@@ -53,6 +53,7 @@ import {
   formatDollars,
   parseDollars,
   pressPlaceholderArt,
+  PressPrintRulesCard,
 } from "./AdminManufacturer";
 import {
   ColorBall,
@@ -3409,6 +3410,20 @@ export function PressPackagePricingCatalog({
                       <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>Blank fields inherit the press default — the gray numbers.</p>
                     <AudioSpecEditorCard pressId={pressId} canEdit={canEdit} />
                   </section>
+                    <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: "28px 0" }} />
+                    {/* Task #3012 — machine-checkable print standards (bleed,
+                        safety, PPI floors, color/format rules, reference
+                        artifacts). Drives the completed-art check verdicts.
+                        Functional admin-pattern card; Ruby restyles later. */}
+                    <section id="section-print-rules" data-testid="section-print-rules">
+                      <TwoTone lead="Print rules." rest="Your standards, checked automatically." />
+                      <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
+                        Blank fields keep the default behavior — enter only what your plant publishes.
+                      </p>
+                      <fieldset disabled={!canEdit}>
+                        <PressPrintRulesCard pressId={pressId} />
+                      </fieldset>
+                    </section>
                 </>
               )}
               <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: "28px 0" }} />
@@ -3607,6 +3622,9 @@ type PressTemplateSpecRow = {
   fontsRule: string | null;
   templateFileUrl: string | null;
   templateFileName: string | null;
+  // Task #3012 — per-component print-rule overrides (opaque here; edited on
+  // the operator surface, preserved verbatim by this page's full-row resend).
+  printRules: Record<string, unknown> | null;
 };
 // Blueprint icons — line drawings of the actual piece, drawn like a die-line.
 // Solid strokes are edges; dashed strokes are folds, holes, and hidden parts.
@@ -3727,6 +3745,7 @@ export function TemplateTilesGrid({
         minPpi: existing?.minPpi ?? null,
         color: existing?.color ?? null,
         fontsRule: existing?.fontsRule ?? null,
+        printRules: existing?.printRules ?? null,
         ...body,
       });
       return res.json();

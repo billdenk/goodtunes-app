@@ -2677,6 +2677,12 @@ export const pressTemplateSpecs = pgTable(
     // Task #2705 — minimum placed-image resolution (PPI) the press requires
     // for this component; null = no check (never fabricated).
     minPpi: integer("min_ppi"),
+    // Task #3012 — per-component press print-rule overrides (bleed min/
+    // recommended, safety margin, bitmap PPI floor, grayscale/Pantone-only
+    // toggles, placed-image format rule, advisories). Shape:
+    // shared/vendorSpecs.ts PressPrintRules. Null = inherit the press-level
+    // defaults (manufacturers.print_rules) / today's behavior.
+    printRules: jsonb("print_rules").$type<Record<string, unknown>>(),
     updatedByUserId: varchar("updated_by_user_id"),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -4554,6 +4560,14 @@ export const manufacturers = pgTable("manufacturers", {
   // (vinyl/cd/cassette), art specs one flat blob. Null = press hasn't
   // customized; the server resolves handoff defaults (resolvePressSpecs).
   audioSpecs: jsonb("audio_specs").$type<PressAudioSpecsData>(),
+  // Task #3012 — press-level MACHINE-CHECKABLE print rules (bleed min/
+  // recommended, safety margin, dual PPI floors, Pantone-only, placed-image
+  // format rule, advisories, accepted-formats note, .joboptions/preflight
+  // reference artifacts). Distinct from art_specs (display strings for the
+  // handoff Specs page). Shape: shared/vendorSpecs.ts PressPrintRules.
+  // Null = press entered nothing → completed-art checks keep today's
+  // behavior exactly.
+  printRules: jsonb("print_rules").$type<Record<string, unknown>>(),
   artSpecs: jsonb("art_specs").$type<PressArtSpecsData>(),
   // Stable per-press series color for cross-press charts (combined Press
   // Dashboard stacked trend, legends, leaderboard bars). Assigned ONCE when

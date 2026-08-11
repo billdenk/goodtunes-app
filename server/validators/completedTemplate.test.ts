@@ -1,7 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-import { scanBuffer, validateCompletedComponent } from "./completedTemplate";
+import { scanBuffer, validateCompletedComponent, measuredBleedInches } from "./completedTemplate";
 import {
   requiredFinishedComponents,
   resolveFinishedComponents,
@@ -315,5 +315,245 @@ describe("resolveFinishedComponents — catalog specs merged over baseline", () 
       storeRows: [row({ variantKey: "", artboardWInches: 31, artboardHInches: 31 })],
     });
     assert.deepEqual(resolved.find((s) => s.id === "jacket")!.templatePageInches, { w: 31, h: 31 });
+  });
+});
+
+// ─── Task #3012 — press-specific print-rule fields + checks ──────────────
+
+// fakePdf variant with an explicit smaller TrimBox (bleed = (media−trim)/2)
+// plus optional bitmap images, separation names, gray/SMask tokens.
+function bleedPdf(opts: {
+  wIn: number;
+  hIn: number;
+  trimWIn?: number;
+  trimHIn?: number;
+  noTrim?: boolean;
+  color?: string; // raw tokens appended per page
+  imageDims?: { w: number; h: number; bitmap?: boolean; smask?: boolean }[];
+  sepNames?: string[];
+}): Buffer {
+  const w = (opts.wIn * 72).toFixed(4);
+  const h = (opts.hIn * 72).toFixed(4);
+  const tw = ((opts.trimWIn ?? opts.wIn) * 72).toFixed(4);
+  const th = ((opts.trimHIn ?? opts.hIn) * 72).toFixed(4);
+  let s = "%PDF-1.6\n";
+  s += `/Type /Page /MediaBox [ 0 0 ${w} ${h} ]`;
+  if (!opts.noTrim) s += ` /TrimBox [ 0 0 ${tw} ${th} ]`;
+  s += `\n${opts.color ?? "/DeviceCMYK"}\n`;
+  for (const n of opts.sepNames ?? []) s += `/Separation /${n} /DeviceCMYK\n`;
+  for (const d of opts.imageDims ?? []) {
+    s += `/Subtype /Image /Width ${d.w} /Height ${d.h}`;
+    if (d.bitmap) s += " /BitsPerComponent 1";
+    if (d.smask) s += " /SMask 12 0 R";
+    s += "\n";
+  }
+  s += "%%EOF";
+  return Buffer.from(s, "latin1");
+}
+
+const MRP_RULES = {
+  bleedMinInches: 0.125,
+  bleedRecommendedInches: 0.25,
+  safetyMarginInches: 0.125,
+  minPpi: 300,
+  minPpiBitmap: 800,
+  pantoneOnly: true,
+  placedImageRule: "No GIF or PNG-sourced images.",
+  advisories: ["Keep text inside the safety area."],
+} as const;
+
+// A loose jacket-like spec (no exact template artboard) carrying MRP rules.
+const RULED_SPEC = {
+  ...SPECS["jacket"],
+  // Pin the placement basis so PPI expectations below are deterministic.
+  templatePageInches: { w: 12.75, h: 12.75 },
+  expectedPages: 0,
+  printRules: { ...MRP_RULES },
+  pressName: "Memphis Record Pressing",
+} as any;
+
+const find = (checks: { key: string }[], key: string) =>
+  checks.find((c) => c.key === key) as any;
+
+describe("Task #3012 — bleed measurement + tiers", () => {
+  test("measuredBleedInches reads (media−trim)/2; null without a TrimBox", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25 }));
+    assert.ok(Math.abs(measuredBleedInches(scan)! - 0.25) < 1e-3);
+    assert.equal(measuredBleedInches(scanBuffer(bleedPdf({ wIn: 12, hIn: 12, noTrim: true }))), null);
+  });
+
+  test("bleed ≥ recommended passes and cites the press's spec", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25 }));
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.bleed");
+    assert.equal(c.status, "pass");
+    assert.match(c.message, /Memphis Record Pressing requires ≥0.125" bleed; 0.25" recommended/);
+  });
+
+  test("bleed between min and recommended warns", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.55, hIn: 12.55, trimWIn: 12.25, trimHIn: 12.25 }));
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.bleed");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /below the recommended/);
+  });
+
+  test("bleed below the minimum fails", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.35, hIn: 12.35, trimWIn: 12.25, trimHIn: 12.25 }));
+    assert.equal(find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.bleed").status, "fail");
+  });
+
+  test("unmeasurable bleed (no trim box) warns, never fails", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, noTrim: true }));
+    assert.equal(find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.bleed").status, "warn");
+  });
+
+  test("edge band: empty warns, filled passes, absent (null) omits the row", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25 }));
+    const empty = validateCompletedComponent(scan, RULED_SPEC, { edgeBand: "empty" });
+    assert.equal(find(empty, "tmpl.edge_band").status, "warn");
+    const filled = validateCompletedComponent(scan, RULED_SPEC, { edgeBand: "filled" });
+    assert.equal(find(filled, "tmpl.edge_band").status, "pass");
+    const none = validateCompletedComponent(scan, RULED_SPEC);
+    assert.equal(find(none, "tmpl.edge_band"), undefined);
+  });
+});
+
+describe("Task #3012 — dual PPI, grayscale, Pantone, placed-format, advisories", () => {
+  const base = { wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25 };
+
+  test("bitmap PPI floor applies only to 1-bit images", () => {
+    // A 4000×4000 1-bit image on ~12.75" is well below 800 PPI → warn; the
+    // same size continuous-tone image is above 300 → tmpl.min_ppi stays ok.
+    const scan = scanBuffer(bleedPdf({ ...base, imageDims: [{ w: 4000, h: 4000, bitmap: true }, { w: 4000, h: 4000 }] }));
+    const checks = validateCompletedComponent(scan, RULED_SPEC);
+    assert.equal(find(checks, "tmpl.min_ppi_bitmap").status, "warn");
+    // continuous-tone floor (press-level 300) — 4000px is ~313 PPI → pass
+    assert.equal(find(checks, "tmpl.min_ppi").status, "pass");
+  });
+
+  test("no 1-bit images → bitmap check passes", () => {
+    const scan = scanBuffer(bleedPdf({ ...base, imageDims: [{ w: 4000, h: 4000 }] }));
+    assert.equal(find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.min_ppi_bitmap").status, "pass");
+  });
+
+  test("grayscale-required: RGB fails, CMYK warns, gray-only passes", () => {
+    const gSpec = { ...RULED_SPEC, printRules: { grayscaleRequired: true } };
+    const rgb = scanBuffer(bleedPdf({ ...base, color: "/DeviceRGB" }));
+    assert.equal(find(validateCompletedComponent(rgb, gSpec), "tmpl.grayscale").status, "fail");
+    const cmyk = scanBuffer(bleedPdf({ ...base, color: "/DeviceCMYK" }));
+    assert.equal(find(validateCompletedComponent(cmyk, gSpec), "tmpl.grayscale").status, "warn");
+    const gray = scanBuffer(bleedPdf({ ...base, color: "/DeviceGray" }));
+    assert.equal(find(validateCompletedComponent(gray, gSpec), "tmpl.grayscale").status, "pass");
+  });
+
+  test("pantone-only: PANTONE names pass (incl. #20 escapes); off-brand names warn", () => {
+    const ok = scanBuffer(bleedPdf({ ...base, sepNames: ["PANTONE#20186#20C", "PMS#20287"] }));
+    assert.equal(find(validateCompletedComponent(ok, RULED_SPEC), "tmpl.pantone").status, "pass");
+    const bad = scanBuffer(bleedPdf({ ...base, sepNames: ["My#20Cool#20Orange"] }));
+    const c = find(validateCompletedComponent(bad, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /My Cool Orange/);
+  });
+
+  test("pantone-only: process separation names (All/None) are never listed as off-brand", () => {
+    // Only process names → treated as "names couldn't be read" (warn), and
+    // the message must not accuse All/None of being off-brand inks.
+    const scan = scanBuffer(bleedPdf({ ...base, sepNames: ["All", "None"] }));
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "warn");
+    assert.doesNotMatch(c.message, /"All"|"None"/);
+  });
+
+  test("placed-format: SMask images warn citing the press's rule text", () => {
+    const scan = scanBuffer(bleedPdf({ ...base, imageDims: [{ w: 3000, h: 3000, smask: true }] }));
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.placed_format");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /No GIF or PNG-sourced images/);
+    const clean = scanBuffer(bleedPdf({ ...base, imageDims: [{ w: 3000, h: 3000 }] }));
+    assert.equal(find(validateCompletedComponent(clean, RULED_SPEC), "tmpl.placed_format").status, "pass");
+  });
+
+  test("safety margin + advisories render as advisory-tier pass rows", () => {
+    const scan = scanBuffer(bleedPdf(base));
+    const checks = validateCompletedComponent(scan, RULED_SPEC);
+    const safety = find(checks, "tmpl.safety");
+    assert.equal(safety.status, "pass");
+    assert.equal(safety.tier, "advisory");
+    const adv = find(checks, "tmpl.advisory_0");
+    assert.equal(adv.status, "pass");
+    assert.equal(adv.tier, "advisory");
+    assert.match(adv.message, /safety area/);
+    assert.notEqual(rollupStatus(checks), "fail");
+  });
+});
+
+describe("Task #3012 — fallback safety: no rules ⇒ identical verdicts", () => {
+  test("a spec without printRules produces exactly today's check set", () => {
+    const scan = scanBuffer(fakePdf({ pages: 4, wIn: 6.5, hIn: 7.6811, color: "cmyk+spot", fonts: "embedded" }));
+    const before = validateCompletedComponent(scan, SPECS["labels"]);
+    const after = validateCompletedComponent(scan, { ...SPECS["labels"], printRules: null, pressName: null } as any);
+    assert.deepEqual(after, before);
+    // None of the new keys appear.
+    for (const k of ["tmpl.bleed", "tmpl.edge_band", "tmpl.min_ppi_bitmap", "tmpl.grayscale", "tmpl.pantone", "tmpl.placed_format", "tmpl.safety"]) {
+      assert.equal(find(after, k), undefined);
+    }
+  });
+});
+
+describe("Task #3012 — resolver: press rules merge + labelAdvisories routing", () => {
+  const pressRules = {
+    bleedMinInches: 0.125,
+    minPpi: 300,
+    advisories: ["general note"],
+    labelAdvisories: ["solid image, no center-hole knockout"],
+  } as any;
+
+  test("press-level rules land on every slot; labelAdvisories only on labels", () => {
+    const resolved = resolveFinishedComponents({
+      vendorId: "mrp",
+      config: CFG,
+      storeRows: [],
+      pressPrintRules: pressRules,
+      pressName: "Memphis Record Pressing",
+    });
+    const jacket = resolved.find((s) => s.id === "jacket")! as any;
+    const labels = resolved.find((s) => s.id === "labels")! as any;
+    assert.equal(jacket.printRules.bleedMinInches, 0.125);
+    assert.equal(jacket.pressName, "Memphis Record Pressing");
+    assert.deepEqual(jacket.printRules.advisories, ["general note"]);
+    assert.equal(jacket.printRules.labelAdvisories, undefined);
+    assert.deepEqual(labels.printRules.advisories, ["general note", "solid image, no center-hole knockout"]);
+    assert.equal(labels.printRules.labelAdvisories, undefined);
+  });
+
+  test("component-row rules override press-level per field", () => {
+    const resolved = resolveFinishedComponents({
+      vendorId: "mrp",
+      config: CFG,
+      storeRows: [
+        {
+          format: "12_double",
+          componentKey: "jacket",
+          variantKey: "gatefold_oldstyle",
+          discCount: 0,
+          artboardWInches: null,
+          artboardHInches: null,
+          expectedPages: null,
+          color: null,
+          printRules: { bleedMinInches: 0.25 },
+        } as any,
+      ],
+      pressPrintRules: pressRules,
+      pressName: "MRP",
+    });
+    const jacket = resolved.find((s) => s.id === "jacket")! as any;
+    assert.equal(jacket.printRules.bleedMinInches, 0.25); // row wins
+    assert.equal(jacket.printRules.minPpi, 300); // press-level survives
+  });
+
+  test("no press rules + no rows ⇒ baseline untouched (deep-equal)", () => {
+    assert.deepEqual(
+      resolveFinishedComponents({ vendorId: "mrp", config: CFG, storeRows: [] }),
+      requiredFinishedComponents("mrp", CFG),
+    );
   });
 });

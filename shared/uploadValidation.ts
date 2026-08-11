@@ -10,6 +10,13 @@ export type CheckResult = {
   /** Short human label for the row ("Resolution", "Bit depth"). */
   label: string;
   status: CheckStatus;
+  /**
+   * Task #3012 — "advisory" rows carry press-worded guidance that can't
+   * be machine-verified (safety-area content, label knockout). They keep
+   * status "pass" so they never flip a clean component's rollup, but the
+   * client renders them with an info glyph instead of a green check.
+   */
+  tier?: "advisory";
   /** One-line detail message. */
   message: string;
 };

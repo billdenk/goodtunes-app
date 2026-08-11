@@ -31,6 +31,7 @@ import {
   ZoomIn,
   FileText,
   RefreshCw,
+  Info,
 } from "lucide-react";
 import {
   Dialog,
@@ -65,6 +66,17 @@ type CompletedTemplateResponse = {
   status: CompletedTemplateVerdict;
   updatedAt: string | null;
   pressPlaceholderUrl: string | null;
+  // Task #3012 — press-level submission guidance: the accepted-formats note
+  // ("PDF preferred") shown to whoever uploads, and downloadable reference
+  // artifacts (.joboptions PDF preset, preflight profile). Absent for
+  // presses that haven't entered print rules.
+  acceptedFormatsNote?: string | null;
+  referenceArtifacts?: {
+    kind: "joboptions" | "preflight_profile";
+    label: string;
+    url: string;
+    fileName: string | null;
+  }[];
 };
 
 const STATUS_STYLE: Record<CheckStatus, { text: string; bg: string; border: string; label: string }> = {
@@ -214,6 +226,32 @@ export function CompletedTemplatePanel({
               {packageSummary(effectiveConfig)}
               <span className="text-slate-400"> — from this album's formats on the Sell tab</span>
             </p>
+          )}
+          {/* Task #3012 — press submission guidance: accepted formats +
+              reference artifacts (.joboptions / preflight profile). */}
+          {configured && data?.acceptedFormatsNote && (
+            <p className="mt-1 text-xs text-slate-500" data-testid="text-completed-accepted-formats">
+              {data.acceptedFormatsNote}
+            </p>
+          )}
+          {configured && (data?.referenceArtifacts?.length ?? 0) > 0 && (
+            <div className="mt-1 flex flex-wrap gap-3">
+              {data!.referenceArtifacts!.map((a) => (
+                <a
+                  key={a.kind}
+                  href={a.url}
+                  download
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-[var(--brand-blue)] hover:underline"
+                  data-testid={`link-completed-artifact-${a.kind}`}
+                >
+                  <Download className="w-3 h-3" />
+                  {a.label}
+                  {a.fileName ? ` (${a.fileName})` : ""}
+                </a>
+              ))}
+            </div>
           )}
         </div>
         <button
@@ -884,7 +922,13 @@ function PreviewArtDialog({
         {/* Checks. */}
         <div className="space-y-1.5">
           {component.checks.map((c) => {
-            const cs = STATUS_STYLE[c.status];
+            // Task #3012 — advisory rows (rules the check can't machine-
+            // verify) render an info glyph instead of a green check so they
+            // read as guidance, not a passed test.
+            const advisory = (c as { tier?: string }).tier === "advisory";
+            const cs = advisory
+              ? { bg: "bg-slate-100", text: "text-slate-500" }
+              : STATUS_STYLE[c.status];
             return (
               <div
                 key={c.key}
@@ -892,7 +936,11 @@ function PreviewArtDialog({
                 data-testid={`check-completed-${componentId}-${c.key}`}
               >
                 <span className={`mt-0.5 inline-flex items-center justify-center rounded-full ${cs.bg} ${cs.text} w-4 h-4 shrink-0`}>
-                  <StatusIcon s={c.status} className="w-2.5 h-2.5" />
+                  {advisory ? (
+                    <Info className="w-2.5 h-2.5" />
+                  ) : (
+                    <StatusIcon s={c.status} className="w-2.5 h-2.5" />
+                  )}
                 </span>
                 <div className="flex-1">
                   <div className="font-medium text-slate-800">{c.label}</div>

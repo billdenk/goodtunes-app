@@ -3632,6 +3632,29 @@ type PressTemplateSpec = {
   color: "process-4c" | "cmyk-or-pms" | null;
   fontsRule: string | null;
   templateFileUrl: string | null;
+  // Task #3012 — per-component print-rule overrides (null = inherit the
+  // press-level defaults saved in the Print rules card below).
+  printRules: PressPrintRulesDraftShape | null;
+};
+
+// Task #3012 — shared shape for print rules (press-level defaults +
+// per-component overrides). Mirrors shared/vendorSpecs.ts PressPrintRules.
+type PressPrintRulesDraftShape = {
+  bleedMinInches?: number | null;
+  bleedRecommendedInches?: number | null;
+  safetyMarginInches?: number | null;
+  minPpi?: number | null;
+  minPpiBitmap?: number | null;
+  grayscaleRequired?: boolean | null;
+  pantoneOnly?: boolean | null;
+  placedImageRule?: string | null;
+  advisories?: string[] | null;
+  labelAdvisories?: string[] | null;
+  acceptedFormatsNote?: string | null;
+  jobOptionsUrl?: string | null;
+  jobOptionsName?: string | null;
+  preflightProfileUrl?: string | null;
+  preflightProfileName?: string | null;
 };
 const TEMPLATE_COMPONENTS: {
   key: PressTemplateSpec["componentKey"];
@@ -3706,12 +3729,305 @@ export function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt:
                 minPpi: existing?.minPpi ?? null,
                 color: existing?.color ?? null,
                 fontsRule: existing?.fontsRule ?? null,
+                printRules: existing?.printRules ?? null,
                 ...body,
               });
             }}
             onRemove={(specId) => remove.mutate(specId)}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Task #3012 — Press-level print rules (MRP guide parity) ─────────────────
+// One jsonb blob per press (manufacturers.print_rules): machine-checkable
+// print standards the completed-art check enforces (bleed min/recommended,
+// safety margin, dual PPI floors, Pantone-only, placed-image rule,
+// advisories) plus the accepted-formats note and reference artifacts
+// (.joboptions / preflight profile) shown to whoever uploads. Blank =
+// today's behavior; component rows can override per field. Mirrors the
+// PressAudioSpecCard save pattern (full-document PUT).
+export function PressPrintRulesCard({ pressId }: { pressId: string }) {
+  const { toast } = useToast();
+  const fileRefs = { joboptions: useRef<HTMLInputElement>(null), preflight: useRef<HTMLInputElement>(null) };
+  const qk = ["/api/admin/manufacturers", pressId, "print-rules"];
+  const { data, isLoading } = useQuery<{ printRules: PressPrintRulesDraftShape | null }>({
+    queryKey: qk,
+  });
+  const rules = data?.printRules ?? null;
+
+  const numOrEmpty = (n: number | null | undefined) => (n == null ? "" : String(n));
+  const [bleedMin, setBleedMin] = useState("");
+  const [bleedRec, setBleedRec] = useState("");
+  const [safety, setSafety] = useState("");
+  const [minPpi, setMinPpi] = useState("");
+  const [bitmapPpi, setBitmapPpi] = useState("");
+  const [grayscale, setGrayscale] = useState(false);
+  const [pantone, setPantone] = useState(false);
+  const [placedRule, setPlacedRule] = useState("");
+  const [advisories, setAdvisories] = useState("");
+  const [labelAdvisories, setLabelAdvisories] = useState("");
+  const [formatsNote, setFormatsNote] = useState("");
+  const [artifacts, setArtifacts] = useState<{
+    jobOptionsUrl: string | null;
+    jobOptionsName: string | null;
+    preflightProfileUrl: string | null;
+    preflightProfileName: string | null;
+  }>({ jobOptionsUrl: null, jobOptionsName: null, preflightProfileUrl: null, preflightProfileName: null });
+  const [uploading, setUploading] = useState<"joboptions" | "preflight" | null>(null);
+
+  useEffect(() => {
+    setBleedMin(numOrEmpty(rules?.bleedMinInches));
+    setBleedRec(numOrEmpty(rules?.bleedRecommendedInches));
+    setSafety(numOrEmpty(rules?.safetyMarginInches));
+    setMinPpi(numOrEmpty(rules?.minPpi));
+    setBitmapPpi(numOrEmpty(rules?.minPpiBitmap));
+    setGrayscale(!!rules?.grayscaleRequired);
+    setPantone(!!rules?.pantoneOnly);
+    setPlacedRule(rules?.placedImageRule ?? "");
+    setAdvisories((rules?.advisories ?? []).join("\n"));
+    setLabelAdvisories((rules?.labelAdvisories ?? []).join("\n"));
+    setFormatsNote(rules?.acceptedFormatsNote ?? "");
+    setArtifacts({
+      jobOptionsUrl: rules?.jobOptionsUrl ?? null,
+      jobOptionsName: rules?.jobOptionsName ?? null,
+      preflightProfileUrl: rules?.preflightProfileUrl ?? null,
+      preflightProfileName: rules?.preflightProfileName ?? null,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rules]);
+
+  const buildBody = (over: Partial<typeof artifacts> = {}): PressPrintRulesDraftShape | null => {
+    const num = (s: string) => (s.trim() === "" ? null : Number(s));
+    const lines = (s: string) =>
+      s.split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 12);
+    const a = { ...artifacts, ...over };
+    const body: PressPrintRulesDraftShape = {
+      bleedMinInches: num(bleedMin),
+      bleedRecommendedInches: num(bleedRec),
+      safetyMarginInches: num(safety),
+      minPpi: num(minPpi) != null ? Math.round(num(minPpi)!) : null,
+      minPpiBitmap: num(bitmapPpi) != null ? Math.round(num(bitmapPpi)!) : null,
+      grayscaleRequired: grayscale || null,
+      pantoneOnly: pantone || null,
+      placedImageRule: placedRule.trim() || null,
+      advisories: lines(advisories).length > 0 ? lines(advisories) : null,
+      labelAdvisories: lines(labelAdvisories).length > 0 ? lines(labelAdvisories) : null,
+      acceptedFormatsNote: formatsNote.trim() || null,
+      jobOptionsUrl: a.jobOptionsUrl,
+      jobOptionsName: a.jobOptionsName,
+      preflightProfileUrl: a.preflightProfileUrl,
+      preflightProfileName: a.preflightProfileName,
+    };
+    const bad = [body.bleedMinInches, body.bleedRecommendedInches, body.safetyMarginInches, body.minPpi, body.minPpiBitmap].some(
+      (n) => n != null && !Number.isFinite(n),
+    );
+    if (bad) {
+      toast({ title: "Enter valid numbers for the print rules.", variant: "destructive" });
+      return null;
+    }
+    return Object.values(body).some((v) => v != null) ? body : null;
+  };
+
+  const save = useMutation({
+    mutationFn: async (printRules: PressPrintRulesDraftShape | null) => {
+      const res = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/print-rules`, {
+        printRules,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: qk });
+      toast({ title: "Print rules saved" });
+    },
+    onError: (e: any) =>
+      toast({ title: e?.message || "Couldn't save print rules", variant: "destructive" }),
+  });
+
+  const busy = save.isPending || isLoading || uploading != null;
+
+  const handleArtifactUpload = async (slot: "joboptions" | "preflight", file: File | undefined) => {
+    if (!file) return;
+    setUploading(slot);
+    try {
+      const url = await uploadAdminDoc(file);
+      const over =
+        slot === "joboptions"
+          ? { jobOptionsUrl: url, jobOptionsName: file.name }
+          : { preflightProfileUrl: url, preflightProfileName: file.name };
+      setArtifacts((a) => ({ ...a, ...over }));
+      const body = buildBody(over);
+      save.mutate(body);
+    } catch (e: any) {
+      toast({ title: e?.message || "Upload failed", variant: "destructive" });
+    } finally {
+      setUploading(null);
+      const ref = fileRefs[slot].current;
+      if (ref) ref.value = "";
+    }
+  };
+
+  const artifactRow = (
+    slot: "joboptions" | "preflight",
+    label: string,
+    url: string | null,
+    name: string | null,
+  ) => (
+    <div className="flex items-center gap-2">
+      <span className="w-44 shrink-0 text-xs font-medium text-slate-600">{label}</span>
+      {url ? (
+        <>
+          <a
+            href={url}
+            download
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-w-0 truncate text-xs text-slate-600 hover:text-[var(--brand-blue)]"
+            data-testid={`link-print-artifact-${slot}`}
+          >
+            {name || url.split("/").pop()}
+          </a>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              const over =
+                slot === "joboptions"
+                  ? { jobOptionsUrl: null, jobOptionsName: null }
+                  : { preflightProfileUrl: null, preflightProfileName: null };
+              setArtifacts((a) => ({ ...a, ...over }));
+              save.mutate(buildBody(over));
+            }}
+            className="text-xs text-slate-400 hover:text-rose-600 disabled:opacity-50"
+            data-testid={`button-remove-print-artifact-${slot}`}
+          >
+            Remove
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => fileRefs[slot].current?.click()}
+          className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+          data-testid={`button-upload-print-artifact-${slot}`}
+        >
+          <Upload className="h-3.5 w-3.5" />
+          {uploading === slot ? "Uploading…" : "Upload"}
+        </button>
+      )}
+      <input
+        ref={fileRefs[slot]}
+        type="file"
+        className="hidden"
+        onChange={(e) => handleArtifactUpload(slot, e.target.files?.[0])}
+      />
+    </div>
+  );
+
+  return (
+    <div className="border-t border-slate-100 px-5 py-4">
+      <span className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+        Print rules
+      </span>
+      <p className="mt-1 text-xs text-slate-400">
+        The plant's published print standards — these drive the completed-artwork check's
+        pass/warn/fail verdicts. Leave a field blank for no check (today's behavior). Component
+        rows in the product specs above can override any value per piece.
+      </p>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        <input value={bleedMin} onChange={(e) => setBleedMin(e.target.value)} inputMode="decimal" placeholder="Bleed min (in)" title="Minimum bleed beyond the trim line, inches — fails below this." className={INPUT} disabled={busy} data-testid="input-print-bleed-min" />
+        <input value={bleedRec} onChange={(e) => setBleedRec(e.target.value)} inputMode="decimal" placeholder="Bleed rec (in)" title="Recommended bleed, inches — warns below this." className={INPUT} disabled={busy} data-testid="input-print-bleed-rec" />
+        <input value={safety} onChange={(e) => setSafety(e.target.value)} inputMode="decimal" placeholder="Safety (in)" title="Safety margin from the cut line, inches — advisory only." className={INPUT} disabled={busy} data-testid="input-print-safety" />
+        <input value={minPpi} onChange={(e) => setMinPpi(e.target.value)} inputMode="numeric" placeholder="Min PPI" title="PPI floor for standard placed images (component Min PPI wins when both are set)." className={INPUT} disabled={busy} data-testid="input-print-min-ppi" />
+        <input value={bitmapPpi} onChange={(e) => setBitmapPpi(e.target.value)} inputMode="numeric" placeholder="Bitmap PPI" title="Second PPI floor for 1-bit / bitmap / line-art images." className={INPUT} disabled={busy} data-testid="input-print-bitmap-ppi" />
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+        <label className="flex items-center gap-1.5 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={grayscale}
+            onChange={(e) => setGrayscale(e.target.checked)}
+            disabled={busy}
+            data-testid="checkbox-print-grayscale"
+          />
+          Grayscale required for B/W pieces
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={pantone}
+            onChange={(e) => setPantone(e.target.checked)}
+            disabled={busy}
+            data-testid="checkbox-print-pantone"
+          />
+          Official Pantone spot colors only
+        </label>
+      </div>
+      <input
+        value={placedRule}
+        onChange={(e) => setPlacedRule(e.target.value)}
+        placeholder="Placed-image format rule (e.g. 'No GIF or PNG-sourced images')"
+        className={`${INPUT} mt-2 w-full`}
+        disabled={busy}
+        data-testid="input-print-placed-rule"
+      />
+      <textarea
+        value={advisories}
+        onChange={(e) => setAdvisories(e.target.value)}
+        rows={2}
+        placeholder="Advisories, one per line — rules the check can't verify (shown as info rows on every piece)"
+        className={`${INPUT} mt-2 w-full`}
+        disabled={busy}
+        data-testid="textarea-print-advisories"
+      />
+      <textarea
+        value={labelAdvisories}
+        onChange={(e) => setLabelAdvisories(e.target.value)}
+        rows={2}
+        placeholder="Center-label advisories, one per line (e.g. 'Solid image, no center-hole knockout')"
+        className={`${INPUT} mt-2 w-full`}
+        disabled={busy}
+        data-testid="textarea-print-label-advisories"
+      />
+      <textarea
+        value={formatsNote}
+        onChange={(e) => setFormatsNote(e.target.value)}
+        rows={2}
+        placeholder='Accepted submission formats note shown to uploaders (e.g. "Press-quality PDF preferred")'
+        className={`${INPUT} mt-2 w-full`}
+        disabled={busy}
+        data-testid="textarea-print-formats-note"
+      />
+
+      <div className="mt-3 space-y-2">
+        {artifactRow("joboptions", "PDF output preset (.joboptions)", artifacts.jobOptionsUrl, artifacts.jobOptionsName)}
+        {artifactRow("preflight", "Preflight profile", artifacts.preflightProfileUrl, artifacts.preflightProfileName)}
+      </div>
+
+      <div className="mt-4 flex items-center gap-3">
+        <Button
+          type="button"
+          disabled={busy}
+          onClick={() => save.mutate(buildBody())}
+          data-testid="button-save-print-rules"
+        >
+          {save.isPending ? "Saving…" : "Save print rules"}
+        </Button>
+        {rules && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => save.mutate(null)}
+            className="text-sm text-slate-500 hover:text-[var(--brand-heart)] disabled:opacity-50"
+            data-testid="button-clear-print-rules"
+          >
+            Clear all
+          </button>
+        )}
       </div>
     </div>
   );
@@ -4144,28 +4460,61 @@ function TemplateComponentRow({
   const [pagesDraft, setPagesDraft] = useState(numOrEmpty(spec?.expectedPages));
   const [minPpiDraft, setMinPpiDraft] = useState(numOrEmpty(spec?.minPpi));
   const [colorDraft, setColorDraft] = useState<string>(spec?.color ?? "");
+  // Task #3012 — per-component press print-rule overrides (blank = inherit
+  // press-level defaults from the Print rules card).
+  const pr = spec?.printRules ?? null;
+  const [bleedMinDraft, setBleedMinDraft] = useState(numOrEmpty(pr?.bleedMinInches));
+  const [bleedRecDraft, setBleedRecDraft] = useState(numOrEmpty(pr?.bleedRecommendedInches));
+  const [safetyDraft, setSafetyDraft] = useState(numOrEmpty(pr?.safetyMarginInches));
+  const [bitmapPpiDraft, setBitmapPpiDraft] = useState(numOrEmpty(pr?.minPpiBitmap));
+  const [grayscaleDraft, setGrayscaleDraft] = useState(!!pr?.grayscaleRequired);
+  const [pantoneDraft, setPantoneDraft] = useState(!!pr?.pantoneOnly);
+  const [placedRuleDraft, setPlacedRuleDraft] = useState(pr?.placedImageRule ?? "");
+  const [advisoriesDraft, setAdvisoriesDraft] = useState((pr?.advisories ?? []).join("\n"));
   useEffect(() => {
     setWDraft(numOrEmpty(spec?.artboardWInches));
     setHDraft(numOrEmpty(spec?.artboardHInches));
     setPagesDraft(numOrEmpty(spec?.expectedPages));
     setMinPpiDraft(numOrEmpty(spec?.minPpi));
     setColorDraft(spec?.color ?? "");
+    const rules = spec?.printRules ?? null;
+    setBleedMinDraft(numOrEmpty(rules?.bleedMinInches));
+    setBleedRecDraft(numOrEmpty(rules?.bleedRecommendedInches));
+    setSafetyDraft(numOrEmpty(rules?.safetyMarginInches));
+    setBitmapPpiDraft(numOrEmpty(rules?.minPpiBitmap));
+    setGrayscaleDraft(!!rules?.grayscaleRequired);
+    setPantoneDraft(!!rules?.pantoneOnly);
+    setPlacedRuleDraft(rules?.placedImageRule ?? "");
+    setAdvisoriesDraft((rules?.advisories ?? []).join("\n"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec?.artboardWInches, spec?.artboardHInches, spec?.expectedPages, spec?.minPpi, spec?.color]);
+  }, [spec?.artboardWInches, spec?.artboardHInches, spec?.expectedPages, spec?.minPpi, spec?.color, spec?.printRules]);
 
   const dimsDirty =
     wDraft !== numOrEmpty(spec?.artboardWInches) ||
     hDraft !== numOrEmpty(spec?.artboardHInches) ||
     pagesDraft !== numOrEmpty(spec?.expectedPages) ||
     minPpiDraft !== numOrEmpty(spec?.minPpi) ||
-    colorDraft !== (spec?.color ?? "");
+    colorDraft !== (spec?.color ?? "") ||
+    bleedMinDraft !== numOrEmpty(pr?.bleedMinInches) ||
+    bleedRecDraft !== numOrEmpty(pr?.bleedRecommendedInches) ||
+    safetyDraft !== numOrEmpty(pr?.safetyMarginInches) ||
+    bitmapPpiDraft !== numOrEmpty(pr?.minPpiBitmap) ||
+    grayscaleDraft !== !!pr?.grayscaleRequired ||
+    pantoneDraft !== !!pr?.pantoneOnly ||
+    placedRuleDraft !== (pr?.placedImageRule ?? "") ||
+    advisoriesDraft !== (pr?.advisories ?? []).join("\n");
 
   const saveDims = () => {
     const w = wDraft.trim() === "" ? null : Number(wDraft);
     const h = hDraft.trim() === "" ? null : Number(hDraft);
     const pages = pagesDraft.trim() === "" ? null : Number(pagesDraft);
     const minPpi = minPpiDraft.trim() === "" ? null : Number(minPpiDraft);
-    if ((w != null && !Number.isFinite(w)) || (h != null && !Number.isFinite(h)) || (pages != null && !Number.isFinite(pages)) || (minPpi != null && !Number.isFinite(minPpi))) {
+    const bleedMin = bleedMinDraft.trim() === "" ? null : Number(bleedMinDraft);
+    const bleedRec = bleedRecDraft.trim() === "" ? null : Number(bleedRecDraft);
+    const safety = safetyDraft.trim() === "" ? null : Number(safetyDraft);
+    const bitmapPpi = bitmapPpiDraft.trim() === "" ? null : Number(bitmapPpiDraft);
+    const nums = [w, h, pages, minPpi, bleedMin, bleedRec, safety, bitmapPpi];
+    if (nums.some((n) => n != null && !Number.isFinite(n))) {
       toast({ title: "Enter valid numbers for the check dimensions.", variant: "destructive" });
       return;
     }
@@ -4173,12 +4522,37 @@ function TemplateComponentRow({
       toast({ title: "Minimum resolution must be between 72 and 2400 PPI.", variant: "destructive" });
       return;
     }
+    if (bitmapPpi != null && (bitmapPpi < 72 || bitmapPpi > 4800)) {
+      toast({ title: "Bitmap resolution must be between 72 and 4800 PPI.", variant: "destructive" });
+      return;
+    }
+    if ([bleedMin, bleedRec, safety].some((n) => n != null && (n < 0 || n > 2))) {
+      toast({ title: "Bleed and safety values must be between 0 and 2 inches.", variant: "destructive" });
+      return;
+    }
+    const advisories = advisoriesDraft
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 12);
+    const printRules: PressPrintRulesDraftShape = {
+      bleedMinInches: bleedMin,
+      bleedRecommendedInches: bleedRec,
+      safetyMarginInches: safety,
+      minPpiBitmap: bitmapPpi != null ? Math.round(bitmapPpi) : null,
+      grayscaleRequired: grayscaleDraft || null,
+      pantoneOnly: pantoneDraft || null,
+      placedImageRule: placedRuleDraft.trim() || null,
+      advisories: advisories.length > 0 ? advisories : null,
+    };
+    const hasAnyRule = Object.values(printRules).some((v) => v != null);
     onSave({
       artboardWInches: w,
       artboardHInches: h,
       expectedPages: pages,
       minPpi: minPpi != null ? Math.round(minPpi) : null,
       color: (colorDraft || null) as PressTemplateSpec["color"],
+      printRules: hasAnyRule ? printRules : null,
     });
   };
 
@@ -4378,6 +4752,93 @@ function TemplateComponentRow({
             <option value="cmyk-or-pms">CMYK or PMS</option>
           </select>
         </div>
+
+        {/* Task #3012 — per-component press print-rule overrides. Blank =
+            inherit the press-level defaults from the Print rules card. */}
+        <div className="mt-3 mb-1.5 text-xs font-semibold uppercase tracking-widest text-slate-400">
+          Print rules (override press defaults)
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <input
+            value={bleedMinDraft}
+            onChange={(e) => setBleedMinDraft(e.target.value)}
+            inputMode="decimal"
+            placeholder="Bleed min (in)"
+            title={'Minimum bleed beyond the trim line, inches (e.g. 0.125). Fails below this.'}
+            className={INPUT}
+            disabled={busy}
+            data-testid={`input-template-bleed-min-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+          <input
+            value={bleedRecDraft}
+            onChange={(e) => setBleedRecDraft(e.target.value)}
+            inputMode="decimal"
+            placeholder="Bleed rec (in)"
+            title={'Recommended bleed, inches (e.g. 0.25). Warns below this.'}
+            className={INPUT}
+            disabled={busy}
+            data-testid={`input-template-bleed-rec-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+          <input
+            value={safetyDraft}
+            onChange={(e) => setSafetyDraft(e.target.value)}
+            inputMode="decimal"
+            placeholder="Safety (in)"
+            title="Safety margin from the cut line, inches — advisory only."
+            className={INPUT}
+            disabled={busy}
+            data-testid={`input-template-safety-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+          <input
+            value={bitmapPpiDraft}
+            onChange={(e) => setBitmapPpiDraft(e.target.value)}
+            inputMode="numeric"
+            placeholder="Bitmap PPI"
+            title="Second PPI floor for 1-bit / bitmap / line-art images."
+            className={INPUT}
+            disabled={busy}
+            data-testid={`input-template-bitmap-ppi-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={grayscaleDraft}
+              onChange={(e) => setGrayscaleDraft(e.target.checked)}
+              disabled={busy}
+              data-testid={`checkbox-template-grayscale-${label.toLowerCase().replace(/\s+/g, "-")}`}
+            />
+            Grayscale required (B/W piece)
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={pantoneDraft}
+              onChange={(e) => setPantoneDraft(e.target.checked)}
+              disabled={busy}
+              data-testid={`checkbox-template-pantone-${label.toLowerCase().replace(/\s+/g, "-")}`}
+            />
+            Official Pantone spot colors only
+          </label>
+        </div>
+        <input
+          value={placedRuleDraft}
+          onChange={(e) => setPlacedRuleDraft(e.target.value)}
+          placeholder="Placed-image format rule (e.g. 'No GIF or PNG-sourced images') — blank = inherit"
+          className={`${INPUT} mt-2 w-full`}
+          disabled={busy}
+          data-testid={`input-template-placed-rule-${label.toLowerCase().replace(/\s+/g, "-")}`}
+        />
+        <textarea
+          value={advisoriesDraft}
+          onChange={(e) => setAdvisoriesDraft(e.target.value)}
+          rows={2}
+          placeholder="Advisory notes, one per line (rules the check can't verify — shown as info rows)"
+          className={`${INPUT} mt-2 w-full`}
+          disabled={busy}
+          data-testid={`textarea-template-advisories-${label.toLowerCase().replace(/\s+/g, "-")}`}
+        />
         </div>
       )}
 

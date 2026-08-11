@@ -881,6 +881,11 @@ export interface IStorage {
   getManufacturerByDomain(domain: string): Promise<Manufacturer | undefined>;
   createManufacturer(data: InsertManufacturer & { id?: string }): Promise<Manufacturer>;
   updateManufacturer(id: string, data: Partial<Manufacturer>): Promise<Manufacturer | undefined>;
+  // Task #3012 — press-level machine-checkable print-rule defaults.
+  setManufacturerPrintRules(
+    pressId: string,
+    printRules: Record<string, unknown> | null,
+  ): Promise<Manufacturer | undefined>;
   deleteManufacturer(id: string): Promise<void>;
 
   getFulfillmentPartners(): Promise<FulfillmentPartner[]>;
@@ -5479,6 +5484,12 @@ export class DbStorage implements IStorage {
           fontsRule: values.fontsRule ?? null,
           templateFileUrl: values.templateFileUrl ?? null,
           templateFileName: values.templateFileName ?? null,
+          // Task #3012 — minPpi/printRules update ONLY when the caller
+          // provided the key (the route PUT always does; the CSV apply
+          // path never does, so a CSV re-upload can't wipe them). Fixes
+          // the prior conflict-update silently dropping minPpi.
+          ...("minPpi" in input ? { minPpi: values.minPpi ?? null } : {}),
+          ...("printRules" in input ? { printRules: values.printRules ?? null } : {}),
           updatedByUserId,
           updatedAt: new Date(),
         },
@@ -5490,6 +5501,19 @@ export class DbStorage implements IStorage {
     await db
       .delete(pressTemplateSpecs)
       .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)));
+  }
+
+  // ---- Task #3012 — press-level print-rule defaults ------------------
+  async setManufacturerPrintRules(
+    pressId: string,
+    printRules: Record<string, unknown> | null,
+  ): Promise<Manufacturer | undefined> {
+    const [row] = await db
+      .update(manufacturers)
+      .set({ printRules })
+      .where(eq(manufacturers.id, pressId))
+      .returning();
+    return row;
   }
 
   // ---- Task #2324 — Operator-editable press AUDIO spec override ------

@@ -286,7 +286,7 @@ agent or wait for the next task-agent MERGE** — post-merge.sh's `sync_github_b
 runs in the isolated agent's context where fetch is not blocked, collapses the delta, and
 force-pushes successfully. The DIVERGED mirror self-heals on the next task merge.
 
-## Task-agent heal for DIVERGED blocking markTaskComplete (worked 2026-08-11)
+## Task-agent heal for DIVERGED blocking markTaskComplete
 
 `mirror-freshness` exit-1 (DIVERGED) fails completion validation even for unrelated tasks. A
 task agent can heal it itself: extract the two key/known_hosts helpers from post-merge.sh,

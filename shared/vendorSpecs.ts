@@ -465,6 +465,71 @@ export function defaultCompletedTemplateConfig(): CompletedTemplateConfig {
 /** Plate requirement for a finished component. */
 export type FinishedComponentColor = "process-4c" | "cmyk-or-pms";
 
+// ─── Task #3012 — Press-specific print rules (MRP guide parity) ────────
+// Machine-checkable print standards a press publishes beyond the artboard/
+// pages/color baseline: bleed geometry, dual PPI floors, color-mode
+// toggles, placed-image format rules, human-judgment advisories, and
+// submission-format / reference-artifact metadata. Stored in TWO places:
+//   • press-level defaults  → manufacturers.print_rules (jsonb)
+//   • per-component override → press_template_specs.print_rules (jsonb)
+// Resolution is per-FIELD: component override wins over the press default;
+// an absent field everywhere = no check (today's behavior, never
+// fabricated). Every consumer must stay fallback-safe: a press that has
+// entered nothing produces byte-identical verdicts to before this existed.
+export type PressPrintRules = {
+  /** Minimum bleed beyond the trim line (inches); fail below this. */
+  bleedMinInches?: number | null;
+  /** Recommended bleed (inches); warn when measured bleed is below it. */
+  bleedRecommendedInches?: number | null;
+  /** Safety margin from the cut line (inches) — advisory only (content
+   * position isn't machine-verified). */
+  safetyMarginInches?: number | null;
+  /** PPI floor for standard (continuous-tone) placed images. Component
+   * column min_ppi wins over this when both are set. */
+  minPpi?: number | null;
+  /** Second PPI floor for 1-bit / bitmap / line-art images. */
+  minPpiBitmap?: number | null;
+  /** This piece must be grayscale-only (B/W-required piece). */
+  grayscaleRequired?: boolean | null;
+  /** Spot colors must be official Pantone (PANTONE/PMS-named) inks. */
+  pantoneOnly?: boolean | null;
+  /** Press-worded placed-image format rule (e.g. "No GIF or PNG placed
+   * images"). When set, PNG-provenance heuristics warn citing this text. */
+  placedImageRule?: string | null;
+  /** Press-worded rules that can't be machine-verified (safety-area
+   * content, label center-hole knockout, …) — surfaced as advisory rows. */
+  advisories?: string[] | null;
+  /** Press-level only: advisory rows applied to center-label components. */
+  labelAdvisories?: string[] | null;
+  /** Accepted submission formats / "PDF preferred" note shown to whoever
+   * uploads a finished file. */
+  acceptedFormatsNote?: string | null;
+  /** Reference artifacts beyond the template file (press-level). */
+  jobOptionsUrl?: string | null;
+  jobOptionsName?: string | null;
+  preflightProfileUrl?: string | null;
+  preflightProfileName?: string | null;
+};
+
+/** Per-field merge: `over` wins where it carries a non-undefined,
+ * non-null value; explicit nulls fall through to `base`. Returns null
+ * when neither side carries any value (= no rules, today's behavior). */
+export function mergePrintRules(
+  base: PressPrintRules | null | undefined,
+  over: PressPrintRules | null | undefined,
+): PressPrintRules | null {
+  if (!base && !over) return null;
+  const out: PressPrintRules = { ...(base ?? {}) };
+  for (const [k, v] of Object.entries(over ?? {})) {
+    if (v !== undefined && v !== null) (out as Record<string, unknown>)[k] = v;
+  }
+  // Drop null/undefined noise so "no rules" stays recognizable.
+  for (const [k, v] of Object.entries(out)) {
+    if (v == null) delete (out as Record<string, unknown>)[k];
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 export type FinishedComponentSpec = {
   /** Stable slot key, unique within a confirmation. */
   id: string;
@@ -499,6 +564,15 @@ export type FinishedComponentSpec = {
    * Completed Art card can offer a "Template ↓" link. Null = none on file.
    */
   templateFileUrl: string | null;
+  /**
+   * Task #3012 — resolved press print rules for this slot (press-level
+   * defaults merged with the component's stored override, per field).
+   * Null = the press has entered nothing → no new checks run.
+   */
+  printRules?: PressPrintRules | null;
+  /** Short press name for verdict wording ("MRP requires ≥0.125″ bleed").
+   * Null = generic platform spec. */
+  pressName?: string | null;
 };
 
 // Measured flat artboard sizes (inches) keyed by
@@ -669,6 +743,9 @@ export type PressTemplateSpecRow = {
   templateFileUrl?: string | null;
   /** Task #2705 — minimum placed-image resolution (PPI); null = no check. */
   minPpi?: number | null;
+  /** Task #3012 — per-component print-rule overrides (jsonb, loosely typed
+   * so drizzle rows pass structurally). */
+  printRules?: unknown;
 };
 
 /**
@@ -716,8 +793,29 @@ export function resolveFinishedComponents(args: {
   vendorId: VendorId;
   config: CompletedTemplateConfig;
   storeRows?: PressTemplateSpecRow[];
+  /** Task #3012 — press-level print-rule defaults (manufacturers.print_rules). */
+  pressPrintRules?: PressPrintRules | null;
+  /** Task #3012 — press display name for verdict wording. */
+  pressName?: string | null;
 }): FinishedComponentSpec[] {
-  const baseline = requiredFinishedComponents(args.vendorId, args.config);
+  const rawBaseline = requiredFinishedComponents(args.vendorId, args.config);
+  // Thread press-level print rules + name onto every slot (fallback-safe:
+  // both default to null/absent → validator behavior is unchanged). The
+  // press-level labelAdvisories list lands only on center-label slots, as
+  // that slot's advisories, so a label-only rule never leaks onto jackets.
+  const pressRules = args.pressPrintRules ?? null;
+  const baseline = rawBaseline.map((spec) => {
+    if (!pressRules && !args.pressName) return spec;
+    let rules = pressRules ? { ...pressRules } : null;
+    if (rules) {
+      if (spec.id === "labels" && (rules.labelAdvisories?.length ?? 0) > 0) {
+        rules.advisories = [...(rules.advisories ?? []), ...(rules.labelAdvisories ?? [])];
+      }
+      delete rules.labelAdvisories;
+      rules = mergePrintRules(null, rules);
+    }
+    return { ...spec, printRules: rules, pressName: args.pressName ?? null };
+  });
   const format = completedTemplateConfigToAlbumFormat(args.config);
   const rows = (args.storeRows ?? []).filter((r) => !format || r.format === format);
   if (rows.length === 0) return baseline;
@@ -746,6 +844,41 @@ export function resolveFinishedComponents(args: {
     if (match.color === "process-4c" || match.color === "cmyk-or-pms") next.color = match.color;
     if (match.minPpi != null && match.minPpi > 0) next.minPpi = match.minPpi;
     if (match.templateFileUrl) next.templateFileUrl = match.templateFileUrl;
+    // Task #3012 — component-stored print rules override the press-level
+    // defaults per field (component advisories REPLACE press advisories
+    // when set, since they're the press's own wording for THIS piece).
+    const rowRules = sanitizePrintRules(match.printRules);
+    if (rowRules) next.printRules = mergePrintRules(next.printRules ?? null, rowRules);
     return next;
   });
+}
+
+/** Best-effort structural narrowing for jsonb-sourced print rules. Never
+ * throws; unknown shapes return null (= no rules). */
+export function sanitizePrintRules(raw: unknown): PressPrintRules | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : undefined);
+  const bool = (v: unknown) => (typeof v === "boolean" ? v : undefined);
+  const str = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v : undefined);
+  const strArr = (v: unknown) =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x.trim() !== "") : undefined;
+  const out: PressPrintRules = {
+    bleedMinInches: num(r.bleedMinInches),
+    bleedRecommendedInches: num(r.bleedRecommendedInches),
+    safetyMarginInches: num(r.safetyMarginInches),
+    minPpi: num(r.minPpi),
+    minPpiBitmap: num(r.minPpiBitmap),
+    grayscaleRequired: bool(r.grayscaleRequired),
+    pantoneOnly: bool(r.pantoneOnly),
+    placedImageRule: str(r.placedImageRule),
+    advisories: strArr(r.advisories),
+    labelAdvisories: strArr(r.labelAdvisories),
+    acceptedFormatsNote: str(r.acceptedFormatsNote),
+    jobOptionsUrl: str(r.jobOptionsUrl),
+    jobOptionsName: str(r.jobOptionsName),
+    preflightProfileUrl: str(r.preflightProfileUrl),
+    preflightProfileName: str(r.preflightProfileName),
+  };
+  return mergePrintRules(null, out);
 }

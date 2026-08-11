@@ -11732,3 +11732,77 @@ SQL
 }
 migrate_press_specs dev  "${DATABASE_URL:-}"
 migrate_press_specs prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #3012 — press print rules (MRP guide parity) ────────────────────
+# Machine-checkable per-press print standards: press-level defaults on
+# manufacturers.print_rules + per-component overrides on
+# press_template_specs.print_rules (shared/vendorSpecs.ts PressPrintRules).
+# Declared in shared/schema.ts; additive + idempotent on BOTH DBs so the
+# schema-drift guard stays green.
+migrate_press_print_rules() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press print-rules migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS manufacturers        ADD COLUMN IF NOT EXISTS print_rules jsonb;
+ALTER TABLE IF EXISTS press_template_specs ADD COLUMN IF NOT EXISTS print_rules jsonb;
+SQL
+  then
+    echo "post-merge: press print-rules migration ok on $label"
+  else
+    echo "post-merge: WARNING — press print-rules migration failed on $label (continuing)"
+  fi
+}
+migrate_press_print_rules dev  "${DATABASE_URL:-}"
+migrate_press_print_rules prod "${PROD_DATABASE_URL:-}"
+
+# Task #3012 — seed MRP's published values (Advanced Art File Prep Guide,
+# memphisrecordpressing.com/art-file-prep): 0.125" min / 0.25" recommended
+# bleed, 0.125" safety margin, 300 PPI standard / 800 PPI bitmap floors,
+# official-Pantone-only spot inks, no GIF/PNG-sourced placed images,
+# PDF-preferred submission note, label solid/no-knockout advisory. Marker-
+# guarded so an operator's later edits are never overwritten by a re-merge.
+seed_mrp_print_rules_20260811() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then echo "post-merge: mrp-print-rules-seed skip ($label; no URL)"; return 0; fi
+  local out rc
+  out=$(psql "$url" -v ON_ERROR_STOP=1 <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS one_shot_markers (name text PRIMARY KEY, created_at timestamptz DEFAULT now());
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM one_shot_markers WHERE name = 'mrp-print-rules-seed-20260811') THEN
+    RAISE NOTICE 'mrp-print-rules-seed already applied';
+  ELSE
+    UPDATE manufacturers SET print_rules = '{
+      "bleedMinInches": 0.125,
+      "bleedRecommendedInches": 0.25,
+      "safetyMarginInches": 0.125,
+      "minPpi": 300,
+      "minPpiBitmap": 800,
+      "pantoneOnly": true,
+      "placedImageRule": "Placed images must be TIFF/PSD/EPS or press-quality PDF — no GIF or PNG-sourced images.",
+      "advisories": ["Keep all text and critical artwork inside the safety area — anything outside it risks being trimmed or hidden by the pocket."],
+      "labelAdvisories": ["Center labels must be a solid image with no center-hole knockout — the press punches the hole; artwork should print edge to edge."],
+      "acceptedFormatsNote": "MRP prefers press-quality PDF (PDF/X). Native files (AI, PSD, INDD packages) are accepted but PDF avoids font and link issues."
+    }'::jsonb
+      WHERE name ILIKE 'Memphis Record Pressing%' AND print_rules IS NULL;
+    INSERT INTO one_shot_markers (name) VALUES ('mrp-print-rules-seed-20260811');
+  END IF;
+END $$;
+COMMIT;
+SQL
+  )
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    echo "post-merge: mrp-print-rules-seed ok on $label"
+  else
+    echo "post-merge: ERROR — mrp-print-rules-seed FAILED on $label"
+    echo "$out" | tail -5
+    return 1
+  fi
+}
+seed_mrp_print_rules_20260811 dev  "${DATABASE_URL:-}"
+seed_mrp_print_rules_20260811 prod "${PROD_DATABASE_URL:-}"

@@ -24042,12 +24042,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<p className=\"mt-1 text-[12.5px]\" style={{ color: SUBINK }}>Keep the signed GoodDeed® printing ladder separate from vinyl package pricing.</p>"
+    "snippet": "<p className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "<p className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>"
+    "snippet": "<p className=\"mt-1 text-[12.5px]\" style={{ color: SUBINK }}>Keep the signed GoodDeed® printing ladder separate from vinyl package pricing.</p>"
   },
   {
     "rule": "hardcoded-font-size",

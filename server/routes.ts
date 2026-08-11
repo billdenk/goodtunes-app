@@ -97,6 +97,7 @@ import {
 import {
   requiredFinishedComponents,
   resolveFinishedComponents,
+  sanitizePrintRules,
   completedTemplateConfigToAlbumFormat,
   matchInvitedPressToVendor,
   resolveVendorIdForPress,
@@ -114,7 +115,7 @@ import {
   type CompletedTemplateComponent,
   type CompletedTemplateVerdict,
 } from "@shared/uploadValidation";
-import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner } from "./validators/completedTemplate";
+import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent } from "./validators/completedTemplate";
 
 const scryptAsync = promisify(scrypt);
 
@@ -33645,11 +33646,19 @@ export async function registerRoutes(
   ): Promise<ReturnType<typeof requiredFinishedComponents>> {
     const format = completedTemplateConfigToAlbumFormat(config);
     let storeRows: Awaited<ReturnType<typeof storage.listPressTemplateSpecs>> = [];
-    if (format) {
-      const pressId = await pressIdForVendor(vendorId);
-      if (pressId) storeRows = await storage.listPressTemplateSpecs(pressId, format);
+    // Task #3012 — press-level print-rule defaults + press name ride on
+    // every resolved slot (fallback-safe: both null when no press maps or
+    // the press has entered nothing → validator behavior unchanged).
+    let pressPrintRules: ReturnType<typeof sanitizePrintRules> = null;
+    let pressName: string | null = null;
+    const pressId = await pressIdForVendor(vendorId);
+    if (pressId) {
+      const press = await storage.getManufacturerById(pressId);
+      pressPrintRules = sanitizePrintRules(press?.printRules ?? null);
+      pressName = press?.name ?? null;
+      if (format) storeRows = await storage.listPressTemplateSpecs(pressId, format);
     }
-    return resolveFinishedComponents({ vendorId, config, storeRows });
+    return resolveFinishedComponents({ vendorId, config, storeRows, pressPrintRules, pressName });
   }
 
   // Task #2705 — scan a direct-uploaded print-ready PDF already sitting in
@@ -33980,6 +33989,8 @@ export async function registerRoutes(
         status: "empty" as CompletedTemplateVerdict,
         updatedAt: null as string | null,
         pressPlaceholderUrl: null as string | null,
+        acceptedFormatsNote: null as string | null,
+        referenceArtifacts: [] as { kind: string; label: string; url: string; fileName: string | null }[],
       };
     }
     const { vendorId, config, row } = ctx;
@@ -33990,12 +34001,35 @@ export async function registerRoutes(
     );
     // Task #2705 — the press's branded placeholder art for empty card
     // slots (manufacturers.vinyl_placeholder_url); null = generic tile.
+    // Task #3012 — plus the press's accepted-formats note + reference
+    // artifacts (.joboptions output preset / preflight profile) for the
+    // upload surface. All cosmetic/advisory: never fail the payload.
     let pressPlaceholderUrl: string | null = null;
+    let acceptedFormatsNote: string | null = null;
+    const referenceArtifacts: { kind: string; label: string; url: string; fileName: string | null }[] = [];
     try {
       const pressId = await pressIdForVendor(vendorId);
       if (pressId) {
         const press = await storage.getManufacturerById(pressId);
         pressPlaceholderUrl = press?.vinylPlaceholderUrl ?? null;
+        const rules = sanitizePrintRules(press?.printRules ?? null);
+        acceptedFormatsNote = rules?.acceptedFormatsNote ?? null;
+        if (rules?.jobOptionsUrl) {
+          referenceArtifacts.push({
+            kind: "joboptions",
+            label: "PDF output preset (.joboptions)",
+            url: rules.jobOptionsUrl,
+            fileName: rules.jobOptionsName ?? null,
+          });
+        }
+        if (rules?.preflightProfileUrl) {
+          referenceArtifacts.push({
+            kind: "preflight_profile",
+            label: "Preflight profile",
+            url: rules.preflightProfileUrl,
+            fileName: rules.preflightProfileName ?? null,
+          });
+        }
       }
     } catch {
       /* cosmetic only — never fail the payload */
@@ -34010,6 +34044,8 @@ export async function registerRoutes(
       status,
       updatedAt: row?.updatedAt ? new Date(row.updatedAt).toISOString() : null,
       pressPlaceholderUrl,
+      acceptedFormatsNote,
+      referenceArtifacts,
     };
   }
 
@@ -34088,7 +34124,37 @@ export async function registerRoutes(
       fileName = fetched.fileName;
     }
 
-    const checks = validateCompletedComponent(scan, spec);
+    // Task #3012 — edge-band bleed-content heuristic (advisory only).
+    // Only for our own direct uploads (local file needed to render), only
+    // when the press has entered a bleed rule, and any failure inside
+    // degrades to null = the line item is simply omitted.
+    let edgeBand: Awaited<ReturnType<typeof edgeBandContent>> = null;
+    if (
+      isOwnObject &&
+      (spec.printRules?.bleedMinInches != null || spec.printRules?.bleedRecommendedInches != null)
+    ) {
+      const fsp = await import("node:fs/promises");
+      const os = await import("node:os");
+      const path = await import("node:path");
+      let tmpDir: string | null = null;
+      try {
+        const file = await objectStorage.getObjectEntityFile(body.data.url);
+        const [meta] = await file.getMetadata();
+        const size = Number(meta?.size ?? 0);
+        if (Number.isFinite(size) && size > 0 && size <= PREVIEW_MAX_SOURCE_BYTES) {
+          tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "edge-band-src-"));
+          const pdfPath = path.join(tmpDir, "src.pdf");
+          await file.download({ destination: pdfPath });
+          edgeBand = await edgeBandContent(pdfPath, scan);
+        }
+      } catch {
+        edgeBand = null;
+      } finally {
+        if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+      }
+    }
+
+    const checks = validateCompletedComponent(scan, spec, { edgeBand });
     const component: CompletedTemplateComponent = {
       componentId: spec.id,
       label: spec.label,
@@ -34218,6 +34284,87 @@ export async function registerRoutes(
     // Item 28 — display filename for the attached template (captured from
     // the uploaded file / pasted URL); rendered on the tile, never the URL.
     templateFileName: z.string().trim().max(300).nullable().optional(),
+    // Task #3012 — per-component press print-rule overrides (bleed,
+    // safety, dual PPI floors, color modes, placed-image rule,
+    // advisories). Null = inherit press-level defaults.
+    printRules: z
+      .object({
+        bleedMinInches: z.number().min(0).max(2).nullable().optional(),
+        bleedRecommendedInches: z.number().min(0).max(2).nullable().optional(),
+        safetyMarginInches: z.number().min(0).max(2).nullable().optional(),
+        minPpi: z.number().int().min(72).max(4800).nullable().optional(),
+        minPpiBitmap: z.number().int().min(72).max(4800).nullable().optional(),
+        grayscaleRequired: z.boolean().nullable().optional(),
+        pantoneOnly: z.boolean().nullable().optional(),
+        placedImageRule: z.string().trim().max(300).nullable().optional(),
+        advisories: z.array(z.string().trim().min(1).max(300)).max(12).nullable().optional(),
+      })
+      .strict()
+      .nullable()
+      .optional(),
+  });
+
+  // Task #3012 — press-LEVEL print-rule defaults (manufacturers.print_rules):
+  // everything the component override carries, plus label-only advisories,
+  // the accepted-formats note, and the reference artifacts (.joboptions /
+  // preflight profile). Same requirePressManager gating as template specs.
+  const pressPrintRulesBodySchema = z
+    .object({
+      bleedMinInches: z.number().min(0).max(2).nullable().optional(),
+      bleedRecommendedInches: z.number().min(0).max(2).nullable().optional(),
+      safetyMarginInches: z.number().min(0).max(2).nullable().optional(),
+      minPpi: z.number().int().min(72).max(4800).nullable().optional(),
+      minPpiBitmap: z.number().int().min(72).max(4800).nullable().optional(),
+      grayscaleRequired: z.boolean().nullable().optional(),
+      pantoneOnly: z.boolean().nullable().optional(),
+      placedImageRule: z.string().trim().max(300).nullable().optional(),
+      advisories: z.array(z.string().trim().min(1).max(300)).max(12).nullable().optional(),
+      labelAdvisories: z.array(z.string().trim().min(1).max(300)).max(12).nullable().optional(),
+      acceptedFormatsNote: z.string().trim().max(400).nullable().optional(),
+      jobOptionsUrl: z
+        .string()
+        .trim()
+        .max(2000)
+        .refine((s) => /^https?:\/\//i.test(s) || s.startsWith("/"), {
+          message: "Must be an absolute URL or an /objects path",
+        })
+        .nullable()
+        .optional(),
+      jobOptionsName: z.string().trim().max(300).nullable().optional(),
+      preflightProfileUrl: z
+        .string()
+        .trim()
+        .max(2000)
+        .refine((s) => /^https?:\/\//i.test(s) || s.startsWith("/"), {
+          message: "Must be an absolute URL or an /objects path",
+        })
+        .nullable()
+        .optional(),
+      preflightProfileName: z.string().trim().max(300).nullable().optional(),
+    })
+    .strict();
+
+  app.get("/api/admin/manufacturers/:id/print-rules", requireAdminBearer, async (req, res) => {
+    const pressId = String(req.params.id);
+    if (!(await requirePressManager(req, res, pressId))) return;
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Press not found" });
+    res.json({ printRules: press.printRules ?? null });
+  });
+
+  app.put("/api/admin/manufacturers/:id/print-rules", requireAdminBearer, async (req, res) => {
+    const pressId = String(req.params.id);
+    if (!(await requirePressManager(req, res, pressId, { requireEdit: true }))) return;
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Press not found" });
+    // Full-document PUT (mirrors the template-specs save pattern): the
+    // client re-sends the whole rules object; null clears everything.
+    const body = z
+      .object({ printRules: pressPrintRulesBodySchema.nullable() })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: body.error.message });
+    const updated = await storage.setManufacturerPrintRules(pressId, body.data.printRules);
+    res.json({ printRules: updated?.printRules ?? null });
   });
 
   app.get("/api/admin/manufacturers/:id/template-specs", requireAdminBearer, async (req, res) => {
@@ -34253,6 +34400,7 @@ export async function registerRoutes(
         templateFileUrl: body.data.templateFileUrl ?? null,
         templateFileName: body.data.templateFileName ?? null,
         minPpi: body.data.minPpi ?? null,
+        printRules: body.data.printRules ?? null,
       },
       req.session.userId ?? null,
     );

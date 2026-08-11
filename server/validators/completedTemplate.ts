@@ -80,6 +80,21 @@ export type CompletedPdfScan = {
    * only a lower-bound PPI estimate assuming full-artboard placement.
    */
   imageDimsPx: { w: number; h: number }[];
+  /**
+   * Task #3012 — subset of imageDimsPx that are 1-bit / bitmap images
+   * (`/BitsPerComponent 1` or `/ImageMask true` in the image dict).
+   * Drives the second (line-art) PPI floor. imageDimsPx still contains
+   * ALL images so pre-existing verdicts never shift.
+   */
+  bitmapImageDimsPx: { w: number; h: number }[];
+  /** Task #3012 — images carrying an /SMask (soft transparency mask —
+   * typical of PNG-sourced placements; JPEG/TIFF print art has none). */
+  smaskImageCount: number;
+  /** Task #3012 — /DeviceGray or /CalGray ink usage seen. */
+  hasDeviceGray: boolean;
+  /** Task #3012 — decoded `/Separation /Name` spot-color names (unique,
+   * capped) for the Pantone-authenticity heuristic. */
+  spotColorNames: string[];
 };
 
 // CARRY must exceed the longest token/match we look for so a match that
@@ -100,6 +115,15 @@ const IMAGE_SUBTYPE_RE = /\/Subtype\s*\/Image\b/g;
 // the inspection window is fully present in the carried overlap.
 const IMG_DICT_RADIUS = 400;
 const MAX_IMAGE_DIMS = 2000;
+// Task #3012 — /Separation /<name> pairs; PDF name tokens may carry #xx
+// hex escapes (e.g. PANTONE#20186#20C). Also matches the second name in a
+// [/Separation /Name /AltSpace ...] array form.
+const SEPARATION_NAME_RE = /\/Separation\s*\/([^\s/\[\]<>()]+)/g;
+const MAX_SPOT_NAMES = 60;
+
+function decodePdfName(raw: string): string {
+  return raw.replace(/#([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+}
 
 export class CompletedPdfScanner {
   private carry = "";
@@ -120,6 +144,10 @@ export class CompletedPdfScanner {
   private embedded = false;
   private dieline = false;
   private readonly imageDims: { w: number; h: number }[] = [];
+  private readonly bitmapDims: { w: number; h: number }[] = [];
+  private smaskImages = 0;
+  private gray = false;
+  private readonly spotNames = new Set<string>();
 
   constructor(opts?: { maxBytes?: number }) {
     this.maxBytes = opts?.maxBytes ?? 800 * 1024 * 1024; // 800MB hard ceiling
@@ -166,6 +194,10 @@ export class CompletedPdfScanner {
       hasEmbeddedFonts: this.embedded,
       hasDieline: this.dieline,
       imageDimsPx: this.imageDims,
+      bitmapImageDimsPx: this.bitmapDims,
+      smaskImageCount: this.smaskImages,
+      hasDeviceGray: this.gray,
+      spotColorNames: Array.from(this.spotNames),
     };
   }
 
@@ -177,6 +209,7 @@ export class CompletedPdfScanner {
     if (!this.spot && (/\/Separation\b/.test(s) || /\/DeviceN\b/.test(s))) this.spot = true;
     if (!this.fontDicts && (/\/Type\s*\/Font\b/.test(s) || /\/BaseFont\b/.test(s))) this.fontDicts = true;
     if (!this.embedded && /\/FontFile[23]?\b/.test(s)) this.embedded = true;
+    if (!this.gray && /\/(DeviceGray|CalGray)\b/.test(s)) this.gray = true;
     if (!this.dieline && /(dieline|die[\s_-]?cut|do[\s_-]?not[\s_-]?print|template)/i.test(s)) this.dieline = true;
 
     // Counted page objects.
@@ -190,6 +223,19 @@ export class CompletedPdfScanner {
     this.collectBoxes(MEDIABOX_RE, s, commit, this.media);
     this.collectBoxes(TRIMBOX_RE, s, commit, this.trim);
     this.collectBoxes(BLEEDBOX_RE, s, commit, this.bleed);
+
+    // Task #3012 — spot-color (Separation) names for the Pantone check.
+    if (this.spotNames.size < MAX_SPOT_NAMES) {
+      SEPARATION_NAME_RE.lastIndex = 0;
+      let sm: RegExpExecArray | null;
+      while ((sm = SEPARATION_NAME_RE.exec(s)) !== null) {
+        if (sm.index < commit && this.spotNames.size < MAX_SPOT_NAMES) {
+          const name = decodePdfName(sm[1]).trim();
+          if (name) this.spotNames.add(name);
+        }
+        if (sm.index === SEPARATION_NAME_RE.lastIndex) SEPARATION_NAME_RE.lastIndex++;
+      }
+    }
 
     // Embedded raster image dims (best-effort, for the min-PPI estimate).
     if (this.imageDims.length < MAX_IMAGE_DIMS) {
@@ -205,6 +251,12 @@ export class CompletedPdfScanner {
             const h = parseInt(hMatch[1], 10);
             if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
               this.imageDims.push({ w, h });
+              // Task #3012 — 1-bit / bitmap (line-art) images get their own
+              // PPI floor; SMask presence hints at PNG-sourced placement.
+              if (/\/BitsPerComponent\s+1\b/.test(win) || /\/ImageMask\s+true\b/.test(win)) {
+                this.bitmapDims.push({ w, h });
+              }
+              if (/\/SMask\s/.test(win)) this.smaskImages++;
             }
           }
         }
@@ -260,9 +312,123 @@ const dim = (b: BoxInches) => `${inch(b.w)} × ${inch(b.h)}`;
  * falls back to a computed finished+bleed target that can only WARN (we have
  * no authoritative template on file for that vendor/size/kind).
  */
+// ─── Task #3012 — press print-rule helpers ────────────────────────────
+
+// Names that legitimately appear as /Separation without being spot inks.
+const PROCESS_SEP_NAMES = new Set([
+  "all",
+  "none",
+  "cyan",
+  "magenta",
+  "yellow",
+  "black",
+  "registration",
+]);
+
+function isOfficialPantoneName(name: string): boolean {
+  return /^\s*(pantone|pms)\b/i.test(name.replace(/[_-]+/g, " "));
+}
+
+/**
+ * Measured bleed (inches per side) from the PDF's own boxes: TrimBox vs
+ * BleedBox (preferred) or MediaBox. Pairs boxes by stream order when the
+ * counts line up, else compares the first of each. Returns null when the
+ * PDF carries no TrimBox (can't measure).
+ */
+export function measuredBleedInches(scan: CompletedPdfScan): number | null {
+  const trims = scan.trimSizesInches;
+  if (trims.length === 0) return null;
+  const outers = scan.bleedSizesInches.length > 0 ? scan.bleedSizesInches : scan.pageSizesInches;
+  if (outers.length === 0) return null;
+  const n = trims.length === outers.length ? trims.length : 1;
+  let min = Infinity;
+  for (let i = 0; i < n; i++) {
+    const t = trims[i];
+    const o = outers[i];
+    const b = Math.min((o.w - t.w) / 2, (o.h - t.h) / 2);
+    if (Number.isFinite(b)) min = Math.min(min, b);
+  }
+  if (!Number.isFinite(min)) return null;
+  return Math.max(0, min);
+}
+
+const BLEED_TOL = 0.005; // measurement tolerance, inches
+
+export type EdgeBandVerdict = "filled" | "empty" | null;
+
+/**
+ * Task #3012 — edge-band bleed-content heuristic (ADVISORY ONLY). Renders
+ * page 1 of a LOCAL pdf small (pdftoppm @24dpi, 30s cap) and tests whether
+ * the band outside the trim rectangle contains any non-white content.
+ * Returns null on ANY failure (no pdftoppm, render error, no trim box, no
+ * bleed area) — the caller then simply omits the line item.
+ */
+export async function edgeBandContent(
+  pdfPath: string,
+  scan: CompletedPdfScan,
+): Promise<EdgeBandVerdict> {
+  try {
+    const outer = scan.pageSizesInches[0];
+    const trim = scan.trimSizesInches[0];
+    if (!outer || !trim) return null;
+    const bandW = (outer.w - trim.w) / 2;
+    const bandH = (outer.h - trim.h) / 2;
+    if (bandW < 0.02 && bandH < 0.02) return null; // no bleed area to inspect
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const run = promisify(execFile);
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "edge-band-"));
+    try {
+      const outBase = path.join(tmpDir, "p1");
+      await run("pdftoppm", ["-f", "1", "-l", "1", "-png", "-r", "24", pdfPath, outBase], {
+        timeout: 30_000,
+      });
+      const files = await fsp.readdir(tmpDir);
+      const pageFile = files.find((f) => f.startsWith("p1") && f.endsWith(".png"));
+      if (!pageFile) return null;
+      const sharp = (await import("sharp")).default;
+      const { data, info } = await sharp(path.join(tmpDir, pageFile))
+        .flatten({ background: "#ffffff" })
+        .greyscale()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const ch = info.channels || 1;
+      // Trim rect assumed centered in the rendered page (true for every
+      // real template we've measured; heuristic only).
+      const bx = Math.round((bandW / outer.w) * info.width);
+      const by = Math.round((bandH / outer.h) * info.height);
+      if (bx <= 0 && by <= 0) return null;
+      let total = 0;
+      let inked = 0;
+      for (let y = 0; y < info.height; y++) {
+        const bandRow = y < by || y >= info.height - by;
+        for (let x = 0; x < info.width; x++) {
+          if (!bandRow && bx > 0 && x >= bx && x < info.width - bx) {
+            x = info.width - bx - 1;
+            continue;
+          }
+          if (!bandRow && bx <= 0) break; // middle row, no side band
+          total++;
+          if (data[(y * info.width + x) * ch] < 245) inked++;
+        }
+      }
+      if (total === 0) return null;
+      return inked / total >= 0.02 ? "filled" : "empty";
+    } finally {
+      fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+  } catch {
+    return null; // degrade silently — skip just this line item
+  }
+}
+
 export function validateCompletedComponent(
   scan: CompletedPdfScan,
   spec: FinishedComponentSpec,
+  opts?: { edgeBand?: EdgeBandVerdict },
 ): CheckResult[] {
   // Not a PDF → nothing else is meaningful.
   if (!scan.isPdf) {
@@ -487,50 +653,267 @@ export function validateCompletedComponent(
   // smaller placement only raises the effective PPI, so a passing estimate
   // is safe; a failing estimate can only WARN (never hard-fail) because
   // the image may genuinely be placed smaller.
-  if (spec.minPpi != null && spec.minPpi > 0) {
-    const target: BoxInches = spec.templatePageInches ?? {
-      w: spec.finishedInches.w + spec.bleedInches * 2,
-      h: spec.finishedInches.h + spec.bleedInches * 2,
-    };
+  // Task #3012 — the press-level printRules.minPpi is a default; the
+  // component catalog column (spec.minPpi) always wins when set. When no
+  // press rules exist this is exactly `spec.minPpi` (unchanged behavior).
+  const rules = spec.printRules ?? null;
+  const pressName = spec.pressName || null;
+  const pressWord = pressName ?? "the press";
+  const effectiveMinPpi =
+    spec.minPpi != null && spec.minPpi > 0
+      ? spec.minPpi
+      : rules?.minPpi != null && rules.minPpi > 0
+        ? Math.round(rules.minPpi)
+        : null;
+  // Lower-bound PPI for an image assumed to span the artboard: per
+  // orientation, the effective PPI is the SMALLER of px-width/in-width
+  // and px-height/in-height (the constrained axis governs). Allow the
+  // better of the two orientations (image may be rotated 90°), then
+  // take the best (largest) estimate across embedded images.
+  // (`target` from the artboard-size check above — same placement basis.)
+  const bestPpiEstimate = (dims: { w: number; h: number }[]): number => {
+    let best = 0;
+    for (const d of dims) {
+      const est = Math.max(
+        Math.min(d.w / target.w, d.h / target.h),
+        Math.min(d.w / target.h, d.h / target.w),
+      );
+      if (est > best) best = est;
+    }
+    return best;
+  };
+  if (effectiveMinPpi != null) {
+    const minPpi = effectiveMinPpi;
     const dims = scan.imageDimsPx;
     if (dims.length === 0) {
       checks.push({
         key: "tmpl.min_ppi",
-        label: `Image resolution (min ${spec.minPpi} PPI)`,
+        label: `Image resolution (min ${minPpi} PPI)`,
         status: "warn",
-        message: `Couldn't measure any embedded images — verify placed images are at least ${spec.minPpi} PPI.`,
+        message: `Couldn't measure any embedded images — verify placed images are at least ${minPpi} PPI.`,
       });
     } else {
-      // Lower-bound PPI for an image assumed to span the artboard: per
-      // orientation, the effective PPI is the SMALLER of px-width/in-width
-      // and px-height/in-height (the constrained axis governs). Allow the
-      // better of the two orientations (image may be rotated 90°), then
-      // take the best (largest) estimate across embedded images.
-      let best = 0;
-      for (const d of dims) {
-        const est = Math.max(
-          Math.min(d.w / target.w, d.h / target.h),
-          Math.min(d.w / target.h, d.h / target.w),
-        );
-        if (est > best) best = est;
-      }
+      const best = bestPpiEstimate(dims);
       const rounded = Math.round(best);
-      if (best >= spec.minPpi) {
+      if (best >= minPpi) {
         checks.push({
           key: "tmpl.min_ppi",
-          label: `Image resolution (min ${spec.minPpi} PPI)`,
+          label: `Image resolution (min ${minPpi} PPI)`,
           status: "pass",
-          message: `Largest embedded image ≈${rounded} PPI at full-artboard placement — meets the ${spec.minPpi} PPI minimum (placement not measured; estimate only).`,
+          message: `Largest embedded image ≈${rounded} PPI at full-artboard placement — meets the ${minPpi} PPI minimum (placement not measured; estimate only).`,
         });
       } else {
         checks.push({
           key: "tmpl.min_ppi",
-          label: `Image resolution (min ${spec.minPpi} PPI)`,
+          label: `Image resolution (min ${minPpi} PPI)`,
           status: "warn",
-          message: `Largest embedded image ≈${rounded} PPI if placed full-artboard — below the ${spec.minPpi} PPI minimum. Placement isn't measured, so verify the actual placed resolution.`,
+          message: `Largest embedded image ≈${rounded} PPI if placed full-artboard — below the ${minPpi} PPI minimum. Placement isn't measured, so verify the actual placed resolution.`,
         });
       }
     }
+  }
+
+  // ─── Task #3012 — press-specific print-rule checks. Every block below
+  // is gated on the press having entered a value; with no rules the
+  // checks above are the complete (unchanged) output.
+
+  // 7. Bleed measured from the PDF's own boxes (TrimBox vs BleedBox/
+  // MediaBox) against the press's minimum / recommended values.
+  if (rules && (rules.bleedMinInches != null || rules.bleedRecommendedInches != null)) {
+    const min = rules.bleedMinInches ?? 0;
+    const rec = rules.bleedRecommendedInches ?? null;
+    const specText =
+      rules.bleedMinInches != null
+        ? `${pressWord} requires ≥${min}" bleed${rec != null ? `; ${rec}" recommended` : ""}`
+        : `${pressWord} recommends ${rec}" bleed`;
+    const measured = measuredBleedInches(scan);
+    if (measured == null) {
+      checks.push({
+        key: "tmpl.bleed",
+        label: "Bleed",
+        status: "warn",
+        message: `Couldn't measure bleed (the PDF carries no trim box). ${specText}.`,
+      });
+    } else {
+      const m = Math.round(measured * 1000) / 1000;
+      if (rules.bleedMinInches != null && measured + BLEED_TOL < min) {
+        checks.push({
+          key: "tmpl.bleed",
+          label: "Bleed",
+          status: "fail",
+          message: `Measured ≈${m}" bleed beyond the trim line — ${specText}.`,
+        });
+      } else if (rec != null && measured + BLEED_TOL < rec) {
+        checks.push({
+          key: "tmpl.bleed",
+          label: "Bleed",
+          status: "warn",
+          message: `Measured ≈${m}" bleed — meets the minimum but is below the recommended ${rec}" (${specText}).`,
+        });
+      } else {
+        checks.push({
+          key: "tmpl.bleed",
+          label: "Bleed",
+          status: "pass",
+          message: `Measured ≈${m}" bleed beyond the trim line — ${specText}.`,
+        });
+      }
+    }
+
+    // Edge-band bleed-content heuristic — ADVISORY ONLY, only emitted when
+    // the caller could render the file (own direct uploads); a render
+    // failure or pasted URL simply omits the row.
+    if (opts?.edgeBand === "empty") {
+      checks.push({
+        key: "tmpl.edge_band",
+        label: "Bleed content",
+        status: "warn",
+        message:
+          "Outer bleed band appears empty — art may not extend to the cut line. White-background designs legitimately trip this; verify visually.",
+      });
+    } else if (opts?.edgeBand === "filled") {
+      checks.push({
+        key: "tmpl.edge_band",
+        label: "Bleed content",
+        status: "pass",
+        message: "Artwork extends into the outer bleed band beyond the trim line.",
+      });
+    }
+  }
+
+  // 8. Second PPI floor for 1-bit / bitmap (line-art) images.
+  if (rules?.minPpiBitmap != null && rules.minPpiBitmap > 0) {
+    const floor = Math.round(rules.minPpiBitmap);
+    const dims = scan.bitmapImageDimsPx;
+    if (dims.length === 0) {
+      checks.push({
+        key: "tmpl.min_ppi_bitmap",
+        label: `Bitmap/line-art resolution (min ${floor} PPI)`,
+        status: "pass",
+        message: `No 1-bit/bitmap images detected — nothing held to ${pressWord}'s ${floor} PPI line-art floor.`,
+      });
+    } else {
+      const best = bestPpiEstimate(dims);
+      const rounded = Math.round(best);
+      checks.push({
+        key: "tmpl.min_ppi_bitmap",
+        label: `Bitmap/line-art resolution (min ${floor} PPI)`,
+        status: best >= floor ? "pass" : "warn",
+        message:
+          best >= floor
+            ? `Largest 1-bit image ≈${rounded} PPI at full-artboard placement — meets ${pressWord}'s ${floor} PPI line-art minimum (estimate only).`
+            : `Largest 1-bit image ≈${rounded} PPI if placed full-artboard — below ${pressWord}'s ${floor} PPI line-art minimum. Placement isn't measured, so verify the actual placed resolution.`,
+      });
+    }
+  }
+
+  // 9. Grayscale-required pieces (press flags a B/W component).
+  if (rules?.grayscaleRequired) {
+    if (scan.hasRGB) {
+      checks.push({
+        key: "tmpl.grayscale",
+        label: "Grayscale (B/W piece)",
+        status: "fail",
+        message: `${pressWord} requires this piece built as grayscale — RGB color usage detected.`,
+      });
+    } else if (scan.hasCMYK) {
+      checks.push({
+        key: "tmpl.grayscale",
+        label: "Grayscale (B/W piece)",
+        status: "warn",
+        message: `${pressWord} requires this piece built as grayscale — CMYK color usage detected; confirm all art is actually grayscale-only.`,
+      });
+    } else {
+      checks.push({
+        key: "tmpl.grayscale",
+        label: "Grayscale (B/W piece)",
+        status: "pass",
+        message: scan.hasDeviceGray
+          ? "Grayscale ink usage detected; no RGB/CMYK color usage found."
+          : "No RGB/CMYK color usage found.",
+      });
+    }
+  }
+
+  // 10. Official-Pantone spot colors only (name heuristic, never a fail —
+  // the scanner can't always recover every Separation name).
+  if (rules?.pantoneOnly) {
+    if (!scan.hasSpot) {
+      checks.push({
+        key: "tmpl.pantone",
+        label: "Pantone spot colors",
+        status: "pass",
+        message: `No spot colors detected (${pressWord} accepts only official Pantone spot inks).`,
+      });
+    } else {
+      const named = scan.spotColorNames.filter((n) => !PROCESS_SEP_NAMES.has(n.toLowerCase()));
+      const offBrand = named.filter((n) => !isOfficialPantoneName(n));
+      if (named.length === 0) {
+        checks.push({
+          key: "tmpl.pantone",
+          label: "Pantone spot colors",
+          status: "warn",
+          message: `Spot colors detected but their names couldn't be read — ${pressWord} accepts only official Pantone spot inks; verify each swatch is a PANTONE library color.`,
+        });
+      } else if (offBrand.length > 0) {
+        const list = offBrand.slice(0, 5).join('", "');
+        checks.push({
+          key: "tmpl.pantone",
+          label: "Pantone spot colors",
+          status: "warn",
+          message: `Spot color${offBrand.length > 1 ? "s" : ""} "${list}" ${offBrand.length > 1 ? "don't" : "doesn't"} look like official Pantone names — ${pressWord} accepts only official Pantone spot inks.`,
+        });
+      } else {
+        checks.push({
+          key: "tmpl.pantone",
+          label: "Pantone spot colors",
+          status: "pass",
+          message: `All named spot colors look like official Pantone inks (${named.slice(0, 5).join(", ")}).`,
+        });
+      }
+    }
+  }
+
+  // 11. Placed-image format rule (PNG-provenance heuristic: print-ready
+  // placements carry no soft transparency mask; PNG-sourced ones do).
+  if (rules?.placedImageRule) {
+    if (scan.smaskImageCount > 0) {
+      checks.push({
+        key: "tmpl.placed_format",
+        label: "Placed image formats",
+        status: "warn",
+        message: `${scan.smaskImageCount} placed image${scan.smaskImageCount > 1 ? "s carry" : " carries"} a soft transparency mask (typical of PNG/GIF-sourced art). ${pressWord}: ${rules.placedImageRule}`,
+      });
+    } else {
+      checks.push({
+        key: "tmpl.placed_format",
+        label: "Placed image formats",
+        status: "pass",
+        message: `No PNG-style transparency masks detected. ${pressWord}: ${rules.placedImageRule}`,
+      });
+    }
+  }
+
+  // 12. Advisory rows — the press's own wording for rules that can't be
+  // machine-verified. Status "pass" + tier "advisory" so they inform
+  // without flipping an otherwise-clean component to "warnings".
+  if (rules?.safetyMarginInches != null && rules.safetyMarginInches > 0) {
+    checks.push({
+      key: "tmpl.safety",
+      label: "Safety margin",
+      status: "pass",
+      tier: "advisory",
+      message: `Keep text and critical art at least ${rules.safetyMarginInches}" inside the cut line (${pressWord} spec) — content position isn't machine-verified.`,
+    });
+  }
+  for (let i = 0; i < (rules?.advisories?.length ?? 0); i++) {
+    checks.push({
+      key: `tmpl.advisory_${i}`,
+      label: `${pressName ?? "Press"} advisory`,
+      status: "pass",
+      tier: "advisory",
+      message: rules!.advisories![i],
+    });
   }
 
   return checks;
