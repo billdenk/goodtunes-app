@@ -1,25 +1,40 @@
-# Press Specs handoff — Aug 11 2026
+# Handoff notes — press specs & prepress review
 
-    Three screens. Copy the presentational code VERBATIM — replace presentational code character-for-character; wire data only. Dummy data lives in the MOCK_ consts at the top of each file; those values (and the two image imports) are the ONLY things you swap.
+    Updated: 2026-08-11 (supersedes the earlier drop; the old NOTES described a
+    stale shell and a pre-redesign artwork dialog).
 
-    ## Screens & placement
-    1. PressSpecsAudioDark.tsx — press portal, Catalog › Specs, Audio view (default). Vinyl / CD / Cassette switcher swaps the body; all three states are reachable in the mock.
-    2. PressSpecsArtDark.tsx — press portal, Catalog › Specs, Art view. NO format switcher and NO per-component tabs — one set of art rules for everything; templates upload with each component and carry their own dimensions.
-    3. SuperAdminPressSpecsDark.tsx — super-admin, Presses › [press] › Catalog tab. A quiet section pull-down next to the "Catalog" heading picks GoodTunes Packages / White Label / GoodDeed Certificates / Specs; with Specs chosen it renders the SAME specs page the press sees (Audio · Vinyl shown). The pull-down is wired in the mock (click to open/close).
+    ## Rules
+    - These mock files are the source of truth for PRESENTATION. Replace your
+    presentational code verbatim; wire real data where the MOCK_ consts are.
+    - Colorblind rule (founder): every status = icon + word, never color alone.
 
-    ## Shared header contract (both portals, both views)
-    - Row 1: Audio | Art segmented control left · Save right.
-    - Save starts as a QUIET GRAY OUTLINE (disabled) and only becomes the screen's one filled blue pill once a change is made. Never render filled blue in the idle state.
-    - H2: Specs. <quiet>The numbers artists press against.</quiet> — 30px, -0.02em, two-tone. Same heading on Audio and Art.
-    - Vinyl / CD / Cassette (Audio only) sits BELOW the shared header, smaller (h-7 track, p-0.5), left-aligned.
+    ## ArtworkCheckUpgraded.tsx — "Prepress review" dialog (NEW)
+    - Rebuild of today's artwork check dialog. Both artist and team see it.
+    - Header: two-tone title "Prepress review." + component ("Cover: 12″ (gatefold).")
+    with the standard gray-circle close chip, same line. No other header actions.
+    - Full-width verdict card: soft rose, filled red circle + white ✕,
+    "Not ready — N blockers, N warning." + one gray action sentence.
+    - Left: preview pane with ONE gray ··· circle over the art (top-right). Menu =
+    Replace file / Refresh for preview / Download artwork / Download report.
+    Below: release title + artist, then filename · pages · size caption.
+    - Right, urgency order: Needs attention → Check by eye (no per-row tags) →
+    Passed · N checks (collapsed by default; the only collapsible section).
+    - Rows: hairline-divided quiet table; verdict = icon + word (Pass/Warning/Fail)
+    right-aligned in a fixed gutter.
+    - Footer: outline pill "Override with justification" + ⓘ. Operator-only —
+    never rendered for artists. Keep the existing override behavior untouched:
+    min-8-char justification, who/why/when stamped, rollup = "overridden" (not a
+    clean pass), justification shown inline afterward. Mock shows the
+    pre-override state; an overridden-state variant will follow — don't wait.
+    - Theme-aware: THEMES map holds light + dark token sets. Light for
+    artist-facing contexts, dark inside the charcoal admin. The floating
+    "View dark" toggle is mock-only chrome — do not ship it.
 
-    ## Wired vs decorative
-    - Wired: Audio format switcher (all 3 bodies), super-admin section pull-down.
-    - Decorative: Audio|Art toggle (each view is its own file), Save (disabled by design), rail/nav, search, notifications.
-
-    ## Assets
-    - mrp-logo.svg → each press's own label mark (as already done for Catalog).
-    - goodtunes-logo.png rail footer: tiny 9px caps "Powered by" + logo image with filter: invert(1) brightness(1.8) — identical to the existing press-portal footer, no drift.
-
-    Acceptance: full-page top-to-bottom diff at 1440px; any visual difference other than data values is a failure.
+    ## SuperAdminPressSpecsDark.tsx — corrected super-admin shell
+    - Full-width top bar: logo left (dark asset, white via CSS invert), bell +
+    avatar right, bg = rail color, hairline bottom.
+    - Rail below top bar, starts with rounded-full ⌘K search. No "Find a press"
+    in the rail.
+    - Catalog tab itself is the pull-down (wired open/close) — no separate
+    heading pull-down.
     
