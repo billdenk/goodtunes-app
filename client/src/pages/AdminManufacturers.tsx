@@ -238,7 +238,7 @@ export function AdminManufacturers() {
             onClick={() => setPageTab("dashboard")}
             aria-pressed={pageTab === "dashboard"}
             className={[
-              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
               pageTab === "dashboard"
                 ? "bg-white text-[var(--apple-ink)] shadow-sm"
                 : "text-[var(--apple-subink)]",
@@ -252,7 +252,7 @@ export function AdminManufacturers() {
             onClick={() => setPageTab("list")}
             aria-pressed={pageTab === "list"}
             className={[
-              "h-8 px-3 inline-flex items-center justify-center rounded text-xs font-semibold transition-colors",
+              "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
               pageTab === "list"
                 ? "bg-white text-[var(--apple-ink)] shadow-sm"
                 : "text-[var(--apple-subink)]",
