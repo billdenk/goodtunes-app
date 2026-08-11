@@ -411,16 +411,36 @@ export function OperatorShell<TabId extends string>({
                       onToggle={() => toggleSection(sectionId)}
                       testId={`nav-section-${sectionId}`}
                     >
-                      {members.map((m) => (
-                        <NavButton
-                          key={m.id}
-                          label={m.label}
-                          icon={m.icon}
-                          active={m.id === activeTab}
-                          onClick={() => onTabChange(m.id)}
-                          testId={`nav-${m.id}`}
-                        />
-                      ))}
+                      {members.map((m) =>
+                        m.soon ? (
+                          /* Decorative "coming soon" row — dimmed, inert,
+                             trailing Soon pill (press-specs handoff rail). */
+                          <div
+                            key={m.id}
+                            aria-disabled="true"
+                            data-testid={`nav-${m.id}`}
+                            className="w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] font-medium text-[var(--apple-faint)] select-none"
+                          >
+                            {(() => {
+                              const Glyph = m.icon ?? Circle;
+                              return <Glyph className="w-4 h-4 flex-shrink-0 text-[var(--apple-faint)] opacity-70" />;
+                            })()}
+                            <span className="flex-1 text-left truncate">{m.label}</span>
+                            <span className="ml-auto flex-shrink-0 px-2 h-[18px] rounded-full text-[10px] font-semibold tracking-wide flex items-center text-[var(--apple-subink)] bg-[var(--apple-card-soft,rgba(0,0,0,0.04))] border border-[var(--apple-hairline)]">
+                              Soon
+                            </span>
+                          </div>
+                        ) : (
+                          <NavButton
+                            key={m.id}
+                            label={m.label}
+                            icon={m.icon}
+                            active={m.id === activeTab}
+                            onClick={() => onTabChange(m.id)}
+                            testId={`nav-${m.id}`}
+                          />
+                        ),
+                      )}
                     </NavSection>
                   );
                 }
@@ -468,7 +488,7 @@ export function OperatorShell<TabId extends string>({
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {/* Phone fallback navigation — the rail is hidden < md. */}
           <div className="md:hidden">
-            <DashboardTabs tabs={tabs} value={activeTab} onChange={onTabChange} />
+            <DashboardTabs tabs={tabs.filter((t) => !t.soon)} value={activeTab} onChange={onTabChange} />
           </div>
 
           {/* Page header — regular-admin-style: title + optional subtitle,

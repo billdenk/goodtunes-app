@@ -66,6 +66,18 @@ accents on ~14%-alpha translucent washes — see tokens).
   hover may add a whisper of shadow.
 - Bottom scroll-fade gradient on scrolling panes; hides at the bottom.
 
+## Page layout (ratified Aug 11 2026)
+
+- **Content container**: every operator/partner page uses one container —
+  centered, `max-width: 1240px`, padding `32px 40px 96px`. Left and right
+  gutters are equal (40px); content never hugs the rail while leaving a
+  larger dead margin on the right.
+- No per-page narrow caps (`max-w-3xl`, 720/920px wrappers, etc.). If a page
+  looks sparse at full width, split it into columns inside the container
+  (e.g. two-column form cards) instead of shrinking the container.
+- Individual text blocks may still cap their measure for readability
+  (~640px for paragraphs), but cards, tables, and forms span the container.
+
 ## Content patterns
 
 - **Album/artwork collections**: Apple-Music-style cover-first tiles (~200px),

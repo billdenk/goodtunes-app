@@ -13672,6 +13672,16 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/operator/OperatorShell.tsx",
+    "snippet": "className=\"w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] font-medium text-[var(--apple-faint)] select-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/OperatorShell.tsx",
+    "snippet": "<span className=\"ml-auto flex-shrink-0 px-2 h-[18px] rounded-full text-[10px] font-semibold tracking-wide flex items-center text-[var(--apple-subink)] bg-[var(--apple-card-soft,rgba(0,0,0,0.04))] bord"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/operator/OperatorShell.tsx",
     "snippet": "<Link key={x.id} href={x.href} data-testid={`nav-${x.id}`} className=\"gt-nav w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] font-medium text-[var(--apple-subink)] hover:bg-slate-"
   },
   {

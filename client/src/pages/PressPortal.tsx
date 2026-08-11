@@ -257,11 +257,13 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
     );
   }
 
-  // Task #2222 — hide the redundant standalone "GoodDeed pricing" tab from
-  // actual press logins (it duplicates Catalog → format dropdown → GoodDeeds).
-  // Operators viewing the portal in super-admin view still see it.
-  const tabs = (modulesForRole("press") as ReadonlyArray<{ id: TabId; label: string }>)
-    .filter((t) => isSuperAdminView || t.id !== "pricing");
+  // Press-specs handoff rail (Bill, Aug 11 2026) — Catalog is a collapsible
+  // section whose children include "GoodDeed Certificates" (the pricing tab,
+  // now visible to press logins again — supersedes the Task #2222 hide) and
+  // the decorative "White Label" Soon row (inert; rendered by OperatorShell,
+  // never routable — it's not in PRESS_TAB_IDS so ?tab=whitelabel resolves
+  // to dashboard).
+  const tabs = modulesForRole("press") as ReadonlyArray<{ id: TabId; label: string; soon?: boolean }>;
 
   // Cached for the catalog tab (pressDomain drives Hellbender/MRP import buttons).
   const pressDomain = me?.domain ?? null;

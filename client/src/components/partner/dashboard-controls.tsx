@@ -87,6 +87,10 @@ export type TabDef<T extends string> = {
   /** Task #2566 — collapsible rail section membership (OperatorShell
    * leftnav). The mobile DashboardTabs bar ignores it. */
   section?: OperatorSectionId;
+  /** Decorative "coming soon" rail row (OperatorShell leftnav) — dimmed,
+   * inert, trailing Soon pill. Callers filter these out of the mobile
+   * DashboardTabs bar. */
+  soon?: boolean;
 };
 
 export function DashboardTabs<T extends string>({

@@ -44,6 +44,9 @@ import {
   Wrench,
   Library,
   AudioLines,
+  Package,
+  Layers,
+  Award,
   Gift,
   Receipt,
   Cog,
@@ -94,6 +97,10 @@ export interface OperatorModuleDef {
   /** When set, this module renders nested under the matching collapsible
    * section header in the rail instead of as a flat top-level row. */
   section?: OperatorSectionId;
+  /** Decorative "coming soon" rail row — renders dimmed with a "Soon" pill,
+   * not clickable, excluded from phone tabs and routing. Per the
+   * press-specs handoff rail (Bill, Aug 11 2026). */
+  soon?: boolean;
   slot?: "main" | "aside";
   roles: readonly OperatorRole[];
   requires?: readonly PartnerVerb[];
@@ -184,12 +191,15 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "people",     label: "Clients",          icon: Users,            roles: ["press"] },
   { id: "albums",     label: "Projects",         icon: Disc3,            roles: ["press"] },
   { id: "acquisition", label: "Acquisition",    icon: UserPlus,         roles: ["press"] },
-  { id: "catalog",    label: "Catalog",          icon: Library,          roles: ["press"] },
-  // handoff/press-specs — per-press master-file specs (audio + art) shown
-  // to artists at upload. Sits right under Catalog (rail stays flat per
-  // Bill, Task #2838 — the handoff's Catalog children are decorative).
-  { id: "specs",      label: "Specs",            icon: AudioLines,       roles: ["press"] },
-  { id: "pricing",    label: "GoodDeed pricing", icon: Receipt,          roles: ["press"] },
+  // Catalog is a collapsible SECTION per the re-ratified press-specs
+  // handoff rail (Bill, Aug 11 2026 — supersedes the flat rail of Task
+  // #2838). Children in handoff order: GoodTunes Packages (the vinyl
+  // product catalog), White Label (decorative Soon), GoodDeed
+  // Certificates (was "GoodDeed pricing"), Specs.
+  { id: "catalog",    label: "GoodTunes Packages",    icon: Package,    section: "catalog", roles: ["press"] },
+  { id: "whitelabel", label: "White Label",           icon: Layers,     section: "catalog", soon: true, roles: ["press"] },
+  { id: "pricing",    label: "GoodDeed Certificates", icon: Award,      section: "catalog", roles: ["press"] },
+  { id: "specs",      label: "Specs",                 icon: AudioLines, section: "catalog", roles: ["press"] },
   { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },
   { id: "referrals",  label: "Referrals",        icon: Gift,             roles: ["press"] },
 

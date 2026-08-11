@@ -348,7 +348,7 @@ export function PressSpecs({
 
   return (
     <div className="w-full font-sans" style={{ backgroundColor: CANVAS, color: INK }} data-testid="panel-press-specs">
-      <div className="max-w-3xl mx-auto px-10 pt-12 pb-16">
+      <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
         {/* Audio / Art left · Save (idle until changes) right — consistent header on both views */}
         <div className="flex items-center justify-between gap-4">
           <div className="inline-flex items-center p-1 rounded-full" style={{ backgroundColor: CARD_SOFT, border: `1px solid ${HAIRLINE}` }} role="tablist" aria-label="Spec type">
