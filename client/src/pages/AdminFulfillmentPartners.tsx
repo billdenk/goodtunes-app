@@ -1,3 +1,4 @@
+import { SegmentedPillToggle } from "@/components/admin/SegmentedPillToggle";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -254,40 +255,15 @@ export function AdminFulfillmentPartners() {
   return (
     <AdminFrame active="fulfillment">
       <div className="space-y-5">
-        <div
-          className="inline-flex items-center bg-[var(--apple-track)] rounded-full p-0.5"
-          role="tablist"
-          data-testid="tabs-section-fulfillment"
-        >
-          <button
-            type="button"
-            onClick={() => setPageTab("dashboard")}
-            aria-pressed={pageTab === "dashboard"}
-            className={[
-              "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
-              pageTab === "dashboard"
-                ? "bg-white text-[var(--apple-ink)] shadow-sm"
-                : "text-[var(--apple-subink)]",
-            ].join(" ")}
-            data-testid="tab-section-dashboard"
-          >
-            Dashboard
-          </button>
-          <button
-            type="button"
-            onClick={() => setPageTab("list")}
-            aria-pressed={pageTab === "list"}
-            className={[
-              "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
-              pageTab === "list"
-                ? "bg-white text-[var(--apple-ink)] shadow-sm"
-                : "text-[var(--apple-subink)]",
-            ].join(" ")}
-            data-testid="tab-section-list"
-          >
-            Fulfillment
-          </button>
-        </div>
+        <SegmentedPillToggle
+          value={pageTab}
+          onChange={setPageTab}
+          testId="tabs-section-fulfillment"
+          options={[
+            { value: "dashboard", label: "Dashboard", testId: "tab-section-dashboard" },
+            { value: "list", label: "Fulfillment", testId: "tab-section-list" },
+          ]}
+        />
 
         {pageTab === "dashboard" && <AdminSectionDashboard section="fulfillment" />}
 

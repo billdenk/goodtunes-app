@@ -14,6 +14,7 @@ import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminPressesDashboard } from "@/components/admin/AdminPressesDashboard";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
+import { SegmentedPillToggle } from "@/components/admin/SegmentedPillToggle";
 import {
   Dialog,
   DialogContent,
@@ -228,40 +229,15 @@ export function AdminManufacturers() {
   return (
     <AdminFrame active="manufacturers">
       <div className="space-y-5">
-        <div
-          className="inline-flex items-center bg-[var(--apple-track)] rounded-full p-0.5"
-          role="tablist"
-          data-testid="tabs-section-manufacturers"
-        >
-          <button
-            type="button"
-            onClick={() => setPageTab("dashboard")}
-            aria-pressed={pageTab === "dashboard"}
-            className={[
-              "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
-              pageTab === "dashboard"
-                ? "bg-white text-[var(--apple-ink)] shadow-sm"
-                : "text-[var(--apple-subink)]",
-            ].join(" ")}
-            data-testid="tab-section-dashboard"
-          >
-            Dashboard
-          </button>
-          <button
-            type="button"
-            onClick={() => setPageTab("list")}
-            aria-pressed={pageTab === "list"}
-            className={[
-              "h-8 px-3 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
-              pageTab === "list"
-                ? "bg-white text-[var(--apple-ink)] shadow-sm"
-                : "text-[var(--apple-subink)]",
-            ].join(" ")}
-            data-testid="tab-section-list"
-          >
-            Presses
-          </button>
-        </div>
+        <SegmentedPillToggle
+          value={pageTab}
+          onChange={setPageTab}
+          testId="tabs-section-manufacturers"
+          options={[
+            { value: "dashboard", label: "Dashboard", testId: "tab-section-dashboard" },
+            { value: "list", label: "Presses", testId: "tab-section-list" },
+          ]}
+        />
 
         {pageTab === "dashboard" && <AdminPressesDashboard />}
 
@@ -312,31 +288,18 @@ export function AdminManufacturers() {
               )}
               {/* Task #916 — capability filter (All / Vinyl / GoodDeeds).
                   slate-100 segmented control, matching ViewModeToggle. */}
-              <div
-                className="inline-flex items-center rounded-full bg-[var(--apple-track)] p-0.5"
-                data-testid="filter-capability"
-              >
-                {([
-                  { key: "all", label: "All" },
-                  { key: "vinyl", label: "Vinyl" },
-                  { key: "gooddeed", label: "GoodDeeds" },
-                ] as const).map((opt) => (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    onClick={() => setCapFilter(opt.key)}
-                    className={[
-                      "h-8 px-2.5 rounded-full text-xs font-semibold transition-colors",
-                      capFilter === opt.key
-                        ? "bg-white text-[var(--apple-ink)] shadow-sm"
-                        : "text-[var(--apple-subink)]",
-                    ].join(" ")}
-                    data-testid={`filter-capability-${opt.key}`}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
+              <SegmentedPillToggle
+                value={capFilter}
+                onChange={setCapFilter}
+                testId="filter-capability"
+                ariaLabel="Capability filter"
+                dense
+                options={[
+                  { value: "all", label: "All", testId: "filter-capability-all" },
+                  { value: "vinyl", label: "Vinyl", testId: "filter-capability-vinyl" },
+                  { value: "gooddeed", label: "GoodDeeds", testId: "filter-capability-gooddeed" },
+                ]}
+              />
               <ViewModeToggle
                 value={view}
                 onChange={setView}

@@ -18265,6 +18265,11 @@
     "snippet": "className=\"inline-flex items-center justify-center h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-[var(--brand-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors\""
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "const BLUE = \"#319ED8\";"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
     "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-2\">Funding pools</div>"
@@ -18333,6 +18338,21 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
     "snippet": "<span className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Format</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "className=\"h-8 pl-3.5 pr-2.5 rounded-full inline-flex items-center gap-1.5 text-[12.5px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "className={`w-full flex items-center px-3.5 h-8 text-[12.5px] text-left transition-colors ${soon ? \"\" : dark ? \"hover:bg-white/5\" : \"hover:bg-black/5\"}`}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<span className=\"ml-auto flex-shrink-0 px-2 h-[18px] rounded-full text-[10px] font-semibold tracking-wide flex items-center\" style={{ color: SUBINK, backgroundColor: dark ? \"#26262a\" : \"#f2f2f4\", bord"
   },
   {
     "rule": "hardcoded-font-size",
@@ -24503,6 +24523,71 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "className=\"absolute right-4 top-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "const BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "<span className=\"block text-[12px] font-medium mb-1.5\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "className=\"flex-1 bg-transparent text-[13.5px] focus:outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "<span className=\"text-[12px] flex-shrink-0 pl-2\" style={{ color: FAINT }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "className=\"h-7 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold\" style={{ color: INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ color: FAINT }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "<p className=\"mt-3 text-[12px] flex items-start gap-1.5\" style={{ color: FAINT }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "className=\"h-8 px-5 rounded-full text-[13px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "className=\"h-9 px-4 rounded-full text-[13px] font-semibold flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "<h1 className=\"mt-6 text-[30px] font-semibold\" style={{ color: INK, letterSpacing: \"-0.02em\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "<p className=\"mt-2 text-[13.5px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressSpecs.tsx",
+    "snippet": "className=\"h-7 px-3.5 rounded-full text-[12.5px] font-medium transition-colors\""
   },
   {
     "rule": "brand-hex-literal",
