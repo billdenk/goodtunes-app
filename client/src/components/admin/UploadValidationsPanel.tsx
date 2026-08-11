@@ -22,7 +22,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, AlertTriangle, X, Upload, Lock, RefreshCcw } from "lucide-react";
+import { Check, AlertTriangle, X, Upload, Lock, RefreshCcw, HelpCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
@@ -32,11 +32,15 @@ const STATUS_STYLE: Record<CheckStatus, { ring: string; text: string; bg: string
   pass: { ring: "ring-emerald-200", text: "text-emerald-700", bg: "bg-emerald-50", label: "Pass" },
   warn: { ring: "ring-amber-200",   text: "text-amber-700",   bg: "bg-amber-50",   label: "Warn" },
   fail: { ring: "ring-rose-200",    text: "text-rose-700",    bg: "bg-rose-50",    label: "Fail" },
+  // Task #3030 — Unverified (currently only emitted by the completed-art
+  // bleed check; kept here so the shared CheckStatus union stays total).
+  unverified: { ring: "ring-sky-200", text: "text-sky-700", bg: "bg-sky-50", label: "Unverified" },
 };
 
 function StatusIcon({ s, className = "w-3.5 h-3.5" }: { s: CheckStatus; className?: string }) {
   if (s === "pass") return <Check className={className} />;
   if (s === "warn") return <AlertTriangle className={className} />;
+  if (s === "unverified") return <HelpCircle className={className} />;
   return <X className={className} />;
 }
 

@@ -354,6 +354,29 @@ export function measuredBleedInches(scan: CompletedPdfScan): number | null {
 
 const BLEED_TOL = 0.005; // measurement tolerance, inches
 
+/**
+ * Task #3030 — bleed measured STRICTLY from the PDF's own BleedBox vs
+ * TrimBox. Unlike measuredBleedInches above, this NEVER falls back to the
+ * MediaBox: it answers "does the checked file itself carry declared bleed
+ * geometry?" for the Unverified fallback path. Null when either box is
+ * absent.
+ */
+export function measuredBleedFromBleedBoxInches(scan: CompletedPdfScan): number | null {
+  const trims = scan.trimSizesInches;
+  const bleeds = scan.bleedSizesInches;
+  if (trims.length === 0 || bleeds.length === 0) return null;
+  const n = trims.length === bleeds.length ? trims.length : 1;
+  let min = Infinity;
+  for (let i = 0; i < n; i++) {
+    const t = trims[i];
+    const b = bleeds[i];
+    const v = Math.min((b.w - t.w) / 2, (b.h - t.h) / 2);
+    if (Number.isFinite(v)) min = Math.min(min, v);
+  }
+  if (!Number.isFinite(min)) return null;
+  return Math.max(0, min);
+}
+
 export type EdgeBandVerdict = "filled" | "empty" | null;
 
 /**
@@ -725,49 +748,97 @@ export function validateCompletedComponent(
   // is gated on the press having entered a value; with no rules the
   // checks above are the complete (unchanged) output.
 
-  // 7. Bleed measured from the PDF's own boxes (TrimBox vs BleedBox/
-  // MediaBox) against the press's minimum / recommended values.
-  if (rules && (rules.bleedMinInches != null || rules.bleedRecommendedInches != null)) {
-    const min = rules.bleedMinInches ?? 0;
-    const rec = rules.bleedRecommendedInches ?? null;
-    const specText =
-      rules.bleedMinInches != null
-        ? `${pressWord} requires ≥${min}" bleed${rec != null ? `; ${rec}" recommended` : ""}`
-        : `${pressWord} recommends ${rec}" bleed`;
-    const measured = measuredBleedInches(scan);
-    if (measured == null) {
-      checks.push({
-        key: "tmpl.bleed",
-        label: "Bleed",
-        status: "warn",
-        message: `Couldn't measure bleed (the PDF carries no trim box). ${specText}.`,
-      });
-    } else {
-      const m = Math.round(measured * 1000) / 1000;
-      if (rules.bleedMinInches != null && measured + BLEED_TOL < min) {
+  // 7. Bleed — Task #3030 canon (Otis/Ruby, Bill-approved): the measurement
+  // reference is the press's CERTIFIED control-template bleed line — never
+  // Illustrator's document bleed setting and never the checked file's own
+  // PDF BleedBox as an authoritative source. Strict priority:
+  //   a) certified template line (operator-entered or measured from the
+  //      press's uploaded template) → authoritative pass/warn/fail;
+  //   b) the checked file's own PDF BleedBox → check runs but the result
+  //      is UNVERIFIED (blocks a clean verdict until acknowledged);
+  //   c) neither → explicit FAIL ("Bleed could not be measured.").
+  // Every result stamps the source it was measured against (visible text).
+  {
+    const line = spec.templateBleedLineInches ?? null;
+    const min = rules?.bleedMinInches ?? null;
+    if (line != null && line > 0) {
+      const lineWord =
+        spec.bleedLineSource === "operator"
+          ? `the ${pressWord} certified template line (operator-entered)`
+          : `the ${pressWord} certified template line`;
+      const source = `Measured against ${lineWord} — ${line}" bleed.`;
+      const measured = measuredBleedInches(scan);
+      if (measured == null) {
         checks.push({
           key: "tmpl.bleed",
           label: "Bleed",
           status: "fail",
-          message: `Measured ≈${m}" bleed beyond the trim line — ${specText}.`,
+          source,
+          message: `Bleed could not be measured. The file carries no trim box to measure art extent against vs ${lineWord}.`,
         });
-      } else if (rec != null && measured + BLEED_TOL < rec) {
-        checks.push({
-          key: "tmpl.bleed",
-          label: "Bleed",
-          status: "warn",
-          message: `Measured ≈${m}" bleed — meets the minimum but is below the recommended ${rec}" (${specText}).`,
-        });
+      } else {
+        const m = Math.round(measured * 1000) / 1000;
+        if (measured + BLEED_TOL >= line) {
+          checks.push({
+            key: "tmpl.bleed",
+            label: "Bleed",
+            status: "pass",
+            source,
+            message: `Measured ≈${m}" bleed — meets the ${line}" bleed line vs ${lineWord}.`,
+          });
+        } else if (min != null && measured + BLEED_TOL >= min) {
+          checks.push({
+            key: "tmpl.bleed",
+            label: "Bleed",
+            status: "warn",
+            source,
+            message: `Measured ≈${m}" bleed — below the ${line}" line vs ${lineWord}, but meets ${pressWord}'s ≥${min}" minimum.`,
+          });
+        } else {
+          checks.push({
+            key: "tmpl.bleed",
+            label: "Bleed",
+            status: "fail",
+            source,
+            message: `Measured ≈${m}" bleed — below the ${line}" bleed line vs ${lineWord}.`,
+          });
+        }
+      }
+    } else {
+      const fileBleed = measuredBleedFromBleedBoxInches(scan);
+      if (fileBleed != null) {
+        const source = "Measured against PDF bleed box; no certified template line.";
+        const m = Math.round(fileBleed * 1000) / 1000;
+        if (min != null && fileBleed + BLEED_TOL < min) {
+          checks.push({
+            key: "tmpl.bleed",
+            label: "Bleed",
+            status: "fail",
+            source,
+            message: `Measured ≈${m}" bleed from the file's own PDF bleed box — below ${pressWord}'s ≥${min}" minimum. Measured against PDF bleed box; no certified template line.`,
+          });
+        } else {
+          checks.push({
+            key: "tmpl.bleed",
+            label: "Bleed",
+            status: "unverified",
+            source,
+            message: `Measured ≈${m}" bleed from the file's own PDF bleed box${min != null ? ` — meets ${pressWord}'s ≥${min}" minimum` : ""}. Measured against PDF bleed box; no certified template line.`,
+          });
+        }
       } else {
         checks.push({
           key: "tmpl.bleed",
           label: "Bleed",
-          status: "pass",
-          message: `Measured ≈${m}" bleed beyond the trim line — ${specText}.`,
+          status: "fail",
+          source: "No certified template line on file; no PDF bleed box in the file.",
+          message: `Bleed could not be measured. No certified template line is on file for ${pressWord} and the file carries no PDF bleed box.`,
         });
       }
     }
+  }
 
+  if (rules && (rules.bleedMinInches != null || rules.bleedRecommendedInches != null)) {
     // Edge-band bleed-content heuristic — ADVISORY ONLY, only emitted when
     // the caller could render the file (own direct uploads); a render
     // failure or pasted URL simply omits the row.

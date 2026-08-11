@@ -3648,6 +3648,9 @@ type PressTemplateSpec = {
   measuredHasDieline: boolean | null;
   measuredAt: string | null;
   measuredError: string | null;
+  // Task #3030 — certified template bleed line (operator wins over measured).
+  bleedLineInches: number | null;
+  measuredBleedLineInches: number | null;
 };
 
 // Task #3012 — shared shape for print rules (press-level defaults +
@@ -3753,6 +3756,7 @@ export function PressTemplateSpecsCard({ pressId, fmt }: { pressId: string; fmt:
                 artboardHInches: existing?.artboardHInches ?? null,
                 expectedPages: existing?.expectedPages ?? null,
                 minPpi: existing?.minPpi ?? null,
+                bleedLineInches: existing?.bleedLineInches ?? null,
                 color: existing?.color ?? null,
                 fontsRule: existing?.fontsRule ?? null,
                 printRules: existing?.printRules ?? null,
@@ -4491,6 +4495,9 @@ function TemplateComponentRow({
   const [hDraft, setHDraft] = useState(numOrEmpty(spec?.artboardHInches));
   const [pagesDraft, setPagesDraft] = useState(numOrEmpty(spec?.expectedPages));
   const [minPpiDraft, setMinPpiDraft] = useState(numOrEmpty(spec?.minPpi));
+  // Task #3030 — certified template bleed line (operator-entered wins over
+  // the measured-from-template value).
+  const [bleedLineDraft, setBleedLineDraft] = useState(numOrEmpty(spec?.bleedLineInches));
   const [colorDraft, setColorDraft] = useState<string>(spec?.color ?? "");
   // Task #3012 — per-component press print-rule overrides (blank = inherit
   // press-level defaults from the Print rules card).
@@ -4508,6 +4515,7 @@ function TemplateComponentRow({
     setHDraft(numOrEmpty(spec?.artboardHInches));
     setPagesDraft(numOrEmpty(spec?.expectedPages));
     setMinPpiDraft(numOrEmpty(spec?.minPpi));
+    setBleedLineDraft(numOrEmpty(spec?.bleedLineInches));
     setColorDraft(spec?.color ?? "");
     const rules = spec?.printRules ?? null;
     setBleedMinDraft(numOrEmpty(rules?.bleedMinInches));
@@ -4519,13 +4527,14 @@ function TemplateComponentRow({
     setPlacedRuleDraft(rules?.placedImageRule ?? "");
     setAdvisoriesDraft((rules?.advisories ?? []).join("\n"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spec?.artboardWInches, spec?.artboardHInches, spec?.expectedPages, spec?.minPpi, spec?.color, spec?.printRules]);
+  }, [spec?.artboardWInches, spec?.artboardHInches, spec?.expectedPages, spec?.minPpi, spec?.bleedLineInches, spec?.color, spec?.printRules]);
 
   const dimsDirty =
     wDraft !== numOrEmpty(spec?.artboardWInches) ||
     hDraft !== numOrEmpty(spec?.artboardHInches) ||
     pagesDraft !== numOrEmpty(spec?.expectedPages) ||
     minPpiDraft !== numOrEmpty(spec?.minPpi) ||
+    bleedLineDraft !== numOrEmpty(spec?.bleedLineInches) ||
     colorDraft !== (spec?.color ?? "") ||
     bleedMinDraft !== numOrEmpty(pr?.bleedMinInches) ||
     bleedRecDraft !== numOrEmpty(pr?.bleedRecommendedInches) ||
@@ -4541,11 +4550,12 @@ function TemplateComponentRow({
     const h = hDraft.trim() === "" ? null : Number(hDraft);
     const pages = pagesDraft.trim() === "" ? null : Number(pagesDraft);
     const minPpi = minPpiDraft.trim() === "" ? null : Number(minPpiDraft);
+    const bleedLine = bleedLineDraft.trim() === "" ? null : Number(bleedLineDraft);
     const bleedMin = bleedMinDraft.trim() === "" ? null : Number(bleedMinDraft);
     const bleedRec = bleedRecDraft.trim() === "" ? null : Number(bleedRecDraft);
     const safety = safetyDraft.trim() === "" ? null : Number(safetyDraft);
     const bitmapPpi = bitmapPpiDraft.trim() === "" ? null : Number(bitmapPpiDraft);
-    const nums = [w, h, pages, minPpi, bleedMin, bleedRec, safety, bitmapPpi];
+    const nums = [w, h, pages, minPpi, bleedLine, bleedMin, bleedRec, safety, bitmapPpi];
     if (nums.some((n) => n != null && !Number.isFinite(n))) {
       toast({ title: "Enter valid numbers for the check dimensions.", variant: "destructive" });
       return;
@@ -4560,6 +4570,10 @@ function TemplateComponentRow({
     }
     if ([bleedMin, bleedRec, safety].some((n) => n != null && (n < 0 || n > 2))) {
       toast({ title: "Bleed and safety values must be between 0 and 2 inches.", variant: "destructive" });
+      return;
+    }
+    if (bleedLine != null && (bleedLine <= 0 || bleedLine > 2)) {
+      toast({ title: "The certified bleed line must be between 0 and 2 inches.", variant: "destructive" });
       return;
     }
     const advisories = advisoriesDraft
@@ -4583,6 +4597,7 @@ function TemplateComponentRow({
       artboardHInches: h,
       expectedPages: pages,
       minPpi: minPpi != null ? Math.round(minPpi) : null,
+      bleedLineInches: bleedLine,
       color: (colorDraft || null) as PressTemplateSpec["color"],
       printRules: hasAnyRule ? printRules : null,
     });
@@ -4761,6 +4776,11 @@ function TemplateComponentRow({
                 · {spec.measuredHasLiveText ? (spec.measuredHasEmbeddedFonts ? "live text (fonts embedded)" : "live text (fonts NOT embedded)") : "text outlined"}
               </span>
               <span>· {spec.measuredHasDieline ? "dieline/template layer present" : "no dieline layer"}</span>
+              {spec.measuredBleedLineInches != null && (
+                <span data-testid={`text-template-measured-bleedline-${spec.componentKey}`}>
+                  · bleed line {spec.measuredBleedLineInches.toFixed(4).replace(/0+$/, "").replace(/\.$/, "")}″
+                </span>
+              )}
               {/* Mismatch flags: explicit operator values vs the template's own contents. */}
               {spec.artboardWInches != null &&
                 spec.artboardHInches != null &&
@@ -4852,6 +4872,16 @@ function TemplateComponentRow({
             className={INPUT}
             disabled={busy}
             data-testid={`input-template-minppi-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+          <input
+            value={bleedLineDraft}
+            onChange={(e) => setBleedLineDraft(e.target.value)}
+            inputMode="decimal"
+            placeholder="Certified bleed line (in)"
+            title="The bleed line drawn in this certified template, inches beyond trim. Overrides the measured value; the completed-art bleed check measures against this line."
+            className={INPUT}
+            disabled={busy}
+            data-testid={`input-template-bleedline-${label.toLowerCase().replace(/\s+/g, "-")}`}
           />
           <select
             value={colorDraft}

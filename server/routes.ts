@@ -115,7 +115,7 @@ import {
   type CompletedTemplateComponent,
   type CompletedTemplateVerdict,
 } from "@shared/uploadValidation";
-import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent } from "./validators/completedTemplate";
+import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches } from "./validators/completedTemplate";
 
 const scryptAsync = promisify(scrypt);
 
@@ -34170,6 +34170,9 @@ export async function registerRoutes(
       checks,
       status: rollupStatus(checks),
       override: null,
+      // Task #3030 — a fresh check always resets any prior operator
+      // acknowledgment of an Unverified result (the file may have changed).
+      unverifiedAck: null,
     };
     const merged = ((ctx.row?.components ?? []) as CompletedTemplateComponent[]).filter(
       (c) => c.componentId !== component.componentId,
@@ -34247,6 +34250,42 @@ export async function registerRoutes(
     res.json(await completedTemplatePayload(req.params.id));
   });
 
+  // Task #3030 — operator acknowledgment of an UNVERIFIED bleed result
+  // (measured against the file's own PDF bleed box because no certified
+  // template line exists). Stamps who + when onto the component; the
+  // rollup may then read clean while the row still displays Unverified +
+  // acknowledged. Re-running the check resets the acknowledgment.
+  app.post("/api/admin/albums/:id/completed-template/ack-unverified", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperator(req, res))) return;
+    const body = z.object({ componentId: z.string().trim().min(1) }).safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: body.error.message });
+    const ctx = await resolveCompletedContext(req.params.id);
+    if (!ctx || !ctx.row) return res.status(404).json({ message: "Nothing to acknowledge yet." });
+    const components = (ctx.row.components ?? []) as CompletedTemplateComponent[];
+    const target = components.find((c) => c.componentId === body.data.componentId);
+    if (!target) return res.status(404).json({ message: "No file matched to that component yet." });
+    if (!(target.checks ?? []).some((c) => c.status === "unverified")) {
+      return res.status(400).json({ message: "That component has no unverified result to acknowledge." });
+    }
+    const user = await storage.getUser(req.session.userId!);
+    target.unverifiedAck = {
+      byUserId: req.session.userId!,
+      byDisplayName: user?.displayName ?? null,
+      at: new Date().toISOString(),
+    };
+    const { vendorId, config } = ctx;
+    const required = await resolveRequired(vendorId, config);
+    const { components: retagged, status } = retagCompleted(components, required.map((r) => r.id));
+    await storage.saveCompletedTemplateCheck({
+      albumId: req.params.id,
+      vendorId,
+      config,
+      components: retagged,
+      status,
+    });
+    res.json(await completedTemplatePayload(req.params.id));
+  });
+
   // ─── Task #2109 — Operator-editable press template specs (catalog) ───
   // The completed-template check above resolves these OVER the measured-
   // constant baseline (resolveRequired → resolveFinishedComponents).
@@ -34277,6 +34316,9 @@ export async function registerRoutes(
     fontsRule: z.string().trim().max(200).nullable().optional(),
     // Task #2705 — minimum placed-image resolution (PPI); null = no check.
     minPpi: z.number().int().min(72).max(2400).nullable().optional(),
+    // Task #3030 — operator-entered certified template bleed line (inches
+    // per side, trim → bleed boundary). Always wins over the measured value.
+    bleedLineInches: z.number().positive().max(2).nullable().optional(),
     // Accept either a pasted absolute URL (http/https) OR a relative
     // object path (e.g. `/objects/uploads/<id>`) returned by the
     // upload-doc finalize flow — `z.string().url()` would reject the
@@ -34414,10 +34456,16 @@ export async function registerRoutes(
       // Use the FIRST page's MediaBox as the artboard (all real vendor
       // templates are uniform; a mixed-size file still records page 1).
       const first = scan.pageSizesInches[0] ?? null;
+      // Task #3030 — the template's own drawn bleed line: per-side distance
+      // between its trim and bleed geometry (BleedBox preferred, MediaBox
+      // fallback). Null when the template carries no trim box.
+      const bleedLine = measuredBleedInches(scan);
       await storage.updatePressTemplateSpecMeasured(pressId, specId, {
         measuredArtboardWInches: first ? Math.round(first.w * 10000) / 10000 : null,
         measuredArtboardHInches: first ? Math.round(first.h * 10000) / 10000 : null,
         measuredPages: scan.pageCount > 0 ? scan.pageCount : null,
+        measuredBleedLineInches:
+          bleedLine != null && bleedLine > 0 ? Math.round(bleedLine * 10000) / 10000 : null,
         measuredHasCmyk: scan.hasCMYK,
         measuredHasRgb: scan.hasRGB,
         measuredHasSpot: scan.hasSpot,
@@ -34441,6 +34489,7 @@ export async function registerRoutes(
       measuredArtboardWInches: null,
       measuredArtboardHInches: null,
       measuredPages: null,
+      measuredBleedLineInches: null,
       measuredHasCmyk: null,
       measuredHasRgb: null,
       measuredHasSpot: null,
@@ -34493,6 +34542,7 @@ export async function registerRoutes(
         templateFileUrl: body.data.templateFileUrl ?? null,
         templateFileName: body.data.templateFileName ?? null,
         minPpi: body.data.minPpi ?? null,
+        bleedLineInches: body.data.bleedLineInches ?? null,
         printRules: body.data.printRules ?? null,
       },
       req.session.userId ?? null,

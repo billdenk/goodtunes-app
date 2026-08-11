@@ -2679,6 +2679,10 @@ export const pressTemplateSpecs = pgTable(
     // Task #2705 — minimum placed-image resolution (PPI) the press requires
     // for this component; null = no check (never fabricated).
     minPpi: integer("min_ppi"),
+    // Task #3030 — operator-entered certified template bleed line (inches
+    // per side between the control template's trim and bleed boundaries).
+    // Always wins over the measured column below.
+    bleedLineInches: doublePrecision("bleed_line_inches"),
     // Task #3011 — measured-from-template fields. When a template file is
     // attached, the server scans the PDF and stores what's actually in the
     // file. These NEVER overwrite the operator-entered columns above; the
@@ -2687,6 +2691,9 @@ export const pressTemplateSpecs = pgTable(
     measuredArtboardWInches: doublePrecision("measured_artboard_w_inches"),
     measuredArtboardHInches: doublePrecision("measured_artboard_h_inches"),
     measuredPages: integer("measured_pages"),
+    // Task #3030 — the template's own drawn bleed line, measured from its
+    // trim vs bleed geometry during the same scan. Operator column wins.
+    measuredBleedLineInches: doublePrecision("measured_bleed_line_inches"),
     measuredHasCmyk: boolean("measured_has_cmyk"),
     measuredHasRgb: boolean("measured_has_rgb"),
     measuredHasSpot: boolean("measured_has_spot"),

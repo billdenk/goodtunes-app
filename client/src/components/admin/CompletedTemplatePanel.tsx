@@ -32,6 +32,7 @@ import {
   FileText,
   RefreshCw,
   Info,
+  HelpCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -83,11 +84,16 @@ const STATUS_STYLE: Record<CheckStatus, { text: string; bg: string; border: stri
   pass: { text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", label: "PASS" },
   warn: { text: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200", label: "WARN" },
   fail: { text: "text-rose-700", bg: "bg-rose-50", border: "border-rose-200", label: "FAIL" },
+  // Task #3030 — Unverified: the check ran but only against a weaker
+  // measurement source (the file's own PDF bleed box). Distinct icon +
+  // word so the state never reads by color alone.
+  unverified: { text: "text-sky-700", bg: "bg-sky-50", border: "border-sky-200", label: "UNVERIFIED" },
 };
 
 function StatusIcon({ s, className = "w-3 h-3" }: { s: CheckStatus; className?: string }) {
   if (s === "pass") return <Check className={className} />;
   if (s === "warn") return <AlertTriangle className={className} />;
+  if (s === "unverified") return <HelpCircle className={className} />;
   return <X className={className} />;
 }
 
@@ -378,32 +384,65 @@ function VerdictBanner({
     if (!c || c.presence === "missing") return true;
     return c.status === "fail" || c.status == null;
   }).length;
+  // Task #3030 — unacknowledged Unverified components count against a clean
+  // verdict (server rollup mirrors this); acknowledged ones roll up clean
+  // but their rows still display Unverified.
+  const unverified = required.filter((spec) => {
+    const c = byId.get(spec.id);
+    return !!c && c.status === "unverified" && !c.unverifiedAck;
+  }).length;
   const advisories =
     required.filter((spec) => {
       const c = byId.get(spec.id);
-      return !!c && (c.override != null || c.status === "warn");
+      return !!c && (c.override != null || c.status === "warn" || c.status === "unverified");
     }).length + extras.length;
+
+  // Task #3030 review gate 1 — the bleed measurement source renders as
+  // visible plain text on the banner itself (never a tooltip).
+  const bleedSources: string[] = [];
+  for (const spec of required) {
+    const c = byId.get(spec.id);
+    const bleed = c?.checks?.find((k) => k.key === "tmpl.bleed");
+    if (bleed?.source) bleedSources.push(`${c!.label}: ${bleed.source}`);
+  }
+  const sourceLines =
+    bleedSources.length > 0 ? (
+      <div className="mt-1 space-y-0.5">
+        {bleedSources.map((s) => (
+          <div key={s} className="text-[11px] leading-snug font-normal opacity-80">
+            Bleed · {s}
+          </div>
+        ))}
+      </div>
+    ) : null;
 
   if (verdict === "ready") {
     return (
       <div
-        className="rounded-md border border-emerald-200 bg-emerald-50 p-3 flex items-center gap-2"
+        className="rounded-md border border-emerald-200 bg-emerald-50 p-3 flex items-start gap-2"
         data-testid="banner-completed-verdict"
       >
-        <Check className="w-4 h-4 text-emerald-700 shrink-0" />
-        <div className="text-sm font-semibold text-emerald-900">Ready to send to {vendorLabel}</div>
+        <Check className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+        <div className="text-sm font-semibold text-emerald-900">
+          Ready to send to {vendorLabel}
+          {sourceLines}
+        </div>
       </div>
     );
   }
   if (verdict === "warnings") {
     return (
       <div
-        className="rounded-md border border-amber-200 bg-amber-50 p-3 flex items-center gap-2"
+        className="rounded-md border border-amber-200 bg-amber-50 p-3 flex items-start gap-2"
         data-testid="banner-completed-verdict"
       >
-        <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+        <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
         <div className="text-sm font-semibold text-amber-900">
           Ready to send to {vendorLabel} · {advisories} {advisories === 1 ? "advisory" : "advisories"}
+          {unverified > 0 && (
+            <> · {unverified} unverified {unverified === 1 ? "result" : "results"} awaiting acknowledgment</>
+          )}
+          {sourceLines}
         </div>
       </div>
     );
@@ -411,12 +450,16 @@ function VerdictBanner({
   if (verdict === "blocked") {
     return (
       <div
-        className="rounded-md border border-rose-200 bg-rose-50 p-3 flex items-center gap-2"
+        className="rounded-md border border-rose-200 bg-rose-50 p-3 flex items-start gap-2"
         data-testid="banner-completed-verdict"
       >
-        <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0" />
+        <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
         <div className="text-sm font-semibold text-rose-900">
           Not ready to send · {blockers} {blockers === 1 ? "blocker" : "blockers"}
+          {unverified > 0 && (
+            <> · {unverified} unverified {unverified === 1 ? "result" : "results"} awaiting acknowledgment</>
+          )}
+          {sourceLines}
         </div>
       </div>
     );
@@ -815,7 +858,7 @@ function UploadArtDialog({
 }
 
 // ── Magnifier preview window — big preview, checks, override, download ─
-function PreviewArtDialog({
+export function PreviewArtDialog({
   albumId,
   spec,
   component,
@@ -855,10 +898,29 @@ function PreviewArtDialog({
       toast({ title: "Couldn't save override", description: e?.message, variant: "destructive" }),
   });
 
+  // Task #3030 — acknowledge an Unverified result (who/when stamped
+  // server-side; re-running the check resets it).
+  const ack = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/completed-template/ack-unverified`, {
+        componentId,
+      });
+      return r.json() as Promise<CompletedTemplateResponse>;
+    },
+    onSuccess: (resp) => {
+      queryClient.setQueryData(["/api/admin/albums", albumId, "completed-template"], resp);
+      toast({ title: "Unverified result acknowledged" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't acknowledge", description: e?.message, variant: "destructive" }),
+  });
+
   if (!component) return null;
   // Override is an operator-only verb (the server 403s press accounts) —
   // hide the affordance entirely when the viewer can't operate.
   const canOverride = canOperate && (status === "fail" || status === "warn") && !component.override;
+  // Task #3030 — Unverified acknowledgment (operator-only, like override).
+  const hasUnverified = (component.checks ?? []).some((c) => c.status === "unverified");
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -927,7 +989,7 @@ function PreviewArtDialog({
             // read as guidance, not a passed test.
             const advisory = (c as { tier?: string }).tier === "advisory";
             const cs = advisory
-              ? { bg: "bg-slate-100", text: "text-slate-500" }
+              ? { bg: "bg-slate-100", text: "text-slate-500", label: "ADVISORY" }
               : STATUS_STYLE[c.status];
             return (
               <div
@@ -943,8 +1005,25 @@ function PreviewArtDialog({
                   )}
                 </span>
                 <div className="flex-1">
-                  <div className="font-medium text-slate-800">{c.label}</div>
+                  <div className="font-medium text-slate-800">
+                    {c.label}{" "}
+                    {/* Task #3030 colorblind rule — every status renders as
+                        icon + word, never color alone. */}
+                    <span className={`ml-1 text-[10px] font-bold tracking-wide ${cs.text}`}>
+                      {cs.label}
+                    </span>
+                  </div>
                   <div className="text-slate-500">{c.message}</div>
+                  {/* Task #3030 review gate 1 — measurement source as
+                      visible plain text on the row, never a tooltip. */}
+                  {c.source && (
+                    <div
+                      className="text-slate-600 font-medium"
+                      data-testid={`text-check-source-${componentId}-${c.key}`}
+                    >
+                      {c.source}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -960,6 +1039,31 @@ function PreviewArtDialog({
             {component.override.byDisplayName ? ` by ${component.override.byDisplayName}` : ""} —{" "}
             {component.override.justification}
           </div>
+        )}
+
+        {/* Task #3030 — Unverified acknowledgment: who/when once acked, and
+            the acknowledge action for operators while pending. */}
+        {hasUnverified && component.unverifiedAck && (
+          <div
+            className="rounded-md bg-sky-50 border border-sky-100 p-2 text-xs text-sky-800"
+            data-testid={`text-completed-ack-${componentId}`}
+          >
+            <span className="font-semibold">Unverified — acknowledged</span>
+            {component.unverifiedAck.byDisplayName ? ` by ${component.unverifiedAck.byDisplayName}` : ""} on{" "}
+            {new Date(component.unverifiedAck.at).toLocaleString()}. Re-checking the file resets this.
+          </div>
+        )}
+        {hasUnverified && !component.unverifiedAck && canOperate && (
+          <button
+            type="button"
+            onClick={() => ack.mutate()}
+            disabled={ack.isPending}
+            className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-sky-600 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-50"
+            data-testid={`button-completed-ack-${componentId}`}
+          >
+            {ack.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <HelpCircle className="w-3.5 h-3.5" />}
+            Acknowledge unverified result
+          </button>
         )}
 
         {canOverride && !overrideOpen && (

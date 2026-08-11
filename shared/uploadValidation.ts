@@ -2,7 +2,12 @@
 // against a pressing-vendor spec). Used by both `server/validators/`
 // and `client/src/components/admin/UploadValidationsPanel.tsx`.
 
-export type CheckStatus = "pass" | "warn" | "fail";
+// Task #3030 — "unverified": the check RAN but only against a weaker
+// measurement source than the canon reference (e.g. bleed measured from
+// the file's own PDF bleed box because no certified press template line
+// exists). Not a pass: it blocks a fully-clean verdict until an operator
+// explicitly acknowledges it.
+export type CheckStatus = "pass" | "warn" | "fail" | "unverified";
 
 export type CheckResult = {
   /** Stable machine key (e.g. "art.resolution", "audio.bit_depth"). */
@@ -19,6 +24,13 @@ export type CheckResult = {
   tier?: "advisory";
   /** One-line detail message. */
   message: string;
+  /**
+   * Task #3030 — the measurement source this result was produced against
+   * (e.g. "Measured against the MRP certified template line."). Rendered
+   * as visible plain text on the check row and the verdict banner — never
+   * a tooltip. Currently stamped by the bleed check.
+   */
+  source?: string;
 };
 
 export type UploadValidationKind = "art" | "audio";
@@ -47,6 +59,9 @@ export type UploadValidationResult = {
 /** Roll a list of per-check results into a single status. */
 export function rollupStatus(checks: CheckResult[]): CheckStatus {
   if (checks.some((c) => c.status === "fail")) return "fail";
+  // Task #3030 — unverified outranks warn: it means a check could only be
+  // run against a weaker source and needs explicit operator attention.
+  if (checks.some((c) => c.status === "unverified")) return "unverified";
   if (checks.some((c) => c.status === "warn")) return "warn";
   return "pass";
 }
@@ -90,6 +105,20 @@ export type CompletedTemplateComponent = {
   status: CheckStatus | null;
   /** Admin override-with-justification, stamped per component. */
   override: ValidationOverride | null;
+  /**
+   * Task #3030 — operator acknowledgment of an Unverified result (who +
+   * when). Once acknowledged, the rollup may read clean, but the result
+   * itself still displays as Unverified + acknowledged. Re-running the
+   * check against a (possibly changed) file resets this to null.
+   */
+  unverifiedAck?: UnverifiedAck | null;
+};
+
+/** Task #3030 — who acknowledged an Unverified result, and when. */
+export type UnverifiedAck = {
+  byUserId: string;
+  byDisplayName: string | null;
+  at: string; // ISO timestamp
 };
 
 // Rolled-up "ready to send" verdict for a whole confirmation:
@@ -120,7 +149,12 @@ export function rollupCompletedTemplate(
     }
     // Present but never validated (status null) is not "ready".
     if (c.status === "fail" || c.status == null) blocked = true;
-    else if (c.status === "warn") warned = true;
+    // Task #3030 — an unacknowledged Unverified result blocks a clean
+    // verdict (like warn-or-worse). Once an operator acknowledges it, the
+    // verdict may roll up clean while the row still displays Unverified.
+    else if (c.status === "unverified") {
+      if (!c.unverifiedAck) warned = true;
+    } else if (c.status === "warn") warned = true;
   }
   // Files matched to no required slot never block — they only warn.
   if (components.some((c) => c.presence === "extra")) warned = true;

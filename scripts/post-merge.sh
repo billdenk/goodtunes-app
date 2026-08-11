@@ -11826,6 +11826,9 @@ ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_has_embedded_
 ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_has_dieline boolean;
 ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_at timestamp;
 ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_error text;
+-- Task #3030 — certified template bleed line (operator + measured columns).
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS bleed_line_inches double precision;
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_bleed_line_inches double precision;
 SQL
   then
     echo "post-merge: template-spec-measurements migration ok on $label"
@@ -11854,3 +11857,30 @@ backfill_template_measurements() {
 }
 backfill_template_measurements dev  "${DATABASE_URL:-}"
 backfill_template_measurements prod "${PROD_DATABASE_URL:-}"
+
+# Task #3030 — one-time re-scan of already-measured templates so they gain
+# the new measured_bleed_line_inches column without a re-upload. Marker-
+# guarded: templates with no trim geometry legitimately keep a NULL bleed
+# line and must not be re-scanned on every merge.
+rescan_template_bleed_lines_task_3030() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping bleed-line rescan on $label (no URL set)"
+    return 0
+  fi
+  local done
+  done=$(psql "$url" -tAc "SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_3030_bleed_line_rescan'" 2>/dev/null || echo "")
+  if [ "$done" = "1" ]; then
+    echo "post-merge: bleed-line rescan already done on $label"
+    return 0
+  fi
+  if DATABASE_URL="$url" RESCAN_BLEED_LINE=1 timeout 180 npx tsx scripts/backfill-template-spec-measurements.ts; then
+    psql "$url" -v ON_ERROR_STOP=1 -c "INSERT INTO post_merge_data_backfills (name) VALUES ('task_3030_bleed_line_rescan') ON CONFLICT DO NOTHING" >/dev/null 2>&1 \
+      && echo "post-merge: bleed-line rescan ok on $label" \
+      || echo "post-merge: WARNING — bleed-line rescan ran on $label but the marker insert failed (will retry next merge)"
+  else
+    echo "post-merge: WARNING — bleed-line rescan failed/timed out on $label (no marker written; will retry next merge)"
+  fi
+}
+rescan_template_bleed_lines_task_3030 dev  "${DATABASE_URL:-}"
+rescan_template_bleed_lines_task_3030 prod "${PROD_DATABASE_URL:-}"

@@ -9,7 +9,11 @@ import {
   type CompletedTemplateConfig,
   type PressTemplateSpecRow,
 } from "@shared/vendorSpecs";
-import { rollupStatus } from "@shared/uploadValidation";
+import {
+  rollupStatus,
+  rollupCompletedTemplate,
+  type CompletedTemplateComponent,
+} from "@shared/uploadValidation";
 
 // MRP · 2LP · old-style gatefold · printed inners · 4-color labels — the
 // confirmed Nick Carter 2LP configuration whose real print-ready files the
@@ -95,7 +99,10 @@ describe("validateCompletedComponent", () => {
     assert.equal(checks.find((c) => c.key === "tmpl.size")!.status, "pass");
     assert.equal(checks.find((c) => c.key === "tmpl.color")!.status, "pass");
     assert.equal(checks.find((c) => c.key === "tmpl.fonts")!.status, "pass");
-    assert.notEqual(rollupStatus(checks), "fail");
+    // Task #3030 — bleed now always runs and FAILS without a certified
+    // template line or file BleedBox; exclude it from the legacy roll-up
+    // assertion (its behavior is covered by the Task #3030 suite).
+    assert.notEqual(rollupStatus(checks.filter((c) => c.key !== "tmpl.bleed")), "fail");
   });
 
   test("wrong artboard size fails (and blocks) against an exact template", () => {
@@ -155,7 +162,8 @@ describe("validateCompletedComponent", () => {
     const checks = validateCompletedComponent(scan, SPECS["jacket"]);
     assert.equal(checks.find((c) => c.key === "tmpl.dieline")!.status, "warn");
     // Everything else passes → roll-up is "warn" (still sendable), not fail.
-    assert.equal(rollupStatus(checks), "warn");
+    // (Task #3030 — bleed excluded: it now fails without a measurement source.)
+    assert.equal(rollupStatus(checks.filter((c) => c.key !== "tmpl.bleed")), "warn");
   });
 
   // ── Task #2705 — min-PPI advisory: orientation-safe lower-bound math ──
@@ -195,7 +203,8 @@ describe("validateCompletedComponent", () => {
     const checks = validateCompletedComponent(rectPdf([{ w: 500, h: 1000 }]), RECT_SPEC);
     const c = checks.find((x) => x.key === "tmpl.min_ppi")!;
     assert.equal(c.status, "warn");
-    assert.notEqual(rollupStatus(checks), "fail");
+    // Task #3030 — bleed excluded (fails without a measurement source).
+    assert.notEqual(rollupStatus(checks.filter((x) => x.key !== "tmpl.bleed")), "fail");
   });
 
   test("min-PPI: no measurable images warns, spec without minPpi skips the check", () => {
@@ -429,6 +438,9 @@ function bleedPdf(opts: {
   trimWIn?: number;
   trimHIn?: number;
   noTrim?: boolean;
+  /** Task #3030 — write an explicit /BleedBox of this size. */
+  bleedWIn?: number;
+  bleedHIn?: number;
   color?: string; // raw tokens appended per page
   imageDims?: { w: number; h: number; bitmap?: boolean; smask?: boolean }[];
   sepNames?: string[];
@@ -440,6 +452,9 @@ function bleedPdf(opts: {
   let s = "%PDF-1.6\n";
   s += `/Type /Page /MediaBox [ 0 0 ${w} ${h} ]`;
   if (!opts.noTrim) s += ` /TrimBox [ 0 0 ${tw} ${th} ]`;
+  if (opts.bleedWIn != null && opts.bleedHIn != null) {
+    s += ` /BleedBox [ 0 0 ${(opts.bleedWIn * 72).toFixed(4)} ${(opts.bleedHIn * 72).toFixed(4)} ]`;
+  }
   s += `\n${opts.color ?? "/DeviceCMYK"}\n`;
   for (const n of opts.sepNames ?? []) s += `/Separation /${n} /DeviceCMYK\n`;
   for (const d of opts.imageDims ?? []) {
@@ -483,28 +498,72 @@ describe("Task #3012 — bleed measurement + tiers", () => {
     assert.equal(measuredBleedInches(scanBuffer(bleedPdf({ wIn: 12, hIn: 12, noTrim: true }))), null);
   });
 
-  test("bleed ≥ recommended passes and cites the press's spec", () => {
+  // Task #3030 — a spec carrying the press's certified template line.
+  const LINE_SPEC = {
+    ...RULED_SPEC,
+    templateBleedLineInches: 0.25,
+    bleedLineSource: "measured" as const,
+  } as any;
+
+  test("Task #3030: template line — meeting the line passes and names the source", () => {
     const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25 }));
-    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.bleed");
+    const c = find(validateCompletedComponent(scan, LINE_SPEC), "tmpl.bleed");
     assert.equal(c.status, "pass");
-    assert.match(c.message, /Memphis Record Pressing requires ≥0.125" bleed; 0.25" recommended/);
+    assert.match(c.message, /Memphis Record Pressing certified template line/);
+    assert.match(c.source, /Memphis Record Pressing certified template line/);
   });
 
-  test("bleed between min and recommended warns", () => {
+  test("Task #3030: template line — below the line but ≥ press min warns", () => {
     const scan = scanBuffer(bleedPdf({ wIn: 12.55, hIn: 12.55, trimWIn: 12.25, trimHIn: 12.25 }));
-    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.bleed");
+    const c = find(validateCompletedComponent(scan, LINE_SPEC), "tmpl.bleed");
     assert.equal(c.status, "warn");
-    assert.match(c.message, /below the recommended/);
+    assert.match(c.message, /below the 0.25" line/);
+    assert.match(c.source, /certified template line/);
   });
 
-  test("bleed below the minimum fails", () => {
+  test("Task #3030: template line — below the press minimum fails", () => {
     const scan = scanBuffer(bleedPdf({ wIn: 12.35, hIn: 12.35, trimWIn: 12.25, trimHIn: 12.25 }));
-    assert.equal(find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.bleed").status, "fail");
+    const c = find(validateCompletedComponent(scan, LINE_SPEC), "tmpl.bleed");
+    assert.equal(c.status, "fail");
+    assert.match(c.source, /certified template line/);
   });
 
-  test("unmeasurable bleed (no trim box) warns, never fails", () => {
+  test("Task #3030: template line + unmeasurable file (no trim box) FAILS explicitly", () => {
     const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, noTrim: true }));
-    assert.equal(find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.bleed").status, "warn");
+    const c = find(validateCompletedComponent(scan, LINE_SPEC), "tmpl.bleed");
+    assert.equal(c.status, "fail");
+    assert.match(c.message, /Bleed could not be measured\./);
+  });
+
+  test("Task #3030: no template line + file BleedBox ⇒ UNVERIFIED with the fixed reason", () => {
+    const scan = scanBuffer(
+      bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25, bleedWIn: 12.75, bleedHIn: 12.75 }),
+    );
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.bleed");
+    assert.equal(c.status, "unverified");
+    assert.match(c.message, /Measured against PDF bleed box; no certified template line\./);
+    assert.equal(c.source, "Measured against PDF bleed box; no certified template line.");
+  });
+
+  test("Task #3030: BleedBox fallback below the press minimum still FAILS (never a silent unverified)", () => {
+    const scan = scanBuffer(
+      bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25, bleedWIn: 12.35, bleedHIn: 12.35 }),
+    );
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.bleed");
+    assert.equal(c.status, "fail");
+    assert.match(c.source, /PDF bleed box/);
+  });
+
+  test("Task #3030: neither template line nor BleedBox ⇒ FAIL 'Bleed could not be measured.'", () => {
+    // Trim + media only — a media-box surrogate is NOT a PDF bleed box.
+    const withTrim = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25 }));
+    const c1 = find(validateCompletedComponent(withTrim, RULED_SPEC), "tmpl.bleed");
+    assert.equal(c1.status, "fail");
+    assert.match(c1.message, /Bleed could not be measured\./);
+    const noTrim = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, noTrim: true }));
+    const c2 = find(validateCompletedComponent(noTrim, RULED_SPEC), "tmpl.bleed");
+    assert.equal(c2.status, "fail");
+    assert.match(c2.message, /Bleed could not be measured\./);
   });
 
   test("edge band: empty warns, filled passes, absent (null) omits the row", () => {
@@ -583,20 +642,111 @@ describe("Task #3012 — dual PPI, grayscale, Pantone, placed-format, advisories
     assert.equal(adv.status, "pass");
     assert.equal(adv.tier, "advisory");
     assert.match(adv.message, /safety area/);
-    assert.notEqual(rollupStatus(checks), "fail");
+    // Task #3030 — bleed excluded (fails without a measurement source).
+    assert.notEqual(rollupStatus(checks.filter((c) => c.key !== "tmpl.bleed")), "fail");
   });
 });
 
-describe("Task #3012 — fallback safety: no rules ⇒ identical verdicts", () => {
-  test("a spec without printRules produces exactly today's check set", () => {
+describe("Task #3012/#3030 — fallback safety: no rules ⇒ identical verdicts (bleed excepted)", () => {
+  test("a spec without printRules produces exactly today's check set, plus the always-on bleed check", () => {
     const scan = scanBuffer(fakePdf({ pages: 4, wIn: 6.5, hIn: 7.6811, color: "cmyk+spot", fonts: "embedded" }));
     const before = validateCompletedComponent(scan, SPECS["labels"]);
     const after = validateCompletedComponent(scan, { ...SPECS["labels"], printRules: null, pressName: null } as any);
     assert.deepEqual(after, before);
-    // None of the new keys appear.
-    for (const k of ["tmpl.bleed", "tmpl.edge_band", "tmpl.min_ppi_bitmap", "tmpl.grayscale", "tmpl.pantone", "tmpl.placed_format", "tmpl.safety"]) {
+    // None of the rules-gated keys appear.
+    for (const k of ["tmpl.edge_band", "tmpl.min_ppi_bitmap", "tmpl.grayscale", "tmpl.pantone", "tmpl.placed_format", "tmpl.safety"]) {
       assert.equal(find(after, k), undefined);
     }
+    // Task #3030 — DELIBERATE contract change: the bleed check now always
+    // runs. With no certified template line and no file BleedBox it must
+    // FAIL explicitly (no silent pass, no silent downgrade).
+    const bleed = find(after, "tmpl.bleed");
+    assert.ok(bleed);
+    assert.equal(bleed.status, "fail");
+    assert.match(bleed.message, /Bleed could not be measured\./);
+  });
+});
+
+describe("Task #3030 — unverified status: rollup + acknowledgment", () => {
+  const comp = (over: Partial<CompletedTemplateComponent>): CompletedTemplateComponent => ({
+    componentId: "jacket",
+    label: "Jacket",
+    presence: "present",
+    assetUrl: "/objects/uploads/x",
+    fileName: "jacket.pdf",
+    previewUrl: null,
+    previewUrl2: null,
+    checks: [],
+    status: "pass",
+    override: null,
+    unverifiedAck: null,
+    ...over,
+  });
+
+  test("rollupStatus: unverified outranks warn, fail outranks unverified", () => {
+    const mk = (status: any) => ({ key: "k", label: "L", status, message: "" }) as any;
+    assert.equal(rollupStatus([mk("pass"), mk("warn"), mk("unverified")]), "unverified");
+    assert.equal(rollupStatus([mk("unverified"), mk("fail")]), "fail");
+    assert.equal(rollupStatus([mk("pass")]), "pass");
+  });
+
+  test("an unacknowledged unverified component blocks a clean verdict (warnings, not ready)", () => {
+    const verdict = rollupCompletedTemplate([comp({ status: "unverified" })], ["jacket"]);
+    assert.equal(verdict, "warnings");
+  });
+
+  test("an acknowledged unverified component may roll up clean", () => {
+    const verdict = rollupCompletedTemplate(
+      [comp({ status: "unverified", unverifiedAck: { byUserId: "u1", byDisplayName: "Op", at: "2026-08-11T00:00:00Z" } })],
+      ["jacket"],
+    );
+    assert.equal(verdict, "ready");
+  });
+});
+
+describe("Task #3030 — resolver: certified template bleed line precedence", () => {
+  const row = (over: Partial<PressTemplateSpecRow>): PressTemplateSpecRow => ({
+    format: "12_double",
+    componentKey: "jacket",
+    variantKey: "gatefold_oldstyle",
+    discCount: 0,
+    artboardWInches: null,
+    artboardHInches: null,
+    expectedPages: null,
+    color: null,
+    ...over,
+  });
+
+  test("operator-entered bleed line wins over the measured value", () => {
+    const resolved = resolveFinishedComponents({
+      vendorId: "mrp",
+      config: CFG,
+      pressName: "MRP",
+      storeRows: [row({ bleedLineInches: 0.1875, measuredBleedLineInches: 0.25 })],
+    });
+    const jacket = resolved.find((s) => s.id === "jacket")!;
+    assert.equal(jacket.templateBleedLineInches, 0.1875);
+    assert.equal(jacket.bleedLineSource, "operator");
+  });
+
+  test("measured bleed line fills in when no operator value is set", () => {
+    const resolved = resolveFinishedComponents({
+      vendorId: "mrp",
+      config: CFG,
+      pressName: "MRP",
+      storeRows: [row({ measuredBleedLineInches: 0.25 })],
+    });
+    const jacket = resolved.find((s) => s.id === "jacket")!;
+    assert.equal(jacket.templateBleedLineInches, 0.25);
+    assert.equal(jacket.bleedLineSource, "measured");
+    assert.equal(jacket.measuredFromLabel, "MRP");
+  });
+
+  test("no stored line ⇒ templateBleedLineInches stays null", () => {
+    const resolved = resolveFinishedComponents({ vendorId: "mrp", config: CFG, storeRows: [row({})] });
+    const jacket = resolved.find((s) => s.id === "jacket")!;
+    assert.equal(jacket.templateBleedLineInches, null);
+    assert.equal(jacket.bleedLineSource, null);
   });
 });
 

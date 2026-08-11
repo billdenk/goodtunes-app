@@ -982,6 +982,7 @@ export interface IStorage {
         | "measuredArtboardWInches"
         | "measuredArtboardHInches"
         | "measuredPages"
+        | "measuredBleedLineInches"
         | "measuredHasCmyk"
         | "measuredHasRgb"
         | "measuredHasSpot"
@@ -5510,6 +5511,8 @@ export class DbStorage implements IStorage {
           // path never does, so a CSV re-upload can't wipe them). Fixes
           // the prior conflict-update silently dropping minPpi.
           ...("minPpi" in input ? { minPpi: values.minPpi ?? null } : {}),
+          // Task #3030 — same guarded-update rule for the certified bleed line.
+          ...("bleedLineInches" in input ? { bleedLineInches: values.bleedLineInches ?? null } : {}),
           ...("printRules" in input ? { printRules: values.printRules ?? null } : {}),
           updatedByUserId,
           updatedAt: new Date(),
@@ -5543,6 +5546,7 @@ export class DbStorage implements IStorage {
         | "measuredArtboardWInches"
         | "measuredArtboardHInches"
         | "measuredPages"
+        | "measuredBleedLineInches"
         | "measuredHasCmyk"
         | "measuredHasRgb"
         | "measuredHasSpot"

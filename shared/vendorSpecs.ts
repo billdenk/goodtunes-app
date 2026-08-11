@@ -585,6 +585,18 @@ export type FinishedComponentSpec = {
   pagesSource?: "operator" | "measured" | "baseline" | null;
   /** Press display name when a measured template drives this slot. */
   measuredFromLabel?: string | null;
+  /**
+   * Task #3030 — the press's CERTIFIED control-template bleed line for
+   * this slot (inches per side between the template's trim and bleed
+   * boundaries). This — never the checked file's own PDF bleed box — is
+   * the canon measurement reference for the bleed check. Null = no
+   * certified line on file (bleed can only run against the checked
+   * file's own bleed box, yielding an "unverified" result).
+   */
+  templateBleedLineInches?: number | null;
+  /** Provenance of templateBleedLineInches: operator edit wins over the
+   * value measured from the press's uploaded template. */
+  bleedLineSource?: "operator" | "measured" | null;
 };
 
 // Measured flat artboard sizes (inches) keyed by
@@ -725,6 +737,11 @@ export function requiredFinishedComponents(
     spec.sizeSource = spec.templatePageInches ? "baseline" : null;
     spec.pagesSource = spec.expectedPages > 0 ? "baseline" : null;
     spec.measuredFromLabel = null;
+    // Task #3030 — no baseline exists for the certified template bleed
+    // line: it only ever comes from a stored catalog row (operator edit
+    // or measured from the press's uploaded template).
+    spec.templateBleedLineInches = null;
+    spec.bleedLineSource = null;
   }
 
   return out;
@@ -773,6 +790,12 @@ export type PressTemplateSpecRow = {
   measuredArtboardHInches?: number | null;
   measuredPages?: number | null;
   measuredError?: string | null;
+  // Task #3030 — the template's own drawn bleed line (per-side distance
+  // between its trim and bleed boundaries, inches). Operator column wins;
+  // measured column filled by the template scan when the template PDF
+  // carries the geometry.
+  bleedLineInches?: number | null;
+  measuredBleedLineInches?: number | null;
 };
 
 /**
@@ -883,6 +906,16 @@ export function resolveFinishedComponents(args: {
     } else if (match.measuredPages != null && match.measuredPages > 0) {
       next.expectedPages = match.measuredPages;
       next.pagesSource = "measured";
+      next.measuredFromLabel = args.pressName ?? next.measuredFromLabel ?? null;
+    }
+    // Task #3030 — certified template bleed line: operator edit wins,
+    // measured-from-template fills in only when the operator column is null.
+    if (match.bleedLineInches != null && match.bleedLineInches > 0) {
+      next.templateBleedLineInches = match.bleedLineInches;
+      next.bleedLineSource = "operator";
+    } else if (match.measuredBleedLineInches != null && match.measuredBleedLineInches > 0) {
+      next.templateBleedLineInches = match.measuredBleedLineInches;
+      next.bleedLineSource = "measured";
       next.measuredFromLabel = args.pressName ?? next.measuredFromLabel ?? null;
     }
     if (match.color === "process-4c" || match.color === "cmyk-or-pms") next.color = match.color;

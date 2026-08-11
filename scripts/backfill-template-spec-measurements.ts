@@ -18,6 +18,7 @@ import { ObjectStorageService } from "../server/replit_integrations/object_stora
 import {
   CompletedPdfScanner,
   fetchAndScanPdf,
+  measuredBleedInches,
   type CompletedPdfScan,
 } from "../server/validators/completedTemplate";
 
@@ -41,10 +42,21 @@ async function main() {
   if (!dbUrl) throw new Error("DATABASE_URL not set");
   const pool = new Pool({ connectionString: dbUrl, max: 2 });
   try {
+    // Task #3030 — RESCAN_BLEED_LINE=1 additionally re-scans rows that were
+    // measured BEFORE the bleed-line column existed (measured cleanly but
+    // carry no measured_bleed_line_inches), so already-attached certified
+    // templates start supplying the line without a re-upload. Run one-time
+    // (marker-guarded in post-merge.sh): templates without trim geometry
+    // legitimately stay NULL and must not be re-scanned every merge.
+    const rescanBleed = process.env.RESCAN_BLEED_LINE === "1";
+    const where = rescanBleed
+      ? `template_file_url IS NOT NULL AND (measured_at IS NULL
+           OR (measured_error IS NULL AND measured_bleed_line_inches IS NULL))`
+      : `template_file_url IS NOT NULL AND measured_at IS NULL`;
     const { rows } = await pool.query(
       `SELECT id, press_id, template_file_url
          FROM press_template_specs
-        WHERE template_file_url IS NOT NULL AND measured_at IS NULL
+        WHERE ${where}
         ORDER BY press_id, format, component_key`,
     );
     console.log(`[template-backfill] ${rows.length} unmeasured template row(s)`);
@@ -74,6 +86,10 @@ async function main() {
 
       if (scan) {
         const first = scan.pageSizesInches[0] ?? null;
+        // Task #3030 — the template's own drawn bleed line (trim → bleed
+        // boundary distance per side). Null when the template carries no
+        // trim geometry.
+        const bleedLine = measuredBleedInches(scan);
         await pool.query(
           `UPDATE press_template_specs SET
              measured_artboard_w_inches = $2,
@@ -85,6 +101,7 @@ async function main() {
              measured_has_live_text = $8,
              measured_has_embedded_fonts = $9,
              measured_has_dieline = $10,
+             measured_bleed_line_inches = $11,
              measured_at = now(),
              measured_error = NULL
            WHERE id = $1`,
@@ -99,6 +116,7 @@ async function main() {
             scan.hasFontDicts,
             scan.hasEmbeddedFonts,
             scan.hasDieline,
+            bleedLine != null && bleedLine > 0 ? Math.round(bleedLine * 10000) / 10000 : null,
           ],
         );
         ok++;
