@@ -184,3 +184,7 @@ Reference implementation: the dark Catalog mockup
 - **Acceptance gate:** before a screen is done, screenshot it in both
   themes (where both apply) at 1440 / 1024 / 768. Off-theme surfaces or
   horizontal overflow = failure.
+
+  **Crumb → H1 spacing (ratified 2026-08-12): ~12px (`mt-3`) between the
+  crumb trail and the page H1** — the trail needs its own breathing room and
+  must never sit tight on the heading (`mt-1` is too tight; drift).
