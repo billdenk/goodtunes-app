@@ -314,10 +314,13 @@ export function OperatorShell<TabId extends string>({
               </span>
             ) : (
               <span
-                className="h-9 w-9 rounded-full bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0 overflow-hidden p-1"
+                className={cn(
+                  "h-9 w-9 rounded-full bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0 overflow-hidden",
+                  !resolvedLogoUrl && "p-1",
+                )}
                 style={logoChipStyle}
               >
-                {resolvedLogoUrl ? <img src={resolvedLogoUrl} alt="" className="w-full h-full object-contain" /> : <FallbackIcon className="h-4 w-4 text-slate-400" />}
+                {resolvedLogoUrl ? <img src={resolvedLogoUrl} alt="" className="w-full h-full object-cover" /> : <FallbackIcon className="h-4 w-4 text-slate-400" />}
               </span>
             )}
             <span className="text-[15px] font-semibold text-slate-800 truncate" data-testid="text-operator-topbar-name">{name}</span>
