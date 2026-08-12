@@ -2030,19 +2030,20 @@ export function PressPackagePricingCatalog({
         setActiveTab(wanted as AlbumFormat);
         return;
       }
-      // 12" LP is the default when the press offers it (Bill: not 7").
+      // 12" is the default when the press offers one (Bill: not 7").
+      // Task #3055 — matched by PREFIX so 12_double counts when 12_lp hides.
       setActiveTab(
-        offeredList.includes("12_lp")
-          ? "12_lp"
-          : VINYL_FORMATS.find((f) => offeredList.includes(f)) ?? "12_lp",
+        VINYL_FORMATS.find((f) => f.startsWith("12") && offeredList.includes(f)) ??
+          VINYL_FORMATS.find((f) => offeredList.includes(f)) ??
+          "12_lp",
       );
       return;
     }
     if (!offeredList.includes(activeTab as AlbumFormat)) {
       setActiveTab(
-        offeredList.includes("12_lp")
-          ? "12_lp"
-          : VINYL_FORMATS.find((f) => offeredList.includes(f)) ?? "12_lp",
+        VINYL_FORMATS.find((f) => f.startsWith("12") && offeredList.includes(f)) ??
+          VINYL_FORMATS.find((f) => offeredList.includes(f)) ??
+          "12_lp",
       );
     }
   }, [catalog, activeTab]);

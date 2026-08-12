@@ -992,8 +992,16 @@ export function PressVinylColors({
   );
   const [formatId, setFormatId] = useState<string | null>(null);
   const activeFormat = useMemo(() => {
-    const want = formatId ?? "12_lp";
-    return vinylFormats.find((f) => f.format === want) ?? vinylFormats[0] ?? null;
+    if (formatId) {
+      const picked = vinylFormats.find((f) => f.format === formatId);
+      if (picked) return picked;
+    }
+    // Task #3055 (Otis 5) — default to 12″ whenever the press offers one,
+    // matched by PREFIX (12_lp, 12_double, …) not the exact id, even if 7″
+    // is listed first in the catalog.
+    return (
+      vinylFormats.find((f) => f.format.startsWith("12")) ?? vinylFormats[0] ?? null
+    );
   }, [vinylFormats, formatId]);
 
   const tiers = activeFormat?.tiers ?? [];
@@ -1068,6 +1076,15 @@ export function PressVinylColors({
   const [addOpen, setAddOpen] = useState(false);
   const [editOpenId, setEditOpenId] = useState<string | null>(null);
 
+  // Task #3055 (Otis 7) — once a type is selected the grid collapses into a
+  // compact summary row so "Pick a color" sits right below; "Change" (or a
+  // format-chip switch) reopens the full grid.
+  // The grid stays EXPANDED until the operator explicitly picks a type
+  // (tierId is null on load and after a format switch — activeTier merely
+  // previews tiers[0] for the disc stage).
+  const [typeGridOpen, setTypeGridOpen] = useState(false);
+  const typeGridExpanded = typeGridOpen || tierId === null || !activeTier;
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -1141,6 +1158,7 @@ export function PressVinylColors({
                       setFormatId(e.format);
                       setTierId(e.tierId);
                       setColorId(e.color.id);
+                      setTypeGridOpen(false);
                     }}
                     labelLogoUrl={labelLogoUrl}
                     labelBgColor={labelBgColor}
@@ -1161,6 +1179,9 @@ export function PressVinylColors({
                           setFormatId(f.format);
                           setTierId(null);
                           setColorId(null);
+                          // Switching sizes reopens the type step — the tiers
+                          // are a different (format-scoped) set.
+                          setTypeGridOpen(true);
                         }}
                         aria-pressed={on}
                         data-testid={`format-${f.format}`}
@@ -1181,44 +1202,87 @@ export function PressVinylColors({
                 </div>
               )}
 
-              <div className="grid" style={{ marginTop: 18, gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
-                {tiers.map((t) => {
-                  const on = t.id === activeTier?.id;
-                  // Task #2998 — operator-uploaded type image wins over first color.
+              {!typeGridExpanded && activeTier ? (
+                // Collapsed summary — the picked type, one quiet row.
+                (() => {
+                  const t = activeTier;
                   const firstColor = t.colors[0] ?? null;
                   const preview = t.previewImageUrl
                     ? ({ ...(firstColor ?? { id: "preview", name: t.name, swatchHex: null, swatchThumbUrl: null, position: 0 }), swatchImageUrl: t.previewImageUrl, swatchThumbUrl: null } as CatalogColor)
                     : firstColor;
                   return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => {
-                        setTierId(t.id);
-                        setColorId(t.colors[0]?.id ?? null);
-                      }}
-                      aria-pressed={on}
-                      data-testid={`category-${t.id}`}
-                      className="rounded-2xl bg-white text-left transition-all hover:-translate-y-px focus:outline-none"
-                      style={{ padding: 14, border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+                    <div
+                      className="flex items-center gap-3 rounded-2xl bg-white"
+                      style={{ marginTop: 18, padding: "10px 14px", border: `1px solid ${HAIRLINE}` }}
+                      data-testid="type-summary"
                     >
-                      <div className="flex justify-center" style={{ marginBottom: 10 }}>
-                        <VinylDisc size={90} color={preview} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+                      <VinylDisc size={44} color={preview} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold truncate" style={{ fontSize: 13.5, color: INK }}>
+                          {t.name}
+                        </div>
+                        <div style={{ fontSize: 11.5, marginTop: 1, color: FAINT }}>
+                          Type · {t.colors.length} {t.colors.length === 1 ? "color" : "colors"}
+                        </div>
                       </div>
-                      <div className="text-[13.5px] font-semibold leading-tight" style={{ color: on ? BLUE : INK }}>
-                        {t.name}
-                      </div>
-                      <div className="text-[11.5px]" style={{ marginTop: 2, color: FAINT }}>
-                        {t.colors.length} {t.colors.length === 1 ? "color" : "colors"}
-                      </div>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => setTypeGridOpen(true)}
+                        className="flex-shrink-0 font-semibold rounded-full px-3 py-1.5 transition-colors"
+                        style={{ fontSize: 12.5, color: BLUE }}
+                        onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(49,158,216,0.12)")}
+                        onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                        data-testid="button-change-type"
+                      >
+                        Change
+                      </button>
+                    </div>
                   );
-                })}
-              </div>
-              {canEdit && (
-                <div style={{ marginTop: 14 }}>
-                  <MoreTypesPopover onAdd={(name) => addTier.mutate(name)} adding={addTier.isPending} />
-                </div>
+                })()
+              ) : (
+                <>
+                  <div className="grid" style={{ marginTop: 18, gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 12 }}>
+                    {tiers.map((t) => {
+                      const on = t.id === activeTier?.id;
+                      // Task #2998 — operator-uploaded type image wins over first color.
+                      const firstColor = t.colors[0] ?? null;
+                      const preview = t.previewImageUrl
+                        ? ({ ...(firstColor ?? { id: "preview", name: t.name, swatchHex: null, swatchThumbUrl: null, position: 0 }), swatchImageUrl: t.previewImageUrl, swatchThumbUrl: null } as CatalogColor)
+                        : firstColor;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => {
+                            setTierId(t.id);
+                            setColorId(t.colors[0]?.id ?? null);
+                            // Picking a type collapses the grid into the summary.
+                            setTypeGridOpen(false);
+                          }}
+                          aria-pressed={on}
+                          data-testid={`category-${t.id}`}
+                          className="rounded-2xl bg-white text-left transition-all hover:-translate-y-px focus:outline-none"
+                          style={{ padding: 14, border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+                        >
+                          <div className="flex justify-center" style={{ marginBottom: 10 }}>
+                            <VinylDisc size={90} color={preview} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+                          </div>
+                          <div className="text-[13.5px] font-semibold leading-tight" style={{ color: on ? BLUE : INK }}>
+                            {t.name}
+                          </div>
+                          <div className="text-[11.5px]" style={{ marginTop: 2, color: FAINT }}>
+                            {t.colors.length} {t.colors.length === 1 ? "color" : "colors"}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {canEdit && (
+                    <div style={{ marginTop: 14 }}>
+                      <MoreTypesPopover onAdd={(name) => addTier.mutate(name)} adding={addTier.isPending} />
+                    </div>
+                  )}
+                </>
               )}
             </section>
 

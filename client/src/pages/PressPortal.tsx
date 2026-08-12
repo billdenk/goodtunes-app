@@ -388,7 +388,9 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
         <PressVinylColors
           pressId={pressId}
           pressName={me?.name ?? "your press"}
-          labelLogoUrl={me?.labelLogoUrl ?? null}
+          // Task #3055 (Otis 6) — a press with no dedicated label logo falls
+          // back to its main logo so the disc center label is never blank.
+          labelLogoUrl={me?.labelLogoUrl ?? me?.logoUrl ?? null}
           labelBgColor={me?.labelBgColor ?? null}
           onBack={() => setCatalogViewParam(null)}
         />
