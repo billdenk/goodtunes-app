@@ -9,7 +9,7 @@
 // Live data replaces the MOCK_ consts: GET /api/press/:id/templates supplies
 // every slot row with revision history + latest runs. Each Ruby SLOT_SET tile
 // is matched to a DB spec row by (format, componentKey, variantKey). Slots
-// with no DB format yet (10″ vinyl, Stickers, flexi-disc) render disabled with
+// with no DB format yet (Stickers, flexi-disc) render disabled with
 // a "Not offered yet" note — no fabricated data.
 //
 // Status is icon + word (Bill is colorblind — never color alone) via
@@ -213,7 +213,7 @@ function ComponentIcon({
 // ─── Slot vocabulary — Ruby SLOT_SETS mapped to DB coords ──
 // dbFormat/componentKey/variantKey are the (format, componentKey, variantKey)
 // used to match a spec row. `disabled` slots have no DB format yet (flexi-disc,
-// Stickers, 10″ vinyl) and render greyed with a "Not offered yet" note.
+// Stickers) and render greyed with a "Not offered yet" note.
 type Slot = {
   kind: IconKind;
   title: string;
@@ -225,8 +225,8 @@ type Slot = {
   disabled?: boolean;
 };
 
-// Vinyl size → slot list. 7″ = 7_inch, 12″ = 12_lp (12_double rows shown when
-// present). 10″ has no DB format → every tile disabled with "Not offered yet".
+// Vinyl size → slot list. 7″ = 7_inch, 10″ = 10_inch (template canon only —
+// not sellable), 12″ = 12_lp (12_double rows shown when present).
 const VINYL_SLOTS: Record<"7″" | "10″" | "12″", Slot[]> = {
   "7″": [
     { kind: "labels", title: "Center labels", note: "Small or large hole", dbFormat: "7_inch", componentKey: "labels" },
@@ -237,13 +237,12 @@ const VINYL_SLOTS: Record<"7″" | "10″" | "12″", Slot[]> = {
     { kind: "labels", title: "Flexi disc label", note: "Not offered yet", disabled: true },
   ],
   "10″": [
-    { kind: "labels", title: "Center labels", note: "Not offered yet", disabled: true },
-    { kind: "jacket", title: "Single jacket", note: "Not offered yet", disabled: true },
-    { kind: "jacket", title: "Widespine jacket", note: "Not offered yet", disabled: true },
-    { kind: "jacket", title: "Gatefold jacket", note: "Not offered yet", disabled: true },
-    { kind: "sleeve", title: "Inner sleeve", note: "Not offered yet", disabled: true },
-    { kind: "booklet", title: "Insert", note: "Not offered yet", disabled: true },
-    { kind: "booklet", title: "Gatefold insert", note: "Not offered yet", disabled: true },
+    { kind: "labels", title: "Center labels", note: "Small or large hole", dbFormat: "10_inch", componentKey: "labels" },
+    { kind: "jacket", title: "Single jacket", note: "Outer sleeve — no spine", dbFormat: "10_inch", componentKey: "jacket", variantKey: "single" },
+    { kind: "jacket", title: "Widespine jacket", note: "Outer sleeve — wide spine", dbFormat: "10_inch", componentKey: "jacket", variantKey: "widespine" },
+    { kind: "jacket", title: "Gatefold jacket", note: "Outer sleeve — opens flat", dbFormat: "10_inch", componentKey: "jacket", variantKey: "gatefold" },
+    { kind: "sleeve", title: "Inner sleeve", note: "Paper", dbFormat: "10_inch", componentKey: "inner_sleeve" },
+    { kind: "booklet", title: "Insert", note: "10 × 10 in · 2 pages", dbFormat: "10_inch", componentKey: "booklet" },
   ],
   "12″": [
     { kind: "labels", title: "Center labels", note: "Small or large hole", dbFormat: "12_lp", componentKey: "labels" },
@@ -808,7 +807,7 @@ export function PressTemplatesIndex({
           <div className="flex items-center gap-1.5">
             {format === "Vinyl" &&
               (["7″", "10″", "12″"] as const).map((sz) => {
-                const disabled = sz === "10″"; // no DB format yet
+                const disabled = false;
                 const on = sz === size;
                 return (
                   <button

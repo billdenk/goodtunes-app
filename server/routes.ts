@@ -34291,7 +34291,9 @@ export async function registerRoutes(
   // external URLs go through the SSRF-safe fetchAndScanPdf (https-only,
   // DNS-checked, redirect-revalidated, size/time capped).
   const templateSpecBodySchema = z.object({
-    format: z.enum(["7_inch", "12_lp", "12_double", "cassette", "cd"]),
+    // Template-spec vocabulary: ALBUM_FORMATS plus 10_inch (Task #3062 —
+    // template canon only; 10" is NOT a sellable album format).
+    format: z.enum(["7_inch", "10_inch", "12_lp", "12_double", "cassette", "cd"]),
     // Vinyl pieces + cassette pieces (Bill 2026-08-10: cassette gets the
     // same template slots as vinyl — on-shell print, J-card, O-card, paper
     // label sticker).

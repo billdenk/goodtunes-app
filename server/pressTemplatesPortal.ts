@@ -34,7 +34,7 @@ import type { PressTemplateSpec } from "@shared/schema";
 // Same closed vocabularies as the admin template-spec routes
 // (server/routes.ts) — a portal upload can only create slots the
 // completed-art resolver understands.
-const FORMAT_VALUES = ["7_inch", "12_lp", "12_double", "cassette", "cd"] as const;
+const FORMAT_VALUES = ["7_inch", "10_inch", "12_lp", "12_double", "cassette", "cd"] as const;
 const COMPONENT_VALUES = [
   "jacket",
   "labels",
@@ -107,7 +107,14 @@ async function resolveSlotSpec(
   // baseline — its own catalog rows (storeRows) still override per field,
   // so a press with a measured template is checked against ITS template.
   const vendorId = matchInvitedPressToVendor(press.name) ?? "generic";
-  const size = row.format === "7_inch" ? '7"' : row.format === "12_lp" || row.format === "12_double" ? '12"' : null;
+  const size =
+    row.format === "7_inch"
+      ? '7"'
+      : row.format === "10_inch"
+        ? '10"'
+        : row.format === "12_lp" || row.format === "12_double"
+          ? '12"'
+          : null;
   if (!size) return null;
   const discs =
     row.discCount > 0 ? row.discCount : row.format === "12_double" ? 2 : 1;

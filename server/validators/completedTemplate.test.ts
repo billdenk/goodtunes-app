@@ -232,8 +232,9 @@ describe("completedTemplateConfigToAlbumFormat", () => {
     assert.equal(completedTemplateConfigToAlbumFormat({ ...CFG, size: '7"', discs: 1 }), "7_inch");
     assert.equal(completedTemplateConfigToAlbumFormat({ ...CFG, size: '12"', discs: 1 }), "12_lp");
     assert.equal(completedTemplateConfigToAlbumFormat({ ...CFG, size: '12"', discs: 2 }), "12_double");
-    // 10" has no catalog format yet → no stored specs, baseline only.
-    assert.equal(completedTemplateConfigToAlbumFormat({ ...CFG, size: '10"', discs: 1 }), null);
+    // Task #3062 — 10" maps to the template-spec-only 10_inch key (NOT an
+    // ALBUM_FORMATS entry; nothing sellable) so stored 10" specs can win.
+    assert.equal(completedTemplateConfigToAlbumFormat({ ...CFG, size: '10"', discs: 1 }), "10_inch");
   });
 });
 

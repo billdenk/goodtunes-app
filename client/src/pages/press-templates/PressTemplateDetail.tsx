@@ -108,6 +108,7 @@ const THEMES: Record<"light" | "dark", Theme> = {
 // ─── Slot vocabulary → human label ───────────────────────────────────
 const FORMAT_LABELS: Record<string, string> = {
   "7_inch": '7" vinyl',
+  "10_inch": '10" vinyl',
   "12_lp": '12" LP',
   "12_double": '12" Double LP',
   cassette: "Cassette",

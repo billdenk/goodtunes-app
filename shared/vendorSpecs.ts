@@ -799,17 +799,20 @@ export type PressTemplateSpecRow = {
 };
 
 /**
- * Map a completed-template product config to the catalog AlbumFormat key
- * the press catalog (and press_template_specs) is keyed by. 10" has no
- * catalog format → null (no stored specs; baseline / computed only).
+ * Map a completed-template product config to the format key the press
+ * catalog (and press_template_specs) is keyed by. 10" maps to the
+ * template-spec-only "10_inch" key (Task #3062 — NOT in ALBUM_FORMATS;
+ * nothing sellable), so stored 10" specs win over baselines like the
+ * other sizes.
  */
 export function completedTemplateConfigToAlbumFormat(
   config: CompletedTemplateConfig,
 ): string | null {
   const discs = Math.max(1, Math.floor(Number(config.discs) || 1));
   if (config.size === '7"') return "7_inch";
+  if (config.size === '10"') return "10_inch";
   if (config.size === '12"') return discs >= 2 ? "12_double" : "12_lp";
-  return null; // 10" (and any future size) has no catalog format yet
+  return null; // any future size has no catalog format yet
 }
 
 /**
