@@ -1564,10 +1564,9 @@ export function registerPressPortalRoutes(
     `);
     const staffDetached = (((staffDel as any).rows ?? []) as any[]).length > 0;
     const unhomed = (((upd as any).rows ?? []) as any[]).length > 0;
-    if (!unhomed && !staffDetached) {
-      // Neither relationship existed — tell the truth instead of a happy 200.
-      return res.status(409).json({ message: "This person isn't homed to your press or on your staff roster." });
-    }
+    // A person can be in scope without being homed here or on the staff
+    // roster (e.g. awarded-album scope, homed at another press). That stays
+    // a truthful no-op 200 — the flags tell the client what happened.
     if (unhomed) {
       await db.insert(pressSwitchHistory).values({
         customerKind: "artist",
