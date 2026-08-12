@@ -346,8 +346,34 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
     setName.mutate({ certId: row.id, identityKind: "display", name });
   }
 
-  function previewUrl(certId: string) {
-    return `/api/printer/${vendorId}/print-queue/cert/${certId}/pdf`;
+  // Task #3028 — same bare-anchor fix as AdminPrintQueue: bearer-only logins
+  // would get a raw JSON "Admin only" tab from a plain <a href>, so fetch the
+  // PDF with auth headers and open the blob in a new tab; failures toast.
+  async function openPreview(certId: string) {
+    const token = getAuthToken();
+    try {
+      const r = await fetch(`/api/printer/${vendorId}/print-queue/cert/${certId}/pdf`, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ message: `Request failed (${r.status})` }));
+        toast({ title: "Preview failed", description: err.message, variant: "destructive" });
+        return;
+      }
+      const blob = await r.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (e: any) {
+      toast({ title: "Preview failed", description: e?.message ?? "Network error", variant: "destructive" });
+    }
   }
 
   const readyCount = useMemo(
@@ -488,15 +514,14 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
                   <option value="a4">A4</option>
                 </select>
                 <div className="flex items-center gap-1">
-                  <a
-                    href={previewUrl(r.id)}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => openPreview(r.id)}
                     className="text-[11px] text-[color:var(--brand-blue)] hover:underline active:opacity-70"
                     data-testid={`link-preview-${r.id}`}
                   >
                     Preview
-                  </a>
+                  </button>
                   {editable && (
                     <>
                       <span className="text-[color:var(--apple-faint)]">·</span>

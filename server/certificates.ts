@@ -870,7 +870,12 @@ export function registerCertificateRoutes(app: Express) {
     const ctx = await loadCertContext(req.params.certId, absoluteOrigin(req));
     if (!ctx) return res.status(404).json({ message: "Not found" });
     // Operator print preview → signed (holographic placement guide) variant.
-    const pdf = await renderCertPdf(ctx, true);
+    // Task #3028 — `?variant=fan` renders the exact fan-facing (non-signed)
+    // PDF from the real cert row so operators can see what the customer's
+    // "Download certificate" produces. Both variants are read-only: nothing
+    // here touches nameStatus (only batch download flips rows to printed).
+    const fanVariant = req.query.variant === "fan";
+    const pdf = await renderCertPdf(ctx, !fanVariant);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="${certFilename(ctx)}"`);
     res.send(pdf);

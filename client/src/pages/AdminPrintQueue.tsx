@@ -195,8 +195,41 @@ function AdminPrintQueueInner() {
     setName.mutate({ certId: row.id, identityKind: "display", name });
   }
 
-  function previewUrl(certId: string) {
-    return `/api/admin/print-queue/cert/${certId}/pdf`;
+  // Task #3028 — the preview endpoint's auth is bearer-header-only, so a
+  // bare <a href> in a new tab always showed `{"message":"Admin only"}`.
+  // Fetch the PDF with admin auth headers and open the blob in a new tab
+  // instead (same authenticated pattern as batchDownload). `variant: "fan"`
+  // asks the server for the exact fan-facing (non-signed) PDF rendered from
+  // the real cert row. Both are read-only — no status changes.
+  async function openPreview(certId: string, variant: "operator" | "fan") {
+    const token = getAuthToken();
+    const url =
+      `/api/admin/print-queue/cert/${certId}/pdf` +
+      (variant === "fan" ? "?variant=fan" : "");
+    try {
+      const r = await fetch(url, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ message: `Request failed (${r.status})` }));
+        toast({ title: "Preview failed", description: err.message, variant: "destructive" });
+        return;
+      }
+      const blob = await r.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.target = "_blank";
+      a.rel = "noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Give the new tab a moment to take ownership of the blob before revoking.
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } catch (e: any) {
+      toast({ title: "Preview failed", description: e?.message ?? "Network error", variant: "destructive" });
+    }
   }
 
   const readyCount = useMemo(
@@ -405,15 +438,24 @@ function AdminPrintQueueInner() {
                     <option value="a4">A4</option>
                   </select>
                   <div className="flex items-center gap-1">
-                    <a
-                      href={previewUrl(r.id)}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => openPreview(r.id, "operator")}
                       className="text-[11px] text-[color:var(--brand-blue)] hover:underline active:opacity-70"
                       data-testid={`link-preview-${r.id}`}
                     >
                       Preview
-                    </a>
+                    </button>
+                    <span className="text-[var(--apple-faint)]">·</span>
+                    <button
+                      type="button"
+                      onClick={() => openPreview(r.id, "fan")}
+                      className="text-[11px] text-[color:var(--brand-blue)] hover:underline active:opacity-70"
+                      title="The exact certificate PDF the fan gets from “Download certificate”"
+                      data-testid={`link-fan-preview-${r.id}`}
+                    >
+                      Fan preview
+                    </button>
                     {editable && (
                       <>
                         <span className="text-[var(--apple-faint)]">·</span>
