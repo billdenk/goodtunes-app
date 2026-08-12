@@ -41,6 +41,7 @@
 
 import dns from "node:dns/promises";
 import net from "node:net";
+import zlib from "node:zlib";
 import type { CheckResult } from "@shared/uploadValidation";
 import type { FinishedComponentSpec } from "@shared/vendorSpecs";
 
@@ -95,10 +96,31 @@ export type CompletedPdfScan = {
   /** Task #3012 — decoded `/Separation /Name` spot-color names (unique,
    * capped) for the Pantone-authenticity heuristic. */
   spotColorNames: string[];
+  /**
+   * Task #3069 — whether spot colorspaces are actually USED by page
+   * content, not merely defined (Illustrator embeds unused swatch
+   * definitions, incl. in its private round-trip data).
+   *   "none"    — no /Separation or /DeviceN tokens at all.
+   *   "used"    — a content stream selects (`cs`/`CS`) a colorspace
+   *               resource that resolves to a Separation/DeviceN object.
+   *   "unused"  — spot definitions exist, content streams decoded fine,
+   *               and none of them is ever selected.
+   *   "unknown" — usage couldn't be confirmed; see spotUsageReason.
+   */
+  spotUsage: SpotUsage;
+  /** Task #3069 — why usage couldn't be confirmed (null unless "unknown"). */
+  spotUsageReason: SpotUsageReason | null;
+  /** Task #3069 — who the "unknown" is attributed to: "file" (encrypted /
+   * malformed — a problem with the file) or "system" (a GoodTunes scanner
+   * limitation: caps, legacy compression, unsupported-but-valid structure). */
+  spotUsageAttribution: "file" | "system" | null;
+  /** Task #3069 — decoded names of the spot colorspaces confirmed USED
+   * (subset semantics of spotColorNames; may be empty for used DeviceN /
+   * unreadable names). */
+  usedSpotColorNames: string[];
 };
 
-// CARRY must exceed the longest token/match we look for so a match that
-// straddles a chunk boundary is fully present in the next window.
+export type SpotUsage = "none" | "used" | "unused" | "unknown";
 const CARRY = 1024;
 
 // Counted / box-collecting matches use the global flag + an exec loop; we
@@ -121,6 +143,7 @@ const MAX_IMAGE_DIMS = 2000;
 const SEPARATION_NAME_RE = /\/Separation\s*\/([^\s/\[\]<>()]+)/g;
 const MAX_SPOT_NAMES = 60;
 
+const OBJ_HEADER_RE = /(\d+)\s+\d+\s+obj\b/g;
 function decodePdfName(raw: string): string {
   return raw.replace(/#([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
 }
@@ -149,8 +172,45 @@ export class CompletedPdfScanner {
   private gray = false;
   private readonly spotNames = new Set<string>();
 
-  constructor(opts?: { maxBytes?: number }) {
+  // Task #3069 — spot-usage state.
+  private pend = ""; // unprocessed committed text for the stream machine
+  private streamMode: "idle" | "capture" | "skip" = "idle";
+  private streamBuf = "";
+  private streamFlate = false;
+  private encrypted = false;
+  private objStm = false;
+  private lzwContent = false;
+  private otherFilterContent = false;
+  private zlibFailed = false;
+  private capHit = false;
+  private decodedStreams = 0;
+  private totalCaptured = 0;
+  private readonly sepObjIds = new Set<string>(); // obj ids defining Separation/DeviceN
+  private readonly sepObjName = new Map<string, string>(); // obj id → decoded name
+  private readonly csRefEntries = new Map<string, string>(); // resource name → obj id
+  private readonly csInlineSep = new Map<string, string>(); // resource name → sep name ("" = unreadable)
+  private readonly csAmbiguous = new Set<string>(); // resource names mapped to CONFLICTING targets
+  private readonly csNonSpot = new Set<string>(); // resource names aliased DIRECTLY to a standard non-spot space (/CS0 /DeviceCMYK)
+  private readonly csRefTargets = new Set<string>(); // obj ids referenced via `/ColorSpace N 0 R` anywhere (incl. image dicts)
+  private spotImage = false; // image XObject with an inline Separation/DeviceN colorspace
+  private readonly spotImageNames = new Set<string>(); // readable inline spot-image ink names
+  private readonly contentCsNames = new Set<string>(); // names selected via cs/CS
+
+  // Task #3069 caps — instance fields so tests can exercise each boundary.
+  private readonly capTotalStream: number;
+  private readonly capPerStreamCompressed: number;
+  private readonly capPerStreamDecoded: number;
+  private readonly capEntries: number;
+
+  constructor(opts?: {
+    maxBytes?: number;
+    spotCaps?: { totalStream?: number; perStreamCompressed?: number; perStreamDecoded?: number; entries?: number };
+  }) {
     this.maxBytes = opts?.maxBytes ?? 800 * 1024 * 1024; // 800MB hard ceiling
+    this.capTotalStream = opts?.spotCaps?.totalStream ?? TOTAL_STREAM_CAP;
+    this.capPerStreamCompressed = opts?.spotCaps?.perStreamCompressed ?? PER_STREAM_COMPRESSED_CAP;
+    this.capPerStreamDecoded = opts?.spotCaps?.perStreamDecoded ?? PER_STREAM_DECODED_CAP;
+    this.capEntries = opts?.spotCaps?.entries ?? 5000;
   }
 
   push(chunk: Buffer): void {
@@ -176,6 +236,91 @@ export class CompletedPdfScanner {
   finish(): CompletedPdfScan {
     if (this.carry) this.scanWindow(this.carry, this.carry.length); // flush fully
     this.carry = "";
+    // An unterminated content stream at EOF = broken/malformed file.
+    if (this.streamMode === "capture") this.zlibFailed = true;
+    this.pend = "";
+    this.streamBuf = "";
+
+    // Task #3069 — resolve spot USAGE from the collected evidence.
+    let spotUsage: SpotUsage = "none";
+    let spotUsageReason: SpotUsageReason | null = null;
+    const usedNames = new Set<string>();
+    // Names `cs`/`CS` may take DIRECTLY without a resource-dict lookup.
+    const DIRECT_CS = new Set(["DeviceGray", "DeviceRGB", "DeviceCMYK", "Pattern"]);
+    let unresolvedSelection = false;
+    let provenUsed = false;
+    if (this.spot) {
+      for (const n of Array.from(this.contentCsNames)) {
+        if (DIRECT_CS.has(n)) continue;
+        if (this.csAmbiguous.has(n)) {
+          // Same resource name mapped to conflicting targets across
+          // scopes — can't safely say which one this selection means.
+          unresolvedSelection = true;
+          continue;
+        }
+        const inline = this.csInlineSep.get(n);
+        if (inline !== undefined) {
+          provenUsed = true;
+          if (inline) usedNames.add(inline);
+          continue;
+        }
+        if (this.csNonSpot.has(n)) continue; // direct alias to a standard non-spot space
+        const ref = this.csRefEntries.get(n);
+        if (ref !== undefined) {
+          if (this.sepObjIds.has(ref)) {
+            provenUsed = true;
+            const nm = this.sepObjName.get(ref);
+            if (nm) usedNames.add(nm);
+          }
+          continue; // resolved to a non-spot colorspace — fine
+        }
+        // Selected but NEVER resolved (e.g. the resources live in an
+        // indirect /ColorSpace dict or an ObjStm we can't see) — a spot
+        // could hide behind it, so this can never support "unused".
+        unresolvedSelection = true;
+      }
+      // Spot-bearing IMAGE colorspaces count as usage (inline, or a
+      // /ColorSpace ref that resolves to a Separation/DeviceN object).
+      if (this.spotImage) {
+        provenUsed = true;
+        for (const nm of Array.from(this.spotImageNames)) usedNames.add(nm);
+      }
+      for (const id of Array.from(this.csRefTargets)) {
+        if (this.sepObjIds.has(id)) {
+          provenUsed = true;
+          const nm = this.sepObjName.get(id);
+          if (nm) usedNames.add(nm);
+        }
+      }
+      // A "used" verdict requires that EVERY selected colorspace resolved:
+      // an unresolved/ambiguous selection could hide a different (e.g.
+      // non-Pantone) spot, so it forces the reason-coded fallback even
+      // when another spot is provably used.
+      if (provenUsed && !unresolvedSelection) spotUsage = "used";
+      if (spotUsage !== "used") {
+        // Conservative, reason-coded fallback — never pass blindly.
+        if (this.encrypted) spotUsageReason = "encrypted";
+        else if (this.zlibFailed) spotUsageReason = "malformed";
+        else if (this.lzwContent) spotUsageReason = "unsupported-compression";
+        else if (this.capHit || this._truncated) spotUsageReason = "cap-reached";
+        else if (
+          this.objStm ||
+          this.otherFilterContent ||
+          this.decodedStreams === 0 ||
+          unresolvedSelection
+        ) {
+          spotUsageReason = "unsupported-structure";
+        }
+        spotUsage = spotUsageReason ? "unknown" : "unused";
+      }
+    }
+    const spotUsageAttribution =
+      spotUsageReason == null
+        ? null
+        : spotUsageReason === "encrypted" || spotUsageReason === "malformed"
+          ? ("file" as const)
+          : ("system" as const);
+
     const pageCount = this.typePage > 0 ? this.typePage : this.media.length;
     return {
       isPdf: this._isPdf,
@@ -198,10 +343,19 @@ export class CompletedPdfScanner {
       smaskImageCount: this.smaskImages,
       hasDeviceGray: this.gray,
       spotColorNames: Array.from(this.spotNames),
+      spotUsage,
+      spotUsageReason,
+      spotUsageAttribution,
+      usedSpotColorNames: Array.from(usedNames),
     };
   }
 
   private scanWindow(s: string, commit: number): void {
+    // Task #3069 — feed the committed slice to the content-stream machine
+    // FIRST (the commit-gated slices concatenate to the exact byte stream,
+    // each byte exactly once — see push()).
+    if (commit > 0) this.trackCommitted(s.slice(0, commit));
+
     // Booleans: OR over the whole window every time (idempotent — seeing a
     // token twice across the carry overlap is harmless).
     if (!this.cmyk && /\/DeviceCMYK\b/.test(s)) this.cmyk = true;
@@ -211,6 +365,9 @@ export class CompletedPdfScanner {
     if (!this.embedded && /\/FontFile[23]?\b/.test(s)) this.embedded = true;
     if (!this.gray && /\/(DeviceGray|CalGray)\b/.test(s)) this.gray = true;
     if (!this.dieline && /(dieline|die[\s_-]?cut|do[\s_-]?not[\s_-]?print|template)/i.test(s)) this.dieline = true;
+    // Task #3069 — structure flags for the spot-usage fallback reasons.
+    if (!this.encrypted && ENCRYPT_RE.test(s)) this.encrypted = true;
+    if (!this.objStm && /\/Type\s*\/ObjStm\b/.test(s)) this.objStm = true;
 
     // Counted page objects.
     TYPE_PAGE_RE.lastIndex = 0;
@@ -223,6 +380,98 @@ export class CompletedPdfScanner {
     this.collectBoxes(MEDIABOX_RE, s, commit, this.media);
     this.collectBoxes(TRIMBOX_RE, s, commit, this.trim);
     this.collectBoxes(BLEEDBOX_RE, s, commit, this.bleed);
+
+    // Task #3069 — objects defining Separation/DeviceN colorspaces
+    // (lookahead < CARRY so the slice is always fully present).
+    OBJ_HEADER_RE.lastIndex = 0;
+    let om: RegExpExecArray | null;
+    while ((om = OBJ_HEADER_RE.exec(s)) !== null) {
+      if (om.index < commit && this.sepObjIds.size >= this.capEntries) this.capHit = true;
+      if (om.index < commit && this.sepObjIds.size < this.capEntries) {
+        let ahead = s.slice(om.index, om.index + OBJ_LOOKAHEAD);
+        // Never look past this object's end — a following object's
+        // /Separation must not be attributed to THIS obj id.
+        const end = ahead.indexOf("endobj", om[0].length);
+        if (end >= 0) ahead = ahead.slice(0, end);
+        if (/\/Separation\b/.test(ahead) || /\/DeviceN\b/.test(ahead)) {
+          const id = om[1];
+          this.sepObjIds.add(id);
+          SEPARATION_NAME_RE.lastIndex = 0;
+          const nameM = SEPARATION_NAME_RE.exec(ahead);
+          if (nameM && !this.sepObjName.has(id)) {
+            const nm = decodePdfName(nameM[1]).trim();
+            if (nm) this.sepObjName.set(id, nm);
+          }
+        }
+      }
+      if (om.index === OBJ_HEADER_RE.lastIndex) OBJ_HEADER_RE.lastIndex++;
+    }
+
+    // Task #3069 — /ColorSpace resource dictionaries: name → obj ref, plus
+    // inline [/Separation …] / [/DeviceN …] arrays.
+    CS_DICT_RE.lastIndex = 0;
+    let cm: RegExpExecArray | null;
+    while ((cm = CS_DICT_RE.exec(s)) !== null) {
+      if (cm.index < commit && this.csRefEntries.size >= this.capEntries) this.capHit = true;
+      if (cm.index < commit && this.csRefEntries.size < this.capEntries) {
+        const body = cm[1];
+        CS_INLINE_SEP_RE.lastIndex = 0;
+        let im2: RegExpExecArray | null;
+        while ((im2 = CS_INLINE_SEP_RE.exec(body)) !== null) {
+          const res = decodePdfName(im2[1]);
+          const nm = im2[2] === "Separation" && im2[3] ? decodePdfName(im2[3]).trim() : "";
+          const prev = this.csInlineSep.get(res);
+          if (prev === undefined) {
+            // Same name already mapped to an obj ref elsewhere → ambiguous.
+            if (this.csRefEntries.has(res) || this.csNonSpot.has(res)) this.csAmbiguous.add(res);
+            this.csInlineSep.set(res, nm);
+          } else if (prev !== nm) {
+            this.csAmbiguous.add(res); // conflicting inline targets
+          }
+          if (im2.index === CS_INLINE_SEP_RE.lastIndex) CS_INLINE_SEP_RE.lastIndex++;
+        }
+        CS_REF_ENTRY_RE.lastIndex = 0;
+        let rm: RegExpExecArray | null;
+        while ((rm = CS_REF_ENTRY_RE.exec(body)) !== null) {
+          const res = decodePdfName(rm[1]);
+          const prev = this.csRefEntries.get(res);
+          if (prev === undefined) {
+            if (this.csInlineSep.has(res) || this.csNonSpot.has(res)) this.csAmbiguous.add(res);
+            this.csRefEntries.set(res, rm[2]);
+          } else if (prev !== rm[2]) {
+            this.csAmbiguous.add(res); // same name → different objects
+          }
+          if (rm.index === CS_REF_ENTRY_RE.lastIndex) CS_REF_ENTRY_RE.lastIndex++;
+        }
+        // Direct non-spot aliases (`/CS0 /DeviceCMYK`) — strip bracketed
+        // arrays first so `/Separation /Name /DeviceCMYK` inside an inline
+        // array can't masquerade as an alias.
+        const flatBody = body.replace(/\[[^\]]*\]?/g, " ");
+        const CS_DIRECT_NONSPOT_RE =
+          /\/([^\s/\[\]<>()]+)\s*\/(DeviceGray|DeviceRGB|DeviceCMYK|CalGray|CalRGB|Lab|Pattern)\b/g;
+        let dm: RegExpExecArray | null;
+        while ((dm = CS_DIRECT_NONSPOT_RE.exec(flatBody)) !== null) {
+          const res = decodePdfName(dm[1]);
+          if (!this.csNonSpot.has(res)) {
+            if (this.csInlineSep.has(res) || this.csRefEntries.has(res)) this.csAmbiguous.add(res);
+            this.csNonSpot.add(res);
+          }
+          if (dm.index === CS_DIRECT_NONSPOT_RE.lastIndex) CS_DIRECT_NONSPOT_RE.lastIndex++;
+        }
+      }
+      if (cm.index === CS_DICT_RE.lastIndex) CS_DICT_RE.lastIndex++;
+    }
+
+    // Task #3069 — every obj id referenced via `/ColorSpace N 0 R` (page
+    // resources OR image dicts): if any resolves to a Separation/DeviceN
+    // object, spot ink is genuinely painted. (Idempotent set — overlap-safe.)
+    const CS_REF_TARGET_RE = /\/ColorSpace\s+(\d+)\s+\d+\s+R\b/g;
+    let tm2: RegExpExecArray | null;
+    while ((tm2 = CS_REF_TARGET_RE.exec(s)) !== null) {
+      if (this.csRefTargets.size < this.capEntries) this.csRefTargets.add(tm2[1]);
+      else if (!this.csRefTargets.has(tm2[1])) this.capHit = true;
+      if (tm2.index === CS_REF_TARGET_RE.lastIndex) CS_REF_TARGET_RE.lastIndex++;
+    }
 
     // Task #3012 — spot-color (Separation) names for the Pantone check.
     if (this.spotNames.size < MAX_SPOT_NAMES) {
@@ -265,6 +514,135 @@ export class CompletedPdfScanner {
     }
   }
 
+  // Task #3069 — bounded state machine over the committed byte stream:
+  // capture non-image/non-font content streams (raw or FlateDecode),
+  // decompress under caps, and record `/Name cs|CS` colorspace selections.
+  private trackCommitted(text: string): void {
+    this.pend += text;
+    for (;;) {
+      if (this.streamMode === "idle") {
+        const m = /stream\r?\n/.exec(this.pend);
+        if (!m) {
+          if (this.pend.length > STREAM_LOOKBACK) {
+            this.pend = this.pend.slice(this.pend.length - STREAM_LOOKBACK);
+          }
+          return;
+        }
+        const i = m.index;
+        const after = i + m[0].length;
+        // Reject `endstream` (or any identifier ending in "stream").
+        if (i > 0 && /[A-Za-z0-9]/.test(this.pend[i - 1])) {
+          this.pend = this.pend.slice(after);
+          continue;
+        }
+        const look = this.pend.slice(Math.max(0, i - STREAM_LOOKBACK), i);
+        const isImage = /\/Subtype\s*\/Image\b/.test(look);
+        const isFont = /\/FontFile[23]?\b/.test(look);
+        const isObjStm = /\/Type\s*\/ObjStm\b/.test(look);
+        const hasFlate = /\/FlateDecode\b/.test(look);
+        const hasLZW = /\/LZWDecode\b/.test(look);
+        const hasFilter = /\/Filter\b/.test(look);
+        if (isImage || isFont || isObjStm) {
+          // Task #3069 — an image XObject can carry a DIRECT Separation/
+          // DeviceN colorspace: painted spot ink even with no `cs` operator.
+          if (isImage && (/\/Separation\b/.test(look) || /\/DeviceN\b/.test(look))) {
+            this.spotImage = true;
+            SEPARATION_NAME_RE.lastIndex = 0;
+            const nm = SEPARATION_NAME_RE.exec(look);
+            if (nm) {
+              const decoded = decodePdfName(nm[1]).trim();
+              if (decoded) this.spotImageNames.add(decoded);
+            }
+          }
+          this.streamMode = "skip";
+        } else if (hasLZW) {
+          this.lzwContent = true; // legacy compression we don't decode
+          this.streamMode = "skip";
+        } else if (hasFilter && !hasFlate) {
+          this.otherFilterContent = true; // exotic filter chain
+          this.streamMode = "skip";
+        } else if (this.totalCaptured >= this.capTotalStream) {
+          this.capHit = true;
+          this.streamMode = "skip";
+        } else {
+          this.streamMode = "capture";
+          this.streamFlate = hasFlate;
+          this.streamBuf = "";
+        }
+        this.pend = this.pend.slice(after);
+        continue;
+      }
+      const j = this.pend.indexOf("endstream");
+      if (j >= 0) {
+        if (this.streamMode === "capture") {
+          this.streamBuf += this.pend.slice(0, j);
+          this.finalizeStream();
+        }
+        this.streamMode = "idle";
+        this.pend = this.pend.slice(j + "endstream".length);
+        continue;
+      }
+      const keep = 12; // enough to reassemble a split "endstream"
+      if (this.pend.length > keep) {
+        const take = this.pend.slice(0, this.pend.length - keep);
+        if (this.streamMode === "capture") {
+          this.streamBuf += take;
+          if (this.streamBuf.length > this.capPerStreamCompressed) {
+            this.capHit = true;
+            this.streamBuf = "";
+            this.streamMode = "skip";
+          }
+        }
+        this.pend = this.pend.slice(this.pend.length - keep);
+      }
+      return;
+    }
+  }
+
+  private finalizeStream(): void {
+    // Strip the optional EOL immediately before `endstream`.
+    const raw = this.streamBuf.replace(/\r?\n$/, "");
+    this.streamBuf = "";
+    if (raw.length === 0) return;
+    this.totalCaptured += raw.length;
+    if (this.totalCaptured > this.capTotalStream) {
+      // Crossing the cumulative cap ON this stream: don't trust a partial
+      // picture — force the conservative fallback.
+      this.capHit = true;
+      return;
+    }
+    let decoded: string;
+    if (this.streamFlate) {
+      try {
+        decoded = zlib
+          .inflateSync(Buffer.from(raw, "latin1"), { maxOutputLength: this.capPerStreamDecoded })
+          .toString("latin1");
+      } catch (e: any) {
+        if (e?.code === "ERR_BUFFER_TOO_LARGE") this.capHit = true;
+        else this.zlibFailed = true;
+        return;
+      }
+    } else {
+      decoded = raw;
+    }
+    this.decodedStreams++;
+    // Lexically strip comments and literal/hex strings so `/Name cs` inside
+    // a string or comment never counts as a colorspace selection.
+    const code = stripPdfStringsAndComments(decoded);
+    CONTENT_CS_RE.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = CONTENT_CS_RE.exec(code)) !== null) {
+      if (this.contentCsNames.size >= MAX_CONTENT_CS_NAMES) {
+        // Cap reached: a later selection could be a spot alias we'd miss —
+        // force the conservative fallback, never certify "unused".
+        this.capHit = true;
+        break;
+      }
+      this.contentCsNames.add(decodePdfName(m[1]));
+      if (m.index === CONTENT_CS_RE.lastIndex) CONTENT_CS_RE.lastIndex++;
+    }
+  }
+
   private collectBoxes(re: RegExp, s: string, commit: number, into: BoxInches[]): void {
     re.lastIndex = 0;
     let m: RegExpExecArray | null;
@@ -283,7 +661,14 @@ export class CompletedPdfScanner {
 
 /** Scan an in-memory buffer (tests). Pushed in modest chunks so the carry
  * overlap is exercised exactly as it is on a real stream. */
-export function scanBuffer(buf: Buffer, opts?: { maxBytes?: number; chunk?: number }): CompletedPdfScan {
+export function scanBuffer(
+  buf: Buffer,
+  opts?: {
+    maxBytes?: number;
+    chunk?: number;
+    spotCaps?: { totalStream?: number; perStreamCompressed?: number; perStreamDecoded?: number; entries?: number };
+  },
+): CompletedPdfScan {
   const sc = new CompletedPdfScanner(opts);
   const step = opts?.chunk ?? 64 * 1024;
   for (let i = 0; i < buf.length; i += step) {
@@ -680,6 +1065,31 @@ export async function edgeBandContent(
   }
 }
 
+/**
+ * Task #3069 — server-side telemetry for the spot-usage fallback: one log
+ * line per occurrence, with the structured reason code + attribution and
+ * enough file context to review frequency later. No-op unless the scan
+ * actually fell back ("unknown").
+ */
+export function logSpotUsageFallback(
+  scan: CompletedPdfScan,
+  ctx: { fileName?: string | null; source?: string | null },
+): void {
+  if (!scan.hasSpot || scan.spotUsage !== "unknown") return;
+  // Redact query strings/fragments regardless of URL form — pasted share
+  // links AND relative /objects paths can carry signed tokens that must
+  // never land in server logs.
+  let source = (ctx.source ?? "?").split(/[?#]/)[0];
+  try {
+    const u = new URL(source);
+    source = `${u.origin}${u.pathname}`;
+  } catch {
+    /* relative path or label — query already stripped above */
+  }
+  console.warn(
+    `[completed-scan] spot-usage fallback reason=${scan.spotUsageReason} attribution=${scan.spotUsageAttribution} file=${ctx.fileName ?? "?"} source=${source} bytes=${scan.bytes} truncated=${scan.truncated}`,
+  );
+}
 export function validateCompletedComponent(
   scan: CompletedPdfScan,
   spec: FinishedComponentSpec,
@@ -805,15 +1215,20 @@ export function validateCompletedComponent(
   }
 
   // 3. Color.
+  // Task #3069 — definition-only spot swatches (never applied to art) must
+  // not count as spot ink. "unknown" stays conservative (counts as present).
+  // Older stored scans lack spotUsage — default keeps legacy behavior.
+  const spotUsage: SpotUsage = (scan as any).spotUsage ?? (scan.hasSpot ? "unknown" : "none");
+  const spotInUse = scan.hasSpot && spotUsage !== "unused";
   if (spec.color === "process-4c") {
     if (scan.hasCMYK) {
       checks.push({
         key: "tmpl.color",
         label: "Color (4-color process)",
         status: "pass",
-        message: `CMYK process present${scan.hasSpot ? " (+ spot)" : ""}${scan.hasRGB ? " — embedded RGB preview ignored" : ""}.`,
+        message: `CMYK process present${spotInUse ? " (+ spot)" : ""}${scan.hasRGB ? " — embedded RGB preview ignored" : ""}.`,
       });
-    } else if (scan.hasSpot) {
+    } else if (spotInUse) {
       // process-4c means a full-color label printed in CMYK. A spot-only
       // file is a 1-color imprint — the WRONG process for this slot — so it
       // must BLOCK (fail), not merely advise. Override-with-justification
@@ -841,8 +1256,8 @@ export function validateCompletedComponent(
     }
   } else {
     // cmyk-or-pms
-    if (scan.hasCMYK || scan.hasSpot) {
-      const parts = [scan.hasCMYK ? "CMYK" : null, scan.hasSpot ? "spot/PMS" : null].filter(Boolean);
+    if (scan.hasCMYK || spotInUse) {
+      const parts = [scan.hasCMYK ? "CMYK" : null, spotInUse ? "spot/PMS" : null].filter(Boolean);
       checks.push({
         key: "tmpl.color",
         label: "Color (CMYK / PMS)",
@@ -1195,15 +1610,48 @@ export function validateCompletedComponent(
         status: "pass",
         message: `No spot colors detected (${pressWord} accepts only official Pantone spot inks).`,
       });
+    } else if (spotUsage === "unused") {
+      // Task #3069 — Illustrator embeds swatch definitions (incl. in its
+      // private round-trip data) even when never applied to artwork.
+      checks.push({
+        key: "tmpl.pantone",
+        label: "Pantone spot colors",
+        status: "pass",
+        message: `Spot color swatches are defined in the file but none are used in the artwork — nothing will output as a spot plate. (${pressWord} accepts only official Pantone spot inks.)`,
+      });
+    } else if (spotUsage === "unknown") {
+      // Task #3069 — reason-coded conservative fallback: name the exact
+      // reason and attribute it (scanner limitation vs file problem).
+      const reason = ((scan as any).spotUsageReason ?? "unsupported-structure") as SpotUsageReason;
+      const reasonText: Record<SpotUsageReason, string> = {
+        encrypted:
+          "the PDF is encrypted/password-protected, so its page content can't be inspected — this is a problem with the file, not a GoodTunes limitation",
+        malformed:
+          "a content stream in the PDF is broken or malformed — this is a problem with the file, not a GoodTunes limitation",
+        "unsupported-compression":
+          "the PDF uses legacy compression (e.g. LZW) that our scanner doesn't decode — a GoodTunes scanner limitation (our scanner couldn't fully inspect this file)",
+        "unsupported-structure":
+          "the PDF uses a structure our scanner doesn't fully parse (e.g. compressed object streams) — a GoodTunes scanner limitation (our scanner couldn't fully inspect this file)",
+        "cap-reached":
+          "the file exceeded our scan/decompression cap — a GoodTunes scanner limitation (our scanner couldn't fully inspect this file)",
+      };
+      checks.push({
+        key: "tmpl.pantone",
+        label: "Pantone spot colors",
+        status: "warn",
+        message: `Spot color swatches are defined, but we couldn't confirm whether they're used in the artwork: ${reasonText[reason]}. ${pressWord} accepts only official Pantone spot inks — verify each used swatch is a PANTONE library color.`,
+      });
     } else {
-      const named = scan.spotColorNames.filter((n) => !PROCESS_SEP_NAMES.has(n.toLowerCase()));
+      // spotUsage === "used" — today's name heuristic, keyed to USED spots.
+      const usedNames: string[] = (scan as any).usedSpotColorNames ?? [];
+      const named = usedNames.filter((n) => !PROCESS_SEP_NAMES.has(n.toLowerCase()));
       const offBrand = named.filter((n) => !isOfficialPantoneName(n));
       if (named.length === 0) {
         checks.push({
           key: "tmpl.pantone",
           label: "Pantone spot colors",
           status: "warn",
-          message: `Spot colors detected but their names couldn't be read — ${pressWord} accepts only official Pantone spot inks; verify each swatch is a PANTONE library color.`,
+          message: `Spot colors are used in the artwork but their names couldn't be read — ${pressWord} accepts only official Pantone spot inks; verify each swatch is a PANTONE library color.`,
         });
       } else if (offBrand.length > 0) {
         const list = offBrand.slice(0, 5).join('", "');
@@ -1439,3 +1887,82 @@ export async function fetchAndScanPdf(
     clearTimeout(timer);
   }
 }
+
+const PER_STREAM_DECODED_CAP = 16 * 1024 * 1024;
+
+const CS_REF_ENTRY_RE = /\/([^\s/\[\]<>()]+)\s+(\d+)\s+\d+\s+R\b/g;
+
+const CS_INLINE_SEP_RE = /\/([^\s/\[\]<>()]+)\s*\[\s*\/(Separation|DeviceN)(?:\s*\/([^\s/\[\]<>()]+))?/g;
+
+const MAX_CONTENT_CS_NAMES = 400;
+
+const STREAM_LOOKBACK = 1500; // dict-inspection window before `stream`
+
+/** Replace PDF comments (% → EOL), literal strings `(...)` (nesting +
+ * backslash escapes) and hex strings `<...>` (but not `<<` dicts) with
+ * spaces, so operator scanning can't be fooled by string/comment content. */
+function stripPdfStringsAndComments(src: string): string {
+  let out = "";
+  let i = 0;
+  const n = src.length;
+  while (i < n) {
+    const c = src[i];
+    if (c === "%") {
+      while (i < n && src[i] !== "\n" && src[i] !== "\r") i++;
+      out += " ";
+      continue;
+    }
+    if (c === "(") {
+      let depth = 1;
+      i++;
+      while (i < n && depth > 0) {
+        const d = src[i];
+        if (d === "\\") i += 2;
+        else {
+          if (d === "(") depth++;
+          else if (d === ")") depth--;
+          i++;
+        }
+      }
+      out += " ";
+      continue;
+    }
+    if (c === "<") {
+      if (src[i + 1] === "<") {
+        out += "<<";
+        i += 2;
+        continue;
+      }
+      const j = src.indexOf(">", i);
+      if (j === -1) {
+        out += " ";
+        break; // unterminated hex string — rest is string data
+      }
+      out += " ";
+      i = j + 1;
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
+const ENCRYPT_RE = /\/Encrypt\s+\d+\s+\d+\s+R\b/;
+
+const CS_DICT_RE = /\/ColorSpace\s*<<([\s\S]{0,800}?)>>/g; // 800 < CARRY
+
+const TOTAL_STREAM_CAP = 48 * 1024 * 1024;
+
+const PER_STREAM_COMPRESSED_CAP = 4 * 1024 * 1024;
+
+export type SpotUsageReason =
+  | "encrypted"
+  | "malformed"
+  | "unsupported-compression"
+  | "unsupported-structure"
+  | "cap-reached";
+
+const OBJ_LOOKAHEAD = 320; // < CARRY, so the slice is always fully present
+
+const CONTENT_CS_RE = /\/([^\s/\[\]<>()]+)\s+(?:cs|CS)(?![A-Za-z])/g;

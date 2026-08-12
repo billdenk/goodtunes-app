@@ -5,6 +5,7 @@ import {
   scanBuffer,
   validateCompletedComponent,
   measuredBleedInches,
+  logSpotUsageFallback,
   hasTrustworthyBleedBoxes,
   templateTrimRectInches,
   contentBleedFromRaster,
@@ -453,6 +454,17 @@ function bleedPdf(opts: {
   color?: string; // raw tokens appended per page
   imageDims?: { w: number; h: number; bitmap?: boolean; smask?: boolean }[];
   sepNames?: string[];
+  /** Task #3069 — spot swatches actually USED by page content: emits
+   * Separation objects + a /ColorSpace resource dict + a content stream
+   * that selects each via `cs`. */
+  usedSpotNames?: string[];
+  /** Task #3069 — an unreadable-name spot (DeviceN) that IS used. */
+  usedDeviceN?: boolean;
+  /** Task #3069 — a plain decodable content stream that never selects a
+   * spot colorspace (makes "unused" provable). */
+  plainContentStream?: boolean;
+  /** Task #3069 — raw extra tokens appended verbatim (encrypt/LZW/etc.). */
+  extraRaw?: string;
 }): Buffer {
   const w = (opts.wIn * 72).toFixed(4);
   const h = (opts.hIn * 72).toFixed(4);
@@ -472,6 +484,28 @@ function bleedPdf(opts: {
     if (d.smask) s += " /SMask 12 0 R";
     s += "\n";
   }
+  // Task #3069 — used-spot machinery: obj defs + resources + content stream.
+  const used = opts.usedSpotNames ?? [];
+  const csEntries: string[] = [];
+  const csOps: string[] = [];
+  used.forEach((n, i) => {
+    s += `${50 + i} 0 obj [ /Separation /${n} /DeviceCMYK 9 0 R ] endobj\n`;
+    csEntries.push(`/CS${i} ${50 + i} 0 R`);
+    csOps.push(`/CS${i} cs 1 scn 0 0 10 10 re f`);
+  });
+  if (opts.usedDeviceN) {
+    s += `70 0 obj [ /DeviceN [ /InkA ] /DeviceCMYK 9 0 R ] endobj\n`;
+    csEntries.push(`/CSN 70 0 R`);
+    csOps.push(`/CSN cs 1 scn 0 0 10 10 re f`);
+  }
+  if (csEntries.length > 0) {
+    s += `/Resources << /ColorSpace << ${csEntries.join(" ")} >> >>\n`;
+    s += `<< /Length 99 >>\nstream\n${csOps.join(" ")}\nendstream\n`;
+  }
+  if (opts.plainContentStream) {
+    s += `<< /Length 30 >>\nstream\n0 0 0 1 k 0 0 10 10 re f\nendstream\n`;
+  }
+  if (opts.extraRaw) s += opts.extraRaw + "\n";
   s += "%%EOF";
   return Buffer.from(s, "latin1");
 }
@@ -614,10 +648,13 @@ describe("Task #3012 — dual PPI, grayscale, Pantone, placed-format, advisories
     assert.equal(find(validateCompletedComponent(gray, gSpec), "tmpl.grayscale").status, "pass");
   });
 
-  test("pantone-only: PANTONE names pass (incl. #20 escapes); off-brand names warn", () => {
-    const ok = scanBuffer(bleedPdf({ ...base, sepNames: ["PANTONE#20186#20C", "PMS#20287"] }));
+  test("pantone-only: USED PANTONE names pass (incl. #20 escapes); off-brand names warn", () => {
+    // Task #3069 — the name heuristic now keys off spots actually USED by
+    // page content, so these fixtures paint with the swatch.
+    const ok = scanBuffer(bleedPdf({ ...base, usedSpotNames: ["PANTONE#20186#20C", "PMS#20287"] }));
+    assert.equal(ok.spotUsage, "used");
     assert.equal(find(validateCompletedComponent(ok, RULED_SPEC), "tmpl.pantone").status, "pass");
-    const bad = scanBuffer(bleedPdf({ ...base, sepNames: ["My#20Cool#20Orange"] }));
+    const bad = scanBuffer(bleedPdf({ ...base, usedSpotNames: ["My#20Cool#20Orange"] }));
     const c = find(validateCompletedComponent(bad, RULED_SPEC), "tmpl.pantone");
     assert.equal(c.status, "warn");
     assert.match(c.message, /My Cool Orange/);
@@ -626,7 +663,7 @@ describe("Task #3012 — dual PPI, grayscale, Pantone, placed-format, advisories
   test("pantone-only: process separation names (All/None) are never listed as off-brand", () => {
     // Only process names → treated as "names couldn't be read" (warn), and
     // the message must not accuse All/None of being off-brand inks.
-    const scan = scanBuffer(bleedPdf({ ...base, sepNames: ["All", "None"] }));
+    const scan = scanBuffer(bleedPdf({ ...base, usedSpotNames: ["All", "None"] }));
     const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone");
     assert.equal(c.status, "warn");
     assert.doesNotMatch(c.message, /"All"|"None"/);
@@ -653,6 +690,423 @@ describe("Task #3012 — dual PPI, grayscale, Pantone, placed-format, advisories
     assert.match(adv.message, /safety area/);
     // Task #3030 — bleed excluded (fails without a measurement source).
     assert.notEqual(rollupStatus(checks.filter((c) => c.key !== "tmpl.bleed")), "fail");
+  });
+});
+
+describe("Task #3069 — spot-usage detection (unused swatches pass certification)", () => {
+  const base = { wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25 };
+
+  test("unused-swatch-only file: pantone passes; color summary drops spot/PMS", () => {
+    // Swatch DEFINITIONS only (Illustrator-style), plus a decodable content
+    // stream that never selects them → provably unused.
+    const scan = scanBuffer(
+      bleedPdf({ ...base, sepNames: ["My#20Cool#20Orange"], plainContentStream: true }),
+    );
+    assert.equal(scan.hasSpot, true);
+    assert.equal(scan.spotUsage, "unused");
+    assert.equal(scan.spotUsageReason, null);
+    const checks = validateCompletedComponent(scan, RULED_SPEC);
+    const p = find(checks, "tmpl.pantone");
+    assert.equal(p.status, "pass");
+    assert.match(p.message, /defined in the file but none are used in the artwork/);
+    const color = find(checks, "tmpl.color");
+    assert.doesNotMatch(color.message, /spot\/PMS/);
+  });
+
+  test("genuinely used Pantone spot: used + pass, and the summary reports spot/PMS", () => {
+    const scan = scanBuffer(bleedPdf({ ...base, usedSpotNames: ["PANTONE#20186#20C"] }));
+    assert.equal(scan.spotUsage, "used");
+    assert.deepEqual(scan.usedSpotColorNames, ["PANTONE 186 C"]);
+    const checks = validateCompletedComponent(scan, RULED_SPEC);
+    assert.equal(find(checks, "tmpl.pantone").status, "pass");
+    assert.match(find(checks, "tmpl.color").message, /spot\/PMS/);
+  });
+
+  test("used non-Pantone spot warns with the off-brand name", () => {
+    const scan = scanBuffer(bleedPdf({ ...base, usedSpotNames: ["House#20Red"] }));
+    assert.equal(scan.spotUsage, "used");
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /House Red/);
+  });
+
+  test("unreadable-name-but-used (DeviceN) warns that names couldn't be read", () => {
+    const scan = scanBuffer(bleedPdf({ ...base, usedDeviceN: true }));
+    assert.equal(scan.spotUsage, "used");
+    assert.equal(scan.usedSpotColorNames.length, 0);
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /names couldn't be read/);
+  });
+
+  test("carry/overlap: tiny chunks give identical usage verdicts", () => {
+    const buf = bleedPdf({ ...base, usedSpotNames: ["PANTONE#20186#20C"] });
+    const scan = scanBuffer(buf, { chunk: 7 });
+    assert.equal(scan.spotUsage, "used");
+    assert.deepEqual(scan.usedSpotColorNames, ["PANTONE 186 C"]);
+    const unusedBuf = bleedPdf({ ...base, sepNames: ["Foo"], plainContentStream: true });
+    assert.equal(scanBuffer(unusedBuf, { chunk: 7 }).spotUsage, "unused");
+  });
+
+  test("can't confirm — encrypted PDF: file-problem attribution", () => {
+    const scan = scanBuffer(
+      bleedPdf({ ...base, sepNames: ["Foo"], plainContentStream: true, extraRaw: "/Encrypt 5 0 R" }),
+    );
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "encrypted");
+    assert.equal(scan.spotUsageAttribution, "file");
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /encrypted\/password-protected/);
+    assert.match(c.message, /problem with the file/);
+    assert.doesNotMatch(c.message, /scanner couldn't fully inspect/);
+  });
+
+  test("can't confirm — malformed content stream: file-problem attribution", () => {
+    const scan = scanBuffer(
+      bleedPdf({
+        ...base,
+        sepNames: ["Foo"],
+        extraRaw: "<< /Length 9 /Filter /FlateDecode >>\nstream\nnot-flate\nendstream",
+      }),
+    );
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "malformed");
+    assert.equal(scan.spotUsageAttribution, "file");
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /broken or malformed/);
+    assert.match(c.message, /problem with the file/);
+  });
+
+  test("can't confirm — legacy LZW compression: scanner-limitation attribution", () => {
+    const scan = scanBuffer(
+      bleedPdf({
+        ...base,
+        sepNames: ["Foo"],
+        extraRaw: "<< /Length 4 /Filter /LZWDecode >>\nstream\nxxxx\nendstream",
+      }),
+    );
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "unsupported-compression");
+    assert.equal(scan.spotUsageAttribution, "system");
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /legacy compression/);
+    assert.match(c.message, /GoodTunes scanner limitation/);
+  });
+
+  test("can't confirm — scan cap reached: scanner-limitation attribution", () => {
+    // A /Separation token early, then the byte cap cuts the scan short.
+    const early = Buffer.from("%PDF-1.6\n/Separation /Foo /DeviceCMYK\n", "latin1");
+    const pad = Buffer.alloc(4096, 0x20);
+    const scan = scanBuffer(Buffer.concat([early, pad]), { maxBytes: 256 });
+    assert.equal(scan.truncated, true);
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "cap-reached");
+    assert.equal(scan.spotUsageAttribution, "system");
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /scan\/decompression cap/);
+    assert.match(c.message, /GoodTunes scanner limitation/);
+  });
+
+  test("can't confirm — unsupported structure (no decodable content / ObjStm): scanner-limitation attribution", () => {
+    // Definitions but NO content streams at all → can't prove unused.
+    const noStreams = scanBuffer(bleedPdf({ ...base, sepNames: ["Foo"] }));
+    assert.equal(noStreams.spotUsage, "unknown");
+    assert.equal(noStreams.spotUsageReason, "unsupported-structure");
+    assert.equal(noStreams.spotUsageAttribution, "system");
+    // Compressed object streams present → same reason.
+    const objStm = scanBuffer(
+      bleedPdf({
+        ...base,
+        sepNames: ["Foo"],
+        plainContentStream: true,
+        extraRaw: "<< /Type /ObjStm /Filter /FlateDecode >>\nstream\nxx\nendstream",
+      }),
+    );
+    assert.equal(objStm.spotUsage, "unknown");
+    assert.equal(objStm.spotUsageReason, "unsupported-structure");
+    const c = find(validateCompletedComponent(noStreams, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /GoodTunes scanner limitation/);
+  });
+
+  test("indirect /ColorSpace resource dict can NOT certify 'unused' (falls back)", () => {
+    // Page resources point at an INDIRECT dict (`/ColorSpace 12 0 R`); the
+    // map lives in object 12 (unparsed), so the decoded `/CS0 cs` selection
+    // never resolves. A spot could hide behind it → conservative unknown.
+    const raw =
+      "12 0 obj << /CS0 50 0 R >> endobj\n" +
+      "50 0 obj [ /Separation /PANTONE#20186#20C /DeviceCMYK 9 0 R ] endobj\n" +
+      "/Resources << /ColorSpace 12 0 R >>\n" +
+      "<< /Length 30 >>\nstream\n/CS0 cs 1 scn 0 0 10 10 re f\nendstream";
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }));
+    assert.equal(scan.hasSpot, true);
+    assert.notEqual(scan.spotUsage, "unused");
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "unsupported-structure");
+    assert.equal(scan.spotUsageAttribution, "system");
+  });
+
+  test("unresolved selected colorspace name can NOT certify 'unused'", () => {
+    // Content selects /CS9 but no resource dict maps it — never "unused".
+    const raw =
+      "/Separation /Foo /DeviceCMYK\n" +
+      "<< /Length 30 >>\nstream\n/CS9 cs 1 scn 0 0 10 10 re f\nendstream";
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }));
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "unsupported-structure");
+  });
+
+  test("reused resource name mapped to CONFLICTING targets is ambiguous → unknown", () => {
+    // Two scopes both call their colorspace /CS0: one maps to a Separation,
+    // the other to a different (non-spot) object. A `/CS0 cs` selection is
+    // ambiguous — must fall back, never resolve optimistically.
+    const raw =
+      "50 0 obj [ /Separation /House#20Red /DeviceCMYK 9 0 R ] endobj\n" +
+      "60 0 obj [ /ICCBased 61 0 R ] endobj\n" +
+      "/Resources << /ColorSpace << /CS0 50 0 R >> >>\n" +
+      "/Resources << /ColorSpace << /CS0 60 0 R >> >>\n" +
+      "<< /Length 30 >>\nstream\n/CS0 cs 1 scn 0 0 10 10 re f\nendstream";
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }));
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "unsupported-structure");
+  });
+
+  test("spot-color image XObject (inline Separation colorspace) counts as USED", () => {
+    // An image can paint spot ink with no `cs` operator at all — its dict
+    // carries the colorspace directly. Must never certify "unused".
+    const raw =
+      "<< /Subtype /Image /Width 10 /Height 10 /ColorSpace [ /Separation /House#20Red /DeviceCMYK 9 0 R ] /Length 4 >>\nstream\nxxxx\nendstream";
+    const scan = scanBuffer(bleedPdf({ ...base, plainContentStream: true, extraRaw: raw }));
+    assert.equal(scan.spotUsage, "used");
+    assert.deepEqual(scan.usedSpotColorNames, ["House Red"]);
+    const checks = validateCompletedComponent(scan, RULED_SPEC);
+    const p = find(checks, "tmpl.pantone");
+    assert.equal(p.status, "warn"); // off-brand ink name
+    assert.match(p.message, /House Red/);
+    assert.match(find(checks, "tmpl.color").message, /spot\/PMS/);
+  });
+
+  test("spot-color image XObject (referenced Separation colorspace) counts as USED", () => {
+    const raw =
+      "50 0 obj [ /Separation /PANTONE#20186#20C /DeviceCMYK 9 0 R ] endobj\n" +
+      "<< /Subtype /Image /Width 10 /Height 10 /ColorSpace 50 0 R /Length 4 >>\nstream\nxxxx\nendstream";
+    const scan = scanBuffer(bleedPdf({ ...base, plainContentStream: true, extraRaw: raw }));
+    assert.equal(scan.spotUsage, "used");
+    assert.deepEqual(scan.usedSpotColorNames, ["PANTONE 186 C"]);
+    assert.equal(find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone").status, "pass");
+  });
+
+  test("plain (non-spot) image XObject does not block an 'unused' verdict", () => {
+    const raw =
+      "<< /Subtype /Image /Width 10 /Height 10 /ColorSpace /DeviceRGB /Length 4 >>\nstream\nxxxx\nendstream";
+    const scan = scanBuffer(
+      bleedPdf({ ...base, sepNames: ["Foo"], plainContentStream: true, extraRaw: raw }),
+    );
+    assert.equal(scan.spotUsage, "unused");
+  });
+
+  test("direct process alias (/CS0 /DeviceCMYK) selected + unused spot defs → 'unused'", () => {
+    // Illustrator-style: artwork selects a process space through a resource
+    // alias while the spot swatch is only defined — must certify unused.
+    const raw =
+      "50 0 obj [ /Separation /House#20Red /DeviceCMYK 9 0 R ] endobj\n" +
+      "/Resources << /ColorSpace << /CS0 /DeviceCMYK /CS1 50 0 R >> >>\n" +
+      "<< /Length 30 >>\nstream\n/CS0 cs 1 scn 0 0 10 10 re f\nendstream";
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }));
+    assert.equal(scan.spotUsage, "unused");
+    const checks = validateCompletedComponent(scan, RULED_SPEC);
+    assert.equal(find(checks, "tmpl.pantone").status, "pass");
+    assert.doesNotMatch(find(checks, "tmpl.color").message, /spot\/PMS/);
+  });
+
+  test("direct process alias in Flate content also certifies 'unused'", async () => {
+    const zlib = await import("node:zlib");
+    const content = zlib.deflateSync(Buffer.from("/CS0 cs 1 scn 0 0 10 10 re f", "latin1"));
+    const raw =
+      "50 0 obj [ /Separation /House#20Red /DeviceCMYK 9 0 R ] endobj\n" +
+      "/Resources << /ColorSpace << /CS0 /DeviceRGB >> >>\n" +
+      `<< /Length ${content.length} /Filter /FlateDecode >>\nstream\n` +
+      content.toString("latin1") +
+      "\nendstream";
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }));
+    assert.equal(scan.spotUsage, "unused");
+  });
+
+  test("alias name reused as direct non-spot AND spot ref stays ambiguous → unknown", () => {
+    const raw =
+      "50 0 obj [ /Separation /House#20Red /DeviceCMYK 9 0 R ] endobj\n" +
+      "/Resources << /ColorSpace << /CS0 /DeviceCMYK >> >>\n" +
+      "/Resources << /ColorSpace << /CS0 50 0 R >> >>\n" +
+      "<< /Length 30 >>\nstream\n/CS0 cs 1 scn 0 0 10 10 re f\nendstream";
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }));
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "unsupported-structure");
+  });
+
+  test("resolved Pantone spot + an UNRESOLVED selection still falls back to unknown (no bypass)", () => {
+    // /CS0 provably paints an official Pantone ink, but the content also
+    // selects /CS9 which never resolves — /CS9 could be a non-Pantone spot,
+    // so the verdict must stay conservative and the Pantone row must warn.
+    const raw = "<< /Length 30 >>\nstream\n/CS9 cs 1 scn 0 0 10 10 re f\nendstream";
+    const scan = scanBuffer(
+      bleedPdf({ ...base, usedSpotNames: ["PANTONE#20186#20C"], extraRaw: raw }),
+    );
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "unsupported-structure");
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /GoodTunes scanner limitation/);
+  });
+
+  test("resolved Pantone spot + an AMBIGUOUS selection also falls back to unknown", () => {
+    const raw =
+      "60 0 obj [ /ICCBased 61 0 R ] endobj\n" +
+      "/Resources << /ColorSpace << /CSA /DeviceCMYK >> >>\n" +
+      "/Resources << /ColorSpace << /CSA 60 0 R >> >>\n" +
+      "<< /Length 30 >>\nstream\n/CSA cs 1 scn 0 0 10 10 re f\nendstream";
+    const scan = scanBuffer(
+      bleedPdf({ ...base, usedSpotNames: ["PANTONE#20186#20C"], extraRaw: raw }),
+    );
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "unsupported-structure");
+    assert.equal(find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone").status, "warn");
+  });
+
+  test("selection-cap overflow forces conservative cap-reached fallback", () => {
+    // 400+ distinct selections exhaust the tracker; a later spot alias
+    // could be missed, so the verdict must be unknown (cap-reached).
+    let ops = "";
+    for (let i = 0; i <= 400; i++) ops += `/N${i} cs `;
+    const raw =
+      "/Separation /Foo /DeviceCMYK\n" +
+      `<< /Length ${ops.length} >>\nstream\n${ops}\nendstream`;
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }));
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "cap-reached");
+    assert.equal(scan.spotUsageAttribution, "system");
+  });
+
+  test("`/Name cs` inside literal strings or comments is NOT a selection", () => {
+    // The only spot-ish selections live in a string and a comment; the real
+    // selection is a process alias → provably unused.
+    const content =
+      "(text with /CS1 cs inside a string) Tj\n" +
+      "% comment /CS1 cs here\n" +
+      "<AABB> Tj\n" +
+      "/CS0 cs 1 scn 0 0 10 10 re f";
+    const raw =
+      "50 0 obj [ /Separation /House#20Red /DeviceCMYK 9 0 R ] endobj\n" +
+      "/Resources << /ColorSpace << /CS0 /DeviceCMYK /CS1 50 0 R >> >>\n" +
+      `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }));
+    assert.equal(scan.spotUsage, "unused");
+  });
+
+  test("cumulative stream cap crossed ON the final stream → cap-reached, never unused", () => {
+    // Two decodable streams; the second crosses the total-captured cap.
+    const s1 = "0 0 0 1 k 0 0 10 10 re f";
+    const s2 = "1 0 0 0 k 0 0 99 99 re f padding padding padding";
+    const raw =
+      "/Separation /Foo /DeviceCMYK\n" +
+      `<< /Length ${s1.length} >>\nstream\n${s1}\nendstream\n` +
+      `<< /Length ${s2.length} >>\nstream\n${s2}\nendstream`;
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }), {
+      spotCaps: { totalStream: s1.length + 10 }, // first fits, second crosses
+    });
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "cap-reached");
+    assert.equal(scan.spotUsageAttribution, "system");
+  });
+
+  test("entry-cap overflow in resource/object collections → cap-reached, never unused", () => {
+    // More Separation objects and ColorSpace refs than the entry cap can
+    // hold; a later spot image ref could be missed → conservative fallback.
+    let raw = "";
+    for (let i = 0; i < 4; i++) {
+      raw += `${100 + i} 0 obj [ /Separation /Ink${i} /DeviceCMYK 9 0 R ] endobj\n`;
+    }
+    raw += "/Resources << /ColorSpace << /CS0 /DeviceCMYK >> >>\n";
+    raw += "<< /Length 30 >>\nstream\n/CS0 cs 1 scn 0 0 10 10 re f\nendstream";
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }), {
+      spotCaps: { entries: 2 },
+    });
+    assert.equal(scan.spotUsage, "unknown");
+    assert.equal(scan.spotUsageReason, "cap-reached");
+
+    // ColorSpace ref-target overflow: distinct `/ColorSpace N 0 R` refs
+    // beyond the cap must also flag, since one could resolve to a spot.
+    let raw2 = "/Separation /Foo /DeviceCMYK\n";
+    for (let i = 0; i < 4; i++) raw2 += `/ColorSpace ${200 + i} 0 R\n`;
+    raw2 += "<< /Length 30 >>\nstream\n0 0 0 1 k 0 0 10 10 re f\nendstream";
+    const scan2 = scanBuffer(bleedPdf({ ...base, extraRaw: raw2 }), {
+      spotCaps: { entries: 2 },
+    });
+    assert.equal(scan2.spotUsage, "unknown");
+    assert.equal(scan2.spotUsageReason, "cap-reached");
+  });
+
+  test("telemetry redacts query strings from relative /objects paths too", () => {
+    const scan = scanBuffer(bleedPdf({ ...base, sepNames: ["Foo"] }));
+    const lines: string[] = [];
+    const orig = console.warn;
+    console.warn = (...a: unknown[]) => { lines.push(a.join(" ")); };
+    try {
+      logSpotUsageFallback(scan, {
+        fileName: "jacket.pdf",
+        source: "/objects/uploads/abc.pdf?sig=SECRET#frag",
+      });
+    } finally {
+      console.warn = orig;
+    }
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /source=\/objects\/uploads\/abc\.pdf(\s|$)/);
+    assert.doesNotMatch(lines[0], /SECRET|sig=|#frag/);
+  });
+
+  test("telemetry redacts query strings from pasted URLs", () => {
+    const scan = scanBuffer(bleedPdf({ ...base, sepNames: ["Foo"] })); // unknown
+    assert.equal(scan.spotUsage, "unknown");
+    const lines: string[] = [];
+    const orig = console.warn;
+    console.warn = (...a: unknown[]) => { lines.push(a.join(" ")); };
+    try {
+      logSpotUsageFallback(scan, {
+        fileName: "jacket.pdf",
+        source: "https://dl.example.com/file.pdf?token=SECRET&sig=abc",
+      });
+    } finally {
+      console.warn = orig;
+    }
+    assert.equal(lines.length, 1);
+    assert.match(lines[0], /reason=unsupported-structure/);
+    assert.match(lines[0], /source=https:\/\/dl\.example\.com\/file\.pdf(\s|$)/);
+    assert.doesNotMatch(lines[0], /SECRET|sig=/);
+  });
+
+  test("Flate-compressed content stream is decompressed and proves usage", async () => {
+    const zlib = await import("node:zlib");
+    const content = zlib.deflateSync(Buffer.from("/CS0 cs 1 scn 0 0 10 10 re f", "latin1"));
+    const raw =
+      "50 0 obj [ /Separation /PANTONE#20345#20C /DeviceCMYK 9 0 R ] endobj\n" +
+      "/Resources << /ColorSpace << /CS0 50 0 R >> >>\n" +
+      `<< /Length ${content.length} /Filter /FlateDecode >>\nstream\n` +
+      content.toString("latin1") +
+      "\nendstream";
+    const scan = scanBuffer(bleedPdf({ ...base, extraRaw: raw }));
+    assert.equal(scan.spotUsage, "used");
+    assert.deepEqual(scan.usedSpotColorNames, ["PANTONE 345 C"]);
+  });
+
+  test("no spot tokens at all stays 'none' and passes untouched", () => {
+    const scan = scanBuffer(bleedPdf({ ...base, plainContentStream: true }));
+    assert.equal(scan.spotUsage, "none");
+    const c = find(validateCompletedComponent(scan, RULED_SPEC), "tmpl.pantone");
+    assert.equal(c.status, "pass");
+    assert.match(c.message, /No spot colors detected/);
   });
 });
 

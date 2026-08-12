@@ -115,7 +115,7 @@ import {
   type CompletedTemplateComponent,
   type CompletedTemplateVerdict,
 } from "@shared/uploadValidation";
-import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches, hasTrustworthyBleedBoxes, contentBleedMeasurement, type ContentBleedMeasurement } from "./validators/completedTemplate";
+import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches, hasTrustworthyBleedBoxes, contentBleedMeasurement, type ContentBleedMeasurement, logSpotUsageFallback } from "./validators/completedTemplate";
 import { scanObjectPdf, measureTemplateSpecRow, clearTemplateSpecMeasurements } from "./templateSpecs";
 
 const scryptAsync = promisify(scrypt);
@@ -34155,6 +34155,9 @@ export async function registerRoutes(
         if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
       }
     }
+
+    // Task #3069 — log every spot-usage fallback with its reason code.
+    logSpotUsageFallback(scan, { fileName, source: isOwnObject ? assetUrl : "external-url" });
 
     const checks = validateCompletedComponent(scan, spec, { edgeBand, contentBleed });
     const component: CompletedTemplateComponent = {

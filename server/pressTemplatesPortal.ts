@@ -23,7 +23,7 @@ import {
   type JacketKind,
 } from "@shared/vendorSpecs";
 import { rollupStatus, type CheckResult } from "@shared/uploadValidation";
-import { validateCompletedComponent } from "./validators/completedTemplate";
+import { validateCompletedComponent, logSpotUsageFallback } from "./validators/completedTemplate";
 import {
   measureTemplateSpecRow,
   clearTemplateSpecMeasurements,
@@ -730,6 +730,8 @@ export function registerPressTemplateFlowRoutes(
       if (!scan) {
         return res.status(422).json({ message: error ?? "Couldn't read that file." });
       }
+      // Task #3069 — log every spot-usage fallback with its reason code.
+      logSpotUsageFallback(scan, { fileName: null, source: body.data.url });
       const checks: CheckResult[] = validateCompletedComponent(scan, slotSpec);
       const verdict = rollupStatus(checks);
 
