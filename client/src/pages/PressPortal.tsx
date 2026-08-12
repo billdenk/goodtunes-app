@@ -50,6 +50,12 @@ import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { AdminAlbum } from "@/pages/AdminAlbum";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { PressTemplatesTab } from "@/pages/press-templates/PressTemplatesTab";
+import {
+  PressVinylComponentTab,
+  PressLabelsComponentTab,
+  PressStickersComponentTab,
+  PressComponentPricingTab,
+} from "@/pages/press-components/tabs";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
@@ -79,9 +85,9 @@ import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 
 // pipeline + reports stay in the union so direct ?tab= URLs still render
 // their content (they're just hidden from the nav per Task #2188).
-type TabId = "dashboard" | "people" | "catalog" | "specs" | "templates" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "acquisition" | "settings";
+type TabId = "dashboard" | "people" | "catalog" | "specs" | "templates" | "comp-vinyl" | "comp-labels" | "comp-stickers" | "comp-pricing" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "acquisition" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "specs", "templates", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "specs", "templates", "comp-vinyl", "comp-labels", "comp-stickers", "comp-pricing", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 interface PressMe {
@@ -395,6 +401,10 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       ))}
       {tab === "specs" && <PressSpecs pressId={pressId} />}
       {tab === "templates" && <PressTemplatesTab pressId={pressId} />}
+      {tab === "comp-vinyl" && <PressVinylComponentTab pressId={pressId} />}
+      {tab === "comp-labels" && <PressLabelsComponentTab pressId={pressId} />}
+      {tab === "comp-stickers" && <PressStickersComponentTab pressId={pressId} />}
+      {tab === "comp-pricing" && <PressComponentPricingTab pressId={pressId} />}
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
       {tab === "reports" && <AdminReports embedded />}
       {tab === "pricing" && <AdminGoodDeedPricing embedded />}

@@ -2775,6 +2775,32 @@ export const pressTemplateTestRuns = pgTable("press_template_test_runs", {
 });
 export type PressTemplateTestRun = typeof pressTemplateTestRuns.$inferSelect;
 
+// Press Components (handoff/press-components, 2026-08-12) — the per-press
+// component setup surfaces (Vinyl color setup, Center labels, Stickers,
+// component-level Pricing). One row per (press, componentKey); the whole
+// component configuration is a single jsonb blob (atomic merge PUT, same
+// pattern as manufacturers.cd_catalog). Binding rule: GoodTunes Packages
+// (press_formats/tiers/colors) are UNTOUCHABLE — the Vinyl component is
+// SEEDED from them once (seededAt stamp) and then lives independently;
+// component edits never write back to the packages tables.
+export const pressComponents = pgTable(
+  "press_components",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    pressId: varchar("press_id").notNull(),
+    componentKey: text("component_key").notNull(), // vinyl | labels | stickers | pricing
+    config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+    seededAt: timestamp("seeded_at"),
+    updatedByUserId: varchar("updated_by_user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    pressComponentUniq: unique("press_components_press_key_uniq").on(t.pressId, t.componentKey),
+  }),
+);
+export type PressComponent = typeof pressComponents.$inferSelect;
+
 // Task #2324 — per-press AUDIO spec override. One row per press
 // (unique on pressId). The audio preflight baseline lives as measured
 // constants in shared/vendorSpecs.ts; this table lets an operator (or a

@@ -1,0 +1,657 @@
+// PressStickersComponent — ported from handoff/press-components/PressCatalogStickers.tsx.
+// Renders ONLY the main-content body inside OperatorShell (the mock's PressShell,
+// left rail, header, breadcrumb chrome, and the View-dark/light pill are all
+// MOCK-ONLY and stripped). Theme mode comes from useAdminDark(); the THEMES map
+// is copied handoff-verbatim. Press identity is data (payload.press).
+//
+// The mock's select-a-shape / select-a-size interaction is the preview browser
+// and is KEPT. On top of it, each size chip carries an explicit offered on/off
+// toggle (word + shape, not color alone) that flips whether the press offers
+// that size — local config then save(next). Staff (canEdit=false) is view-only:
+// every toggle affordance is hidden.
+//
+// The sticker render, contact shadow, and barcode are PRODUCT imagery — not
+// themed. Self-contained: helper components live in this file, like the mock.
+
+import { useState, useEffect } from "react";
+import { Check } from "lucide-react";
+import { useAdminDark } from "@/lib/adminAppearance";
+import type { PressComponentsPayload } from "./usePressComponents";
+import type { StickersComponentConfig } from "@shared/pressComponents";
+
+function cn(...parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(" ");
+}
+
+// ─── Themes — light = apple-canon; dark = charcoal admin canon ──────────
+type Theme = {
+  canvas: string;
+  card: string;
+  hairline: string;
+  ink: string;
+  subink: string;
+  faint: string;
+  tick: string;
+  blue: string;
+  chipFill: string;
+  offeredWash: string;
+};
+
+const THEMES: Record<"light" | "dark", Theme> = {
+  light: {
+    canvas: "#f5f5f7",
+    card: "#ffffff",
+    hairline: "#e6e6ea",
+    ink: "#1d1d1f",
+    subink: "#6e6e73",
+    faint: "#a1a1a6",
+    tick: "#d0d0d5",
+    blue: "#319ED8",
+    chipFill: "rgba(0,0,0,0.06)",
+    offeredWash: "rgba(28,138,91,0.10)",
+  },
+  dark: {
+    canvas: "#161617",
+    card: "#1e1e20",
+    hairline: "rgba(255,255,255,0.10)",
+    ink: "#f5f5f7",
+    subink: "#98989d",
+    faint: "#6e6e73",
+    tick: "#48484c",
+    blue: "#319ED8",
+    chipFill: "rgba(255,255,255,0.08)",
+    offeredWash: "rgba(28,138,91,0.16)",
+  },
+};
+
+// ─── Shapes → sizes: fixed product vocabulary (kept as a const) ─────────
+// Artists pick a shape first, then a size within it. UPC is its own shape
+// with one fixed size. payload.stickers.shapes records which size ids the
+// press OFFERS per shape.
+type StickerShapeId = "rect" | "square" | "circle" | "upc";
+
+type StickerSize = {
+  id: string;
+  name: string;
+  wIn: number;
+  hIn: number;
+};
+
+type StickerShape = {
+  id: StickerShapeId;
+  name: string;
+  note: string;
+  kind: "promo" | "upc";
+  round: boolean;
+  sizes: StickerSize[];
+};
+
+const sz = (wIn: number, hIn: number, round = false): StickerSize => ({
+  id: `${wIn}x${hIn}`,
+  name: round ? `${wIn}"` : `${wIn}" × ${hIn}"`,
+  wIn,
+  hIn,
+});
+
+const MOCK_STICKER_SHAPES: StickerShape[] = [
+  {
+    id: "rect",
+    name: "Rectangle",
+    note: "Wide promo strips and title stickers.",
+    kind: "promo",
+    round: false,
+    sizes: [sz(1.5, 1), sz(2, 1), sz(2, 3), sz(2, 4), sz(2.5, 1)],
+  },
+  {
+    id: "square",
+    name: "Square",
+    note: "Compact hype squares, tiny to full-size.",
+    kind: "promo",
+    round: false,
+    sizes: [sz(1, 1), sz(1.5, 1.5), sz(2, 2), sz(2.5, 2.5), sz(3, 3), sz(3.5, 3.5), sz(4, 4)],
+  },
+  {
+    id: "circle",
+    name: "Circle",
+    note: "Classic round hype stickers.",
+    kind: "promo",
+    round: true,
+    sizes: [sz(1, 1, true), sz(1.5, 1.5, true), sz(2, 2, true), sz(2.5, 2.5, true), sz(3, 3, true), sz(3.5, 3.5, true), sz(4, 4, true)],
+  },
+  {
+    id: "upc",
+    name: "UPC",
+    note: "Barcode retailers scan — one standard size.",
+    kind: "upc",
+    round: false,
+    sizes: [sz(1.75, 0.75)],
+  },
+];
+
+// ─── Barcode — quiet CSS-only UPC bars, no libraries ─────────────────
+const UPC_BARS = [
+  2, 1, 1, 3, 1, 2, 1, 1, 2, 3, 1, 1, 1, 2, 2, 1, 3, 1, 1, 2,
+  1, 1, 2, 1, 3, 1, 1, 2, 1, 2, 2, 1, 1, 3, 1, 1, 2, 1, 1, 2,
+];
+
+function Barcode({ height, scale = 1 }: { height: number; scale?: number }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 * scale }}>
+      <div style={{ display: "flex", alignItems: "stretch", height, gap: 1 * scale }} aria-hidden>
+        {UPC_BARS.map((w, i) => (
+          <div
+            key={i}
+            style={{
+              width: Math.max(1, w * scale),
+              background: i % 2 === 0 ? "#111114" : "transparent",
+            }}
+          />
+        ))}
+      </div>
+      {scale >= 0.9 && (
+        <div style={{ fontSize: 8 * scale, letterSpacing: 2 * scale, color: "#111114", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+          8 12345 67890 4
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Press mark on the sticker face ──────────────────────────────────
+// payload.press.labelLogoUrl is the per-press white-reading mark. On the
+// bright white sticker face we render it as-is (no filter — assume it reads
+// on white too, i.e. a single-color mark). When absent, a neutral initials
+// mark stands in — NEVER Memphis's logo.
+function PressMark({ logoUrl, name, size }: { logoUrl: string | null; name: string; size: number }) {
+  if (logoUrl) {
+    return <img src={logoUrl} alt="" aria-hidden style={{ width: size, height: size, objectFit: "contain" }} />;
+  }
+  const initials = (name || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+  return (
+    <div
+      aria-hidden
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        border: "1px solid rgba(0,0,0,0.14)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        color: "#6e6e73",
+        fontWeight: 700,
+        fontSize: Math.max(9, size * 0.34),
+        letterSpacing: 0.5,
+      }}
+    >
+      {initials || "•"}
+    </div>
+  );
+}
+
+// ─── The sticker render — white stock, per-shape face ────────────────
+function Sticker({
+  size,
+  shape,
+  pxPerInch,
+  logoUrl,
+  pressName,
+}: {
+  size: StickerSize;
+  shape: StickerShape;
+  pxPerInch: number;
+  logoUrl: string | null;
+  pressName: string;
+}) {
+  const kind = shape.kind;
+  const w = Math.round(size.wIn * pxPerInch);
+  const h = Math.round(size.hIn * pxPerInch);
+  const isCircle = shape.round;
+  const radius = isCircle ? "50%" : Math.round(pxPerInch * 0.09);
+  const minDim = Math.min(w, h);
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: w,
+        height: h,
+        borderRadius: radius,
+        background: "radial-gradient(circle at 40% 30%, #ffffff 0%, #f7f7f8 62%, #eeeef0 100%)",
+        border: "1px solid rgba(0,0,0,0.07)",
+        boxShadow: "0 1px 2px rgba(0,0,0,0.06), inset 0 1px 2px rgba(255,255,255,0.9)",
+        overflow: "hidden",
+        flexShrink: 0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {kind === "promo" ? (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: minDim * 0.05, padding: minDim * 0.12 }}>
+          {/* Per-press: payload.press.labelLogoUrl — each press's own mark. */}
+          <PressMark logoUrl={logoUrl} name={pressName} size={minDim * 0.52} />
+          {minDim >= 120 && (
+            <div
+              style={{
+                fontSize: Math.max(7, minDim * 0.045),
+                fontWeight: 700,
+                letterSpacing: minDim * 0.012,
+                textTransform: "uppercase",
+                color: "#6e6e73",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Limited Pressing
+            </div>
+          )}
+        </div>
+      ) : (
+        <Barcode height={h * 0.34} scale={minDim / 200} />
+      )}
+    </div>
+  );
+}
+
+// ─── Left preview stage — one large sticker ──────────────────────────
+const STAGE_PX_PER_INCH = 75;
+
+function StickerStage({
+  size,
+  shape,
+  logoUrl,
+  pressName,
+}: {
+  size: StickerSize;
+  shape: StickerShape;
+  logoUrl: string | null;
+  pressName: string;
+}) {
+  const w = Math.round(size.wIn * STAGE_PX_PER_INCH);
+  return (
+    <div style={{ position: "relative", display: "flex", justifyContent: "center" }}>
+      <div style={{ position: "relative", height: 310, display: "flex", alignItems: "flex-end" }}>
+        <div style={{ transition: "all 0.4s cubic-bezier(0.32, 0.72, 0.28, 1)" }}>
+          <Sticker size={size} shape={shape} pxPerInch={STAGE_PX_PER_INCH} logoUrl={logoUrl} pressName={pressName} />
+        </div>
+        {/* Contact shadow */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: -14,
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: Math.round(w * 0.66),
+            height: 14,
+            borderRadius: "50%",
+            background: "rgba(0,0,0,0.18)",
+            filter: "blur(8px)",
+            pointerEvents: "none",
+            zIndex: 0,
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ─── Shape option tile — mini sticker face, representative size ──────
+function ShapeTile({
+  shape,
+  active,
+  onSelect,
+  offeredCount,
+  logoUrl,
+  pressName,
+  t,
+}: {
+  shape: StickerShape;
+  active: boolean;
+  onSelect: () => void;
+  offeredCount: number;
+  logoUrl: string | null;
+  pressName: string;
+  t: Theme;
+}) {
+  const rep = shape.sizes[Math.floor(shape.sizes.length / 2)];
+  const tilePxPerInch = 76 / Math.max(rep.wIn, rep.hIn);
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      aria-pressed={active}
+      data-testid={`sticker-shape-${shape.id}`}
+      className="rounded-2xl text-left transition-all hover:-translate-y-px focus:outline-none cursor-pointer"
+      style={{ backgroundColor: t.card, padding: 16, border: active ? `2px solid ${t.blue}` : `1px solid ${t.hairline}` }}
+    >
+      <div className="flex justify-center" style={{ marginBottom: 12 }}>
+        <div style={{ width: 80, height: 80, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <Sticker size={rep} shape={shape} pxPerInch={tilePxPerInch} logoUrl={logoUrl} pressName={pressName} />
+        </div>
+      </div>
+      <div className="text-[13px] font-semibold leading-tight" style={{ color: active ? t.blue : t.ink }}>
+        {shape.name}
+      </div>
+      <div className="text-[11.5px]" style={{ marginTop: 3, color: t.faint, lineHeight: 1.35 }}>
+        {shape.sizes.length === 1 ? shape.sizes[0].name : `${shape.sizes.length} sizes`}
+        {" · "}
+        {offeredCount} offered
+      </div>
+    </div>
+  );
+}
+
+// ─── Size option card — quiet text card + offered toggle ─────────────
+// The card itself previews the size (mock behaviour). The check pill in the
+// corner is the offered on/off control: word + shape state (a filled check
+// pill labelled "Offered" vs. a hollow pill labelled "Off"), never color
+// alone. Hidden entirely when the press can't edit (view-only Staff).
+function SizeCard({
+  size,
+  round,
+  active,
+  offered,
+  canEdit,
+  onSelect,
+  onToggleOffered,
+  t,
+}: {
+  size: StickerSize;
+  round: boolean;
+  active: boolean;
+  offered: boolean;
+  canEdit: boolean;
+  onSelect: () => void;
+  onToggleOffered: () => void;
+  t: Theme;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      aria-pressed={active}
+      data-testid={`sticker-size-${size.id}`}
+      className="rounded-2xl transition-all hover:-translate-y-px focus:outline-none"
+      style={{
+        position: "relative",
+        backgroundColor: offered ? t.offeredWash : t.card,
+        padding: "14px 10px",
+        border: active ? `2px solid ${t.blue}` : `1px solid ${t.hairline}`,
+        textAlign: "center",
+        cursor: "pointer",
+      }}
+    >
+      <div className="text-[15px] font-semibold" style={{ color: active ? t.blue : t.ink }}>{size.name}</div>
+      <div className="text-[11px]" style={{ marginTop: 2, color: t.faint }}>
+        {round ? "Circle" : size.wIn === size.hIn ? "Square" : "Rectangle"}
+      </div>
+
+      {canEdit ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleOffered();
+          }}
+          aria-pressed={offered}
+          aria-label={offered ? `${size.name} offered — click to stop offering` : `${size.name} not offered — click to offer`}
+          data-testid={`sticker-size-toggle-${size.id}`}
+          className="inline-flex items-center gap-1 rounded-full transition-colors focus:outline-none"
+          style={{
+            marginTop: 10,
+            padding: "3px 9px",
+            fontSize: 10.5,
+            fontWeight: 600,
+            border: offered ? "1px solid transparent" : `1px solid ${t.hairline}`,
+            backgroundColor: offered ? t.blue : "transparent",
+            color: offered ? "#ffffff" : t.subink,
+          }}
+        >
+          {offered && <Check className="w-3 h-3" />}
+          {offered ? "Offered" : "Off"}
+        </button>
+      ) : (
+        <div
+          className="inline-flex items-center gap-1 rounded-full"
+          style={{
+            marginTop: 10,
+            padding: "3px 9px",
+            fontSize: 10.5,
+            fontWeight: 600,
+            border: offered ? "1px solid transparent" : `1px solid ${t.hairline}`,
+            backgroundColor: offered ? t.chipFill : "transparent",
+            color: offered ? t.ink : t.faint,
+          }}
+          data-testid={`sticker-size-state-${size.id}`}
+        >
+          {offered && <Check className="w-3 h-3" />}
+          {offered ? "Offered" : "Off"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Two-tone headings ───────────────────────────────────────────────
+function PageHeading({ lead, rest, t }: { lead: string; rest: string; t: Theme }) {
+  return (
+    <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
+      <span style={{ color: t.ink }}>{lead} </span>
+      <span style={{ color: t.faint, fontWeight: 600 }}>{rest}</span>
+    </h1>
+  );
+}
+
+function StepHeading({ lead, rest, t }: { lead: string; rest: string; t: Theme }) {
+  return (
+    <h2 className="tracking-tight" style={{ fontSize: 24, lineHeight: 1.15, fontWeight: 600 }}>
+      <span style={{ color: t.ink }}>{lead} </span>
+      <span style={{ color: t.faint }}>{rest}</span>
+    </h2>
+  );
+}
+
+// ─── Local editing helpers ───────────────────────────────────────────
+type OfferedMap = Record<StickerShapeId, Set<string>>;
+
+function configToMap(cfg: StickersComponentConfig): OfferedMap {
+  const map: OfferedMap = { rect: new Set(), square: new Set(), circle: new Set(), upc: new Set() };
+  for (const s of cfg.shapes) {
+    if (map[s.id]) map[s.id] = new Set(s.offeredSizeIds);
+  }
+  return map;
+}
+
+function mapToConfig(map: OfferedMap): StickersComponentConfig {
+  return {
+    shapes: MOCK_STICKER_SHAPES.map((shape) => ({
+      id: shape.id,
+      offeredSizeIds: shape.sizes.filter((sz) => map[shape.id]?.has(sz.id)).map((sz) => sz.id),
+    })),
+  };
+}
+
+// ─── Component ───────────────────────────────────────────────────────
+export function PressStickersComponent({
+  payload,
+  canEdit,
+  save,
+  saving,
+}: {
+  payload: PressComponentsPayload;
+  canEdit: boolean;
+  save: (config: StickersComponentConfig) => void;
+  saving: boolean;
+}) {
+  const t = THEMES[useAdminDark() ? "dark" : "light"];
+  const press = payload.press;
+
+  // Local edit state seeded from payload; re-seed only on press identity change
+  // when there are no unsaved edits (local-edit vs shared-query re-seed rule).
+  const [offered, setOffered] = useState<OfferedMap>(() => configToMap(payload.stickers));
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => {
+    if (!dirty) setOffered(configToMap(payload.stickers));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [press.id]);
+
+  const [selectedShapeId, setSelectedShapeId] = useState<StickerShapeId>("circle");
+  const [selectedSizeId, setSelectedSizeId] = useState<string>("3x3");
+
+  const shape = MOCK_STICKER_SHAPES.find((s) => s.id === selectedShapeId) ?? MOCK_STICKER_SHAPES[0];
+  const size = shape.sizes.find((s) => s.id === selectedSizeId) ?? shape.sizes[Math.floor(shape.sizes.length / 2)];
+
+  const chooseShape = (id: StickerShapeId) => {
+    setSelectedShapeId(id);
+    const next = MOCK_STICKER_SHAPES.find((s) => s.id === id);
+    if (next) setSelectedSizeId(next.sizes[Math.floor(next.sizes.length / 2)].id);
+  };
+
+  const toggleOffered = (shapeId: StickerShapeId, sizeId: string) => {
+    if (!canEdit) return;
+    setOffered((prev) => {
+      const nextSet = new Set(prev[shapeId]);
+      if (nextSet.has(sizeId)) nextSet.delete(sizeId);
+      else nextSet.add(sizeId);
+      const next: OfferedMap = { ...prev, [shapeId]: nextSet };
+      // Persist the WHOLE config atomically on this commit point.
+      save(mapToConfig(next));
+      return next;
+    });
+    setDirty(true);
+  };
+
+  return (
+    <div className="font-sans" style={{ backgroundColor: t.canvas, color: t.ink }}>
+      <div className="mx-auto w-full" style={{ maxWidth: 1240, paddingLeft: 40, paddingRight: 40, paddingTop: 40, paddingBottom: 96 }}>
+        {/* Quiet opening header */}
+        <div className="min-w-0">
+          <PageHeading lead="Stickers." rest="Promo and UPC options." t={t} />
+          <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: t.subink }}>
+            Pick the sticker sizes you offer. Artists choose from these when they design a record with {press.name}.
+          </p>
+          {saving && (
+            <p className="text-[12px]" style={{ marginTop: 8, color: t.faint }} data-testid="stickers-saving">
+              Saving…
+            </p>
+          )}
+        </div>
+
+        {/* Split: sticky sticker stage · size + style picker */}
+        <div
+          style={{
+            marginTop: 40,
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) 520px",
+            gap: 56,
+            alignItems: "start",
+          }}
+        >
+          {/* LEFT — the calm sticker stage (sticky) */}
+          <div className="sticky" style={{ top: 88 }}>
+            <div className="flex flex-col items-center">
+              <StickerStage size={size} shape={shape} logoUrl={press.labelLogoUrl} pressName={press.name} />
+              <div className="flex items-center justify-center gap-2 text-[13px]" style={{ marginTop: 28, color: t.subink }}>
+                <span className="font-semibold" style={{ color: t.ink }}>
+                  {size.name}
+                </span>
+                <span style={{ color: t.tick }}>·</span>
+                <span>{shape.name}</span>
+              </div>
+              <p className="text-[12px] text-center" style={{ marginTop: 6, maxWidth: 320, color: t.faint }}>
+                {shape.note}
+              </p>
+            </div>
+          </div>
+
+          {/* RIGHT — pick a shape → pick a size */}
+          <div className="min-w-0 flex flex-col" style={{ gap: 48 }}>
+            {/* Shape */}
+            <section>
+              <StepHeading lead="Pick a shape." rest="Die-cut to fit." t={t} />
+              <p className="text-[12.5px]" style={{ marginTop: 10, color: t.subink }}>
+                Stickers apply to the shrink-wrap, not the jacket itself.
+              </p>
+              <div
+                style={{
+                  marginTop: 18,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: 12,
+                }}
+              >
+                {MOCK_STICKER_SHAPES.map((s) => (
+                  <ShapeTile
+                    key={s.id}
+                    shape={s}
+                    active={s.id === selectedShapeId}
+                    onSelect={() => chooseShape(s.id)}
+                    offeredCount={offered[s.id]?.size ?? 0}
+                    logoUrl={press.labelLogoUrl}
+                    pressName={press.name}
+                    t={t}
+                  />
+                ))}
+              </div>
+            </section>
+
+            {/* Size — options follow the chosen shape */}
+            <section>
+              <StepHeading lead="Pick a size." rest={`For ${shape.name.toLowerCase()}s.`} t={t} />
+              <p className="text-[12.5px]" style={{ marginTop: 10, color: t.subink }}>
+                {shape.id === "upc"
+                  ? "UPC stickers come in one standard retail size."
+                  : canEdit
+                  ? "Tap a size to preview it; use its toggle to offer or hide it. Every size prints on the same white die-cut stock."
+                  : "Every size prints on the same white die-cut stock."}
+              </p>
+              <div
+                style={{
+                  marginTop: 18,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 12,
+                }}
+              >
+                {shape.sizes.map((s) => (
+                  <SizeCard
+                    key={s.id}
+                    size={s}
+                    round={shape.round}
+                    active={s.id === selectedSizeId}
+                    offered={offered[shape.id]?.has(s.id) ?? false}
+                    canEdit={canEdit}
+                    onSelect={() => setSelectedSizeId(s.id)}
+                    onToggleOffered={() => toggleOffered(shape.id, s.id)}
+                    t={t}
+                  />
+                ))}
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default PressStickersComponent;

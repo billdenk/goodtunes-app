@@ -55,6 +55,10 @@ import {
   Store,
   type LucideIcon,
   FileText,
+  Square,
+  CircleDot,
+  StickyNote,
+  Sticker,
 } from "lucide-react";
 
 export type OperatorRole =
@@ -82,11 +86,12 @@ export type PartnerVerb =
 /** Collapsible rail groups. Only "catalog" exists today — mirrors the
  * super-admin's Catalog section (People/Roster + Albums nested under a
  * chevron header directly under Dashboard). */
-export type OperatorSectionId = "catalog";
+export type OperatorSectionId = "catalog" | "components";
 
 /** Header labels for each collapsible section. */
 export const SECTION_LABELS: Record<OperatorSectionId, string> = {
   catalog: "Catalog",
+  components: "Components",
 };
 
 export interface OperatorModuleDef {
@@ -204,6 +209,17 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // Press-templates flow (Ruby handoff, Aug 2026): template ingestion +
   // finished-file certification, under the Catalog section beside Specs.
   { id: "templates",  label: "Templates",             icon: FileText,   section: "catalog", roles: ["press"] },
+  // Components section (Ruby handoff, handoff/press-components/, Aug 12
+  // 2026): the per-press component setup surfaces. Rail order matches the
+  // mock's COMPONENTS_CHILDREN. Jackets / Inner Sleeves / Inserts are
+  // future-state artist choosers — decorative Soon rows, not wired.
+  { id: "comp-vinyl",    label: "Vinyl",         icon: Disc3,      section: "components", roles: ["press"] },
+  { id: "comp-jackets",  label: "Jackets",       icon: Square,     section: "components", soon: true, roles: ["press"] },
+  { id: "comp-sleeves",  label: "Inner Sleeves", icon: Layers,     section: "components", soon: true, roles: ["press"] },
+  { id: "comp-labels",   label: "Center Labels", icon: CircleDot,  section: "components", roles: ["press"] },
+  { id: "comp-inserts",  label: "Inserts",       icon: StickyNote, section: "components", soon: true, roles: ["press"] },
+  { id: "comp-stickers", label: "Stickers",      icon: Sticker,    section: "components", roles: ["press"] },
+  { id: "comp-pricing",  label: "Pricing",       icon: Receipt,    section: "components", roles: ["press"] },
   { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },
   { id: "referrals",  label: "Referrals",        icon: Gift,             roles: ["press"] },
 

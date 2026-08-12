@@ -163,6 +163,8 @@ function revisionStatusMeta(status: TemplateRevision["status"]) {
       return { word: "Certified", Icon: BadgeCheck, tone: "ready" as const };
     case "pending":
       return { word: "Pending", Icon: Clock3, tone: "warn" as const };
+    case "review":
+      return { word: "Needs review", Icon: AlertTriangle, tone: "warn" as const };
     case "superseded":
       return { word: "Superseded", Icon: ChevronDown, tone: "neutral" as const };
     case "archived":

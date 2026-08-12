@@ -18,7 +18,7 @@ export type TemplateRevision = {
   revLabel: string;
   fileUrl: string;
   fileName: string | null;
-  status: "pending" | "certified" | "superseded" | "archived";
+  status: "pending" | "certified" | "superseded" | "archived" | "review";
   note: string | null;
   measuredSnapshot: Record<string, unknown> | null;
   createdAt: string;
@@ -78,11 +78,14 @@ export type TemplatesPayload = {
 };
 
 /** Slot status derived for the index tiles. */
-export type SlotStatus = "certified" | "pending" | "failed" | "empty";
+export type SlotStatus = "certified" | "pending" | "failed" | "empty" | "review";
 
 export function slotStatus(spec: TemplateSpecWithHistory | undefined): SlotStatus {
   if (!spec || !spec.templateFileUrl) return "empty";
   const live = spec.revisions.find((r) => r.status === "certified" || r.status === "pending");
+  // Auto-imported legacy uploads that couldn't be confidently matched to
+  // this slot sit in "review" until the press re-attaches or archives.
+  if (!live && spec.revisions.some((r) => r.status === "review")) return "review";
   if (live?.status === "certified") return "certified";
   const latestRun = spec.runs[0];
   if (latestRun && latestRun.verdict === "fail") return "failed";

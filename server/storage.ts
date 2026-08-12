@@ -1018,6 +1018,7 @@ export interface IStorage {
     fileName: string | null;
     createdByUserId: string | null;
     measuredSnapshot?: Record<string, unknown> | null;
+    note?: string | null;
   }): Promise<PressTemplateRevision>;
   supersedePressTemplateRevisions(specId: string, exceptId: string | null, note: string | null): Promise<void>;
   setPressTemplateRevisionStatus(
@@ -5641,6 +5642,7 @@ export class DbStorage implements IStorage {
     fileName: string | null;
     createdByUserId: string | null;
     measuredSnapshot?: Record<string, unknown> | null;
+    note?: string | null;
   }): Promise<PressTemplateRevision> {
     const [row] = await db
       .insert(pressTemplateRevisions)
@@ -5651,6 +5653,7 @@ export class DbStorage implements IStorage {
         fileName: input.fileName,
         createdByUserId: input.createdByUserId,
         measuredSnapshot: input.measuredSnapshot ?? null,
+        ...(input.note !== undefined ? { note: input.note } : {}),
       })
       .returning();
     return row;

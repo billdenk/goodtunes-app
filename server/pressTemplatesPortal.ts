@@ -100,6 +100,7 @@ function measuredSnapshotOf(row: PressTemplateSpec): Record<string, unknown> {
 async function resolveSlotSpec(
   press: { id: string; name: string; printRules?: unknown },
   row: PressTemplateSpec,
+  opts: { excludeOwnMeasured?: boolean } = {},
 ): Promise<FinishedComponentSpec | null> {
   // Name-matched presses (MRP/Hellbender/PMP/Viryl) get their measured
   // vendor baseline; any other press falls back to the "generic" vendor
@@ -118,7 +119,17 @@ async function resolveSlotSpec(
     labelColor: "process-4c",
     booklet: row.componentKey === "booklet",
   };
-  const storeRows = await storage.listPressTemplateSpecs(row.pressId, row.format);
+  let storeRows = await storage.listPressTemplateSpecs(row.pressId, row.format);
+  if (opts.excludeOwnMeasured) {
+    // Identity checks compare the row's measured artboard against what the
+    // slot SHOULD be — the persisted measured values must not ride in as
+    // the basis (the comparison would trivially match itself).
+    storeRows = storeRows.map((s) =>
+      s.id === row.id
+        ? ({ ...s, measuredArtboardWInches: null, measuredArtboardHInches: null } as typeof s)
+        : s,
+    );
+  }
   const resolved = resolveFinishedComponents({
     vendorId,
     config,
@@ -136,6 +147,97 @@ async function resolveSlotSpec(
   return match ?? null;
 }
 
+/**
+ * Auto-import previously uploaded template PDFs onto the Templates flow
+ * (Ruby handoff, handoff/press-components/README.md "Templates
+ * follow-through"). Any slot with a live template file but ZERO revision
+ * rows predates the revision flow (old admin/catalog uploads). Each such
+ * row is measured once, then a revision is minted:
+ *   • measured cleanly + artboard plausibly matches the slot's expected
+ *     finished+bleed geometry → status "pending" (imported, ready to test)
+ *   • scan failed, or the measured artboard is far from what this slot
+ *     should be (likely filed under the wrong component) → status "review"
+ *     — queued for a quick press review (re-attach or archive resolves it).
+ * A revision is minted EVEN on failure so the row is never rescanned on
+ * every GET. Runs lazily from the templates GET (bounded per press,
+ * best-effort — an import failure never blocks the page).
+ */
+export async function autoImportLegacyTemplates(
+  press: { id: string; name: string; printRules?: unknown },
+  specs: PressTemplateSpec[],
+): Promise<boolean> {
+  const withFile = specs.filter((s) => s.templateFileUrl);
+  if (!withFile.length) return false;
+  const revs = await storage.listPressTemplateRevisions(withFile.map((s) => s.id));
+  const seen = new Set(revs.map((r) => r.specId));
+  const orphans = withFile.filter((s) => !seen.has(s.id));
+  if (!orphans.length) return false;
+
+  let minted = false;
+  for (const spec of orphans) {
+    try {
+      // Measure once if never measured (a recorded measuredError counts
+      // as measured — don't rescan a known-bad file forever).
+      let row = spec;
+      if (row.measuredArtboardWInches == null && !row.measuredError) {
+        await measureTemplateSpecRow(press.id, row.id);
+        row = (await storage.getPressTemplateSpecById(press.id, row.id)) ?? row;
+      }
+
+      let status: "pending" | "review" = "pending";
+      let note = "Imported from an earlier upload";
+      if (row.measuredError || row.measuredArtboardWInches == null) {
+        status = "review";
+        note = `Needs review — couldn't read the file (${row.measuredError ?? "not measurable"})`;
+      } else {
+        // Identity check: compare the measured artboard against what this
+        // SLOT should roughly be (finished trim + bleed, orientation-
+        // agnostic). We deliberately resolve WITHOUT the row's own measured
+        // override (it would match itself trivially) by checking against
+        // the computed finished basis only.
+        const slotSpec = await resolveSlotSpec(press, row, { excludeOwnMeasured: true });
+        const basis = slotSpec
+          ? {
+              w: slotSpec.finishedInches.w + 2 * (slotSpec.bleedInches || 0),
+              h: slotSpec.finishedInches.h + 2 * (slotSpec.bleedInches || 0),
+            }
+          : null;
+        if (basis) {
+          const mw = Number(row.measuredArtboardWInches);
+          const mh = Number(row.measuredArtboardHInches);
+          const TOL = 1.5; // generous — templates legitimately outsize trim
+          const fits =
+            (Math.abs(mw - basis.w) <= TOL && Math.abs(mh - basis.h) <= TOL) ||
+            (Math.abs(mw - basis.h) <= TOL && Math.abs(mh - basis.w) <= TOL);
+          if (!fits) {
+            status = "review";
+            note = `Needs review — measured ${mw}"×${mh}" doesn't look like this slot (expected ≈${basis.w.toFixed(1)}"×${basis.h.toFixed(1)}")`;
+          }
+        }
+        // No baseline (cassette/cd/unknown) → import as pending; the test
+        // route already answers honestly for those slots.
+      }
+
+      const revision = await storage.createPressTemplateRevision({
+        specId: row.id,
+        revLabel: nextRevLabel([]),
+        fileUrl: row.templateFileUrl!,
+        fileName: row.templateFileName ?? null,
+        createdByUserId: null,
+        measuredSnapshot: measuredSnapshotOf(row),
+        note,
+      });
+      if (status === "review") {
+        await storage.setPressTemplateRevisionStatus(revision.id, "review");
+      }
+      minted = true;
+    } catch (e: any) {
+      console.error(`[templates-import] spec ${spec.id} failed:`, e?.message ?? e);
+    }
+  }
+  return minted;
+}
+
 export function registerPressTemplateFlowRoutes(
   app: Express,
   requireAdmin: any,
@@ -148,7 +250,14 @@ export function registerPressTemplateFlowRoutes(
     const pressId = String(req.params.id);
     const press = await storage.getManufacturerById(pressId);
     if (!press) return res.status(404).json({ message: "Press not found" });
-    const specs = await storage.listPressTemplateSpecs(pressId);
+    let specs = await storage.listPressTemplateSpecs(pressId);
+    // Legacy uploads (file on the slot, no revision history) get imported
+    // into the revision flow on first view — best-effort, never blocks.
+    const imported = await autoImportLegacyTemplates(press, specs).catch((e) => {
+      console.error("[templates-import] failed:", e?.message ?? e);
+      return false;
+    });
+    if (imported) specs = await storage.listPressTemplateSpecs(pressId);
     const specIds = specs.map((s) => s.id);
     const [revisions, runs] = await Promise.all([
       storage.listPressTemplateRevisions(specIds),

@@ -18,7 +18,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
-  BadgeCheck, Clock3, XCircle, History, Upload, CloudUpload, X,
+  BadgeCheck, Clock3, XCircle, AlertTriangle, History, Upload, CloudUpload, X,
   MoreHorizontal, Archive, Loader2, AlertCircle,
 } from "lucide-react";
 import { ChevronDown as NavChevron } from "lucide-react";
@@ -128,6 +128,9 @@ const STATUS_META: Record<
   certified: { label: "Certified", tone: "ready", Icon: BadgeCheck },
   pending: { label: "Pending", tone: "warn", Icon: Clock3 },
   failed: { label: "Failed", tone: "crit", Icon: XCircle },
+  // Auto-imported legacy upload the importer couldn't confidently match to
+  // this slot — press confirms by re-attaching or archives it.
+  review: { label: "Needs review", tone: "warn", Icon: AlertTriangle },
   // "empty" never reaches StatusChip (the empty tile renders its own affordance).
   empty: { label: "Empty", tone: "warn", Icon: Clock3 },
 };

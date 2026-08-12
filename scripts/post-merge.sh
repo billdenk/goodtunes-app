@@ -11931,3 +11931,26 @@ SQL
 }
 create_press_template_flow_tables dev  "${DATABASE_URL:-}"
 create_press_template_flow_tables prod "${PROD_DATABASE_URL:-}"
+
+# ── Press Components tables (Ruby handoff, handoff/press-components/) ──
+# One row per (press, componentKey) holding the whole component config as
+# jsonb. Idempotent on both DBs (schema-drift guard covers it).
+create_press_components_table() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[press-components] $label: no URL, skipping"; return 0; }
+  psql "$url" <<'SQL' >/dev/null 2>&1 || echo "[press-components] $label: DDL failed (non-fatal)"
+CREATE TABLE IF NOT EXISTS press_components (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id varchar NOT NULL,
+  component_key text NOT NULL,
+  config jsonb NOT NULL DEFAULT '{}'::jsonb,
+  seeded_at timestamp,
+  updated_by_user_id varchar,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT press_components_press_key_uniq UNIQUE (press_id, component_key)
+);
+SQL
+}
+create_press_components_table dev  "${DATABASE_URL:-}"
+create_press_components_table prod "${PROD_DATABASE_URL:-}"
