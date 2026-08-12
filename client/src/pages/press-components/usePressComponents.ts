@@ -57,9 +57,19 @@ export type PressComponentsPayload = {
 // gooddeed_printing_json store ({ active, tiers: [{ qty, perUnitCents }] })
 // via the press-manager-gated manufacturers GET/PUT (writes require
 // pressUserCanEdit — staff stay view-only).
+// Task #3073 — per-service ladders: `tiers` is the PRINT-ONLY ladder
+// (legacy bundled rates map onto it unchanged); `finishing` is the optional
+// hologram-application + shrinkwrap service with its own ladder;
+// `shipToFulfillment` records whether the printer hands finished certs off
+// to fulfillment. The GET normalizes older single-ladder rows to defaults.
 export type GoodDeedPrintingConfig = {
   active: boolean;
   tiers: Array<{ qty: number; perUnitCents: number }>;
+  finishing: {
+    offered: boolean;
+    tiers: Array<{ qty: number; perUnitCents: number }>;
+  };
+  shipToFulfillment: boolean;
 };
 
 export function useGoodDeedPrinting(pressId: string) {

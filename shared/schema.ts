@@ -4806,9 +4806,23 @@ export const manufacturers = pgTable("manufacturers", {
   // { active: boolean; tiers: Array<{ qty: number; perUnitCents: number }> }
   // so the press can record its own printing costs without needing a
   // vendors.id. Distinct from vendor_good_deed_services (vendor-FK-keyed).
+  //
+  // Task #3073 — restructured into per-service ladders. `tiers` is now the
+  // PRINT-ONLY ladder (legacy bundled rates map onto it unchanged — no data
+  // wipe, just copy no longer claims hologram/shrinkwrap is included).
+  // `finishing` is the optional second service: the printer receives signed
+  // certs back and applies GoodTunes-supplied holograms + shrinkwrap, with
+  // its own ladder. `shipToFulfillment` records whether the printer can
+  // hand finished certs off to fulfillment. Older rows lack the new keys —
+  // the GET normalizes { offered:false, tiers:[] } / false defaults.
   gooddeedPrintingJson: jsonb("gooddeed_printing_json").$type<{
     active: boolean;
     tiers: Array<{ qty: number; perUnitCents: number }>;
+    finishing?: {
+      offered: boolean;
+      tiers: Array<{ qty: number; perUnitCents: number }>;
+    };
+    shipToFulfillment?: boolean;
   }>(),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,

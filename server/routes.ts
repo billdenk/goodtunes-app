@@ -34625,10 +34625,25 @@ export async function registerRoutes(
       const press = await storage.getManufacturerById(req.params.id);
       if (!press) return res.status(404).json({ message: "Press not found" });
       const raw = (press as any).gooddeedPrintingJson as
-        | { active: boolean; tiers: Array<{ qty: number; perUnitCents: number }> }
+        | {
+            active: boolean;
+            tiers: Array<{ qty: number; perUnitCents: number }>;
+            finishing?: { offered: boolean; tiers: Array<{ qty: number; perUnitCents: number }> };
+            shipToFulfillment?: boolean;
+          }
         | null
         | undefined;
-      return res.json({ active: raw?.active ?? false, tiers: raw?.tiers ?? [] });
+      // Task #3073 — normalize older single-ladder rows: legacy `tiers`
+      // map onto the print-only ladder; finishing/ship default off.
+      return res.json({
+        active: raw?.active ?? false,
+        tiers: raw?.tiers ?? [],
+        finishing: {
+          offered: raw?.finishing?.offered ?? false,
+          tiers: raw?.finishing?.tiers ?? [],
+        },
+        shipToFulfillment: raw?.shipToFulfillment ?? false,
+      });
     },
   );
 
@@ -34639,31 +34654,74 @@ export async function registerRoutes(
       if (!(await requirePressManager(req, res, req.params.id, { requireEdit: true }))) return;
       const press = await storage.getManufacturerById(req.params.id);
       if (!press) return res.status(404).json({ message: "Press not found" });
-      const { active, tiers } = req.body as { active: unknown; tiers: unknown };
+      const { active, tiers, finishing, shipToFulfillment } = req.body as {
+        active: unknown;
+        tiers: unknown;
+        finishing?: unknown;
+        shipToFulfillment?: unknown;
+      };
       if (typeof active !== "boolean")
         return res.status(400).json({ message: "'active' must be boolean" });
-      if (!Array.isArray(tiers))
-        return res.status(400).json({ message: "'tiers' must be an array" });
-      const seen = new Set<number>();
-      const cleaned: Array<{ qty: number; perUnitCents: number }> = [];
-      for (const t of tiers) {
-        const qty = Number(t?.qty);
-        const puc = Number(t?.perUnitCents);
-        if (!Number.isFinite(qty) || qty <= 0)
-          return res.status(400).json({ message: "Each tier needs a positive qty" });
-        if (!Number.isFinite(puc) || puc < 0)
-          return res.status(400).json({ message: "Each tier perUnitCents must be ≥ 0" });
-        if (seen.has(qty))
-          return res.status(400).json({ message: `Duplicate tier qty ${qty}` });
-        seen.add(qty);
-        cleaned.push({ qty, perUnitCents: Math.round(puc) });
+      // Shared per-ladder tier validation (print + finishing use the same shape).
+      const cleanTiers = (
+        input: unknown,
+        label: string,
+      ): { ok: true; tiers: Array<{ qty: number; perUnitCents: number }> } | { ok: false; message: string } => {
+        if (!Array.isArray(input)) return { ok: false, message: `'${label}' must be an array` };
+        const seen = new Set<number>();
+        const out: Array<{ qty: number; perUnitCents: number }> = [];
+        for (const t of input) {
+          const qty = Number(t?.qty);
+          const puc = Number(t?.perUnitCents);
+          if (!Number.isFinite(qty) || qty <= 0)
+            return { ok: false, message: "Each tier needs a positive qty" };
+          if (!Number.isFinite(puc) || puc < 0)
+            return { ok: false, message: "Each tier perUnitCents must be ≥ 0" };
+          if (seen.has(qty)) return { ok: false, message: `Duplicate tier qty ${qty}` };
+          seen.add(qty);
+          out.push({ qty, perUnitCents: Math.round(puc) });
+        }
+        out.sort((a, b) => a.qty - b.qty);
+        return { ok: true, tiers: out };
+      };
+      const printRes = cleanTiers(tiers, "tiers");
+      if (!printRes.ok) return res.status(400).json({ message: printRes.message });
+
+      // Task #3073 — finishing ladder + ship flag. Optional in the body so
+      // the legacy operator editor (which PUTs { active, tiers } only) can't
+      // wipe a press's saved finishing config: absent fields keep the stored
+      // values instead of resetting them.
+      const existing = (press as any).gooddeedPrintingJson as
+        | { finishing?: { offered: boolean; tiers: Array<{ qty: number; perUnitCents: number }> }; shipToFulfillment?: boolean }
+        | null
+        | undefined;
+      let nextFinishing = existing?.finishing ?? { offered: false, tiers: [] };
+      if (finishing !== undefined) {
+        const f = finishing as { offered?: unknown; tiers?: unknown } | null;
+        if (typeof f !== "object" || f === null || typeof f.offered !== "boolean")
+          return res.status(400).json({ message: "'finishing.offered' must be boolean" });
+        const finRes = cleanTiers(f.tiers ?? [], "finishing.tiers");
+        if (!finRes.ok) return res.status(400).json({ message: finRes.message });
+        nextFinishing = { offered: f.offered, tiers: finRes.tiers };
       }
-      cleaned.sort((a, b) => a.qty - b.qty);
+      let nextShip = existing?.shipToFulfillment ?? false;
+      if (shipToFulfillment !== undefined) {
+        if (typeof shipToFulfillment !== "boolean")
+          return res.status(400).json({ message: "'shipToFulfillment' must be boolean" });
+        nextShip = shipToFulfillment;
+      }
+
+      const nextConfig = {
+        active,
+        tiers: printRes.tiers,
+        finishing: nextFinishing,
+        shipToFulfillment: nextShip,
+      };
       await db
         .update(manufacturers)
-        .set({ gooddeedPrintingJson: { active, tiers: cleaned } } as any)
+        .set({ gooddeedPrintingJson: nextConfig } as any)
         .where(eq(manufacturers.id, req.params.id));
-      return res.json({ active, tiers: cleaned });
+      return res.json(nextConfig);
     },
   );
 
