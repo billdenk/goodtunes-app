@@ -348,7 +348,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       // while the embedded album view is open (it brings its own chrome).
       pageTitle={
         albumViewId ||
-        ["dashboard", "catalog", "specs", "pricing", "referrals", "reports", "people", "albums", "acquisition", "templates"].includes(tab)
+        ["dashboard", "catalog", "specs", "pricing", "referrals", "reports", "people", "albums", "acquisition", "templates", "comp-vinyl", "comp-labels", "comp-stickers", "comp-pricing"].includes(tab)
           ? undefined
           : tab === "pipeline"
             ? "Pipeline"

@@ -13,7 +13,17 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Check } from "lucide-react";
 import { useAdminDark } from "@/lib/adminAppearance";
 import type { PressComponentsPayload } from "./usePressComponents";
-import type { PricingComponentConfig, PricingRow } from "@shared/pressComponents";
+import type { PricingComponentConfig, PricingRow, VinylSizeId } from "@shared/pressComponents";
+// Segmented size chips (canvas handoff: 7″ Single · 10″ EP · 12″ LP Standard)
+// + pure size-filter/group/count helpers (unit-tested in pricingView.test.ts).
+import {
+  SIZE_CHIPS,
+  defaultSizeChip,
+  groupPricingRows,
+  priceForSize,
+  pricedCountForSize,
+  visibleRowsForSize,
+} from "./pricingView";
 
 type Theme = {
   blue: string;
@@ -71,29 +81,31 @@ function inputToCents(v: string): number | null | undefined {
 }
 
 function PriceCell({
-  row,
+  rowKey,
+  priceCents,
   canEdit,
   t,
   onCommit,
 }: {
-  row: PricingRow;
+  rowKey: string;
+  priceCents: number | null;
   canEdit: boolean;
   t: Theme;
   onCommit: (cents: number | null) => void;
 }) {
-  const [val, setVal] = useState(() => centsToInput(row.priceCents));
+  const [val, setVal] = useState(() => centsToInput(priceCents));
   const [invalid, setInvalid] = useState(false);
   const dirty = useRef(false);
 
   // Re-seed from the shared payload only when NOT mid-edit.
   useEffect(() => {
-    if (!dirty.current) setVal(centsToInput(row.priceCents));
-  }, [row.priceCents]);
+    if (!dirty.current) setVal(centsToInput(priceCents));
+  }, [priceCents]);
 
   if (!canEdit) {
     return (
-      <span className="text-[13.5px] tabular-nums" style={{ color: row.priceCents == null ? t.faint : t.ink }}>
-        {row.priceCents == null ? "—" : `$${(row.priceCents / 100).toFixed(2)}`}
+      <span className="text-[13.5px] tabular-nums" style={{ color: priceCents == null ? t.faint : t.ink }}>
+        {priceCents == null ? "—" : `$${(priceCents / 100).toFixed(2)}`}
       </span>
     );
   }
@@ -106,7 +118,7 @@ function PriceCell({
       return;
     }
     setInvalid(false);
-    if (cents !== row.priceCents) onCommit(cents);
+    if (cents !== priceCents) onCommit(cents);
   };
 
   return (
@@ -128,7 +140,7 @@ function PriceCell({
         placeholder="—"
         inputMode="decimal"
         aria-invalid={invalid || undefined}
-        data-testid={`price-input-${row.key}`}
+        data-testid={`price-input-${rowKey}`}
         className="w-[84px] h-8 rounded-lg px-2.5 text-right text-[13.5px] tabular-nums outline-none transition-colors focus:ring-2"
         style={{
           background: t.inputBg,
@@ -173,32 +185,28 @@ export function PressComponentPricing({
     }
   }, [payload.press.id, payload.pricing.rows]);
 
-  // Group rows: each type row heads a card; its color rows nest under it.
-  const groups = useMemo(() => {
-    const out: { type: PricingRow; colors: PricingRow[] }[] = [];
-    const orphans: PricingRow[] = [];
-    let current: { type: PricingRow; colors: PricingRow[] } | null = null;
-    for (const r of rows) {
-      if (r.kind === "type") {
-        current = { type: r, colors: [] };
-        out.push(current);
-      } else if (r.kind === "color" && current && r.key.startsWith(`color:${current.type.key.slice(5)}:`)) {
-        current.colors.push(r);
-      } else {
-        orphans.push(r);
-      }
-    }
-    return { out, orphans };
-  }, [rows]);
+  // Selected size chip. Default to the first chip that has any rows (a
+  // 12"-only press opens on 12″ instead of an empty 7″ view).
+  const [size, setSize] = useState<VinylSizeId>(() => defaultSizeChip(payload.pricing.rows));
+
+  const priceFor = (r: PricingRow): number | null => priceForSize(r, size);
+
+  // Group VISIBLE rows: each type row heads a card; its color rows nest
+  // under it — filtered to the selected size (Splatter under 10″/12″ only).
+  const groups = useMemo(() => groupPricingRows(rows, size), [rows, size]);
 
   const commitRow = (key: string, cents: number | null) => {
     touched.current = true;
-    const next = rows.map((r) => (r.key === key ? { ...r, priceCents: cents } : r));
+    const next = rows.map((r) =>
+      r.key === key ? { ...r, pricesBySize: { ...(r.pricesBySize ?? {}), [size]: cents } } : r,
+    );
     setRows(next);
     save({ rows: next } satisfies PricingComponentConfig);
   };
 
-  const pricedCount = rows.filter((r) => r.priceCents != null).length;
+  // Counter reflects the selected size's view: visible cells with a price.
+  const visibleRows = useMemo(() => visibleRowsForSize(rows, size), [rows, size]);
+  const pricedCount = pricedCountForSize(rows, size);
 
   return (
     <div className="mx-auto w-full" style={{ maxWidth: 980, paddingBottom: 96 }} data-testid="component-pricing">
@@ -226,13 +234,47 @@ export function PressComponentPricing({
           ) : (
             <span className="inline-flex items-center gap-1.5">
               <Check className="w-3.5 h-3.5" style={{ color: t.blue }} />
-              {pricedCount} of {rows.length} priced
+              {pricedCount} of {visibleRows.length} priced
             </span>
           )}
         </div>
       </div>
 
-      <div className="mt-8 flex flex-col gap-5">
+      {/* Segmented size chips — canvas handoff: 7″ Single · 10″ EP · 12″ LP */}
+      <div
+        className="mt-7 inline-flex items-center rounded-full"
+        style={{ padding: 3, background: t.cardSoft }}
+        role="tablist"
+        aria-label="Vinyl size"
+        data-testid="pricing-size-chips"
+      >
+        {SIZE_CHIPS.map((c) => {
+          const active = c.id === size;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setSize(c.id)}
+              className="inline-flex items-baseline gap-1.5 rounded-full px-4 h-8 text-[13px] font-semibold transition-colors"
+              style={{
+                background: active ? t.card : "transparent",
+                color: active ? t.ink : t.subink,
+                boxShadow: active ? "0 1px 3px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)" : undefined,
+              }}
+              data-testid={`size-chip-${c.id.replace('"', "in")}`}
+            >
+              {c.size}
+              <span className="text-[11px] font-medium" style={{ color: active ? t.subink : t.faint }}>
+                {c.note}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-6 flex flex-col gap-5">
         {groups.out.map((g) => (
           <section
             key={g.type.key}
@@ -259,7 +301,7 @@ export function PressComponentPricing({
                 <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.faint }}>
                   Type upcharge · per unit
                 </span>
-                <PriceCell row={g.type} canEdit={canEdit} t={t} onCommit={(c) => commitRow(g.type.key, c)} />
+                <PriceCell rowKey={g.type.key} priceCents={priceFor(g.type)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(g.type.key, c)} />
               </div>
             </div>
             {/* Color rows */}
@@ -272,7 +314,7 @@ export function PressComponentPricing({
                 <span className="text-[13.5px] truncate" style={{ color: t.ink }}>
                   {r.label}
                 </span>
-                <PriceCell row={r} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
+                <PriceCell rowKey={r.key} priceCents={priceFor(r)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
               </div>
             ))}
           </section>
@@ -299,10 +341,20 @@ export function PressComponentPricing({
                     </span>
                   )}
                 </div>
-                <PriceCell row={r} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
+                <PriceCell rowKey={r.key} priceCents={priceFor(r)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
               </div>
             ))}
           </section>
+        )}
+
+        {rows.length > 0 && visibleRows.length === 0 && (
+          <div
+            className="rounded-2xl px-6 py-12 text-center text-[13.5px]"
+            style={{ background: t.card, border: `1px dashed ${t.hairline}`, color: t.subink }}
+            data-testid="pricing-empty-size"
+          >
+            No vinyl types are pressed in this size yet.
+          </div>
         )}
 
         {rows.length === 0 && (

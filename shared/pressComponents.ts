@@ -98,6 +98,7 @@ export type StickersComponentConfig = z.infer<typeof stickersComponentConfigSche
 // Rows are seeded from the press's existing vinyl types/colors; price cells
 // start EMPTY (null). Package pricing is untouchable — these prices are a
 // separate component-level surface and are not read by the SellPanel.
+const priceCentsSchema = z.number().int().min(0).max(10_000_000).nullable();
 export const pricingRowSchema = z.object({
   // Stable row identity: "type:<categoryId>" or "color:<categoryId>:<swatchId>"
   // or a component row like "labels:bw" / "stickers:circle:3x3".
@@ -105,7 +106,14 @@ export const pricingRowSchema = z.object({
   label: z.string().min(1).max(160),
   detail: z.string().max(160).default(""),
   kind: z.enum(["type", "color", "labels", "stickers"]),
-  priceCents: z.number().int().min(0).max(10_000_000).nullable(),
+  // Sizes this row's type/color is pressed in (drives the size-chip filter).
+  // Empty = not size-scoped (labels/stickers/orphan rows show under every size).
+  sizes: z.array(vinylSizeIdSchema).max(3).default([]),
+  // Legacy single price (pre size-chips). Kept parseable so stored configs
+  // still validate; merged into pricesBySize on read and nulled thereafter.
+  priceCents: priceCentsSchema.optional().default(null),
+  // Per-size prices — a price typed under 7" never shows under 12".
+  pricesBySize: z.record(vinylSizeIdSchema, priceCentsSchema).default({}),
 });
 export type PricingRow = z.infer<typeof pricingRowSchema>;
 

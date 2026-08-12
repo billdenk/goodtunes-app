@@ -14,7 +14,9 @@ import { PressVinylComponent } from "./PressVinylComponent";
 import { PressLabelsComponent } from "./PressLabelsComponent";
 import { PressStickersComponent } from "./PressStickersComponent";
 import { PressComponentPricing } from "./PressComponentPricing";
+import { createSerialSaver } from "./saveQueue";
 import { Loader2 } from "lucide-react";
+import { useMemo, useRef } from "react";
 
 function LoadingRow() {
   return (
@@ -69,12 +71,20 @@ export function PressStickersComponentTab({ pressId }: { pressId: string }) {
 export function PressComponentPricingTab({ pressId }: { pressId: string }) {
   const { data, isLoading } = usePressComponents(pressId);
   const save = useSavePressComponent(pressId, "pricing");
+  // Serialize + coalesce whole-config PUTs so a slow earlier save can never
+  // complete after (and overwrite) a newer one — two rapid blurs both stick.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const serialSave = useMemo(
+    () => createSerialSaver<PricingComponentConfig>((config) => saveRef.current.mutateAsync(config)),
+    [pressId],
+  );
   if (isLoading || !data) return <LoadingRow />;
   return (
     <PressComponentPricing
       payload={data}
       canEdit={data.canEdit}
-      save={(config: PricingComponentConfig) => save.mutate(config)}
+      save={serialSave}
       saving={save.isPending}
     />
   );

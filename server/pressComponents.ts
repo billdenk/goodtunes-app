@@ -192,9 +192,11 @@ export function seedPricingFromVinyl(vinyl: VinylComponentConfig): PricingCompon
     rows.push({
       key: `type:${cat.id}`,
       label: cat.name,
-      detail: cat.sizes.join(" · "),
+      detail: "",
       kind: "type",
+      sizes: [...cat.sizes],
       priceCents: null,
+      pricesBySize: {},
     });
     for (const sw of cat.swatches) {
       rows.push({
@@ -202,27 +204,50 @@ export function seedPricingFromVinyl(vinyl: VinylComponentConfig): PricingCompon
         label: sw.name,
         detail: cat.name,
         kind: "color",
+        sizes: sw.sizes.length ? [...sw.sizes] : [...cat.sizes],
         priceCents: null,
+        pricesBySize: {},
       });
     }
   }
   return { rows };
 }
 
+export function rowHasAnyPrice(r: PricingRow): boolean {
+  if (r.priceCents != null) return true;
+  return Object.values(r.pricesBySize ?? {}).some((v) => v != null);
+}
+
 /**
  * Merge newly seeded pricing rows into an existing config: keep every price
  * the press already typed (matched by key), append rows for types/colors
  * that appeared since, drop rows whose source vanished ONLY if unpriced.
+ *
+ * Legacy migration: a pre-size-chips row carried ONE priceCents that was
+ * ambiguous across sizes. Simplest honest carry-over: copy that price into
+ * EVERY size the row is pressed in (the press sees it under each size and
+ * can correct per size), then drop the legacy field.
  */
-function mergePricingRows(existing: PricingRow[], seeded: PricingRow[]): PricingRow[] {
+export function mergePricingRows(existing: PricingRow[], seeded: PricingRow[]): PricingRow[] {
   const byKey = new Map(existing.map((r) => [r.key, r] as const));
+  const migrate = (prev: PricingRow, sizes: PricingRow["sizes"]): Record<string, number | null> => {
+    const bySize: Record<string, number | null> = { ...(prev.pricesBySize ?? {}) };
+    if (prev.priceCents != null && !Object.values(bySize).some((v) => v != null)) {
+      const targets = sizes.length ? sizes : (['7"', '10"', '12"'] as const);
+      for (const s of targets) bySize[s] = prev.priceCents;
+    }
+    return bySize;
+  };
   const out: PricingRow[] = seeded.map((s) => {
     const prev = byKey.get(s.key);
-    return prev ? { ...s, priceCents: prev.priceCents } : s;
+    if (!prev) return s;
+    return { ...s, priceCents: null, pricesBySize: migrate(prev, s.sizes) };
   });
   const seededKeys = new Set(seeded.map((s) => s.key));
   for (const r of existing) {
-    if (!seededKeys.has(r.key) && r.priceCents != null) out.push(r);
+    if (!seededKeys.has(r.key) && rowHasAnyPrice(r)) {
+      out.push({ ...r, priceCents: null, pricesBySize: migrate(r, r.sizes ?? []) });
+    }
   }
   return out;
 }
