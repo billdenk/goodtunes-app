@@ -23,6 +23,9 @@ import { PrinterPortal } from "./PrinterPortal";
 // Task #2818 — fulfillment partners get Orders + Inbound work surfaces,
 // shared with the super-admin mirror on AdminFulfillmentPartner.
 import { FulfillmentOrdersPanel, FulfillmentInboundPanel } from "@/components/admin/FulfillmentPartnerPanels";
+// Task #3075 — fulfillment partners quote the GoodDeed receive/hologram/
+// shrinkwrap/ship leg for signed cert batches whose printer only prints.
+import { FulfillmentGoodDeedServiceTab } from "@/components/admin/FulfillmentGoodDeedServiceTab";
 
 // Routes a vendor-role scope to either the new PrinterPortal (when the
 // vendor is flagged `is_quickprinter`) or the legacy VendorBody shell
@@ -71,7 +74,7 @@ interface MeRole {
   roleScopeId: string | null;
 }
 
-type VendorTabId = "dashboard" | "services" | "orders" | "inbound";
+type VendorTabId = "dashboard" | "services" | "orders" | "inbound" | "gooddeed";
 
 export function VendorPortal() {
   const { user, isLoading: authLoading } = useAuth();
@@ -155,7 +158,7 @@ function RoleRouter({ meRole }: { meRole: MeRole | null | undefined }) {
 function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string; role: string; superAdminScopeKind?: "vendor" | "manufacturer" | "fulfillment" }) {
   const [tab, setTab] = useState<VendorTabId>(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
-    if (t === "dashboard" || t === "services" || t === "orders" || t === "inbound") return t;
+    if (t === "dashboard" || t === "services" || t === "orders" || t === "inbound" || t === "gooddeed") return t;
     return "dashboard";
   });
   // GoodDeed Services is vendor-only server-side (gateVendorAccess in
@@ -235,6 +238,11 @@ function VendorBody({ vendorId, role, superAdminScopeKind }: { vendorId: string;
       )}
       {tab === "inbound" && role === "fulfillment" && (
         <FulfillmentInboundPanel partnerId={vendorId} />
+      )}
+      {tab === "gooddeed" && role === "fulfillment" && (
+        <div className="bg-white text-[color:var(--apple-ink)] rounded-2xl p-4 sm:p-6 ring-1 ring-[color:var(--apple-hairline)]" data-testid="fulfillment-gooddeed-panel">
+          <FulfillmentGoodDeedServiceTab partnerId={vendorId} />
+        </div>
       )}
     </OperatorShell>
   );

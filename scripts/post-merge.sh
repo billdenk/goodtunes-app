@@ -11982,3 +11982,23 @@ SQL
 }
 create_template_variant_custom_slots dev  "${DATABASE_URL:-}"
 create_template_variant_custom_slots prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #3075 — fulfillment GoodDeed service pricing + cert-batch return label ──
+# gooddeed_service_json on fulfillment_partners (receive/hologram/shrinkwrap/
+# ship ladder) + 4 cert-batch return-label columns on albums. Idempotent on
+# both DBs (schema-drift guard covers them).
+add_fulfillment_gooddeed_cols() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[fulfillment-gooddeed] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: fulfillment-gooddeed DDL ok on $label" \
+    || echo "post-merge: WARNING — fulfillment-gooddeed DDL failed on $label"
+ALTER TABLE fulfillment_partners ADD COLUMN IF NOT EXISTS gooddeed_service_json jsonb;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS cert_batch_return_fulfillment_id varchar;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS cert_batch_return_carrier text;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS cert_batch_return_tracking text;
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS cert_batch_return_notified_at timestamp;
+SQL
+}
+add_fulfillment_gooddeed_cols dev  "${DATABASE_URL:-}"
+add_fulfillment_gooddeed_cols prod "${PROD_DATABASE_URL:-}"

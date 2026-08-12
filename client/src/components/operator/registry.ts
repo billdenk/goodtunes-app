@@ -183,6 +183,10 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // press runs inbound to their dock.
   { id: "orders",    label: "Orders",            icon: ShoppingBag,     roles: ["fulfillment"] },
   { id: "inbound",   label: "Inbound",           icon: Truck,           roles: ["fulfillment"] },
+  // Task #3075 — fulfillment partners quote the GoodDeed receive/
+  // hologram/shrinkwrap/ship leg (signed cert batches whose printer
+  // only prints). Mirrors the printer's GoodDeed pricing surface.
+  { id: "gooddeed",  label: "GoodDeed Service",  icon: Sticker,         roles: ["fulfillment"] },
 
   // Press shell — `/vendor` routed via ManufacturerScopeRouter for
   // is_maker manufacturers (PressPortal.tsx). Clients + Projects render

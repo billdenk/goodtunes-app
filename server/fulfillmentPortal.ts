@@ -173,6 +173,40 @@ export function registerFulfillmentPortalRoutes(app: Express, requireAdmin: any)
     );
   });
 
+  // ─── Task #3075 — GoodDeed receive/hologram/shrinkwrap/ship pricing ──
+  // The fulfillment partner quotes what it charges GoodTunes to receive a
+  // signed cert batch, apply the GoodTunes-supplied holographic stickers,
+  // shrinkwrap, and ship. One tiered ladder per partner, stored as jsonb
+  // on the row (manufacturers.gooddeed_printing_json precedent — no
+  // vendors.id needed). Partner-editable (mirrors the printer's own
+  // GoodDeed pricing surface) — scope gate already admits only platform
+  // staff or this partner's membership.
+  app.get("/api/fulfillment/:id/gooddeed-service", requireAdmin, requireFulfillmentScope, async (req, res) => {
+    const partner = (req as any).fulfillmentPartner;
+    res.json({ service: partner.gooddeedServiceJson ?? null });
+  });
+
+  app.put("/api/fulfillment/:id/gooddeed-service", requireAdmin, requireFulfillmentScope, async (req, res) => {
+    const { validateFulfillmentGoodDeedService } = await import("./certBatch");
+    const body = req.body ?? {};
+    const err = validateFulfillmentGoodDeedService(body);
+    if (err) return res.status(400).json({ message: err });
+    const service = {
+      active: !!body.active,
+      tiers: (body.tiers as Array<{ qty: number; perUnitCents: number }>)
+        .map((t) => ({ qty: t.qty, perUnitCents: t.perUnitCents }))
+        .sort((a, b) => a.qty - b.qty),
+      setupFeeCents: body.setupFeeCents ?? 0,
+      leadTimeDays: body.leadTimeDays ?? 7,
+      notes: typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null,
+    };
+    await db
+      .update(fulfillmentPartners)
+      .set({ gooddeedServiceJson: service })
+      .where(eq(fulfillmentPartners.id, String(req.params.id)));
+    res.json({ service });
+  });
+
   // GET /api/fulfillment/:id/inbound — approved press runs whose finished
   // goods land at this warehouse. Routed via album splits / album override /
   // platform default, mirroring the OD routing rules exactly.

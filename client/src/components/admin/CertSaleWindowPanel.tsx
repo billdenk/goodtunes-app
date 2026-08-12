@@ -47,6 +47,25 @@ interface Payload {
     cancelled: number;
     total: number;
   };
+  // Task #3075 — per-leg batch ownership + return-label routing.
+  legOwners: {
+    collapsed: boolean;
+    legs: Array<{
+      leg: string;
+      label: string;
+      ownerKind: "vendor" | "fulfillment_partner" | null;
+      ownerId: string | null;
+      ownerName: string | null;
+      source: string | null;
+    }>;
+  } | null;
+  returnLabel: {
+    fulfillmentPartnerId: string | null;
+    fulfillmentPartnerName: string | null;
+    carrier: string | null;
+    trackingNumber: string | null;
+    notifiedAt: string | null;
+  } | null;
   trueup: {
     batchSize: number;
     projectedRungLabel: string | null;
@@ -61,6 +80,162 @@ interface Payload {
 }
 
 const MIN_BATCH = 25;
+
+const LEG_SOURCE_LABELS: Record<string, string> = {
+  vendor_assignment: "vendor routing",
+  return_label: "return label",
+  album_routing: "album routing",
+  platform_default: "platform default",
+};
+
+// Task #3075 — per-batch leg ownership (print / hologram+shrinkwrap /
+// fulfillment) + return-label routing. When the printer only prints, the
+// return label targets a fulfillment company, and saving it fires that
+// partner's inbound heads-up email (batch size + album + tracking) once.
+function LegOwnersAndReturnLabel({
+  albumId,
+  legOwners,
+  returnLabel,
+}: {
+  albumId: string;
+  legOwners: Payload["legOwners"];
+  returnLabel: Payload["returnLabel"];
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: partners = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ["/api/fulfillment-partners"],
+  });
+
+  const [partnerId, setPartnerId] = useState<string>(returnLabel?.fulfillmentPartnerId ?? "");
+  const [carrier, setCarrier] = useState<string>(returnLabel?.carrier ?? "");
+  const [tracking, setTracking] = useState<string>(returnLabel?.trackingNumber ?? "");
+  const dirty =
+    partnerId !== (returnLabel?.fulfillmentPartnerId ?? "") ||
+    carrier !== (returnLabel?.carrier ?? "") ||
+    tracking !== (returnLabel?.trackingNumber ?? "");
+
+  const saveLabel = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("PATCH", `/api/admin/albums/${albumId}/cert-batch/return-label`, {
+        fulfillmentPartnerId: partnerId || null,
+        carrier: carrier || null,
+        trackingNumber: tracking || null,
+      });
+      return r.json();
+    },
+    onSuccess: (r: { notified?: boolean; notifyProblem?: string | null }) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "cert-sale-window"] });
+      if (r.notifyProblem) {
+        toast({
+          title: "Return label saved — partner NOT notified",
+          description: r.notifyProblem,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: r.notified
+            ? "Return label saved — fulfillment partner notified"
+            : "Return label saved",
+        });
+      }
+    },
+    onError: (e: any) => toast({ title: "Save failed", description: e?.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-3 space-y-3" data-testid="panel-cert-leg-owners">
+      <div>
+        <h4 className="text-sm font-semibold text-slate-900">Batch routing</h4>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Who owns each leg of this batch.
+          {legOwners?.collapsed && " This press does it all — print and hologram collapse to one owner."}
+        </p>
+      </div>
+      {legOwners && (
+        <dl className="space-y-1">
+          {legOwners.legs.map((leg) => (
+            <div key={leg.leg} className="flex items-center gap-2 text-xs" data-testid={`leg-owner-${leg.leg}`}>
+              <dt className="w-44 flex-shrink-0 text-slate-500">{leg.label}</dt>
+              <dd className={leg.ownerName ? "text-slate-900 font-medium" : "text-slate-400"}>
+                {leg.ownerName ?? "Unassigned"}
+                {leg.source && LEG_SOURCE_LABELS[leg.source] && (
+                  <span className="ml-1.5 text-xs uppercase tracking-wider text-slate-400 font-semibold">
+                    via {LEG_SOURCE_LABELS[leg.source]}
+                  </span>
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+
+      <div className="pt-2 border-t border-slate-100 space-y-2">
+        <div>
+          <h5 className="text-xs font-semibold text-slate-900">Signed batch return label</h5>
+          <p className="text-xs text-slate-500 mt-0.5">
+            When the printer only prints, target the fulfillment company that applies the holographic
+            stickers, shrinkwraps, and ships. Saving notifies them that the batch is inbound.
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <label className="block text-xs text-slate-600 col-span-1">
+            Fulfillment company
+            <select
+              value={partnerId}
+              onChange={(e) => setPartnerId(e.target.value)}
+              className="mt-1 w-full h-8 text-xs rounded border border-slate-200 px-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+              data-testid="select-return-fulfillment-partner"
+            >
+              <option value="">— None —</option>
+              {partners.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs text-slate-600">
+            Carrier
+            <input
+              type="text"
+              value={carrier}
+              onChange={(e) => setCarrier(e.target.value)}
+              placeholder="UPS"
+              className="mt-1 w-full h-8 text-xs rounded border border-slate-200 px-2 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+              data-testid="input-return-carrier"
+            />
+          </label>
+          <label className="block text-xs text-slate-600">
+            Tracking number
+            <input
+              type="text"
+              value={tracking}
+              onChange={(e) => setTracking(e.target.value)}
+              placeholder="1Z…"
+              className="mt-1 w-full h-8 text-xs rounded border border-slate-200 px-2 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+              data-testid="input-return-tracking"
+            />
+          </label>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={!dirty || saveLabel.isPending}
+            onClick={() => saveLabel.mutate()}
+            className="text-xs px-3 py-1.5 rounded bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40"
+            data-testid="button-save-return-label"
+          >
+            {saveLabel.isPending ? "Saving…" : "Save return label"}
+          </button>
+          {returnLabel?.notifiedAt && (
+            <span className="text-xs text-slate-500" data-testid="text-return-notified-at">
+              Partner notified {fmtDate(returnLabel.notifiedAt)}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return "";
@@ -448,6 +623,15 @@ export function CertSaleWindowPanel({ albumId }: { albumId: string }) {
             })}
           </ol>
         </div>
+      )}
+
+      {/* Task #3075 — leg ownership + batch return-label routing */}
+      {(w.status === "in_production" || w.status === "shipped") && (
+        <LegOwnersAndReturnLabel
+          albumId={albumId}
+          legOwners={data.legOwners ?? null}
+          returnLabel={data.returnLabel ?? null}
+        />
       )}
 
       {/* True-up ledger */}

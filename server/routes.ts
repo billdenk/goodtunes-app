@@ -35193,10 +35193,64 @@ export async function registerRoutes(
         .where(eq(certTrueupLedger.albumId, String(req.params.id)))
         .orderBy(desc(certTrueupLedger.createdAt))
         .limit(1);
+
+      // Task #3075 — per-leg ownership (print / hologram+shrinkwrap /
+      // fulfillment) + the batch return-label routing. Do-it-all presses
+      // (same vendor prints + holograms) collapse to a single owner row.
+      const { resolveCertLegOwners, resolveBatchFulfillmentRouting } = await import("./certBatch");
+      const { albumAddons } = await import("@shared/schema");
+      const [certAddon] = await db
+        .select({
+          printVendorId: albumAddons.printVendorId,
+          hologramVendorId: albumAddons.hologramVendorId,
+        })
+        .from(albumAddons)
+        .where(and(eq(albumAddons.albumId, String(req.params.id)), eq(albumAddons.kind, "signed_cert")))
+        .limit(1);
+      const vendorIds = [certAddon?.printVendorId, certAddon?.hologramVendorId].filter(Boolean) as string[];
+      const vendorRows = vendorIds.length
+        ? await db
+            .select({ id: vendorsTable.id, name: vendorsTable.name })
+            .from(vendorsTable)
+            .where(inArray(vendorsTable.id, vendorIds))
+        : [];
+      const vendorRef = (id: string | null | undefined) =>
+        id ? (vendorRows.find((v) => v.id === id) ?? { id, name: id }) : null;
+      const fpRef = async (id: string | null | undefined) => {
+        if (!id) return null;
+        const p = await storage.getFulfillmentPartnerById(id);
+        return p && !(p as any).deletedAt ? { id: p.id, name: p.name } : null;
+      };
+      const returnFulfillment = await fpRef(album.certBatchReturnFulfillmentId);
+      // Mirror real order routing (splits → album override → ordered
+      // live-partner fallback) so the displayed fulfillment owner matches
+      // where the batch would actually land.
+      const routed = returnFulfillment
+        ? null
+        : await resolveBatchFulfillmentRouting({
+            id: album.id,
+            fulfillmentPartnerId: album.fulfillmentPartnerId ?? null,
+          });
+      const legOwners = resolveCertLegOwners({
+        printVendor: vendorRef(certAddon?.printVendorId),
+        hologramVendor: vendorRef(certAddon?.hologramVendorId),
+        returnFulfillment,
+        albumFulfillment: routed?.source === "album_routing" ? routed.ref : null,
+        defaultFulfillment: routed?.source === "platform_default" ? routed.ref : null,
+      });
+
       res.json({
         window: pickWindowPayload(album),
         counts,
         trueup: latestTrueup ?? null,
+        legOwners,
+        returnLabel: {
+          fulfillmentPartnerId: album.certBatchReturnFulfillmentId ?? null,
+          fulfillmentPartnerName: returnFulfillment?.name ?? null,
+          carrier: album.certBatchReturnCarrier ?? null,
+          trackingNumber: album.certBatchReturnTracking ?? null,
+          notifiedAt: album.certBatchReturnNotifiedAt ?? null,
+        },
       });
     });
 
@@ -35368,6 +35422,119 @@ export async function registerRoutes(
         })().catch(() => {});
       }
       res.json({ ok: true });
+    });
+
+    // Task #3075 — batch return-label routing + fulfillment heads-up.
+    // When the printer only prints, the artist's prepaid return label
+    // targets a fulfillment company that applies the GoodTunes-supplied
+    // holographic stickers, shrinkwraps, and ships. Saving a label that
+    // targets a fulfillment partner fires that partner's inbound
+    // heads-up email ONCE (batch size + album + tracking); edits after
+    // the first notify update routing silently (no re-spam) unless the
+    // operator passes renotify=true.
+    app.patch("/api/admin/albums/:id/cert-batch/return-label", requireAdmin, async (req, res) => {
+      const albumId = String(req.params.id);
+      const [album] = await db.select().from(albumsTbl).where(eq(albumsTbl.id, albumId));
+      if (!album) return res.status(404).json({ message: "Album not found" });
+
+      const body = req.body ?? {};
+      const fulfillmentPartnerId =
+        body.fulfillmentPartnerId === null || body.fulfillmentPartnerId === ""
+          ? null
+          : body.fulfillmentPartnerId !== undefined
+            ? String(body.fulfillmentPartnerId)
+            : (album.certBatchReturnFulfillmentId ?? null);
+      const carrier =
+        body.carrier !== undefined
+          ? (String(body.carrier ?? "").trim() || null)
+          : (album.certBatchReturnCarrier ?? null);
+      const trackingNumber =
+        body.trackingNumber !== undefined
+          ? (String(body.trackingNumber ?? "").trim() || null)
+          : (album.certBatchReturnTracking ?? null);
+
+      let partner: any = null;
+      if (fulfillmentPartnerId) {
+        partner = await storage.getFulfillmentPartnerById(fulfillmentPartnerId);
+        if (!partner || (partner as any).deletedAt) {
+          return res.status(400).json({ message: "Unknown fulfillment partner" });
+        }
+      }
+
+      // Persist + atomically claim the one-shot heads-up (row-locked CTE
+      // in saveCertBatchReturnLabel — concurrent saves get exactly one
+      // claimed=true per partner). Clearing the partner resets the guard.
+      const { saveCertBatchReturnLabel, releaseCertBatchNotifyClaim } = await import("./certBatch");
+      const { claimed } = await saveCertBatchReturnLabel({
+        albumId,
+        fulfillmentPartnerId,
+        carrier,
+        trackingNumber,
+        renotify: body.renotify === true,
+      });
+
+      let notified = false;
+      let notifyProblem: string | null = null;
+      if (claimed && fulfillmentPartnerId) {
+        // Batch size = printed reservations locked for production.
+        const reservations = await db
+          .select({ id: certReservations.id })
+          .from(certReservations)
+          .where(
+            and(
+              eq(certReservations.albumId, albumId),
+              eq(certReservations.status, "in_production"),
+              eq(certReservations.variantKind, "printed"),
+            ),
+          );
+        const batchSize = reservations.length;
+        try {
+          const { dispatchPartnerNotification, partnerEmailHtml } = await import("./partnerNotifications");
+          const albumTitle = album.title ?? "an album";
+          const bodyLines = [
+            `A signed GoodDeed certificate batch for ${albumTitle}${album.artist ? ` by ${album.artist}` : ""} is inbound to your dock.`,
+            `Batch size: ${batchSize} signed certificate${batchSize === 1 ? "" : "s"}.`,
+            trackingNumber
+              ? `Tracking: ${carrier ? `${carrier} ` : ""}${trackingNumber}.`
+              : "Tracking will follow once the return label is scanned.",
+            "Apply the GoodTunes-supplied holographic stickers, shrinkwrap, and ship per your GoodDeed service agreement.",
+          ];
+          const result = await dispatchPartnerNotification({
+            partnerKind: "fulfillment",
+            partnerId: fulfillmentPartnerId!,
+            eventType: "fulfillment_heads_up",
+            subject: `Inbound signed cert batch: ${albumTitle} (${batchSize} certs)`,
+            html: partnerEmailHtml({
+              heading: "Signed cert batch inbound",
+              bodyLines,
+              partnerName: partner?.name ?? "your team",
+            }),
+            text: bodyLines.join("\n\n"),
+            payloadSnapshot: { albumId, albumTitle, batchSize, carrier, trackingNumber },
+          });
+          // The dispatcher never throws — it reports {sent, failed,
+          // skipped}. "Notified" means at least one email actually went
+          // out; anything else (no subscribed contacts, send failures)
+          // releases the claim so a later save retries, and the response
+          // tells the operator why.
+          if (result.sent > 0) {
+            notified = true;
+          } else {
+            await releaseCertBatchNotifyClaim(albumId, fulfillmentPartnerId).catch(() => {});
+            notifyProblem =
+              result.failed > 0
+                ? "Email delivery failed — check the partner's notification contacts and try again."
+                : "No subscribed email contacts for this partner — add one under partner notifications, then re-save.";
+          }
+        } catch (e) {
+          console.log(`[notify] cert-batch return-label heads-up threw: ${(e as Error).message}`);
+          // Release the claim so a later save can retry the email.
+          await releaseCertBatchNotifyClaim(albumId, fulfillmentPartnerId).catch(() => {});
+          notifyProblem = "Notification dispatch errored — routing saved; re-save to retry the email.";
+        }
+      }
+
+      res.json({ ok: true, notified, notifyProblem });
     });
 
     app.get("/api/partners/albums/:id/cert-batch-status", requireAuth, async (req, res) => {

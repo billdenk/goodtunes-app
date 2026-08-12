@@ -477,6 +477,17 @@ export const albums = pgTable("albums", {
   certBatchNotes: jsonb("cert_batch_notes").$type<Record<string, string>>(),
   certBatchPdfAssetUrl: text("cert_batch_pdf_asset_url"),
   certBatchPdfGeneratedAt: timestamp("cert_batch_pdf_generated_at"),
+  // Task #3075 — return-label routing for the signed batch. When the
+  // printer only prints, the artist's prepaid return label targets a
+  // fulfillment company (hologram + shrinkwrap + ship there instead).
+  // Soft pointer into fulfillment_partners (no FK — mirrors the
+  // partner-notifications convention); carrier/tracking come off the
+  // return label itself. `notifiedAt` guards the one-shot inbound
+  // heads-up email to that partner.
+  certBatchReturnFulfillmentId: varchar("cert_batch_return_fulfillment_id"),
+  certBatchReturnCarrier: text("cert_batch_return_carrier"),
+  certBatchReturnTracking: text("cert_batch_return_tracking"),
+  certBatchReturnNotifiedAt: timestamp("cert_batch_return_notified_at"),
   // Task #335 — sell mode + physical format.
   // `sellMode`: "direct" (GoodTunes Direct: digital + optional press) or
   // "shopify" (digital + optional GoodDeed addon only; label fulfills
@@ -4881,6 +4892,18 @@ export const fulfillmentPartners = pgTable("fulfillment_partners", {
   // row carries this flag (the PUT endpoint clears it from every other row),
   // mirroring the single-default convention above.
   isOdooPrinter: boolean("is_odoo_printer").notNull().default(false),
+  // Task #3075 — GoodDeed receive/hologram/shrinkwrap/ship service pricing
+  // for fulfillment partners whose printer only prints. Mirrors the
+  // printer's hologram+shrinkwrap ladder shape (manufacturers.gooddeed_
+  // printing_json precedent — jsonb, no vendors.id needed). `tiers` qty is
+  // the floor (100 covers 100–199); walk down to the highest rung ≤ batch.
+  gooddeedServiceJson: jsonb("gooddeed_service_json").$type<{
+    active: boolean;
+    tiers: Array<{ qty: number; perUnitCents: number }>;
+    setupFeeCents?: number;
+    leadTimeDays?: number;
+    notes?: string | null;
+  }>(),
   createdAt: timestamp("created_at").defaultNow(),
   ...softDeleteCols,
 }, (table) => ({
