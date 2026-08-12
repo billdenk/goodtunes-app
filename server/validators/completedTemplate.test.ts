@@ -1,7 +1,15 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
-import { scanBuffer, validateCompletedComponent, measuredBleedInches } from "./completedTemplate";
+import {
+  scanBuffer,
+  validateCompletedComponent,
+  measuredBleedInches,
+  hasTrustworthyBleedBoxes,
+  templateTrimRectInches,
+  contentBleedFromRaster,
+  type ContentBleedMeasurement,
+} from "./completedTemplate";
 import {
   requiredFinishedComponents,
   resolveFinishedComponents,
@@ -702,6 +710,163 @@ describe("Task #3030 — unverified status: rollup + acknowledgment", () => {
       ["jacket"],
     );
     assert.equal(verdict, "ready");
+  });
+});
+
+// ─── Task #3072 — rendered-content bleed vs the certified template line ──
+describe("Task #3072 — content-based bleed measurement", () => {
+  // LINE_SPEC-alike: certified 0.25" line, MRP rules (min 0.125"), pinned
+  // 12.75×12.75 template artboard.
+  const CB_SPEC = {
+    ...RULED_SPEC,
+    templateBleedLineInches: 0.25,
+    bleedLineSource: "measured" as const,
+  } as any;
+
+  const fullBleed: ContentBleedMeasurement = {
+    perSideInches: { left: 0.25, right: 0.25, top: 0.26, bottom: 0.25 },
+    minInches: 0.25,
+    pagesMeasured: 1,
+  };
+  const shortBleed: ContentBleedMeasurement = {
+    perSideInches: { left: 0.25, right: 0.02, top: 0.25, bottom: 0.05 },
+    minInches: 0.02,
+    pagesMeasured: 1,
+  };
+  const midBleed: ContentBleedMeasurement = {
+    perSideInches: { left: 0.25, right: 0.15, top: 0.25, bottom: 0.25 },
+    minInches: 0.15,
+    pagesMeasured: 1,
+  };
+
+  test("hasTrustworthyBleedBoxes: trim<media trusted; no trim / all-equal boxes not", () => {
+    const distinct = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25 }));
+    assert.equal(hasTrustworthyBleedBoxes(distinct), true);
+    const noTrim = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, noTrim: true }));
+    assert.equal(hasTrustworthyBleedBoxes(noTrim), false);
+    const degenerate = scanBuffer(
+      bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.75, trimHIn: 12.75, bleedWIn: 12.75, bleedHIn: 12.75 }),
+    );
+    assert.equal(hasTrustworthyBleedBoxes(degenerate), false);
+  });
+
+  test("templateTrimRectInches: artboard inset by the line; labels use the centered finished square", () => {
+    const jacket = templateTrimRectInches({
+      componentId: "jacket",
+      pageInches: { w: 12.75, h: 12.75 },
+      templatePageInches: { w: 12.75, h: 12.75 },
+      bleedLineInches: 0.25,
+    })!;
+    assert.deepEqual(jacket, { left: 0.25, top: 0.25, width: 12.25, height: 12.25 });
+    const labels = templateTrimRectInches({
+      componentId: "labels",
+      pageInches: { w: 6.5, h: 7.6811 },
+      templatePageInches: { w: 6.5, h: 7.6811 },
+      bleedLineInches: 0.25,
+      finishedInches: { w: 3.875, h: 3.875 },
+    })!;
+    assert.ok(Math.abs(labels.left - (6.5 - 3.875) / 2) < 1e-6);
+    assert.equal(labels.width, 3.875);
+  });
+
+  test("templateTrimRectInches: artboard mismatch → null (size check is the authority); 90° rotation still resolves", () => {
+    assert.equal(
+      templateTrimRectInches({
+        componentId: "jacket",
+        pageInches: { w: 12, h: 12 },
+        templatePageInches: { w: 27.25, h: 27 },
+        bleedLineInches: 0.25,
+      }),
+      null,
+    );
+    const rotated = templateTrimRectInches({
+      componentId: "jacket",
+      pageInches: { w: 27, h: 27.25 },
+      templatePageInches: { w: 27.25, h: 27 },
+      bleedLineInches: 0.25,
+    });
+    assert.ok(rotated);
+  });
+
+  test("contentBleedFromRaster: full-page ink overhangs the trim rect by the bleed; blank page → null", () => {
+    // 128×128 px page = 12.8" @10ppi; trim rect inset 0.25" (2.5px) each side.
+    const W = 128;
+    const page = { w: 12.8, h: 12.8 };
+    const trim = { left: 0.25, top: 0.25, width: 12.3, height: 12.3 };
+    const inked = Buffer.alloc(W * W, 0); // solid black to every edge
+    const sides = contentBleedFromRaster({
+      data: inked, width: W, height: W, channels: 1, pageInches: page, trimRectInches: trim,
+    })!;
+    for (const v of Object.values(sides)) assert.ok(Math.abs(v - 0.25) < 0.02, String(v));
+    const blank = Buffer.alloc(W * W, 255);
+    assert.equal(
+      contentBleedFromRaster({ data: blank, width: W, height: W, channels: 1, pageInches: page, trimRectInches: trim }),
+      null,
+    );
+  });
+
+  test("contentBleedFromRaster: content stopping short of the bleed edge reads a smaller overhang", () => {
+    const W = 128;
+    const page = { w: 12.8, h: 12.8 };
+    const trim = { left: 0.25, top: 0.25, width: 12.3, height: 12.3 };
+    const data = Buffer.alloc(W * W, 255);
+    // Ink only from x/y = 2..125 (0.2" margin on left/top, 0.2" on right/bottom).
+    for (let y = 2; y < W - 2; y++) for (let x = 2; x < W - 2; x++) data[y * W + x] = 0;
+    const sides = contentBleedFromRaster({
+      data, width: W, height: W, channels: 1, pageInches: page, trimRectInches: trim,
+    })!;
+    // Overhang = 0.25 − 0.2 = 0.05" per side.
+    for (const v of Object.values(sides)) assert.ok(Math.abs(v - 0.05) < 0.02, String(v));
+  });
+
+  test("no-box file + content filling to the bleed edge PASSES via rendered content", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, noTrim: true }));
+    const c = find(validateCompletedComponent(scan, CB_SPEC, { contentBleed: fullBleed }), "tmpl.bleed");
+    assert.equal(c.status, "pass");
+    assert.match(c.message, /rendered content/i);
+    assert.match(c.message, /certified template line/);
+    assert.match(c.source, /via rendered content/);
+  });
+
+  test("no-box file + content short of the line FAILS with per-side detail", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, noTrim: true }));
+    const c = find(validateCompletedComponent(scan, CB_SPEC, { contentBleed: shortBleed }), "tmpl.bleed");
+    assert.equal(c.status, "fail");
+    assert.match(c.message, /short on/);
+    assert.match(c.message, /right ≈0.02"/);
+    assert.match(c.message, /bottom ≈0.05"/);
+    assert.match(c.source, /via rendered content/);
+  });
+
+  test("content below the line but ≥ press minimum WARNS", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, noTrim: true }));
+    const c = find(validateCompletedComponent(scan, CB_SPEC, { contentBleed: midBleed }), "tmpl.bleed");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /≥0.125" minimum/);
+  });
+
+  test("degenerate-box file (Bleed==Media==Trim) routes to the content measurement", () => {
+    const scan = scanBuffer(
+      bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.75, trimHIn: 12.75, bleedWIn: 12.75, bleedHIn: 12.75 }),
+    );
+    const c = find(validateCompletedComponent(scan, CB_SPEC, { contentBleed: fullBleed }), "tmpl.bleed");
+    assert.equal(c.status, "pass");
+    assert.match(c.source, /via rendered content/);
+  });
+
+  test("trustworthy box geometry keeps winning over the content measurement", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, trimWIn: 12.25, trimHIn: 12.25 }));
+    const c = find(validateCompletedComponent(scan, CB_SPEC, { contentBleed: shortBleed }), "tmpl.bleed");
+    assert.equal(c.status, "pass"); // boxes say 0.25" — trusted source
+    assert.match(c.message, /file's own PDF boxes/);
+    assert.doesNotMatch(c.source, /rendered content/);
+  });
+
+  test("no-box file with NO content measurement keeps the explicit fail (unchanged)", () => {
+    const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, noTrim: true }));
+    const c = find(validateCompletedComponent(scan, CB_SPEC), "tmpl.bleed");
+    assert.equal(c.status, "fail");
+    assert.match(c.message, /Bleed could not be measured\./);
   });
 });
 

@@ -115,7 +115,7 @@ import {
   type CompletedTemplateComponent,
   type CompletedTemplateVerdict,
 } from "@shared/uploadValidation";
-import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches } from "./validators/completedTemplate";
+import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches, hasTrustworthyBleedBoxes, contentBleedMeasurement, type ContentBleedMeasurement } from "./validators/completedTemplate";
 import { scanObjectPdf, measureTemplateSpecRow, clearTemplateSpecMeasurements } from "./templateSpecs";
 
 const scryptAsync = promisify(scrypt);
@@ -34122,10 +34122,17 @@ export async function registerRoutes(
     // when the press has entered a bleed rule, and any failure inside
     // degrades to null = the line item is simply omitted.
     let edgeBand: Awaited<ReturnType<typeof edgeBandContent>> = null;
-    if (
-      isOwnObject &&
-      (spec.printRules?.bleedMinInches != null || spec.printRules?.bleedRecommendedInches != null)
-    ) {
+    // Task #3072 — when a certified template bleed line is on file but the
+    // artwork's own PDF boxes are missing/degenerate (print-ready files with
+    // the template layer stripped), measure bleed from the RENDERED content
+    // vs the template-derived trim rectangle instead.
+    let contentBleed: ContentBleedMeasurement | null = null;
+    const wantsEdgeBand =
+      spec.printRules?.bleedMinInches != null || spec.printRules?.bleedRecommendedInches != null;
+    const certLine = spec.templateBleedLineInches ?? null;
+    const wantsContentBleed =
+      certLine != null && certLine > 0 && spec.templatePageInches != null && !hasTrustworthyBleedBoxes(scan);
+    if (isOwnObject && (wantsEdgeBand || wantsContentBleed)) {
       const fsp = await import("node:fs/promises");
       const os = await import("node:os");
       const path = await import("node:path");
@@ -34138,16 +34145,18 @@ export async function registerRoutes(
           tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "edge-band-src-"));
           const pdfPath = path.join(tmpDir, "src.pdf");
           await file.download({ destination: pdfPath });
-          edgeBand = await edgeBandContent(pdfPath, scan);
+          if (wantsEdgeBand) edgeBand = await edgeBandContent(pdfPath, scan);
+          if (wantsContentBleed) contentBleed = await contentBleedMeasurement(pdfPath, scan, spec);
         }
       } catch {
         edgeBand = null;
+        contentBleed = null;
       } finally {
         if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
       }
     }
 
-    const checks = validateCompletedComponent(scan, spec, { edgeBand });
+    const checks = validateCompletedComponent(scan, spec, { edgeBand, contentBleed });
     const component: CompletedTemplateComponent = {
       componentId: spec.id,
       label: spec.label,

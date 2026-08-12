@@ -377,6 +377,238 @@ export function measuredBleedFromBleedBoxInches(scan: CompletedPdfScan): number 
   return Math.max(0, min);
 }
 
+// ─── Task #3072 — rendered-content bleed vs the certified template line ──
+//
+// Print-ready files routinely arrive with the template/bleed layer removed
+// AND no usable TrimBox/BleedBox (or all three boxes stamped equal). When a
+// certified template line is on file, the bleed check can instead verify
+// that the artwork's RENDERED content extends past the template-derived
+// trim rectangle by at least the bleed amount on every side. The pieces
+// are split pure-vs-IO so the geometry is unit-testable without pdftoppm.
+
+const BOX_EQ_TOL = 0.02; // inches — same-box tolerance
+
+/**
+ * True when the file's own PDF boxes carry TRUSTWORTHY bleed geometry:
+ * a TrimBox exists AND at least one page's trim differs from its outer
+ * boxes. All-equal boxes (BleedBox==MediaBox==TrimBox, the default-stamped
+ * degenerate case) are NOT trustworthy — they'd read a fake 0" bleed.
+ */
+export function hasTrustworthyBleedBoxes(scan: CompletedPdfScan): boolean {
+  const trims = scan.trimSizesInches;
+  if (trims.length === 0) return false;
+  const same = (a: BoxInches, b: BoxInches) =>
+    Math.abs(a.w - b.w) <= BOX_EQ_TOL && Math.abs(a.h - b.h) <= BOX_EQ_TOL;
+  const medias = scan.pageSizesInches;
+  const bleeds = scan.bleedSizesInches;
+  for (let i = 0; i < trims.length; i++) {
+    const t = trims[i];
+    const m = medias.length > 0 ? medias[Math.min(i, medias.length - 1)] : null;
+    const b = bleeds.length > 0 ? bleeds[Math.min(i, bleeds.length - 1)] : null;
+    if (!m && !b) continue; // nothing to compare against
+    const trimEqMedia = m ? same(t, m) : true;
+    const trimEqBleed = b ? same(t, b) : true;
+    if (!(trimEqMedia && trimEqBleed)) return true; // distinct geometry somewhere
+  }
+  return false;
+}
+
+export type SideInches = { left: number; right: number; top: number; bottom: number };
+
+export type ContentBleedMeasurement = {
+  /** Per-side content overhang (inches) beyond the template-derived trim
+   * rectangle — MINIMUM across measured pages. Negative = content stops
+   * short of the trim line on that side. */
+  perSideInches: SideInches;
+  /** Worst (smallest) per-side overhang across all sides/pages. */
+  minInches: number;
+  pagesMeasured: number;
+};
+
+export type RectInches = { left: number; top: number; width: number; height: number };
+
+/**
+ * The expected trim rectangle for an artwork page, derived from TEMPLATE
+ * geometry alone (never the artwork's declared boxes):
+ *   • labels — the spec's finished square centered in the artboard
+ *     (matches the preview-crop semantics; label artboards carry margins);
+ *   • everything else — the centered artboard inset by the certified
+ *     bleed line on each side.
+ * Returns null when the page's artboard doesn't match the template
+ * artboard (within tolerance, either orientation) — the artboard-size
+ * check is the authority on that mismatch, so no bleed verdict is derived.
+ */
+export function templateTrimRectInches(opts: {
+  componentId: string;
+  pageInches: BoxInches;
+  templatePageInches: BoxInches;
+  bleedLineInches: number;
+  finishedInches?: BoxInches | null;
+}): RectInches | null {
+  const { componentId, pageInches, templatePageInches, bleedLineInches, finishedInches } = opts;
+  const tol = 0.05;
+  const direct =
+    Math.abs(pageInches.w - templatePageInches.w) <= tol &&
+    Math.abs(pageInches.h - templatePageInches.h) <= tol;
+  const swapped =
+    Math.abs(pageInches.w - templatePageInches.h) <= tol &&
+    Math.abs(pageInches.h - templatePageInches.w) <= tol;
+  if (!direct && !swapped) return null; // artboard mismatch — size check owns this
+  if (componentId === "labels" && finishedInches) {
+    const fw = Math.min(finishedInches.w, pageInches.w);
+    const fh = Math.min(finishedInches.h, pageInches.h);
+    if (fw <= 0 || fh <= 0) return null;
+    return { left: (pageInches.w - fw) / 2, top: (pageInches.h - fh) / 2, width: fw, height: fh };
+  }
+  const b = bleedLineInches;
+  const w = pageInches.w - 2 * b;
+  const h = pageInches.h - 2 * b;
+  if (w <= 0 || h <= 0) return null;
+  return { left: b, top: b, width: w, height: h };
+}
+
+/**
+ * Per-side content overhang (inches) beyond a trim rectangle, from a raw
+ * grayscale raster. Pure — takes the pixel data + page/trim geometry and
+ * finds the ink bounding box (any pixel below `inkThreshold`; 250 keeps
+ * near-white art edges counted as content so a light design doesn't
+ * false-fail its own bleed, while pure-white paper never counts).
+ * Returns null when the page renders blank (nothing measurable — the
+ * caller must NOT treat that as a pass).
+ */
+export function contentBleedFromRaster(opts: {
+  data: Buffer | Uint8Array;
+  width: number;
+  height: number;
+  channels: number;
+  pageInches: BoxInches;
+  trimRectInches: RectInches;
+  inkThreshold?: number;
+}): SideInches | null {
+  const { data, width, height, channels, pageInches, trimRectInches } = opts;
+  if (width <= 0 || height <= 0 || pageInches.w <= 0 || pageInches.h <= 0) return null;
+  const th = opts.inkThreshold ?? 250;
+  let minX = Infinity, minY = Infinity, maxX = -1, maxY = -1;
+  for (let y = 0; y < height; y++) {
+    const rowBase = y * width * channels;
+    for (let x = 0; x < width; x++) {
+      if (data[rowBase + x * channels] < th) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX < 0) return null; // blank page — nothing to measure
+  const ppiX = width / pageInches.w;
+  const ppiY = height / pageInches.h;
+  const trimLeftPx = trimRectInches.left * ppiX;
+  const trimRightPx = (trimRectInches.left + trimRectInches.width) * ppiX;
+  const trimTopPx = trimRectInches.top * ppiY;
+  const trimBottomPx = (trimRectInches.top + trimRectInches.height) * ppiY;
+  return {
+    left: (trimLeftPx - minX) / ppiX,
+    right: (maxX + 1 - trimRightPx) / ppiX,
+    top: (trimTopPx - minY) / ppiY,
+    bottom: (maxY + 1 - trimBottomPx) / ppiY,
+  };
+}
+
+// 72 DPI: 0.125" = 9px, so ±1px of raster rounding is ≈0.014" — well inside
+// the pass/fail band for the 0.125" threshold while keeping big flat
+// artboards (27"+) cheap to render.
+const CONTENT_BLEED_DPI = 72;
+const CONTENT_BLEED_MAX_PAGES = 8;
+
+/**
+ * Task #3072 — measure per-side content overhang beyond the TEMPLATE-derived
+ * trim rectangle by rendering the file's pages (pdftoppm + sharp, same
+ * pipeline as the preview/edge-band paths). Takes the MINIMUM per side
+ * across pages (the per-page pairing semantics of the box measurements).
+ * Null on ANY failure — no renderer, blank pages, artboard mismatch — so
+ * the caller falls back to the explicit "could not be measured" verdict,
+ * never a false pass.
+ */
+export async function contentBleedMeasurement(
+  pdfPath: string,
+  scan: CompletedPdfScan,
+  spec: {
+    id: string;
+    templatePageInches?: { w: number; h: number } | null;
+    templateBleedLineInches?: number | null;
+    finishedInches: { w: number; h: number };
+  },
+): Promise<ContentBleedMeasurement | null> {
+  try {
+    const line = spec.templateBleedLineInches ?? null;
+    const tmpl = spec.templatePageInches ?? null;
+    if (line == null || line <= 0 || !tmpl) return null;
+    const pages = Math.min(Math.max(scan.pageCount, 1), CONTENT_BLEED_MAX_PAGES);
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const run = promisify(execFile);
+    const fsp = await import("node:fs/promises");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const sharp = (await import("sharp")).default;
+    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "content-bleed-"));
+    try {
+      const outBase = path.join(tmpDir, "p");
+      await run(
+        "pdftoppm",
+        ["-f", "1", "-l", String(pages), "-png", "-r", String(CONTENT_BLEED_DPI), pdfPath, outBase],
+        { timeout: 120_000 },
+      );
+      const files = (await fsp.readdir(tmpDir)).filter((f) => f.endsWith(".png")).sort();
+      if (files.length === 0) return null;
+      let agg: SideInches | null = null;
+      let measured = 0;
+      for (const f of files) {
+        const { data, info } = await sharp(path.join(tmpDir, f))
+          .flatten({ background: "#ffffff" })
+          .greyscale()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        const pageInches = { w: info.width / CONTENT_BLEED_DPI, h: info.height / CONTENT_BLEED_DPI };
+        const trimRect = templateTrimRectInches({
+          componentId: spec.id,
+          pageInches,
+          templatePageInches: tmpl,
+          bleedLineInches: line,
+          finishedInches: spec.finishedInches,
+        });
+        if (!trimRect) continue; // artboard mismatch — size check owns it
+        const sides = contentBleedFromRaster({
+          data,
+          width: info.width,
+          height: info.height,
+          channels: info.channels || 1,
+          pageInches,
+          trimRectInches: trimRect,
+        });
+        if (!sides) continue; // blank page
+        measured++;
+        agg = agg
+          ? {
+              left: Math.min(agg.left, sides.left),
+              right: Math.min(agg.right, sides.right),
+              top: Math.min(agg.top, sides.top),
+              bottom: Math.min(agg.bottom, sides.bottom),
+            }
+          : sides;
+      }
+      if (!agg || measured === 0) return null;
+      const minInches = Math.min(agg.left, agg.right, agg.top, agg.bottom);
+      return { perSideInches: agg, minInches, pagesMeasured: measured };
+    } finally {
+      fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
+  } catch {
+    return null; // degrade silently — caller falls back to "could not be measured"
+  }
+}
+
 export type EdgeBandVerdict = "filled" | "empty" | null;
 
 /**
@@ -451,7 +683,7 @@ export async function edgeBandContent(
 export function validateCompletedComponent(
   scan: CompletedPdfScan,
   spec: FinishedComponentSpec,
-  opts?: { edgeBand?: EdgeBandVerdict },
+  opts?: { edgeBand?: EdgeBandVerdict; contentBleed?: ContentBleedMeasurement | null },
 ): CheckResult[] {
   // Not a PDF → nothing else is meaningful.
   if (!scan.isPdf) {
@@ -768,7 +1000,46 @@ export function validateCompletedComponent(
           : `the ${pressWord} certified template line`;
       const source = `Measured against ${lineWord} — ${line}" bleed.`;
       const measured = measuredBleedInches(scan);
-      if (measured == null) {
+      // Task #3072 — prefer TRUSTWORTHY artwork box measurement; when the
+      // boxes are missing or degenerate (all stamped equal), fall back to
+      // the rendered-content measurement when the caller could render.
+      const boxesTrusted = measured != null && hasTrustworthyBleedBoxes(scan);
+      const contentBleed = opts?.contentBleed ?? null;
+      if (!boxesTrusted && contentBleed) {
+        const cb = contentBleed;
+        const contentSource = `Measured against ${lineWord} via rendered content — ${line}" bleed.`;
+        const r3 = (v: number) => Math.round(v * 1000) / 1000;
+        const m = r3(cb.minInches);
+        const shortSides = (Object.entries(cb.perSideInches) as [string, number][])
+          .filter(([, v]) => v + BLEED_TOL < line)
+          .map(([k, v]) => `${k} ≈${r3(Math.max(0, v))}"`);
+        const how = "Measured from rendered content vs the certified template line (the file carries no usable trim/bleed boxes).";
+        if (cb.minInches + BLEED_TOL >= line) {
+          checks.push({
+            key: "tmpl.bleed",
+            label: "Bleed",
+            status: "pass",
+            source: contentSource,
+            message: `Rendered content extends ≈${m}" past the template trim line on all sides — meets the ${line}" bleed line vs ${lineWord}. ${how}`,
+          });
+        } else if (min != null && cb.minInches + BLEED_TOL >= min) {
+          checks.push({
+            key: "tmpl.bleed",
+            label: "Bleed",
+            status: "warn",
+            source: contentSource,
+            message: `Rendered content extends ≈${m}" past the template trim line — below the ${line}" line vs ${lineWord} (short on ${shortSides.join(", ")}), but meets ${pressWord}'s ≥${min}" minimum. ${how}`,
+          });
+        } else {
+          checks.push({
+            key: "tmpl.bleed",
+            label: "Bleed",
+            status: "fail",
+            source: contentSource,
+            message: `Rendered content falls short of the ${line}" bleed line vs ${lineWord} — short on ${shortSides.join(", ")}. ${how}`,
+          });
+        }
+      } else if (measured == null) {
         checks.push({
           key: "tmpl.bleed",
           label: "Bleed",
@@ -784,7 +1055,7 @@ export function validateCompletedComponent(
             label: "Bleed",
             status: "pass",
             source,
-            message: `Measured ≈${m}" bleed — meets the ${line}" bleed line vs ${lineWord}.`,
+            message: `Measured ≈${m}" bleed — meets the ${line}" bleed line vs ${lineWord}. Measured from the file's own PDF boxes.`,
           });
         } else if (min != null && measured + BLEED_TOL >= min) {
           checks.push({
@@ -792,7 +1063,7 @@ export function validateCompletedComponent(
             label: "Bleed",
             status: "warn",
             source,
-            message: `Measured ≈${m}" bleed — below the ${line}" line vs ${lineWord}, but meets ${pressWord}'s ≥${min}" minimum.`,
+            message: `Measured ≈${m}" bleed — below the ${line}" line vs ${lineWord}, but meets ${pressWord}'s ≥${min}" minimum. Measured from the file's own PDF boxes.`,
           });
         } else {
           checks.push({
@@ -800,7 +1071,7 @@ export function validateCompletedComponent(
             label: "Bleed",
             status: "fail",
             source,
-            message: `Measured ≈${m}" bleed — below the ${line}" bleed line vs ${lineWord}.`,
+            message: `Measured ≈${m}" bleed — below the ${line}" bleed line vs ${lineWord}. Measured from the file's own PDF boxes.`,
           });
         }
       }
