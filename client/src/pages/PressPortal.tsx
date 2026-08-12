@@ -147,6 +147,14 @@ interface ScopedPersonFull {
     expiresAt: string | null;
     reviewStatus: string | null;
   } | null;
+  // Staff (Bill, 2026-08-11) — person on the press's OWN contact roster.
+  // Staff show a contact-info Overview and no Cover/Releases/Streaming tabs;
+  // contact fields come back only for staff (PII stays stripped otherwise).
+  staff?: boolean;
+  staffTitle?: string | null;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
+  shippingAddress?: string | null;
 }
 interface ScopedPersonAlbum {
   id: string;
@@ -993,7 +1001,7 @@ export function PressScopedPersonDetail({
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-[color:var(--apple-faint)] text-[11px] font-semibold uppercase tracking-wider">
-            {person.shape === "artist" ? "Artist" : "Contact"}
+            {person.staff ? (person.staffTitle || "Staff") : person.shape === "artist" ? "Artist" : "Contact"}
           </div>
           <h1 className="text-[color:var(--apple-ink)] text-[24px] font-bold tracking-tight mt-0.5 truncate" data-testid="heading-person-name">
             {person.name}
@@ -1030,10 +1038,10 @@ export function PressScopedPersonDetail({
             <Button
               type="button"
               onClick={() => setInviteOpen(true)}
-              className="h-9 rounded-full px-4 border-0 font-semibold text-sm text-white shadow-sm bg-gradient-to-r from-[color:var(--brand-blue)] to-[color:var(--brand-purple)] hover:opacity-95"
+              className="h-8 rounded-full px-4 border-0 font-semibold text-sm text-white bg-[color:var(--brand-blue)] hover:opacity-90 shadow-none"
               data-testid="button-invite-person"
             >
-              <Send className="w-4 h-4 mr-2" /> Invite
+              Invite
             </Button>
           ) : null}
         </div>
@@ -1042,7 +1050,9 @@ export function PressScopedPersonDetail({
       {/* Tabs + Remove action */}
       <div className="flex items-end justify-between gap-5 border-b border-[color:var(--apple-hairline)]" data-testid="tabs-press-person">
         <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
-          {PERSON_DETAIL_TABS.map((t) => (
+          {/* Staff (Bill, 2026-08-11): no Cover / Releases / Streaming —
+              those are artist surfaces. Staff keep just the Overview. */}
+          {(person.staff ? PERSON_DETAIL_TABS.filter((t) => t.key === "overview") : PERSON_DETAIL_TABS).map((t) => (
             <button
               key={t.key}
               type="button"
@@ -1065,7 +1075,7 @@ export function PressScopedPersonDetail({
             type="button"
             onClick={() => setRemoveConfirmOpen(true)}
             disabled={removeFromPress.isPending}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 mb-1 rounded-md text-xs font-medium text-[color:var(--apple-subink)] border border-[color:var(--apple-hairline)] bg-white hover:bg-[color:var(--apple-tile)] hover:text-[color:var(--apple-ink)] disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 h-7 px-3 mb-1 rounded-full text-xs font-medium text-[color:var(--apple-subink)] border border-[color:var(--apple-hairline)] bg-transparent hover:bg-[color:var(--apple-tile)] hover:text-[color:var(--apple-ink)] disabled:opacity-50"
             data-testid="button-remove-from-press"
           >
             Remove from press
@@ -1074,9 +1084,47 @@ export function PressScopedPersonDetail({
       </div>
 
       {/* Tab content */}
-      {tab === "overview" && (
+      {tab === "overview" && person.staff && (
+        // Staff overview (Bill, 2026-08-11) — work contact info, not an
+        // artist profile. Rows render only when there's something on file.
         <div className="space-y-4" data-testid="panel-press-person-overview">
-          <div className="rounded-2xl border border-[color:var(--apple-hairline)] bg-white p-5 space-y-4">
+          <div className="rounded-2xl border border-[color:var(--apple-hairline)] bg-[color:var(--apple-card,white)] p-5">
+            {(() => {
+              const rows: { label: string; value: string; href?: string }[] = [];
+              if (person.staffTitle) rows.push({ label: "Title", value: person.staffTitle });
+              if (person.contactEmail) rows.push({ label: "Email", value: person.contactEmail, href: `mailto:${person.contactEmail}` });
+              if (person.contactPhone) rows.push({ label: "Phone", value: person.contactPhone, href: `tel:${person.contactPhone.replace(/[^+\d]/g, "")}` });
+              if (person.shippingAddress) rows.push({ label: "Address", value: person.shippingAddress });
+              if (rows.length === 0) {
+                return <p className="text-[color:var(--apple-subink)] text-sm">No contact details on file yet.</p>;
+              }
+              return (
+                <dl className="space-y-0" data-testid="press-staff-contact-info">
+                  {rows.map((r, i) => (
+                    <div key={r.label} className={["flex items-baseline gap-6 py-2.5", i > 0 ? "border-t border-[color:var(--apple-hairline)]" : ""].join(" ")}>
+                      <dt className="w-20 flex-shrink-0 text-xs font-medium text-[color:var(--apple-faint)]">{r.label}</dt>
+                      <dd className="text-sm text-[color:var(--apple-ink)] whitespace-pre-line min-w-0">
+                        {r.href ? (
+                          <a href={r.href} className="hover:text-[color:var(--brand-blue)] transition-colors">{r.value}</a>
+                        ) : (
+                          r.value
+                        )}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              );
+            })()}
+          </div>
+          <p className="text-[color:var(--apple-faint)] text-xs px-1">
+            Staff contact details are managed by GoodTunes — ask your GoodTunes contact to update them.
+          </p>
+        </div>
+      )}
+
+      {tab === "overview" && !person.staff && (
+        <div className="space-y-4" data-testid="panel-press-person-overview">
+          <div className="rounded-2xl border border-[color:var(--apple-hairline)] bg-[color:var(--apple-card,white)] p-5 space-y-4">
             {person.bio && (
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wider text-[color:var(--apple-faint)]">Bio</div>

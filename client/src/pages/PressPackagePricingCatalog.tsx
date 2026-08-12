@@ -4079,7 +4079,7 @@ function TemplateRow({
           the same height. Overflow shows "…"; hovering slides the text left
           (same Apple-style marquee as the color cards) to reveal it all. */}
       <div
-        className="text-[11.5px] tabular-nums w-full min-w-0"
+        className="text-xs tabular-nums w-full min-w-0"
         style={{ marginTop: 3 }}
         data-testid={`text-template-filename-${tile.key}`}
       >

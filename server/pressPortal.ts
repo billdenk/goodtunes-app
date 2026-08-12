@@ -1371,6 +1371,28 @@ export function registerPressPortalRoutes(
     });
     if (isArtist && !derived.some((r) => r.toLowerCase() === "artist")) derived.unshift("Artist");
 
+    // Staff detection (Bill, 2026-08-11) — a person on the press's own
+    // contact roster (entity_contacts, manufacturer kind) is STAFF, not a
+    // client artist. Staff get their business title + contact info back so
+    // the portal Overview can show it; artists/other contacts don't (the
+    // PII-stripping contract below stays for them).
+    let staff = false;
+    let staffTitle: string | null = null;
+    try {
+      const strow = await db.execute<{ role: string | null }>(sql`
+        SELECT role FROM entity_contacts
+        WHERE entity_kind = 'manufacturer' AND entity_id = ${pressId} AND person_id = ${personId}
+        LIMIT 1
+      `);
+      const row = ((strow as any).rows ?? [])[0];
+      if (row !== undefined) {
+        staff = true;
+        staffTitle = row.role ? String(row.role) : null;
+      }
+    } catch (e: any) {
+      console.warn(`[press:${pressId} person:${personId}] staff lookup failed: ${e?.message}`);
+    }
+
     // Invite state for the profile's Invite affordance. The Invite button
     // shows only when there's no live invite AND the person hasn't claimed
     // an account yet; a pending invite surfaces status + resend/revoke/copy;
@@ -1443,9 +1465,15 @@ export function registerPressPortalRoutes(
       isGroup: !!p.isGroup,
       groupKind: p.groupKind ?? null,
       // Cross-press / PII stripped: never expose the mailing address or
-      // another press's invite stamp to a press partner.
-      shippingAddress: null,
+      // another press's invite stamp to a press partner. EXCEPTION (Bill,
+      // 2026-08-11): the press's OWN staff — their work contact info is
+      // exactly what the portal Overview should show.
+      shippingAddress: staff ? (p.shippingAddress ?? null) : null,
       shippingAddressStruct: null,
+      staff,
+      staffTitle,
+      contactEmail: staff ? (p.contactEmail ?? null) : null,
+      contactPhone: staff ? (p.contactPhone ?? null) : null,
       invitedByPressId: p.invitedByPressId === pressId ? pressId : null,
       artistShareSlug: p.artistShareSlug ?? null,
       shape: isArtist ? "artist" : "contact",
