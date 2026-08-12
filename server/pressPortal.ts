@@ -1553,7 +1553,21 @@ export function registerPressPortalRoutes(
        WHERE id = ${personId} AND default_press_id = ${pressId}
        RETURNING id
     `);
+    // Staff (Bill, 2026-08-11): a roster-only staff contact isn't "homed"
+    // (default_press_id is null) — removing them means detaching the
+    // entity_contacts row, or the profile stays discoverable after the
+    // "Removed" toast. Artists get the un-home path above; both count.
+    const staffDel = await db.execute<{ person_id: string }>(sql`
+      DELETE FROM entity_contacts
+       WHERE entity_kind = 'manufacturer' AND entity_id = ${pressId} AND person_id = ${personId}
+       RETURNING person_id
+    `);
+    const staffDetached = (((staffDel as any).rows ?? []) as any[]).length > 0;
     const unhomed = (((upd as any).rows ?? []) as any[]).length > 0;
+    if (!unhomed && !staffDetached) {
+      // Neither relationship existed — tell the truth instead of a happy 200.
+      return res.status(409).json({ message: "This person isn't homed to your press or on your staff roster." });
+    }
     if (unhomed) {
       await db.insert(pressSwitchHistory).values({
         customerKind: "artist",

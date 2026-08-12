@@ -912,6 +912,17 @@ export function PressScopedPersonDetail({
   const { data: person, isLoading, error } = useQuery<ScopedPersonFull>({
     queryKey: [`/api/press/${pressId}/people/${personId}`],
   });
+
+  // Reset to Overview when the person changes (URL/history swap) or the
+  // loaded person turns out to be staff — otherwise `tab` can be stuck on a
+  // tab that no longer renders (staff have no Cover/Releases/Streaming) and
+  // the page goes blank.
+  useEffect(() => {
+    setTab("overview");
+  }, [personId]);
+  useEffect(() => {
+    if (person?.staff && tab !== "overview") setTab("overview");
+  }, [person?.staff, tab]);
   const { data: albums = [], isLoading: albumsLoading } = useQuery<ScopedPersonAlbum[]>({
     queryKey: [`/api/press/${pressId}/people/${personId}/albums`],
   });
