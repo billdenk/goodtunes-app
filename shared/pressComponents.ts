@@ -86,6 +86,32 @@ export const stickerShapeOfferSchema = z.object({
   id: z.enum(STICKER_SHAPE_IDS),
   // Which size ids within the shape's fixed size list the press offers.
   offeredSizeIds: z.array(z.string().max(24)).max(24),
+  // Task #3049 — shape-level offer flag (absent = offered, keeps existing
+  // configs valid). A not-offered shape is excluded wherever artists pick
+  // sticker options regardless of its offeredSizeIds.
+  offered: z.boolean().optional(),
+  // Task #3049 — die-cut template attachments (attach + store only; no
+  // validation/preflight here). Shape-level template plus optional
+  // per-size templates keyed by size id.
+  // Templates are stored via the admin doc-upload sign flow, which mints
+  // /objects/uploads/<id> paths — constrain persisted values to exactly that
+  // shape so a javascript:/https: string can never land in the config and be
+  // rendered as a link to other privileged users.
+  templateUrl: z
+    .string()
+    .regex(/^\/objects\/uploads\/[a-zA-Z0-9._-]+$/, "Template must be an uploaded file path")
+    .max(1024)
+    .nullable()
+    .optional(),
+  sizeTemplates: z
+    .record(
+      z.string().max(24),
+      z
+        .string()
+        .regex(/^\/objects\/uploads\/[a-zA-Z0-9._-]+$/, "Template must be an uploaded file path")
+        .max(1024),
+    )
+    .optional(),
 });
 export type StickerShapeOffer = z.infer<typeof stickerShapeOfferSchema>;
 

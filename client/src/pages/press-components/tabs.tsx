@@ -57,12 +57,21 @@ export function PressLabelsComponentTab({ pressId }: { pressId: string }) {
 export function PressStickersComponentTab({ pressId }: { pressId: string }) {
   const { data, isLoading } = usePressComponents(pressId);
   const save = useSavePressComponent(pressId, "stickers");
+  // Serialize + coalesce whole-config PUTs (same as Pricing below) so a slow
+  // earlier save can never complete after — and overwrite — a newer one:
+  // rapid offered toggles or a toggle racing a template attach both stick.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const serialStickerSave = useMemo(
+    () => createSerialSaver<StickersComponentConfig>((config) => saveRef.current.mutateAsync(config)),
+    [pressId],
+  );
   if (isLoading || !data) return <LoadingRow />;
   return (
     <PressStickersComponent
       payload={data}
       canEdit={data.canEdit}
-      save={(config: StickersComponentConfig) => save.mutate(config)}
+      save={serialStickerSave}
       saving={save.isPending}
     />
   );

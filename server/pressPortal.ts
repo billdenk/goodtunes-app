@@ -635,7 +635,14 @@ export function registerPressPortalRoutes(
   // front instead of letting Staff click into a 403.
   const requirePressEditor = async (req: Request, res: Response, next: any) => {
     const { pressUserCanEdit } = await import("./auth/partnerPermissions");
-    const ok = await pressUserCanEdit(req.session.userId!, String(req.params.id));
+    // Task #3049 — resolve the caller from the bearer stamp (req.adminUserId,
+    // set by commerce.ts requireAdmin) OR the session; the admin SPA is
+    // bearer-only, so a session-only read 403'd every press mutation here.
+    const callerId =
+      ((req as any).adminUserId as string | undefined) ?? req.session?.userId;
+    const ok = callerId
+      ? await pressUserCanEdit(callerId, String(req.params.id))
+      : false;
     if (!ok) {
       return res.status(403).json({
         message:

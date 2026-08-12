@@ -5,6 +5,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { toast } from "@/hooks/use-toast";
 import type {
   PressComponentKey,
   VinylComponentConfig,
@@ -52,6 +53,17 @@ export function useSavePressComponent(pressId: string, key: PressComponentKey) {
       return res.json();
     },
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/press/${pressId}/components`] });
+    },
+    // Surface failed saves instead of silently keeping optimistic local
+    // state — the serial saver swallows rejections to keep its queue moving,
+    // so this is where the user learns a save didn't stick.
+    onError: (err: any) => {
+      toast({
+        title: "Couldn't save changes",
+        description: err?.message ?? "Please try again.",
+        variant: "destructive",
+      });
       qc.invalidateQueries({ queryKey: [`/api/press/${pressId}/components`] });
     },
   });

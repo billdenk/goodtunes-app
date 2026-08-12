@@ -373,7 +373,13 @@ export function registerPressComponentRoutes(
       if (!press) return res.status(404).json({ message: "Press not found" });
       const configs = await loadPressComponents(pressId);
       const { pressUserCanEdit } = await import("./auth/partnerPermissions");
-      const canEdit = await pressUserCanEdit(req.session.userId!, pressId);
+      // Task #3049 — the admin SPA authenticates with a Bearer token (no
+      // session cookie); commerce.ts's requireAdmin stamps req.adminUserId.
+      // Reading ONLY req.session.userId left every bearer-authed press with
+      // canEdit=false, rendering the whole page view-only.
+      const callerId =
+        ((req as any).adminUserId as string | undefined) ?? req.session?.userId;
+      const canEdit = callerId ? await pressUserCanEdit(callerId, pressId) : false;
       res.json({
         canEdit,
         press: {
@@ -419,7 +425,10 @@ export function registerPressComponentRoutes(
           });
         }
         await upsertComponentRow(pressId, key, parsed.data, {
-          userId: req.session.userId ?? null,
+          userId:
+            ((req as any).adminUserId as string | undefined) ??
+            req.session?.userId ??
+            null,
         });
         res.json({ ok: true, config: parsed.data });
       } catch (e: any) {
