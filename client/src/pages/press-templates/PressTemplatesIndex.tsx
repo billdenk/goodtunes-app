@@ -246,6 +246,7 @@ const VINYL_SLOTS: Record<"7″" | "10″" | "12″", Slot[]> = {
     { kind: "booklet", title: "Gatefold insert", note: "Not offered yet", disabled: true },
   ],
   "12″": [
+    { kind: "labels", title: "Center labels", note: "Small or large hole", dbFormat: "12_lp", componentKey: "labels" },
     { kind: "jacket", title: "Single jacket", note: "Outer sleeve — no spine", dbFormat: "12_lp", componentKey: "jacket", variantKey: "single" },
     { kind: "jacket", title: "Widespine jacket", note: "Outer sleeve — wide spine", dbFormat: "12_lp", componentKey: "jacket", variantKey: "widespine" },
     { kind: "jacket", title: "Gatefold jacket", note: "Outer sleeve — opens flat", dbFormat: "12_lp", componentKey: "jacket", variantKey: "gatefold" },
