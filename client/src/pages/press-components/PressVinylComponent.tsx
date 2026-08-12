@@ -384,6 +384,25 @@ function VinylDisc({
             pointerEvents: 'none',
           }}
         />
+        {/* The source photo carries its OWN label (whatever the press's
+            site photo happened to show). Cover it with the same rendered
+            press label the drawn discs use so every disc — photo or drawn —
+            wears this press's mark. */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: size * LABEL_RATIO,
+            height: size * LABEL_RATIO,
+            borderRadius: '50%',
+            backgroundColor: PRESS_LABEL_BG,
+            overflow: 'hidden',
+          }}
+        >
+          {size >= 70 && <DiscLabelArt size={size * LABEL_RATIO} brand={brand} />}
+        </div>
         <div
           style={{
             position: 'absolute',
