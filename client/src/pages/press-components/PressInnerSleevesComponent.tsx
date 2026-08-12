@@ -6,6 +6,7 @@
 // (SLEEVE_STYLE_IDS) so each carries its own offered/template ••• menu.
 import { useEffect, useState } from "react";
 import { resolvePressMarkLogo, type PressComponentsPayload } from "./usePressComponents";
+import { WhiteMarkGlyph } from "./PressMarkGlyph";
 import { SLEEVE_STYLE_IDS, type SleevesComponentConfig } from "@shared/pressComponents";
 import { useAdminDark } from "@/lib/adminAppearance";
 import {
@@ -85,7 +86,7 @@ function menuTheme(t: Theme, dark: boolean): OfferMenuTheme {
 // ─── Press mark on the printed sleeve face ───────────────────────────
 function FaceMark({ logoUrl, name, size }: { logoUrl: string | null; name: string; size: number }) {
   if (logoUrl) {
-    return <img src={logoUrl} alt="" aria-hidden style={{ width: size, height: size, objectFit: "contain", opacity: 0.92 }} />;
+    return <WhiteMarkGlyph logoUrl={logoUrl} size={size} opacity={0.92} />;
   }
   const initials = (name || "")
     .split(/\s+/)

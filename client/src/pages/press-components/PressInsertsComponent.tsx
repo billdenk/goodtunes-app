@@ -6,6 +6,7 @@
 // page-count and poster size stay selection-only preview toggles.
 import { useEffect, useState } from "react";
 import { resolvePressMarkLogo, type PressComponentsPayload } from "./usePressComponents";
+import { WhiteMarkGlyph } from "./PressMarkGlyph";
 import { INSERT_STYLE_IDS, type InsertsComponentConfig } from "@shared/pressComponents";
 import { useAdminDark } from "@/lib/adminAppearance";
 import {
@@ -85,7 +86,7 @@ const HAIRLINE = "#e6e6ea";
 // ─── Press mark on printed faces ─────────────────────────────────────
 function FaceMark({ logoUrl, name, size }: { logoUrl: string | null; name: string; size: number }) {
   if (logoUrl) {
-    return <img src={logoUrl} alt="" aria-hidden style={{ width: size, height: size, objectFit: "contain", opacity: 0.92 }} />;
+    return <WhiteMarkGlyph logoUrl={logoUrl} size={size} opacity={0.92} />;
   }
   const initials = (name || "")
     .split(/\s+/)

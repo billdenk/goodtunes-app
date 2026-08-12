@@ -18,7 +18,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { RotateCcw, Check, Minus, Loader2 } from 'lucide-react';
 import { useAdminDark } from '@/lib/adminAppearance';
-import type { PressComponentsPayload } from './usePressComponents';
+import { resolvePressMarkLogo, type PressComponentsPayload } from './usePressComponents';
+import { WhiteMarkGlyph } from './PressMarkGlyph';
 import type { LabelsComponentConfig } from '@shared/pressComponents';
 
 // ─── Themes — light = apple-canon (default, unchanged); dark = charcoal ──
@@ -169,8 +170,11 @@ function LabelLogo({
   // hole would punch through a centered logo), so shift it to the right side.
   const showArcText = size >= 70 && !offsetRight;
   const arcTextFill = whiteFilter ? 'rgba(245,245,247,0.55)' : 'rgba(0,0,0,0.38)';
+  // Resolve through the shared logo chain (labelLogoUrl first) so presses
+  // without a dedicated label logo still show their mark.
+  const markUrl = resolvePressMarkLogo(press);
   // When null render the label without a logo mark.
-  if (!press.labelLogoUrl) {
+  if (!markUrl) {
     if (!showArcText) return null;
     return (
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
@@ -189,24 +193,40 @@ function LabelLogo({
   }
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
-      <img
-        src={press.labelLogoUrl}
-        alt=""
-        aria-hidden
-        style={{
-          position: 'absolute',
-          top: '50%',
-          // The 7" big-hole label leaves only a ~0.9" ring of paper between the
-          // 1.5" hole and the 3.3" label edge, so the logo sits small, centered
-          // in that ring on the right side (band center ≈ 73% of label radius).
-          left: offsetRight ? '13.5%' : '50%',
-          transform: 'translate(-50%, -50%)',
-          width: size * (offsetRight ? 0.18 : 0.9),
-          height: size * (offsetRight ? 0.18 : 0.9),
-          objectFit: 'contain',
-          // labelLogoUrl reads white already; no invert filter for real presses.
-        }}
-      />
+      {whiteFilter ? (
+        // Dark label face — render the mark WHITE via mask so any uploaded
+        // logo color reads correctly on dark stock.
+        <WhiteMarkGlyph
+          logoUrl={markUrl}
+          size={size * (offsetRight ? 0.18 : 0.9)}
+          opacity={1}
+          style={{
+            position: 'absolute',
+            top: '50%',
+            // The 7" big-hole label leaves only a ~0.9" ring of paper between
+            // the 1.5" hole and the 3.3" label edge, so the logo sits small,
+            // centered in that ring (band center ≈ 73% of label radius).
+            left: offsetRight ? '13.5%' : '50%',
+            transform: 'translate(-50%, -50%)',
+          }}
+        />
+      ) : (
+        // Light label stock — logo as uploaded.
+        <img
+          src={markUrl}
+          alt=""
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: offsetRight ? '13.5%' : '50%',
+            transform: 'translate(-50%, -50%)',
+            width: size * (offsetRight ? 0.18 : 0.9),
+            height: size * (offsetRight ? 0.18 : 0.9),
+            objectFit: 'contain',
+          }}
+        />
+      )}
       {showArcText && (
         <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden style={{ position: 'absolute', inset: 0 }}>
           <defs>

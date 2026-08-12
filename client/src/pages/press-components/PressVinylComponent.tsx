@@ -30,7 +30,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
-import type { PressComponentsPayload } from './usePressComponents';
+import { resolvePressMarkLogo, type PressComponentsPayload } from './usePressComponents';
+import { WhiteMarkGlyph } from './PressMarkGlyph';
 import type {
   VinylComponentConfig,
   VinylCategory,
@@ -286,18 +287,17 @@ function DiscLabelArt({ size, brand }: { size: number; brand: LabelBrand }) {
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
       {brand.logoUrl && (
-        <img
-          src={brand.logoUrl}
-          alt=""
-          aria-hidden
+        // Black label face — mark renders WHITE via mask regardless of the
+        // uploaded logo's color.
+        <WhiteMarkGlyph
+          logoUrl={brand.logoUrl}
+          size={size * 0.9}
+          opacity={1}
           style={{
             position: 'absolute',
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: size * 0.9,
-            height: size * 0.9,
-            objectFit: 'contain',
           }}
         />
       )}
@@ -2087,7 +2087,7 @@ export function PressVinylComponent({
   const { toast } = useToast();
 
   const press = payload.press;
-  const brand: LabelBrand = { logoUrl: press.labelLogoUrl };
+  const brand: LabelBrand = { logoUrl: resolvePressMarkLogo(press) };
   const partnerName = press.name;
 
   // ── Local editing state, seeded from the config slice ──────────────

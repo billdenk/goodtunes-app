@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { resolvePressMarkLogo, type PressComponentsPayload } from "./usePressComponents";
+import { WhiteMarkGlyph } from "./PressMarkGlyph";
 import { JACKET_STYLE_IDS, type JacketsComponentConfig } from "@shared/pressComponents";
 import { useAdminDark } from "@/lib/adminAppearance";
 import {
@@ -94,14 +95,7 @@ function FaceMark({
   opacity?: number;
 }) {
   if (logoUrl) {
-    return (
-      <img
-        src={logoUrl}
-        alt=""
-        aria-hidden
-        style={{ width: size, height: size, objectFit: "contain", opacity }}
-      />
-    );
+    return <WhiteMarkGlyph logoUrl={logoUrl} size={size} opacity={opacity} />;
   }
   const initials = (name || "")
     .split(/\s+/)
