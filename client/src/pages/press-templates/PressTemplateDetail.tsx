@@ -35,6 +35,7 @@ import type {
   TemplateTestRun,
   TemplateCheck,
 } from "./types";
+import { variantOptionsNote } from "./types";
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
@@ -134,8 +135,13 @@ const VARIANT_LABELS: Record<string, string> = {
 };
 
 /** Human label for a spec, e.g. "Gatefold jacket · 12″ Double LP". */
-function slotLabel(spec: TemplateSpecWithHistory): { lead: string; rest: string } {
-  const comp = COMPONENT_LABELS[spec.componentKey] ?? spec.componentKey;
+function slotLabel(
+  spec: TemplateSpecWithHistory,
+  customName?: string | null,
+): { lead: string; rest: string } {
+  // Task #3065 — operator-defined slots read their display name off the
+  // custom-slot row (componentKey "custom_<slug>" is not human-friendly).
+  const comp = customName ?? COMPONENT_LABELS[spec.componentKey] ?? spec.componentKey;
   const variant = spec.variantKey ? VARIANT_LABELS[spec.variantKey] ?? spec.variantKey : "";
   const lead =
     spec.componentKey === "jacket" && variant ? `${variant} jacket` : comp;
@@ -405,7 +411,10 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
     );
   }
 
-  const { lead, rest } = slotLabel(spec);
+  const customSlot = spec.componentKey.startsWith("custom_")
+    ? (data?.customSlots ?? []).find((c) => c.format === spec.format && c.slotKey === spec.componentKey)
+    : undefined;
+  const { lead, rest } = slotLabel(spec, customSlot?.displayName ?? null);
   const liveRev = spec.revisions.find((r) => r.status === "certified" || r.status === "pending") ?? null;
   const liveMeta = liveRev ? revisionStatusMeta(liveRev.status) : null;
   const studySpec = buildStudySpec(spec, lead, rest);
@@ -456,6 +465,12 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
             <span style={{ color: t.ink }}>{lead}. </span>
             <span style={{ color: t.subink, fontWeight: 500 }}>{rest}.</span>
           </h1>
+          {/* Task #3065 — one file, multiple options (confirmed at attach). */}
+          {spec.variantOptions?.length ? (
+            <div className="mt-1.5 text-[13px]" style={{ color: t.subink }} data-testid="text-variant-options">
+              {variantOptionsNote(spec.variantOptions)}
+            </div>
+          ) : null}
           {/* Live revision + file */}
           <div className="mt-2 flex items-center gap-3 flex-wrap">
             {liveRev && liveMeta && (

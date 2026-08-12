@@ -68,14 +68,40 @@ export type TemplateSpecWithHistory = {
   measuredHasEmbeddedFonts: boolean | null;
   measuredHasDieline: boolean | null;
   measuredError: string | null;
+  // Task #3065 — option families this ONE template file covers (e.g. small
+  // + large center-label holes). Stamped only after the operator confirms
+  // the detection prompt; null/absent = single-option template.
+  variantOptions?: Array<{ key: string; label: string }> | null;
   revisions: TemplateRevision[];
   runs: TemplateTestRun[];
 };
 
+/** Task #3065 — operator-defined template slot (press_custom_template_slots). */
+export type CustomTemplateSlot = {
+  id: string;
+  pressId: string;
+  format: string;
+  slotKey: string; // "custom_<slug>" — the spec row's componentKey
+  displayName: string;
+  note: string | null;
+  iconKind: "jacket" | "sleeve" | "labels" | "booklet" | string;
+  createdAt: string;
+};
+
 export type TemplatesPayload = {
   canEdit: boolean;
+  customSlots?: CustomTemplateSlot[];
   specs: TemplateSpecWithHistory[];
 };
+
+/** Human note for a multi-option template ("small / large hole" canon case). */
+export function variantOptionsNote(options: Array<{ key: string; label: string }>): string {
+  const keys = options.map((o) => o.key).sort();
+  if (keys.length === 2 && keys[0] === "large_hole" && keys[1] === "small_hole") {
+    return "One template — serves both small and large holes";
+  }
+  return `One template — covers ${options.map((o) => o.label.toLowerCase()).join(" and ")}`;
+}
 
 /** Slot status derived for the index tiles. */
 export type SlotStatus = "certified" | "pending" | "failed" | "empty" | "review";

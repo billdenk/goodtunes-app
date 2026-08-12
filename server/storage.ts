@@ -155,6 +155,8 @@ import {
   type PressTemplateRevision,
   pressTemplateTestRuns,
   type PressTemplateTestRun,
+  pressCustomTemplateSlots,
+  type PressCustomTemplateSlot,
   pressAudioSpecs,
   type PressAudioSpec,
   type InsertPressAudioSpec,
@@ -977,6 +979,22 @@ export interface IStorage {
   ): Promise<PressTemplateSpec>;
   deletePressTemplateSpec(pressId: string, specId: string): Promise<void>;
   getPressTemplateSpecById(pressId: string, specId: string): Promise<PressTemplateSpec | null>;
+  // Task #3065 — one-file multi-option stamp + operator-defined custom slots.
+  updatePressTemplateSpecVariantOptions(
+    pressId: string,
+    specId: string,
+    options: Array<{ key: string; label: string }> | null,
+  ): Promise<PressTemplateSpec | null>;
+  listPressCustomTemplateSlots(pressId: string): Promise<PressCustomTemplateSlot[]>;
+  createPressCustomTemplateSlot(input: {
+    pressId: string;
+    format: string;
+    slotKey: string;
+    displayName: string;
+    note: string | null;
+    iconKind: string;
+    createdByUserId: string | null;
+  }): Promise<PressCustomTemplateSlot>;
   updatePressTemplateSpecMeasured(
     pressId: string,
     specId: string,
@@ -5610,6 +5628,42 @@ export class DbStorage implements IStorage {
       .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)))
       .returning();
     return row ?? null;
+  }
+
+  // Task #3065 — stamp/clear the option families this ONE template file
+  // covers (display-only jsonb; never touches measurements).
+  async updatePressTemplateSpecVariantOptions(
+    pressId: string,
+    specId: string,
+    options: Array<{ key: string; label: string }> | null,
+  ): Promise<PressTemplateSpec | null> {
+    const [row] = await db
+      .update(pressTemplateSpecs)
+      .set({ variantOptions: options })
+      .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)))
+      .returning();
+    return row ?? null;
+  }
+
+  // ---- Task #3065 — operator-defined custom template slots ----------
+  async listPressCustomTemplateSlots(pressId: string): Promise<PressCustomTemplateSlot[]> {
+    return db
+      .select()
+      .from(pressCustomTemplateSlots)
+      .where(eq(pressCustomTemplateSlots.pressId, pressId))
+      .orderBy(asc(pressCustomTemplateSlots.createdAt));
+  }
+  async createPressCustomTemplateSlot(input: {
+    pressId: string;
+    format: string;
+    slotKey: string;
+    displayName: string;
+    note: string | null;
+    iconKind: string;
+    createdByUserId: string | null;
+  }): Promise<PressCustomTemplateSlot> {
+    const [row] = await db.insert(pressCustomTemplateSlots).values(input).returning();
+    return row;
   }
 
   // ---- Press-templates flow (Ruby handoff) — revisions + test runs ----

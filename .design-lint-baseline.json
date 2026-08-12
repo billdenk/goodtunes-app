@@ -24187,6 +24187,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"mt-1.5 text-[13px]\" style={{ color: t.subink }} data-testid=\"text-variant-options\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
     "snippet": "<span className=\"inline-flex items-center gap-2 text-[13.5px]\" style={{ color: t.subink }} data-testid=\"live-revision\">"
   },
   {
@@ -24412,6 +24417,26 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: t.ink }} data-testid=\"text-detected-title\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"mt-1 text-[12.5px]\" style={{ color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className={cn(\"h-9 px-4 rounded-full text-[13px] font-medium transition-colors\", t.hoverWash)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className=\"h-9 px-5 rounded-full inline-flex items-center gap-2 text-[13px] font-semibold text-white disabled:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
     "snippet": "<div className=\"h-7 flex items-center text-[11px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>"
   },
   {
@@ -24487,7 +24512,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
-    "snippet": "className=\"h-9 px-5 rounded-full inline-flex items-center gap-2 text-[13px] font-semibold text-white disabled:opacity-60\""
+    "snippet": "<h2 className=\"text-[19px] font-semibold\" style={{ color: t.ink, letterSpacing: \"-0.01em\" }}>Create new template</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className={cn(\"w-full h-10 px-4 rounded-full text-[13px] focus:outline-none\", t.searchPlaceholder)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className={cn(\"mt-3 w-full h-10 px-4 rounded-full text-[13px] focus:outline-none\", t.searchPlaceholder)}"
   },
   {
     "rule": "hardcoded-font-size",
@@ -24497,7 +24532,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
-    "snippet": "<div className=\"mt-1 text-[12.5px]\" style={{ color: t.subink }}>{slot.note}</div>"
+    "snippet": "<div className=\"mt-1 text-[12.5px] inline-flex items-center gap-1.5 justify-center\" style={{ color: t.subink }} data-testid={`note-${spec.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -24537,17 +24572,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
-    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>{format} · Templates</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
     "snippet": "className=\"h-7 px-3 rounded-full text-[12px] font-semibold tabular-nums transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
     "snippet": "<div className=\"text-[13.5px]\" style={{ color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"mt-4 text-[15px] font-semibold\" style={{ color: t.ink, letterSpacing: \"-0.01em\" }}>Create new template</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"mt-1 text-[12.5px]\" style={{ color: t.faint }}>Anything not listed above</div>"
   },
   {
     "rule": "naked-icon-button",

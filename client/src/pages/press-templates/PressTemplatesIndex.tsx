@@ -19,7 +19,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   BadgeCheck, Clock3, XCircle, AlertTriangle, History, Upload, CloudUpload, X,
-  MoreHorizontal, Archive, Loader2, AlertCircle,
+  MoreHorizontal, Archive, Loader2, AlertCircle, Plus, Layers,
 } from "lucide-react";
 import { ChevronDown as NavChevron } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -28,8 +28,10 @@ import { useAdminDark } from "@/lib/adminAppearance";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import {
   slotStatus,
+  variantOptionsNote,
   type TemplatesPayload,
   type TemplateSpecWithHistory,
+  type CustomTemplateSlot,
   type SlotStatus,
 } from "./types";
 
@@ -320,6 +322,10 @@ function UploadModal({
   const [urlDraft, setUrlDraft] = useState("");
   const [uploading, setUploading] = useState(false);
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  // Task #3065 — the attach response can carry detected options (one file
+  // drawing e.g. both center-hole sizes). The modal swaps to a confirm step;
+  // nothing is stamped unless the operator says yes.
+  const [detected, setDetected] = useState<{ specId: string; options: Array<{ key: string; label: string }> } | null>(null);
 
   const attach = useMutation({
     mutationFn: async (body: {
@@ -331,14 +337,35 @@ function UploadModal({
       fileName?: string | null;
     }) => {
       const r = await apiRequest("PUT", `/api/press/${pressId}/templates`, body);
-      return (await r.json()) as { spec: TemplateSpecWithHistory; revision: unknown };
+      return (await r.json()) as {
+        spec: TemplateSpecWithHistory;
+        revision: unknown;
+        detectedOptions?: Array<{ key: string; label: string }>;
+      };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
+      if (data.detectedOptions && data.detectedOptions.length >= 2) {
+        setDetected({ specId: data.spec.id, options: data.detectedOptions });
+        return;
+      }
       onDone(data.spec.id);
     },
     onError: (e: Error) =>
       toast({ title: "Couldn't attach the template", description: e.message, variant: "destructive" }),
+  });
+
+  const stampOptions = useMutation({
+    mutationFn: async (p: { specId: string; options: Array<{ key: string; label: string }> }) => {
+      await apiRequest("POST", `/api/press/${pressId}/templates/${p.specId}/options`, { options: p.options });
+      return p.specId;
+    },
+    onSuccess: (specId) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
+      onDone(specId);
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn't save that", description: e.message, variant: "destructive" }),
   });
 
   const archive = useMutation({
@@ -402,7 +429,7 @@ function UploadModal({
               {slot.title}
             </h2>
             <p className="mt-1 text-[12.5px]" style={{ color: t.subink }}>
-              {spec ? "Replace the file — done." : "Drop the PDF — done."}
+              {detected ? "Template attached and measured." : spec ? "Replace the file — done." : "Drop the PDF — done."}
             </p>
           </div>
           <button
@@ -417,6 +444,48 @@ function UploadModal({
           </button>
         </div>
 
+        {/* Task #3065 — detection confirm step: one file, multiple options */}
+        {detected ? (
+          <div className="px-7 pt-5 pb-7" data-testid="panel-detected-options">
+            <div className="rounded-2xl px-5 py-5 flex items-start gap-3.5" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
+              <span className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}>
+                <Layers className="w-4.5 h-4.5" style={{ color: t.blue, width: 18, height: 18 }} />
+              </span>
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold" style={{ color: t.ink }} data-testid="text-detected-title">
+                  This template mentions {detected.options.length} options ({detected.options.map((o) => o.label).join(" / ")}).
+                </div>
+                <div className="mt-1 text-[12.5px]" style={{ color: t.subink }}>
+                  Note that this one template serves both? It stays a single file and a single tile — the
+                  note just tells everyone both options are covered here.
+                </div>
+              </div>
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => onDone(detected.specId)}
+                disabled={stampOptions.isPending}
+                className={cn("h-9 px-4 rounded-full text-[13px] font-medium transition-colors", t.hoverWash)}
+                style={{ color: t.subink, border: `1px solid ${t.hairline}` }}
+                data-testid="button-decline-options"
+              >
+                No — leave as is
+              </button>
+              <button
+                type="button"
+                onClick={() => stampOptions.mutate(detected)}
+                disabled={stampOptions.isPending}
+                className="h-9 px-5 rounded-full inline-flex items-center gap-2 text-[13px] font-semibold text-white disabled:opacity-60"
+                style={{ backgroundColor: t.blue }}
+                data-testid="button-confirm-options"
+              >
+                {stampOptions.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                Yes — one template, both options
+              </button>
+            </div>
+          </div>
+        ) : (
         <div className="px-7 pt-5 pb-7 grid gap-6" style={{ gridTemplateColumns: "250px 1fr" }}>
           {/* Current file (only when replacing an existing tile) */}
           <div>
@@ -608,6 +677,118 @@ function UploadModal({
             </div>
           </div>
         </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Task #3065 — "Create new template" dialog (custom slots) ──
+function CreateSlotModal({
+  t,
+  pressId,
+  dbFormat,
+  onClose,
+  onCreated,
+}: {
+  t: Theme;
+  pressId: string;
+  dbFormat: string;
+  onClose: () => void;
+  onCreated: (slot: CustomTemplateSlot) => void;
+}) {
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [note, setNote] = useState("");
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/press/${pressId}/templates/custom-slots`, {
+        format: dbFormat,
+        name: name.trim(),
+        note: note.trim() || undefined,
+      });
+      return (await r.json()) as { slot: CustomTemplateSlot };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
+      onCreated(data.slot);
+    },
+    onError: (e: Error) =>
+      toast({ title: "Couldn't create the template", description: e.message.replace(/^\d{3}:\s*/, ""), variant: "destructive" }),
+  });
+
+  const canSubmit = name.trim().length >= 2 && !create.isPending;
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center"
+      style={{ backgroundColor: t.modalScrim, backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
+      data-testid="modal-create-slot"
+    >
+      <div className="rounded-2xl overflow-hidden" style={{ width: 460, maxWidth: "92vw", backgroundColor: t.card, border: `1px solid ${t.hairline}`, boxShadow: t.modalShadow }}>
+        <div className="flex items-start justify-between gap-4 px-7 pt-6">
+          <div>
+            <h2 className="text-[19px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>Create new template</h2>
+            <p className="mt-1 text-[12.5px]" style={{ color: t.subink }}>
+              Name it — the upload and checks work exactly like the built-in tiles.
+            </p>
+          </div>
+          <button
+            type="button"
+            className={cn("w-8 h-8 -mr-2 rounded-full flex items-center justify-center transition-colors flex-shrink-0", t.hoverWash)}
+            style={{ color: t.subink }}
+            aria-label="Close"
+            onClick={onClose}
+            data-testid="button-close-create-slot"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="px-7 pt-5 pb-7">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && canSubmit && create.mutate()}
+            placeholder="Template name — e.g. Hype sticker"
+            autoFocus
+            maxLength={64}
+            className={cn("w-full h-10 px-4 rounded-full text-[13px] focus:outline-none", t.searchPlaceholder)}
+            style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}`, color: t.ink }}
+            data-testid="input-slot-name"
+          />
+          <input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="Short note (optional)"
+            maxLength={140}
+            className={cn("mt-3 w-full h-10 px-4 rounded-full text-[13px] focus:outline-none", t.searchPlaceholder)}
+            style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}`, color: t.ink }}
+            data-testid="input-slot-note"
+          />
+          <div className="mt-5 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className={cn("h-9 px-4 rounded-full text-[13px] font-medium transition-colors", t.hoverWash)}
+              style={{ color: t.subink, border: `1px solid ${t.hairline}` }}
+              data-testid="button-cancel-create-slot"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => create.mutate()}
+              disabled={!canSubmit}
+              className="h-9 px-5 rounded-full inline-flex items-center gap-2 text-[13px] font-semibold text-white disabled:opacity-60"
+              style={{ backgroundColor: t.blue }}
+              data-testid="button-submit-create-slot"
+            >
+              {create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+              Create — then add the file
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -629,6 +810,9 @@ function FilledTile({
   const live = spec.revisions.find((r) => r.status === "certified" || r.status === "pending");
   const historyRevs = spec.revisions.filter((r) => r.status === "superseded" || r.status === "archived");
   const code = spec.templateFileName ?? slot.title;
+  // Task #3065 — one file covering multiple options gets the confirmed
+  // "serves both" note in place of the generic slot note.
+  const note = spec.variantOptions?.length ? variantOptionsNote(spec.variantOptions) : slot.note;
   return (
     <button
       type="button"
@@ -643,7 +827,10 @@ function FilledTile({
         </span>
       </div>
       <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>{slot.title}</div>
-      <div className="mt-1 text-[12.5px]" style={{ color: t.subink }}>{slot.note}</div>
+      <div className="mt-1 text-[12.5px] inline-flex items-center gap-1.5 justify-center" style={{ color: t.subink }} data-testid={`note-${spec.id}`}>
+        {spec.variantOptions?.length ? <Layers className="w-3 h-3 flex-shrink-0" style={{ color: t.blue }} /> : null}
+        {note}
+      </div>
       {live && (
         <div className="mt-0.5 text-[12.5px] tabular-nums" style={{ color: t.subink }} data-testid={`text-rev-${spec.id}`}>
           {live.revLabel}
@@ -736,6 +923,7 @@ export function PressTemplatesIndex({
   const [format, setFormat] = useState<"Vinyl" | "CD" | "Cassette" | "Stickers">("Vinyl");
   const [size, setSize] = useState<"7″" | "10″" | "12″">("12″");
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading, isError, error } = useQuery<TemplatesPayload>({
     queryKey: [`/api/press/${pressId}/templates`],
@@ -744,8 +932,36 @@ export function PressTemplatesIndex({
   const canEdit = data?.canEdit ?? false;
   const specs = data?.specs ?? [];
 
-  const slots: Slot[] =
-    format === "Vinyl" ? VINYL_SLOTS[size] : FORMAT_SLOTS[format];
+  // The DB format the current section maps to (custom slots + create flow).
+  const sectionDbFormat =
+    format === "Vinyl"
+      ? size === "7″"
+        ? "7_inch"
+        : size === "10″"
+          ? "10_inch"
+          : "12_lp"
+      : format === "CD"
+        ? "cd"
+        : format === "Cassette"
+          ? "cassette"
+          : null;
+
+  // Task #3065 — operator-defined slots render after the built-ins.
+  const customSlotToSlot = (c: CustomTemplateSlot): Slot => ({
+    kind: (["jacket", "sleeve", "labels", "booklet"].includes(c.iconKind) ? c.iconKind : "labels") as IconKind,
+    title: c.displayName,
+    note: c.note ?? "Custom template",
+    dbFormat: c.format,
+    componentKey: c.slotKey,
+  });
+  const customSlots = (data?.customSlots ?? [])
+    .filter((c) => c.format === sectionDbFormat)
+    .map(customSlotToSlot);
+
+  const slots: Slot[] = [
+    ...(format === "Vinyl" ? VINYL_SLOTS[size] : FORMAT_SLOTS[format]),
+    ...customSlots,
+  ];
 
   return (
     <div className="w-full" style={{ color: t.ink }}>
@@ -802,8 +1018,10 @@ export function PressTemplatesIndex({
           </div>
         </div>
 
-        <div className="mt-6 flex items-center justify-between gap-4">
-          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.faint }}>{format} · Templates</div>
+        {/* Task #3065 — the "VINYL · TEMPLATES" eyebrow is gone (the page
+            header + format tabs already say where you are); the size pills
+            keep the row. */}
+        <div className="mt-6 flex items-center justify-end gap-4">
           <div className="flex items-center gap-1.5">
             {format === "Vinyl" &&
               (["7″", "10″", "12″"] as const).map((sz) => {
@@ -870,10 +1088,40 @@ export function PressTemplatesIndex({
                 />
               );
             })}
+            {/* Task #3065 — "Create new template": operator-defined slots for
+                this format section (needs an editable role + a real format). */}
+            {canEdit && sectionDbFormat && (
+              <button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                className={cn("rounded-2xl px-6 py-9 flex flex-col items-center justify-center text-center transition-colors", t.tileHover)}
+                style={{ border: `1.5px dashed ${t.dashedBorder}` }}
+                data-testid="tile-create-template"
+              >
+                <span className="w-11 h-11 rounded-full flex items-center justify-center" style={{ border: `1.5px dashed ${t.dashedBorder}` }}>
+                  <Plus className="w-5 h-5" style={{ color: t.faint }} />
+                </span>
+                <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>Create new template</div>
+                <div className="mt-1 text-[12.5px]" style={{ color: t.faint }}>Anything not listed above</div>
+              </button>
+            )}
           </div>
         )}
       </div>
 
+      {createOpen && sectionDbFormat && (
+        <CreateSlotModal
+          t={t}
+          pressId={pressId}
+          dbFormat={sectionDbFormat}
+          onClose={() => setCreateOpen(false)}
+          onCreated={(created) => {
+            setCreateOpen(false);
+            // Hand straight off to the normal upload flow for the new slot.
+            setModal({ slot: customSlotToSlot(created) });
+          }}
+        />
+      )}
       {modal && (
         <UploadModal
           t={t}

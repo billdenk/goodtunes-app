@@ -11954,3 +11954,31 @@ SQL
 }
 create_press_components_table dev  "${DATABASE_URL:-}"
 create_press_components_table prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #3065 — template variant options + custom template slots ──
+# variant_options: option families ONE template file covers (jsonb, display-
+# only). press_custom_template_slots: operator-defined slots per press+format.
+# Idempotent on both DBs (schema-drift guard covers them).
+create_template_variant_custom_slots() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[template-custom-slots] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: template variant/custom-slot DDL ok on $label" \
+    || echo "post-merge: WARNING — template variant/custom-slot DDL failed on $label"
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS variant_options jsonb;
+CREATE TABLE IF NOT EXISTS press_custom_template_slots (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id varchar NOT NULL,
+  format text NOT NULL,
+  slot_key text NOT NULL,
+  display_name text NOT NULL,
+  note text,
+  icon_kind text NOT NULL DEFAULT 'labels',
+  created_by_user_id varchar,
+  created_at timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT press_custom_template_slot_uniq UNIQUE (press_id, format, slot_key)
+);
+SQL
+}
+create_template_variant_custom_slots dev  "${DATABASE_URL:-}"
+create_template_variant_custom_slots prod "${PROD_DATABASE_URL:-}"

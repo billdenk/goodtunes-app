@@ -28,7 +28,15 @@ import {
   measureTemplateSpecRow,
   clearTemplateSpecMeasurements,
   scanTemplateUrl,
+  detectTemplateOptionsForUrl,
 } from "./templateSpecs";
+import {
+  isKnownOptionSet,
+  customSlotKeyFromName,
+  iconKindForSlotName,
+  CUSTOM_SLOT_KEY_RE,
+  type TemplateOption,
+} from "./templateOptions";
 import type { PressTemplateSpec } from "@shared/schema";
 
 // Same closed vocabularies as the admin template-spec routes
@@ -46,13 +54,31 @@ const COMPONENT_VALUES = [
   "sticker",
 ] as const;
 
+// Task #3065 — custom operator-defined slots ride the same spec rows with
+// componentKey "custom_<slug>". The attach route verifies a matching
+// press_custom_template_slots row exists (the vocabulary stays closed per
+// press — a client can't invent arbitrary component keys).
 const attachSchema = z.object({
   format: z.enum(FORMAT_VALUES),
-  componentKey: z.enum(COMPONENT_VALUES),
+  componentKey: z.union([z.enum(COMPONENT_VALUES), z.string().regex(CUSTOM_SLOT_KEY_RE)]),
   variantKey: z.string().max(64).optional().default(""),
   discCount: z.number().int().min(0).max(9).optional().default(0),
   fileUrl: z.string().min(1).max(2048),
   fileName: z.string().max(512).nullable().optional(),
+});
+
+const optionsSchema = z.object({
+  options: z
+    .array(z.object({ key: z.string().min(1).max(48), label: z.string().min(1).max(64) }))
+    .min(2)
+    .max(4)
+    .nullable(),
+});
+
+const createSlotSchema = z.object({
+  format: z.enum(FORMAT_VALUES),
+  name: z.string().trim().min(2).max(64),
+  note: z.string().trim().max(140).optional(),
 });
 
 const testSchema = z.object({
@@ -102,6 +128,43 @@ async function resolveSlotSpec(
   row: PressTemplateSpec,
   opts: { excludeOwnMeasured?: boolean } = {},
 ): Promise<FinishedComponentSpec | null> {
+  // Task #3065 — custom operator-defined slots have no baseline in the
+  // engine's vocabulary; their finished-file checks run against the slot's
+  // OWN geometry (operator-entered artboard first, else measured from the
+  // attached template). No geometry yet → null (route answers 422, never
+  // fabricates a spec).
+  if (row.componentKey.startsWith("custom_")) {
+    const w =
+      row.artboardWInches ??
+      (opts.excludeOwnMeasured ? null : row.measuredArtboardWInches);
+    const h =
+      row.artboardHInches ??
+      (opts.excludeOwnMeasured ? null : row.measuredArtboardHInches);
+    if (w == null || h == null) return null;
+    const bleed =
+      (row.bleedLineInches ?? row.measuredBleedLineInches ?? 0) > 0
+        ? (row.bleedLineInches ?? row.measuredBleedLineInches)!
+        : 0;
+    const slots = await storage.listPressCustomTemplateSlots(press.id);
+    const slot = slots.find((s) => s.format === row.format && s.slotKey === row.componentKey);
+    const pressRules = sanitizePrintRules((press as any).printRules ?? null);
+    const rowRules = sanitizePrintRules(row.printRules ?? null);
+    return {
+      id: row.componentKey,
+      label: slot?.displayName ?? "Custom template",
+      templatePageInches: { w, h },
+      finishedInches: { w: Math.max(0.1, w - 2 * bleed), h: Math.max(0.1, h - 2 * bleed) },
+      bleedInches: bleed,
+      expectedPages: row.expectedPages ?? row.measuredPages ?? 0,
+      color: row.color === "cmyk-or-pms" ? "cmyk-or-pms" : "process-4c",
+      minPpi: row.minPpi ?? null,
+      templateFileUrl: row.templateFileUrl ?? null,
+      printRules: rowRules ?? pressRules ?? null,
+      pressName: press.name ?? null,
+      sizeSource: row.artboardWInches != null ? "operator" : "measured",
+      measuredFromLabel: row.artboardWInches != null ? null : press.name,
+    } as FinishedComponentSpec;
+  }
   // Name-matched presses (MRP/Hellbender/PMP/Viryl) get their measured
   // vendor baseline; any other press falls back to the "generic" vendor
   // baseline — its own catalog rows (storeRows) still override per field,
@@ -272,8 +335,11 @@ export function registerPressTemplateFlowRoutes(
     ]);
     const { pressUserCanEdit } = await import("./auth/partnerPermissions");
     const canEdit = await pressUserCanEdit(req.session.userId!, pressId);
+    // Task #3065 — operator-defined slots render alongside the built-ins.
+    const customSlots = await storage.listPressCustomTemplateSlots(pressId);
     res.json({
       canEdit,
+      customSlots,
       specs: specs.map((s) => ({
         ...s,
         revisions: revisions.filter((r) => r.specId === s.id),
@@ -300,6 +366,15 @@ export function registerPressTemplateFlowRoutes(
         return res
           .status(400)
           .json({ message: "Upload the file or paste an https:// link." });
+      }
+      // Task #3065 — a custom componentKey must match one of this press's
+      // defined custom slots for the same format (vocabulary stays closed).
+      if (d.componentKey.startsWith("custom_")) {
+        const slots = await storage.listPressCustomTemplateSlots(pressId);
+        const slot = slots.find((s) => s.format === d.format && s.slotKey === d.componentKey);
+        if (!slot) {
+          return res.status(400).json({ message: "Unknown custom template slot — create it first." });
+        }
       }
       // Non-jacket components carry no variant (mirrors the admin route).
       const variantKey = d.componentKey === "jacket" ? d.variantKey : "";
@@ -352,7 +427,107 @@ export function registerPressTemplateFlowRoutes(
         revision.id,
         `Superseded ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
       );
-      res.json({ spec: measured, revision });
+
+      // Task #3065 — option detection: does this ONE file draw multiple
+      // physical options (small vs large hole)? Best-effort text scan of
+      // our own stored file; conservative (all options of a family must be
+      // mentioned). Nothing persists without the operator confirming:
+      //   • detected + not yet stamped → detectedOptions rides the response
+      //     (the client offers the confirm prompt);
+      //   • already stamped + still detected → keep the stamp (a replace
+      //     doesn't nag again);
+      //   • already stamped + no longer detected → clear (the new file
+      //     doesn't cover both options anymore — honest reset).
+      let detectedOptions: TemplateOption[] = [];
+      let specOut = measured;
+      try {
+        const detected = await detectTemplateOptionsForUrl(d.fileUrl);
+        const prior = (existing?.variantOptions ?? null) as TemplateOption[] | null;
+        if (prior?.length) {
+          const same =
+            detected.length === prior.length && prior.every((p) => detected.some((o) => o.key === p.key));
+          if (!same) {
+            specOut = (await storage.updatePressTemplateSpecVariantOptions(pressId, spec.id, null)) ?? specOut;
+            if (detected.length) detectedOptions = detected;
+          }
+        } else if (detected.length) {
+          detectedOptions = detected;
+        }
+      } catch (e: any) {
+        console.error("[template-options] attach detection failed:", e?.message ?? e);
+      }
+      res.json({ spec: specOut, revision, detectedOptions });
+    },
+  );
+
+  // POST /api/press/:id/templates/:specId/options — stamp (or clear) the
+  // option set this one template file covers, after the operator confirms
+  // the detection prompt. Only known option families are accepted.
+  app.post(
+    "/api/press/:id/templates/:specId/options",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const body = optionsSchema.safeParse(req.body);
+      if (!body.success) return res.status(400).json({ message: body.error.message });
+      const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+      if (!spec) return res.status(404).json({ message: "Template slot not found" });
+      if (body.data.options && !spec.templateFileUrl) {
+        return res.status(409).json({ message: "This slot has no live template file." });
+      }
+      if (body.data.options && !isKnownOptionSet(body.data.options)) {
+        return res.status(400).json({ message: "Unknown option set." });
+      }
+      const updated = await storage.updatePressTemplateSpecVariantOptions(
+        pressId,
+        spec.id,
+        body.data.options,
+      );
+      res.json({ spec: updated });
+    },
+  );
+
+  // POST /api/press/:id/templates/custom-slots — define a new template slot
+  // for a format ("Create new template" tile). The slot key is minted from
+  // the name; the icon is auto-assigned. Uploading then rides the normal
+  // attach flow with componentKey = slotKey.
+  app.post(
+    "/api/press/:id/templates/custom-slots",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const body = createSlotSchema.safeParse(req.body);
+      if (!body.success) return res.status(400).json({ message: body.error.message });
+      const d = body.data;
+      const existing = await storage.listPressCustomTemplateSlots(pressId);
+      // Reject names that collide with an existing custom slot in the format.
+      let slotKey = customSlotKeyFromName(d.name);
+      const inFormat = existing.filter((s) => s.format === d.format);
+      if (inFormat.some((s) => s.displayName.trim().toLowerCase() === d.name.trim().toLowerCase())) {
+        return res.status(409).json({ message: "A template with that name already exists in this format." });
+      }
+      if (inFormat.some((s) => s.slotKey === slotKey)) {
+        for (let i = 2; i < 50; i++) {
+          if (!inFormat.some((s) => s.slotKey === `${slotKey}_${i}`)) {
+            slotKey = `${slotKey}_${i}`;
+            break;
+          }
+        }
+      }
+      const slot = await storage.createPressCustomTemplateSlot({
+        pressId,
+        format: d.format,
+        slotKey,
+        displayName: d.name.trim(),
+        note: d.note?.trim() || null,
+        iconKind: iconKindForSlotName(d.name),
+        createdByUserId: req.session.userId ?? null,
+      });
+      res.json({ slot });
     },
   );
 

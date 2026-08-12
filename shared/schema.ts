@@ -2708,6 +2708,13 @@ export const pressTemplateSpecs = pgTable(
     // shared/vendorSpecs.ts PressPrintRules. Null = inherit the press-level
     // defaults (manufacturers.print_rules) / today's behavior.
     printRules: jsonb("print_rules").$type<Record<string, unknown>>(),
+    // Task #3065 — option families this ONE template file covers (e.g. a 7″
+    // center-label template drawing both the small spindle hole and the large
+    // 45 hole). Detected from the template's own text at attach time and
+    // stamped only after the operator confirms; shape [{ key, label }].
+    // Null/empty = single-option template (today's behavior). Display-only —
+    // never feeds measurements or checks (the file is one file either way).
+    variantOptions: jsonb("variant_options").$type<Array<{ key: string; label: string }>>(),
     updatedByUserId: varchar("updated_by_user_id"),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -2774,6 +2781,33 @@ export const pressTemplateTestRuns = pgTable("press_template_test_runs", {
   certifiedAt: timestamp("certified_at"),
 });
 export type PressTemplateTestRun = typeof pressTemplateTestRuns.$inferSelect;
+
+// Task #3065 — operator-defined template slots. The built-in slot vocabulary
+// (jacket/labels/inner_sleeve/…) is hardcoded in code; this table lets a press
+// define additional slots per format ("Create new template" tile) without a
+// code change. Each custom slot's spec row lives in press_template_specs with
+// componentKey = slot_key ("custom_<slug>") — revisions, test runs and
+// certification all ride the exact same rails as built-in slots. icon_kind is
+// one of the four die-line icons (jacket | sleeve | labels | booklet),
+// auto-assigned from the name at create time.
+export const pressCustomTemplateSlots = pgTable(
+  "press_custom_template_slots",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    pressId: varchar("press_id").notNull(),
+    format: text("format").notNull(),
+    slotKey: text("slot_key").notNull(), // "custom_<slug>" — the spec row's componentKey
+    displayName: text("display_name").notNull(),
+    note: text("note"),
+    iconKind: text("icon_kind").notNull().default("labels"),
+    createdByUserId: varchar("created_by_user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    pressCustomSlotUniq: unique("press_custom_template_slot_uniq").on(t.pressId, t.format, t.slotKey),
+  }),
+);
+export type PressCustomTemplateSlot = typeof pressCustomTemplateSlots.$inferSelect;
 
 // Press Components (handoff/press-components, 2026-08-12) — the per-press
 // component setup surfaces (Vinyl color setup, Center labels, Stickers,

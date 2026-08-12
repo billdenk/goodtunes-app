@@ -13,6 +13,7 @@ import {
   type CompletedPdfScan,
 } from "./validators/completedTemplate";
 import { ObjectStorageService } from "./replit_integrations/object_storage/objectStorage";
+import { detectOptionsInText, type TemplateOption } from "./templateOptions";
 
 const objectStorage = new ObjectStorageService();
 
@@ -100,6 +101,49 @@ export async function measureTemplateSpecRow(pressId: string, specId: string): P
       measuredAt: new Date(),
       measuredError: error ?? "Couldn't measure this template.",
     });
+  }
+}
+
+// Task #3065 — extract the template PDF's text (pdftotext) and detect
+// option-family wording ("small hole" / "large hole"). Only runs against
+// files in OUR object storage (`/objects/uploads/<id>`) — pasted external
+// https templates skip detection (no SSRF surface, conservative: no prompt).
+// Best-effort: any failure returns [] and never blocks the attach.
+const DETECT_MAX_SOURCE_BYTES = 300 * 1024 * 1024;
+
+export async function detectTemplateOptionsForUrl(url: string): Promise<TemplateOption[]> {
+  if (!url?.startsWith("/objects/uploads/")) return [];
+  const fsp = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const run = promisify(execFile);
+  let tmpDir: string | null = null;
+  try {
+    const file = await objectStorage.getObjectEntityFile(url);
+    const [meta] = await file.getMetadata();
+    const size = Number(meta?.size ?? 0);
+    if (!Number.isFinite(size) || size <= 0 || size > DETECT_MAX_SOURCE_BYTES) return [];
+    tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "template-options-"));
+    const pdfPath = path.join(tmpDir, "src.pdf");
+    await file.download({ destination: pdfPath });
+    const { stdout } = await run("pdftotext", ["-q", pdfPath, "-"], {
+      timeout: 30_000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return detectOptionsInText(stdout);
+  } catch (e: any) {
+    console.error("[template-options] detection failed:", e?.message ?? e);
+    return [];
+  } finally {
+    if (tmpDir) {
+      try {
+        await (await import("node:fs/promises")).rm(tmpDir, { recursive: true, force: true });
+      } catch {
+        /* non-fatal */
+      }
+    }
   }
 }
 
