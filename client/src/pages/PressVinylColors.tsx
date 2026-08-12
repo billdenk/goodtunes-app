@@ -129,7 +129,7 @@ function PressDiscLabel({
         overflow: "hidden",
       }}
     >
-      {logoUrl && size >= 18 && (
+      {logoUrl && size >= 11 && (
         <img
           src={logoUrl}
           alt=""
@@ -319,16 +319,36 @@ function DiscStage({
 }
 
 // Glossy round color ball — photo swatches show the photo, hex a gradient ball.
-export function ColorBall({ color, size = 40 }: { color: CatalogColor; size?: number }) {
+export function ColorBall({
+  color,
+  size = 40,
+  labelLogoUrl,
+  labelBgColor,
+}: {
+  color: CatalogColor;
+  size?: number;
+  // When the caller supplies the press's brand label (logo + bg), photo-based
+  // balls get the same rendered press label the full VinylDisc wears — the
+  // source photos carry their OWN labels (whatever the press's site photo
+  // showed), which otherwise leaks a foreign or blank mark onto the thumbnail.
+  labelLogoUrl?: string | null;
+  labelBgColor?: string | null;
+}) {
   const photo = color.swatchThumbUrl || color.swatchImageUrl;
   const dark = useAdminDark();
+  const branded = photo && labelLogoUrl !== undefined;
   return (
     <span
       className="relative block rounded-full overflow-hidden"
       style={{ width: size, height: size, boxShadow: dark ? DISC_RIM : "0 0 0 1px rgba(15,23,42,0.10)" }}
     >
       {photo ? (
-        <img src={photo} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover rounded-full" />
+        <>
+          <img src={photo} alt="" aria-hidden className="absolute inset-0 w-full h-full object-cover rounded-full" />
+          {branded && (
+            <PressDiscLabel size={size * (368 / 1104)} logoUrl={labelLogoUrl ?? null} bgColor={labelBgColor ?? null} />
+          )}
+        </>
       ) : (
         <span
           className="absolute inset-0 rounded-full"
@@ -1309,7 +1329,7 @@ export function PressVinylColors({
                           style={{ padding: 12, minHeight: 108, border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
                         >
                           <span className="relative">
-                            <ColorBall color={c} size={40} />
+                            <ColorBall color={c} size={40} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
                             {on && <Check className="absolute inset-0 m-auto w-4 h-4 text-white drop-shadow" strokeWidth={3} />}
                           </span>
                           <span className="text-[11.5px] font-semibold text-center leading-tight" style={{ color: on ? BLUE : INK }}>

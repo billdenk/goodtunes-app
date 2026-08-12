@@ -404,10 +404,14 @@ function ColorCards({
   colors,
   value,
   onChange,
+  labelLogoUrl,
+  labelBgColor,
 }: {
   colors: CatalogColor[];
   value: string | null;
   onChange: (id: string) => void;
+  labelLogoUrl: string | null;
+  labelBgColor: string | null;
 }) {
   return (
     <div className="grid grid-cols-4 gap-3" style={{ marginTop: 14 }}>
@@ -424,7 +428,7 @@ function ColorCards({
             style={{ backgroundColor: CARD, padding: "16px 10px 12px", border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
           >
             <div className="relative flex justify-center" style={{ marginBottom: 8 }}>
-              <ColorBall color={c} size={48} />
+              <ColorBall color={c} size={48} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
               {on && (
                 <span
                   className="absolute flex items-center justify-center rounded-full"
@@ -945,7 +949,7 @@ export function PressAlbumPackageBuilder({
   const press = invited?.press ?? invited?.effectivePress ?? null;
   // Label branding for the disc center — the invited-press payload doesn't
   // carry it, so pull the full press row (same source the catalog page uses).
-  const { data: pressRow } = useQuery<{ labelLogoUrl?: string | null; labelBgColor?: string | null; vinylPlaceholderUrl?: string | null }>({
+  const { data: pressRow } = useQuery<{ labelLogoUrl?: string | null; labelBgColor?: string | null; vinylPlaceholderUrl?: string | null; logoUrl?: string | null }>({
     queryKey: ["/api/manufacturers", press?.id],
     queryFn: async () => {
       const r = await apiRequest("GET", `/api/manufacturers/${press!.id}`);
@@ -953,7 +957,9 @@ export function PressAlbumPackageBuilder({
     },
     enabled: !!press?.id,
   });
-  const labelLogoUrl = pressRow?.labelLogoUrl ?? null;
+  // Same fallback the catalog page uses: a press without a dedicated label
+  // logo (e.g. Hellbender) still shows its main mark on disc labels.
+  const labelLogoUrl = pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? null;
   const labelBgColor = pressRow?.labelBgColor ?? null;
 
   // Vinyl formats the press actually offers, in canon order.
@@ -1286,6 +1292,8 @@ export function PressAlbumPackageBuilder({
             <ColorCards
               colors={activeTier?.colors ?? []}
               value={selectedColor?.id ?? null}
+              labelLogoUrl={labelLogoUrl}
+              labelBgColor={labelBgColor}
               onChange={(id) => {
                 if (activeTier) setColorSel((p) => ({ ...p, [activeTier.id]: id }));
                 markDirty();

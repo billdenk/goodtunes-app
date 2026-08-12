@@ -3368,7 +3368,7 @@ export function PressPackagePricingCatalog({
                             </div>
                           )}
                           <div className="relative flex justify-center" style={{ marginBottom: 8 }}>
-                            <ColorBall color={c} size={48} />
+                            <ColorBall color={c} size={48} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
                             {on && (
                               <span
                                 className="absolute flex items-center justify-center rounded-full"
