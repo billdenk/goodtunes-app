@@ -2,6 +2,8 @@
 name: Stuck task merge — apply manually from local git history
 description: When "Apply changes" bounces back to Ready-for-review repeatedly, the task's commit is usually already fetched locally and can be cherry-picked onto main.
 ---
+Update (Aug 2026, mass-bounce day): a bounced Apply usually deposits the task branch locally as a LOCAL branch named `subrepl-*` (find via `git for-each-ref --sort=-committerdate refs/heads`) — but not always; if absent, have the user click Apply once more just to fetch it. Never `git fetch --all` (dead subrepl remotes hang on a password prompt). After a `git merge --squash`, resolve STATUS.md conflicts by hand and grep marker-count==0 BEFORE committing (leaked `=======`/`>>>>>>>` into a pushed commit once).
+
 The rule: when a task-merge card bounces "Apply changes" → merging → back to "Ready for review" several times (and post-merge runtime is well under its timeout), stop retrying the platform merge and apply it by hand: the task branch's commit is usually already in the local object store (fetched via a `subrepl-*` remote). Find it with `git log --all --oneline -- <touched file>` or by commit message, then `git cherry-pick <sha>` onto main (use `-c user.name/-c user.email`; identity is unset).
 
 **Why:** three bounce attempts (Aug 2026, artwork-template task) with no error surfaced, post-merge healthy at 214s/600s — cherry-pick + `runPostMergeSetup()` applied everything cleanly in minutes.
