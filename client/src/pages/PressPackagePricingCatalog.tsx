@@ -2692,8 +2692,11 @@ export function PressPackagePricingCatalog({
         <div>
           <div>
             <div className="flex items-center gap-4">
+              {/* Per Bill (2026-08-11): this page now lives under the left-rail
+                  "GoodTunes Packages" item (Catalog is the parent section), so
+                  the page title matches the rail label instead of "Catalog". */}
               <h1 className="tracking-tight" style={{ color: INK, fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
-                Catalog
+                GoodTunes Packages
               </h1>
               {sectionPulldown}
             </div>
