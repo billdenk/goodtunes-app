@@ -190,7 +190,12 @@ function Waveform({ h, bar, color = '#ffffff' }: { h: number; bar: number; color
 // = matte cardboard wallet with a soft printed edge. ─────────────────────
 function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print: Print; spots: string[]; logoUrl: string | null }) {
   const S = 260; // case footprint
-  const jewel = caseName === 'Jewel case';
+  // Jewel-case render parked (Bill, 2026-08-11): the CSS-built jewel case
+  // didn't read as a real product, so BOTH cases draw the sleeve/wallet
+  // visual until a proper jewel-case asset arrives. Copy (caption, booklet
+  // step, "booklet and tray card included") still follows the real choice —
+  // only this render is unified. Flip back by restoring the caseName check.
+  const jewel = false as boolean; void caseName;
   const silk = print.name === 'Silkscreen';
   // Silkscreen inks band the white disc: first pick owns the disc, each
   // extra pick pushes the earlier ones out into rings (outermost = first).
