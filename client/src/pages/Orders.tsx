@@ -110,6 +110,10 @@ type OrderRow = {
     jacketUpgrade?: JacketUpgrade | null;
   }[];
   gift: GiftInfo | null;
+  // Task #3029 — server-computed gift eligibility: paid, un-gifted,
+  // single-copy, within the post-purchase gifting window. Drives the
+  // "Give as a gift" action so the client never re-derives window rules.
+  giftable?: boolean;
   // Task #2063 — one entitlement per physical copy, each carrying its own
   // per-copy gift (if any). Present on multi-quantity orders; the per-copy
   // gift UI renders only when the WHOLE order isn't itself a gift.
@@ -483,6 +487,14 @@ export function Orders() {
                   </div>
                 )}
 
+                {/* Task #3029 — paid, single-copy, un-gifted order within the
+                    gifting window: offer "Give as a gift" right from Orders.
+                    On success the list refetches and this swaps into the
+                    gift-management controls below. */}
+                {o.giftable && !o.gift && (o.copies?.length ?? 0) < 2 && giftEnabled && (
+                  <OrderGiftCreateCard order={o} />
+                )}
+
                 {g && g.isBuyer && giftEnabled && (
                   <div className="mt-3 pt-3 border-t border-white/10" data-testid={`gift-controls-${o.id}`}>
                     <div className="text-[12px] text-fan-secondary leading-snug">
@@ -577,6 +589,150 @@ export function Orders() {
         <BottomNav />
       </section>
     </main>
+  );
+}
+
+// ─────────────────────── Give-as-a-gift card (Task #3029) ─────────────
+// Renders on paid, single-copy, un-gifted orders inside the gifting window
+// (server-flagged via `giftable`). Mirrors the post-purchase Welcome flow's
+// recipient form: name + email-or-phone + optional message → POST
+// /api/orders/:id/gift. On success the orders list refetches, so the row
+// swaps into the existing gift-management controls (copy link / resend /
+// change recipient / cancel).
+const GIFT_FIELD =
+  "rounded-lg bg-[color:var(--fan-surface-strong)] border border-[color:var(--fan-field-border)] text-sm text-fan-primary outline-none focus:border-[color:var(--brand-blue)]";
+
+function OrderGiftCreateCard({ order }: { order: OrderRow }) {
+  const { toast } = useToast();
+  const [creating, setCreating] = useState(false);
+  const [first, setFirst] = useState("");
+  const [last, setLast] = useState("");
+  const [contactKind, setContactKind] = useState<"email" | "phone">("email");
+  const [contact, setContact] = useState("");
+  const [message, setMessage] = useState("");
+
+  const createGift = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/orders/${order.id}/gift`, {
+        firstName: first.trim(),
+        lastName: last.trim(),
+        email: contactKind === "email" ? contact.trim() : "",
+        phone: contactKind === "phone" ? contact.trim() : "",
+        message: message.trim() || null,
+      });
+      return (await r.json()) as { shareUrl: string };
+    },
+    onSuccess: async (res) => {
+      // Same event as the Welcome flow / recipient-change path — this is the
+      // moment a paid order actually becomes a gift to a real person.
+      track("gift_initiated", { orderId: order.id });
+      setCreating(false);
+      setFirst(""); setLast(""); setContact(""); setMessage("");
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      try {
+        await navigator.clipboard.writeText(res.shareUrl);
+        toast({ title: "Gift link ready · copied", description: "Send it to your recipient." });
+      } catch {
+        toast({ title: "Gift link ready", description: res.shareUrl });
+      }
+    },
+    onError: (e: any) => toast({ title: "Couldn't create gift", description: e?.message, variant: "destructive" }),
+  });
+
+  function submitCreate() {
+    if (!first.trim() || !last.trim()) {
+      toast({ title: "Add the recipient's name", variant: "destructive" });
+      return;
+    }
+    if (!contact.trim()) {
+      toast({ title: `Add the recipient's ${contactKind}`, variant: "destructive" });
+      return;
+    }
+    createGift.mutate();
+  }
+
+  return (
+    <div className="mt-3 pt-3 border-t border-white/10" data-testid={`gift-create-${order.id}`}>
+      {!creating ? (
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[color:var(--brand-pink-soft)] text-[color:var(--brand-pink)] hover:bg-[color:var(--brand-pink-soft-hover)]"
+          data-testid={`button-give-gift-${order.id}`}
+        >
+          <Gift className="w-3.5 h-3.5" /> Give as a gift
+        </button>
+      ) : (
+        <div className="space-y-2">
+          <div className="text-xs text-fan-secondary">
+            Gift this album — the recipient claims it with a one-time link.
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={first}
+              onChange={(e) => setFirst(e.target.value)}
+              placeholder="First name"
+              className={`min-w-0 flex-1 px-3 py-2 placeholder:text-fan-secondary/60 ${GIFT_FIELD}`}
+              data-testid={`input-gift-first-${order.id}`}
+            />
+            <input
+              value={last}
+              onChange={(e) => setLast(e.target.value)}
+              placeholder="Last name"
+              className={`min-w-0 flex-1 px-3 py-2 placeholder:text-fan-secondary/60 ${GIFT_FIELD}`}
+              data-testid={`input-gift-last-${order.id}`}
+            />
+          </div>
+          <div className="flex gap-2">
+            <select
+              value={contactKind}
+              onChange={(e) => setContactKind(e.target.value as "email" | "phone")}
+              className={`px-2 py-2 ${GIFT_FIELD}`}
+              data-testid={`select-gift-contact-kind-${order.id}`}
+            >
+              <option value="email">Email</option>
+              <option value="phone">Phone</option>
+            </select>
+            <input
+              type={contactKind === "email" ? "email" : "tel"}
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
+              placeholder={contactKind === "email" ? "recipient@email.com" : "Phone number"}
+              className={`min-w-0 flex-1 px-3 py-2 placeholder:text-fan-secondary/60 ${GIFT_FIELD}`}
+              data-testid={`input-gift-contact-${order.id}`}
+            />
+          </div>
+          <textarea
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="Add a personal message (optional)"
+            rows={2}
+            maxLength={500}
+            className={`w-full px-3 py-2 placeholder:text-fan-secondary/60 resize-none ${GIFT_FIELD}`}
+            data-testid={`input-gift-message-${order.id}`}
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={submitCreate}
+              disabled={createGift.isPending}
+              className="px-3 py-1.5 rounded-full text-xs font-semibold bg-[color:var(--brand-pink)] text-white hover:opacity-90 disabled:opacity-50"
+              data-testid={`button-submit-gift-${order.id}`}
+            >
+              {createGift.isPending ? "Creating…" : "Create gift link"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreating(false)}
+              className="px-3 py-1.5 rounded-full text-xs font-medium bg-[color:var(--fan-surface-strong)] text-fan-secondary hover:bg-[color:var(--brand-blue-soft)]"
+              data-testid={`button-cancel-gift-${order.id}`}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

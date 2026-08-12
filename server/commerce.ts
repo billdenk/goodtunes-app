@@ -3620,7 +3620,10 @@ export function registerCommerceRoutes(app: Express) {
     // Task #2063 — whole-order gift (copyId IS NULL) and per-copy gifts are
     // loaded separately so a per-copy gift never masquerades as the legacy
     // order-level gift pill.
-    const { loadGiftForOrders, loadCopyGiftsForOrders, serializeGiftForBuyer } = await import("./gifts");
+    const { loadGiftForOrders, loadCopyGiftsForOrders, serializeGiftForBuyer, getGiftingWindowDays } = await import("./gifts");
+    // Task #3029 — surface per-order gift eligibility so the Orders page can
+    // show "Give as a gift" without re-deriving the window rule client-side.
+    const giftWindowMs = (await getGiftingWindowDays()) * 24 * 60 * 60 * 1000;
     const giftByOrder = await loadGiftForOrders(orderIds);
     const copyGiftsByOrder = await loadCopyGiftsForOrders(orderIds);
     const copyRows = orderIds.length > 0
@@ -3658,6 +3661,16 @@ export function registerCommerceRoutes(app: Express) {
           const cg = giftByCopy.get(c.id);
           return { ...c, gift: cg ? serializeGiftForBuyer(cg, a.userId) : null };
         });
+        // Task #3029 — a paid, un-gifted, single-copy order (that the viewer
+        // actually owns) is giftable while the post-purchase window is open.
+        // Multi-copy orders keep their per-copy gifting UI instead.
+        const giftable =
+          r.order.status === "paid" &&
+          r.order.customerId === a.userId &&
+          !g &&
+          copyGifts.length === 0 &&
+          copies.length < 2 &&
+          Date.now() - new Date(r.order.createdAt as unknown as string).getTime() <= giftWindowMs;
         return {
           ...r.order,
           albumTitle: r.album.title,
@@ -3668,6 +3681,7 @@ export function registerCommerceRoutes(app: Express) {
           items: await getOrderItems(r.order.id),
           copies,
           gift: g ? serializeGiftForBuyer(g, a.userId) : null,
+          giftable,
         };
       }),
     );

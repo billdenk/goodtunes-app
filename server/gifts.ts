@@ -136,7 +136,9 @@ async function lookupRecipientUserId(email: string | null, phone: string | null)
   return null;
 }
 
-async function getGiftingWindowDays(): Promise<number> {
+// Exported so /api/orders can flag which orders are still giftable without
+// re-deriving window rules client-side (Task #3029).
+export async function getGiftingWindowDays(): Promise<number> {
   try {
     const [row] = await db.select().from(payoutSettings).where(eq(payoutSettings.id, "default")).limit(1);
     const v = (row as any)?.giftingWindowDays;
