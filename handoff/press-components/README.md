@@ -35,6 +35,29 @@ each `.tsx` as-is, then wire data. The rendering is the spec.
    everywhere — header, intro copy, and the center label on every rendered
    disc (Hellbender sees the rune mark, never Memphis's skyline).
 
+## Build order
+
+Press side + super admin ship first. The artist choosers in this folder are
+future-state reference — do not wire them up yet. Sequence: components live →
+presses fill in content → component pricing scaffolding → (quote builder and
+artist flow come later, separately briefed).
+
+## Pricing (part of this build)
+
+Pricing is by **component**, and it ships with the components:
+
+- Each component gets its own pricing surface: per type / color / size /
+  category, with quantity-break columns (the structure in the Catalog Pricing
+  mocks).
+- **Seed the rows, leave the cells empty.** The types, colors, and categories
+  a press already has (imported from their GoodTunes Packages per rule 2)
+  auto-populate the pricing rows — but component pricing is a different model
+  from package pricing, so no numbers are copied over. Presses fill in their
+  own component prices.
+- **Package pricing is never touched** (rule 1 applies here too). A press's
+  GoodTunes Package prices stay exactly as they are; component pricing lives
+  alongside, not instead.
+
 ## Templates follow-through
 
 Previously uploaded template PDFs should be auto-imported onto the Templates
