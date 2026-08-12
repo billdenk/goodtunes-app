@@ -10656,6 +10656,91 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<span className=\"mb-1.5 block whitespace-nowrap text-[11.5px] font-medium text-[var(--apple-faint)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "\"w-full min-w-0 flex-1 bg-transparent text-[13px] text-[var(--apple-ink)] outline-none placeholder:text-[var(--apple-faint)]\";"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<h2 className=\"text-[17px] font-semibold tracking-[-0.01em] text-[var(--apple-ink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "className=\"h-9 rounded-full bg-[var(--apple-blue)] px-6 text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-medium text-[var(--apple-ink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<div className=\"mx-auto mt-1 max-w-md text-[12px] text-[var(--apple-subink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<span className=\"w-4 flex-shrink-0 text-right text-[12.5px] tabular-nums text-[var(--apple-faint)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<p className=\"truncate text-[13.5px] font-semibold text-[var(--apple-ink)]\" data-testid={`result-name-${r.pressId}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<span className=\"ml-2.5 inline-flex items-center gap-1.5 align-middle text-[11px] font-medium text-[var(--apple-blue)]\" data-testid=\"badge-best-match\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<p className=\"mt-0.5 truncate text-[12px] text-[var(--apple-faint)]\" title={fitNote(r)}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<span className=\"flex-shrink-0 text-[12.5px] tabular-nums text-[var(--apple-subink)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<span className=\"min-w-[84px] flex-shrink-0 whitespace-nowrap text-right text-[13px] font-semibold tabular-nums text-[var(--apple-ink)]\" data-testid={`result-price-${r.pressId}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "className=\"flex-shrink-0 text-[12.5px] font-medium text-[var(--apple-blue)] transition-opacity hover:opacity-80\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-faint)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<span className=\"truncate text-[12.5px] font-medium text-[var(--apple-subink)]\">{r.name}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<span className=\"flex-shrink-0 text-[11.5px] text-[var(--apple-faint)]\">{r.failedHard.join(\" · \")}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/FindAPressModal.tsx",
+    "snippet": "<p className=\"mt-3.5 text-[11.5px] text-[var(--apple-faint)]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/GoodDeedServicesTab.tsx",
     "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">GoodDeed pricing</h2>"
   },
@@ -19403,16 +19488,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPressingOrders.tsx",
     "snippet": "strong ? \"text-[13.5px] font-semibold text-[var(--apple-ink)]\" : \"text-[12.5px] text-[var(--apple-ink)]\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPressMatch.tsx",
-    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\" data-testid=\"text-match-count\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminPressMatch.tsx",
-    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">"
   },
   {
     "rule": "admin-link-missing-shared-treatment",

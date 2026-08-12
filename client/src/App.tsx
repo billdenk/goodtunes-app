@@ -77,7 +77,6 @@ import { AdminManagers } from "@/pages/AdminManagers";
 import { AdminManager } from "@/pages/AdminManager";
 import { AdminManufacturers } from "@/pages/AdminManufacturers";
 import { AdminManufacturer } from "@/pages/AdminManufacturer";
-import { AdminPressMatch } from "@/pages/AdminPressMatch";
 import { AdminFulfillmentPartners } from "@/pages/AdminFulfillmentPartners";
 import { AdminFulfillmentPartner } from "@/pages/AdminFulfillmentPartner";
 import { Welcome } from "@/pages/Welcome";
@@ -1110,8 +1109,10 @@ function Router() {
         <Route path="/admin/manufacturers">
           <ProtectedRoute component={AdminManufacturers} />
         </Route>
+        {/* Task #3041 — Find-a-press moved into an Advanced modal on the
+            Presses page; the old standalone page redirects there. */}
         <Route path="/admin/press-match">
-          <ProtectedRoute component={AdminPressMatch} />
+          <Redirect to="/admin/manufacturers" />
         </Route>
         <Route path="/admin/fulfillment-partners/:id">
           <ProtectedRoute component={AdminFulfillmentPartner} />

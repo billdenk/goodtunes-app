@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Search, Factory, Clock, Loader2, X, Disc3, BadgeCheck, Truck } from "lucide-react";
+import { Search, Factory, Clock, Loader2, X, Disc3, BadgeCheck, Truck, SlidersHorizontal } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { pressTurnaroundLabel } from "@/lib/pressTurnaround";
 import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
@@ -12,6 +12,7 @@ import { ErrorState } from "@/components/admin/AdminErrorBoundary";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminPressesDashboard } from "@/components/admin/AdminPressesDashboard";
+import { FindAPressModal } from "@/components/admin/FindAPressModal";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { ViewModeToggle, useViewMode } from "@/components/admin/ViewModeToggle";
 import { SegmentedPillToggle } from "@/components/admin/SegmentedPillToggle";
@@ -108,6 +109,15 @@ export function AdminManufacturers() {
   // rows from the others. Fulfillment stays its own nav, so the segmented
   // control only offers All / Vinyl / GoodDeeds here.
   const [capFilter, setCapFilter] = useState<"all" | "vinyl" | "gooddeed">("all");
+  // Task #3041 — "Find a press" advanced-search modal (relocated from the
+  // retired /admin/press-match rail page). The backing API is super-admin
+  // only, so the Advanced button hides for everyone else.
+  const [findOpen, setFindOpen] = useState(false);
+  const { data: roleInfo } = useQuery<{ role: string }>({
+    queryKey: ["/api/me/role"],
+    enabled: !!user?.isAdmin,
+  });
+  const isSuperAdmin = roleInfo?.role === "super_admin";
   const [addOpen, setAddOpen] = useState(false);
   const [draftInput, setDraftInput] = useState("");
   const [pasteError, setPasteError] = useState<string | null>(null);
@@ -286,6 +296,19 @@ export function AdminManufacturers() {
                   <Search className="w-4 h-4" />
                 </button>
               )}
+              {/* Task #3041 — quiet outline "Advanced" opens the
+                  Find-a-press spec modal (super-admin only). */}
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setFindOpen(true)}
+                  className="h-8 px-3 rounded-full text-xs font-medium inline-flex items-center gap-1.5 border border-[var(--apple-hairline)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] transition-colors"
+                  data-testid="button-advanced-search"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-[var(--apple-faint)]" />
+                  Advanced
+                </button>
+              )}
               {/* Task #916 — capability filter (All / Vinyl / GoodDeeds).
                   slate-100 segmented control, matching ViewModeToggle. */}
               <SegmentedPillToggle
@@ -350,6 +373,8 @@ export function AdminManufacturers() {
         )}
         </>)}
       </div>
+
+      {isSuperAdmin && <FindAPressModal open={findOpen} onClose={() => setFindOpen(false)} />}
 
       <Dialog
         open={addOpen}
