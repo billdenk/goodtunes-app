@@ -331,8 +331,11 @@ export function PressGoodDeedPricingComponent({
           </p>
         </section>
 
-        {/* RIGHT — how batches work (quiet explainer) */}
-        <aside className="rounded-2xl self-start" style={{ marginTop: 77, padding: "22px 24px", border: `1px solid ${t.hairline}`, backgroundColor: t.card }}>
+        {/* RIGHT — how batches work (quiet explainer). Wrapped so the card can
+            stretch to match the left table's bottom edge, with the fine print
+            sitting below the card like the left column's minimum note. */}
+        <div className="self-stretch flex flex-col min-w-0" style={{ marginTop: 77 }}>
+        <aside className="rounded-2xl flex-1" style={{ padding: "22px 24px", border: `1px solid ${t.hairline}`, backgroundColor: t.card }}>
           <h3 className="text-[15px] font-semibold tracking-tight" style={{ color: t.ink }}>How a batch works.</h3>
           <ol style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 14 }}>
             {[
@@ -355,10 +358,12 @@ export function PressGoodDeedPricingComponent({
               </li>
             ))}
           </ol>
-          <p className="text-[11.5px]" style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${t.hairline}`, color: t.faint, lineHeight: 1.5 }}>
-            These rates are between you and GoodTunes. Artists never see them.
-          </p>
         </aside>
+        <p className="text-xs" style={{ marginTop: 14, color: t.faint, lineHeight: 1.5 }}>
+          <span className="font-semibold" style={{ color: t.subink }}>These rates are between you and GoodTunes.</span>{" "}
+          Artists never see them.
+        </p>
+        </div>
       </div>
     </div>
   );
