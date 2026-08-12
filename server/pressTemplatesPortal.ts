@@ -29,6 +29,8 @@ import {
   clearTemplateSpecMeasurements,
   scanTemplateUrl,
   detectTemplateOptionsForUrl,
+  renderTestRunPreviews,
+  renderLocalPdfPreviews,
 } from "./templateSpecs";
 import {
   isKnownOptionSet,
@@ -699,7 +701,8 @@ export function registerPressTemplateFlowRoutes(
 
   // POST /api/press/:id/templates/:specId/test — run a finished test file
   // against this slot through the completed-template engine. Streams the
-  // file (own object storage or SSRF-guarded https) — never stores it.
+  // file (own object storage or SSRF-guarded https) — the original is never
+  // stored; only a small first-page preview PNG is kept for the proof view.
   app.post(
     "/api/press/:id/templates/:specId/test",
     requireAdmin,
@@ -726,28 +729,66 @@ export function registerPressTemplateFlowRoutes(
             "Certification test runs aren't available for this slot yet — the finished-file checker doesn't have a baseline for this format.",
         });
       }
-      const { scan, error } = await scanTemplateUrl(body.data.url);
-      if (!scan) {
-        return res.status(422).json({ message: error ?? "Couldn't read that file." });
+      // Task #3090 — proof view needs a local PDF to rasterize. Own-object
+      // uploads download on render; EXTERNAL urls (Dropbox etc.) tee the
+      // SSRF-guarded scan stream into a temp file (only the small preview
+      // PNG is kept — the original file is still never stored).
+      const isOwnObject = body.data.url.startsWith("/objects/uploads/");
+      const fsp = await import("node:fs/promises");
+      const os = await import("node:os");
+      const path = await import("node:path");
+      let spoolDir: string | null = null;
+      let spoolPath: string | null = null;
+      if (!isOwnObject) {
+        try {
+          spoolDir = await fsp.mkdtemp(path.join(os.tmpdir(), "template-test-spool-"));
+          spoolPath = path.join(spoolDir, "src.pdf");
+        } catch {
+          spoolPath = null; // best-effort: scan proceeds without a preview
+        }
       }
-      // Task #3069 — log every spot-usage fallback with its reason code.
-      logSpotUsageFallback(scan, { fileName: null, source: body.data.url });
-      const checks: CheckResult[] = validateCompletedComponent(scan, slotSpec);
-      const verdict = rollupStatus(checks);
+      try {
+        const { scan, error, spooled } = await scanTemplateUrl(body.data.url, {
+          spoolTo: spoolPath ?? undefined,
+        });
+        if (!scan) {
+          return res.status(422).json({ message: error ?? "Couldn't read that file." });
+        }
+        // Task #3069 — log every spot-usage fallback with its reason code.
+        logSpotUsageFallback(scan, { fileName: null, source: body.data.url });
+        const checks: CheckResult[] = validateCompletedComponent(scan, slotSpec);
+        const verdict = rollupStatus(checks);
 
-      // Pin the run to the revision that is live right now.
-      const revs = await storage.listPressTemplateRevisions([spec.id]);
-      const live = revs.find((r) => r.status === "pending" || r.status === "certified") ?? null;
-      const run = await storage.createPressTemplateTestRun({
-        specId: spec.id,
-        revisionId: live?.id ?? null,
-        fileUrl: body.data.url,
-        fileName: body.data.fileName ?? null,
-        checks,
-        verdict,
-        createdByUserId: req.session.userId ?? null,
-      });
-      res.json({ run });
+        // Task #3090 — rasterize the test file's first page(s) so the client
+        // can render the artwork under the TEMPLATE's zone rings. Best-effort,
+        // never blocks; no renderable image → the run row degrades to the
+        // checks list.
+        const pages = spec.componentKey === "labels" ? Math.min(scan.pageCount, 2) : 1;
+        const previews = isOwnObject
+          ? await renderTestRunPreviews(body.data.url, { pages })
+          : spooled && spoolPath
+            ? await renderLocalPdfPreviews(spoolPath, { pages })
+            : { previewUrl: null, previewUrl2: null };
+
+        // Pin the run to the revision that is live right now.
+        const revs = await storage.listPressTemplateRevisions([spec.id]);
+        const live = revs.find((r) => r.status === "pending" || r.status === "certified") ?? null;
+        const run = await storage.createPressTemplateTestRun({
+          specId: spec.id,
+          revisionId: live?.id ?? null,
+          fileUrl: body.data.url,
+          fileName: body.data.fileName ?? null,
+          checks,
+          verdict,
+          previewUrl: previews.previewUrl,
+          previewUrl2: previews.previewUrl2,
+          createdByUserId: req.session.userId ?? null,
+        });
+        res.json({ run });
+      } finally {
+        // The spooled original PDF is never kept — only the preview PNGs.
+        if (spoolDir) fsp.rm(spoolDir, { recursive: true, force: true }).catch(() => {});
+      }
     },
   );
 

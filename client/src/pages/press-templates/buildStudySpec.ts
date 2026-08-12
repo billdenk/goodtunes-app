@@ -31,7 +31,18 @@ export function foldLinesFor(spec: Pick<TemplateSpecWithHistory, "componentKey" 
   return null;
 }
 
-export function buildStudySpec(spec: TemplateSpecWithHistory, lead: string, rest: string): StudySpec {
+/** Shared template-derived geometry: zones, shape, aspect, dims — the ONE
+ *  source of truth for both the template preview and the certification
+ *  proof view (rings always come from the TEMPLATE, never the artwork). */
+function templateGeometry(spec: TemplateSpecWithHistory): {
+  zones: StudyZone[];
+  shape: "circle" | "square";
+  isLabel: boolean;
+  aspect: number;
+  mmDims: string | null;
+  pages: number;
+  foldLines: string[] | null;
+} {
   const zones: StudyZone[] = [];
   const printRules = (spec.printRules ?? {}) as Record<string, unknown>;
   const isLabel = spec.componentKey === "labels";
@@ -83,10 +94,18 @@ export function buildStudySpec(spec: TemplateSpecWithHistory, lead: string, rest
     zones.push({ id: "fold", word: "Fold", detail: "Spine — spread folds here", fold: true });
   }
 
-  // One panel per REAL page, each at the file's true aspect ratio — except
-  // labels, whose die is circular: the panel stays a 1:1 circle regardless of
-  // the PDF's page rectangle (the caption still states the measured page).
+  // Panels render at the file's true aspect ratio — except labels, whose die
+  // is circular: the panel stays a 1:1 circle regardless of the PDF's page
+  // rectangle (the caption still states the measured page).
   const aspect = !isLabel && typeof w === "number" && typeof h === "number" && h > 0 ? w / h : 1;
+
+  return { zones, shape, isLabel, aspect, mmDims, pages, foldLines };
+}
+
+export function buildStudySpec(spec: TemplateSpecWithHistory, lead: string, rest: string): StudySpec {
+  const { zones, shape, isLabel, aspect, mmDims, pages, foldLines } = templateGeometry(spec);
+
+  // One panel per REAL page.
   const panels: StudyPanel[] = [];
   for (let i = 0; i < Math.min(Math.max(pages, 0), 8); i++) {
     panels.push({
@@ -114,4 +133,72 @@ export function buildStudySpec(spec: TemplateSpecWithHistory, lead: string, rest
   const defaultZone = zones.find((z) => z.id === "safe")?.id ?? zones[0]?.id ?? "";
 
   return { title: "Template.", titleRest: `${lead} ${rest}`, caption, shape, defaultZone, zones, panels, footnote };
+}
+
+// Task #3090 — the certification PROOF variant (`*Niina` studies): the run's
+// rendered ARTWORK is the image under the rings, but every zone ring still
+// comes from the TEMPLATE's measured/entered geometry — identical to the
+// template preview above it, never derived from the artwork. Returns null
+// when the run has no renderable image yet (the row degrades to the checks
+// list — no broken panel).
+// Per-zone ✓/✕ status on the proof chips (Ruby's certification mock):
+// ONLY where a run check maps cleanly onto a ring, and never from advisory
+// rows (they always "pass" without machine-verifying anything — a ✓ would
+// overclaim). Zones with no mapped machine check stay status-less.
+const ZONE_CHECK_KEYS: Record<string, string> = {
+  bleed: "tmpl.bleed",
+  cut: "tmpl.size",
+  safe: "tmpl.safety",
+};
+
+export function buildProofSpec(
+  spec: TemplateSpecWithHistory,
+  run: {
+    fileName: string | null;
+    fileUrl: string;
+    previewUrl: string | null;
+    previewUrl2: string | null;
+    checks?: { key: string; status: string; tier?: string }[];
+  },
+  lead: string,
+  rest: string,
+): StudySpec | null {
+  if (!run.previewUrl) return null;
+  const { zones: baseZones, shape, isLabel, aspect, mmDims, foldLines } = templateGeometry(spec);
+
+  const zones: StudyZone[] = baseZones.map((z) => {
+    const key = ZONE_CHECK_KEYS[z.id];
+    if (!key) return z;
+    const check = (run.checks ?? []).find((c) => c.key === key && c.tier !== "advisory");
+    if (!check) return z;
+    if (check.status === "pass") return { ...z, status: "ok" as const };
+    if (check.status === "fail" || check.status === "warn") return { ...z, status: "attention" as const };
+    return z; // unverified — no claim either way
+  });
+
+  // Labels get one circle per rendered face (Side A / Side B, Niina-style);
+  // everything else is one panel at the template's true aspect ratio.
+  const panels: StudyPanel[] = [];
+  if (isLabel) {
+    panels.push({ label: "Side A", sub: mmDims ?? undefined, img: run.previewUrl, aspect: 1 });
+    if (run.previewUrl2) {
+      panels.push({ label: "Side B", sub: mmDims ?? undefined, img: run.previewUrl2, aspect: 1 });
+    }
+  } else {
+    panels.push({
+      label: foldLines ? "Spread" : "Page 1",
+      sub: mmDims ?? undefined,
+      img: run.previewUrl,
+      aspect,
+      foldLines: foldLines ?? undefined,
+    });
+  }
+
+  // Proof-style caption: the test file, then whose zones it sits under.
+  const testName = run.fileName ?? run.fileUrl.split("/").pop() ?? "Test file";
+  const zonesName = spec.templateFileName ?? `${lead} ${rest}`;
+  const caption = `${testName} · ${zonesName} zones · ${panels.length === 2 ? "2 pages → 2 areas" : foldLines ? "1 page → 1 spread" : "1 page → 1 panel"}`;
+
+  const defaultZone = zones.find((z) => z.id === "safe")?.id ?? zones[0]?.id ?? "";
+  return { title: "Proof.", titleRest: `${lead} ${rest}`, caption, shape, defaultZone, zones, panels };
 }

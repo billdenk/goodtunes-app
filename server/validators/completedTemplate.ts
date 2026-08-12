@@ -1720,7 +1720,15 @@ export function validateCompletedComponent(
 // ─── SSRF-guarded streaming fetch ─────────────────────────────────────
 
 export type FetchScanResult =
-  | { ok: true; scan: CompletedPdfScan; fileName: string | null; finalUrl: string }
+  | {
+      ok: true;
+      scan: CompletedPdfScan;
+      fileName: string | null;
+      finalUrl: string;
+      /** Task #3090 — true when `opts.spoolTo` captured the COMPLETE file
+       *  (not truncated by the size cap and no write error). */
+      spooled?: boolean;
+    }
   | { ok: false; error: string };
 
 // Normalize known share-link patterns so we land on the raw bytes. Dropbox
@@ -1808,7 +1816,15 @@ function filenameFromResponse(res: Response, url: URL): string | null {
  */
 export async function fetchAndScanPdf(
   rawUrl: string,
-  opts?: { maxBytes?: number; timeoutMs?: number },
+  opts?: {
+    maxBytes?: number;
+    timeoutMs?: number;
+    /** Task #3090 — also tee the streamed bytes into this local file so the
+     *  caller can rasterize a preview. Best-effort: a write failure aborts
+     *  spooling (spooled=false) but never fails the scan. The caller owns
+     *  cleanup of the file. */
+    spoolTo?: string;
+  },
 ): Promise<FetchScanResult> {
   const maxBytes = opts?.maxBytes ?? 800 * 1024 * 1024;
   const timeoutMs = opts?.timeoutMs ?? 120_000;
@@ -1861,25 +1877,63 @@ export async function fetchAndScanPdf(
     const scanner = new CompletedPdfScanner({ maxBytes });
     const reader = body.getReader();
     let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (!value) continue;
-      total += value.length;
-      scanner.push(Buffer.from(value.buffer, value.byteOffset, value.byteLength));
-      if (total > maxBytes) {
+    let truncatedByCap = false;
+    // Task #3090 — optional tee-to-disk while scanning (sequential writes on
+    // one handle; a failure stops spooling but never the scan).
+    let spoolHandle: import("node:fs/promises").FileHandle | null = null;
+    let spoolOk = false;
+    if (opts?.spoolTo) {
+      try {
+        spoolHandle = await (await import("node:fs/promises")).open(opts.spoolTo, "w");
+        spoolOk = true;
+      } catch {
+        spoolOk = false;
+      }
+    }
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!value) continue;
+        total += value.length;
+        const chunk = Buffer.from(value.buffer, value.byteOffset, value.byteLength);
+        scanner.push(chunk);
+        if (spoolHandle && spoolOk) {
+          try {
+            await spoolHandle.write(chunk);
+          } catch {
+            spoolOk = false;
+          }
+        }
+        if (total > maxBytes) {
+          truncatedByCap = true;
+          try {
+            await reader.cancel();
+          } catch {
+            /* ignore */
+          }
+          break;
+        }
+      }
+    } finally {
+      if (spoolHandle) {
         try {
-          await reader.cancel();
+          await spoolHandle.close();
         } catch {
           /* ignore */
         }
-        break;
       }
     }
 
     const scan = scanner.finish();
     if (!scan.isPdf) return { ok: false, error: "That link doesn't point at a PDF file." };
-    return { ok: true, scan, fileName, finalUrl: current.toString() };
+    return {
+      ok: true,
+      scan,
+      fileName,
+      finalUrl: current.toString(),
+      spooled: !!opts?.spoolTo && spoolOk && !truncatedByCap,
+    };
   } catch (e: any) {
     if (e?.name === "AbortError") return { ok: false, error: "Timed out fetching the file — try again." };
     return { ok: false, error: "Couldn't fetch the file from that link." };

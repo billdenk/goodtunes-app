@@ -27,7 +27,7 @@ import {
   STUDY_DARK,
   STUDY_LIGHT,
 } from "@/components/press/PrintedAreasStudy";
-import { buildStudySpec, INCHES_TO_MM } from "./buildStudySpec";
+import { buildStudySpec, buildProofSpec, INCHES_TO_MM } from "./buildStudySpec";
 import type {
   TemplatesPayload,
   TemplateSpecWithHistory,
@@ -669,6 +669,18 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
                       ) : null}
                     </div>
                   </div>
+                  {open && (() => {
+                    // Task #3090 — proof view: the run's rendered artwork
+                    // under the TEMPLATE's zone rings (same geometry as the
+                    // template preview above). No renderable image yet →
+                    // checks list only, no broken panel.
+                    const proofSpec = buildProofSpec(spec, run, lead, rest);
+                    return proofSpec ? (
+                      <div className="mt-3" style={{ marginLeft: 26 }} data-testid={`run-proof-${run.id}`}>
+                        <PrintedAreasStudy spec={proofSpec} embedded theme={studyTheme} />
+                      </div>
+                    ) : null;
+                  })()}
                   {open && (
                     <div className="mt-3 rounded-xl overflow-hidden" style={{ marginLeft: 26, border: `1px solid ${t.hairline}` }} data-testid={`run-checks-${run.id}`}>
                       {run.checks.length > 0 ? run.checks.map((c, i) => {

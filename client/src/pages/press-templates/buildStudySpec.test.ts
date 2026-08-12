@@ -2,7 +2,7 @@
 // measured facts and the slot's product type, never default label geometry.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildStudySpec, foldLinesFor, INCHES_TO_MM } from "./buildStudySpec";
+import { buildStudySpec, buildProofSpec, foldLinesFor, INCHES_TO_MM } from "./buildStudySpec";
 import type { TemplateSpecWithHistory } from "./types";
 
 function makeSpec(over: Partial<TemplateSpecWithHistory>): TemplateSpecWithHistory {
@@ -168,4 +168,90 @@ test("foldLinesFor: only jacket variants with a known spec", () => {
   assert.equal(foldLinesFor({ componentKey: "jacket", variantKey: "single" }), null);
   assert.equal(foldLinesFor({ componentKey: "jacket", variantKey: "widespine" }), null);
   assert.equal(foldLinesFor({ componentKey: "inner_sleeve", variantKey: "" }), null);
+});
+
+// Task #3090 — certification proof view: artwork under TEMPLATE rings.
+test("proof spec: run artwork panel, template-derived zones, Niina proof caption", () => {
+  const spec = makeSpec({
+    componentKey: "jacket",
+    variantKey: "single",
+    templateFileName: "12-JKTSG3D-100.pdf",
+    measuredArtboardWInches: GUSSET_W,
+    measuredArtboardHInches: GUSSET_H,
+    measuredPages: 1,
+    measuredBleedLineInches: 0.125,
+    printRules: { safetyMarginInches: 0.25 },
+  });
+  const run = {
+    fileName: "niina-jacket-final.pdf",
+    fileUrl: "/objects/uploads/run-src",
+    previewUrl: "/objects/uploads/preview-1.png",
+    previewUrl2: null,
+  };
+  const proof = buildProofSpec(spec, run, "Single jacket", '12" LP');
+  assert.ok(proof);
+  assert.equal(proof!.title, "Proof.");
+  // The artwork is the panel image; zones come from the TEMPLATE, matching
+  // the template preview's ring set exactly.
+  assert.equal(proof!.panels![0].img, "/objects/uploads/preview-1.png");
+  const tmpl = buildStudySpec(spec, "Single jacket", '12" LP');
+  assert.deepEqual(proof!.zones!.map((z) => z.id), tmpl.zones!.map((z) => z.id));
+  // Proof caption names the test file AND whose zones it sits under.
+  assert.match(proof!.caption!, /niina-jacket-final\.pdf/);
+  assert.match(proof!.caption!, /12-JKTSG3D-100\.pdf zones/);
+});
+
+test("proof spec: two label faces render Side A / Side B circles", () => {
+  const spec = makeSpec({
+    componentKey: "labels",
+    variantKey: "standard",
+    measuredArtboardWInches: 4.646,
+    measuredArtboardHInches: 4.646,
+    measuredPages: 2,
+  });
+  const run = {
+    fileName: "labels.pdf",
+    fileUrl: "/objects/uploads/run-src",
+    previewUrl: "/objects/uploads/a.png",
+    previewUrl2: "/objects/uploads/b.png",
+  };
+  const proof = buildProofSpec(spec, run, "Center labels", '12" LP');
+  assert.ok(proof);
+  assert.equal(proof!.shape, "circle");
+  assert.deepEqual(proof!.panels!.map((p) => p.label), ["Side A", "Side B"]);
+  assert.match(proof!.caption!, /2 pages → 2 areas/);
+});
+
+test("proof spec: no rendered image → null (row degrades to checks list)", () => {
+  const spec = makeSpec({ measuredPages: 1 });
+  const run = { fileName: "x.pdf", fileUrl: "https://ext/x.pdf", previewUrl: null, previewUrl2: null };
+  assert.equal(buildProofSpec(spec, run, "Single jacket", '12" LP'), null);
+});
+
+test("proof spec: run checks map onto zone chip statuses; advisory rows never claim ✓", () => {
+  const spec = makeSpec({
+    componentKey: "jacket",
+    variantKey: "single",
+    measuredArtboardWInches: GUSSET_W,
+    measuredArtboardHInches: GUSSET_H,
+    measuredPages: 1,
+    measuredBleedLineInches: 0.125,
+    printRules: { safetyMarginInches: 0.25 },
+  });
+  const run = {
+    fileName: "x.pdf",
+    fileUrl: "/objects/uploads/x",
+    previewUrl: "/objects/uploads/p.png",
+    previewUrl2: null,
+    checks: [
+      { key: "tmpl.bleed", status: "pass" },
+      { key: "tmpl.size", status: "fail" },
+      { key: "tmpl.safety", status: "pass", tier: "advisory" },
+    ],
+  };
+  const proof = buildProofSpec(spec, run, "Single jacket", '12" LP');
+  const byId = Object.fromEntries(proof!.zones!.map((z) => [z.id, z.status]));
+  assert.equal(byId.bleed, "ok");
+  assert.equal(byId.cut, "attention");
+  assert.equal(byId.safe, undefined); // advisory — no machine claim
 });
