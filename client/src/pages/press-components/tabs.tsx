@@ -9,10 +9,16 @@ import type {
   LabelsComponentConfig,
   StickersComponentConfig,
   PricingComponentConfig,
+  JacketsComponentConfig,
+  SleevesComponentConfig,
+  InsertsComponentConfig,
 } from "@shared/pressComponents";
 import { PressVinylComponent } from "./PressVinylComponent";
 import { PressLabelsComponent } from "./PressLabelsComponent";
 import { PressStickersComponent } from "./PressStickersComponent";
+import { PressJacketsComponent } from "./PressJacketsComponent";
+import { PressInnerSleevesComponent } from "./PressInnerSleevesComponent";
+import { PressInsertsComponent } from "./PressInsertsComponent";
 import { PressComponentPricing } from "./PressComponentPricing";
 import { createSerialSaver } from "./saveQueue";
 import { Loader2 } from "lucide-react";
@@ -77,6 +83,27 @@ export function PressStickersComponentTab({ pressId }: { pressId: string }) {
   );
 }
 
+export function PressJacketsComponentTab({ pressId }: { pressId: string }) {
+  const { data, isLoading } = usePressComponents(pressId);
+  const save = useSavePressComponent(pressId, "jackets");
+  // Serialize + coalesce whole-config PUTs (same as Pricing) so a slow earlier
+  // save can never complete after — and overwrite — a newer rapid ••• toggle.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const serialSave = useMemo(
+    () => createSerialSaver<JacketsComponentConfig>((config) => saveRef.current.mutateAsync(config)),
+    [pressId],
+  );
+  if (isLoading || !data) return <LoadingRow />;
+  return (
+    <PressJacketsComponent
+      payload={data}
+      canEdit={data.canEdit}
+      save={serialSave}
+      saving={save.isPending}
+    />
+  );
+}
 export function PressComponentPricingTab({ pressId }: { pressId: string }) {
   const { data, isLoading } = usePressComponents(pressId);
   const save = useSavePressComponent(pressId, "pricing");
@@ -100,3 +127,47 @@ export function PressComponentPricingTab({ pressId }: { pressId: string }) {
 }
 
 export type { PressComponentsPayload };
+
+export function PressInsertsComponentTab({ pressId }: { pressId: string }) {
+  const { data, isLoading } = usePressComponents(pressId);
+  const save = useSavePressComponent(pressId, "inserts");
+  // Serialize + coalesce whole-config PUTs (same as Pricing) so a slow earlier
+  // save can never complete after — and overwrite — a newer rapid ••• toggle.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const serialSave = useMemo(
+    () => createSerialSaver<InsertsComponentConfig>((config) => saveRef.current.mutateAsync(config)),
+    [pressId],
+  );
+  if (isLoading || !data) return <LoadingRow />;
+  return (
+    <PressInsertsComponent
+      payload={data}
+      canEdit={data.canEdit}
+      save={serialSave}
+      saving={save.isPending}
+    />
+  );
+}
+
+export function PressInnerSleevesComponentTab({ pressId }: { pressId: string }) {
+  const { data, isLoading } = usePressComponents(pressId);
+  const save = useSavePressComponent(pressId, "sleeves");
+  // Serialize + coalesce whole-config PUTs (same as Pricing) so a slow earlier
+  // save can never complete after — and overwrite — a newer rapid ••• toggle.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const serialSave = useMemo(
+    () => createSerialSaver<SleevesComponentConfig>((config) => saveRef.current.mutateAsync(config)),
+    [pressId],
+  );
+  if (isLoading || !data) return <LoadingRow />;
+  return (
+    <PressInnerSleevesComponent
+      payload={data}
+      canEdit={data.canEdit}
+      save={serialSave}
+      saving={save.isPending}
+    />
+  );
+}

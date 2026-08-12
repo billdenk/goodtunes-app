@@ -23470,6 +23470,31 @@
     "snippet": "className=\"w-9 h-9 rounded-full flex items-center justify-center text-white\""
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/packagingOffer.tsx",
+    "snippet": "className={`w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] transition-colors whitespace-nowrap ${t.hoverWash}`}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/packagingOffer.tsx",
+    "snippet": "className={`w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] transition-colors whitespace-nowrap disabled:opacity-60 ${t.hoverWash}`}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/packagingOffer.tsx",
+    "snippet": "<p className=\"text-[11px]\" style={{ color: t.subink, whiteSpace: \"nowrap\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/packagingOffer.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold inline-flex items-center gap-1\" style={{ marginTop: 6, color }}>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/press-components/packagingOffer.tsx",
+    "snippet": "className={`absolute top-2 right-2 z-10 w-6 h-6 rounded-full flex items-center justify-center transition-opacity ${open ? \"opacity-100\" : \"opacity-0 group-hover/offer:opacity-100\"}`}"
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/press-components/PressComponentPricing.tsx",
     "snippet": "blue: \"#319ED8\","
@@ -23538,6 +23563,166 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressComponentPricing.tsx",
     "snippet": "className=\"rounded-2xl px-6 py-12 text-center text-[13.5px]\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
+    "snippet": "blue: \"#319ED8\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold leading-tight\" style={{ color: active ? t.blue : t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
+    "snippet": "<div className=\"text-[12px]\" style={{ marginTop: 3, color: t.faint, lineHeight: 1.4 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 8, color: t.faint }} data-testid=\"sleeves-saving\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
+    "snippet": "<div className=\"text-[13px] font-semibold\" style={{ marginTop: 28, color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
+    "snippet": "<p className=\"text-[12px] text-center\" style={{ marginTop: 6, color: t.faint, maxWidth: 280 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 10, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
+    "snippet": "<div className=\"text-[17px] font-semibold\" style={{ color: active ? t.blue : t.ink }}>{s.label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
+    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: t.faint }}>{s.note}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 10, color: t.subink }} data-testid=\"sleeves-availability\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "blue: \"#319ED8\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold leading-tight\" style={{ color: active ? t.blue : t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "<div className=\"text-[12px]\" style={{ marginTop: 3, color: t.faint, lineHeight: 1.4 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 8, color: t.faint, lineHeight: 1.4 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 8, color: t.faint }} data-testid=\"inserts-saving\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "<div className=\"text-[13px] font-semibold\" style={{ marginTop: 28, color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "<p className=\"text-[12px] text-center\" style={{ marginTop: 6, color: t.faint, maxWidth: 280 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 10, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "<div className=\"text-[17px] font-semibold\" style={{ color: active ? t.blue : t.ink }}>{s.label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: t.faint }}>{s.note}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressInsertsComponent.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 10, color: t.subink }} data-testid=\"inserts-availability\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "blue: \"#319ED8\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold leading-tight\" style={{ color: active ? t.blue : t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "<div className=\"text-[12px]\" style={{ marginTop: 3, color: t.faint, lineHeight: 1.4 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 8, color: t.faint, lineHeight: 1.4 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 8, color: t.faint }} data-testid=\"jackets-saving\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "<div className=\"text-[13px] font-semibold\" style={{ marginTop: 28, color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "<p className=\"text-[12px] text-center\" style={{ marginTop: 6, color: t.faint, maxWidth: 280 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 10, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "<div className=\"text-[17px] font-semibold\" style={{ color: active ? t.blue : t.ink }}>{s.label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: t.faint }}>{s.note}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressJacketsComponent.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 10, color: t.subink }} data-testid=\"jackets-availability\">"
   },
   {
     "rule": "brand-hex-literal",

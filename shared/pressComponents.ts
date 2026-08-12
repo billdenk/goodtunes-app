@@ -120,10 +120,47 @@ export const stickersComponentConfigSchema = z.object({
 });
 export type StickersComponentConfig = z.infer<typeof stickersComponentConfigSchema>;
 
-// ── Component-level pricing ────────────────────────────────────────────
-// Rows are seeded from the press's existing vinyl types/colors; price cells
-// start EMPTY (null). Package pricing is untouchable — these prices are a
-// separate component-level surface and are not read by the SellPanel.
+export const packagingOfferOptionSchema = z.object({
+  id: z.string().min(1).max(64),
+  offered: z.boolean(),
+  // Press-supplied print template. Uploads mint /objects/uploads/<id> paths —
+  // constrain persisted values to exactly that shape (same allowlist as the
+  // sticker templates) so a javascript:/https: string can never land in the
+  // config and be rendered as a link to other privileged users.
+  templateUrl: z
+    .string()
+    .regex(/^\/objects\/uploads\/[a-zA-Z0-9._-]+$/, "Template must be an uploaded file path")
+    .max(1024)
+    .nullable()
+    .default(null),
+});
+export type PackagingOfferOption = z.infer<typeof packagingOfferOptionSchema>;
+
+// One generic config per packaging page (Jackets / Inner Sleeves / Inserts):
+// the style vocabulary (names, notes, variants, visuals) stays client-side;
+// only per-style offered/template state persists.
+const packagingConfigSchema = z.object({
+  options: z.array(packagingOfferOptionSchema).max(24),
+});
+
+export const JACKET_STYLE_IDS = ["single", "gatefold", "trifold", "discobag", "pvc"] as const;
+export const SLEEVE_STYLE_IDS = [
+  "printed-paper",
+  "printed-board",
+  "white",
+  "black",
+  "white-poly",
+  "black-poly",
+] as const;
+export const INSERT_STYLE_IDS = ["sheet", "gatefold", "booklet", "poster"] as const;
+
+export const jacketsComponentConfigSchema = packagingConfigSchema;
+export type JacketsComponentConfig = z.infer<typeof jacketsComponentConfigSchema>;
+export const sleevesComponentConfigSchema = packagingConfigSchema;
+export type SleevesComponentConfig = z.infer<typeof sleevesComponentConfigSchema>;
+export const insertsComponentConfigSchema = packagingConfigSchema;
+export type InsertsComponentConfig = z.infer<typeof insertsComponentConfigSchema>;
+
 const priceCentsSchema = z.number().int().min(0).max(10_000_000).nullable();
 export const pricingRowSchema = z.object({
   // Stable row identity: "type:<categoryId>" or "color:<categoryId>:<swatchId>"
@@ -149,12 +186,23 @@ export const pricingComponentConfigSchema = z.object({
 export type PricingComponentConfig = z.infer<typeof pricingComponentConfigSchema>;
 
 // ── Component keys + payload ───────────────────────────────────────────
-export const PRESS_COMPONENT_KEYS = ["vinyl", "labels", "stickers", "pricing"] as const;
+export const PRESS_COMPONENT_KEYS = [
+  "vinyl",
+  "jackets",
+  "sleeves",
+  "labels",
+  "inserts",
+  "stickers",
+  "pricing",
+] as const;
 export type PressComponentKey = (typeof PRESS_COMPONENT_KEYS)[number];
 
 export const componentConfigSchemaByKey: Record<PressComponentKey, z.ZodTypeAny> = {
   vinyl: vinylComponentConfigSchema,
+  jackets: jacketsComponentConfigSchema,
+  sleeves: sleevesComponentConfigSchema,
   labels: labelsComponentConfigSchema,
+  inserts: insertsComponentConfigSchema,
   stickers: stickersComponentConfigSchema,
   pricing: pricingComponentConfigSchema,
 };
@@ -163,7 +211,11 @@ export type PressComponentsPayload = {
   canEdit: boolean;
   press: { id: string; name: string; logoUrl: string | null; identityIconUrl: string | null };
   vinyl: VinylComponentConfig;
+  jackets: JacketsComponentConfig;
+  sleeves: SleevesComponentConfig;
   labels: LabelsComponentConfig;
+  inserts: InsertsComponentConfig;
   stickers: StickersComponentConfig;
   pricing: PricingComponentConfig;
 };
+

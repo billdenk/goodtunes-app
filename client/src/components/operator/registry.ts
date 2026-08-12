@@ -211,13 +211,12 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "templates",  label: "Templates",             icon: FileText,   section: "catalog", roles: ["press"] },
   // Components section (Ruby handoff, handoff/press-components/, Aug 12
   // 2026): the per-press component setup surfaces. Rail order matches the
-  // mock's COMPONENTS_CHILDREN. Jackets / Inner Sleeves / Inserts are
-  // future-state artist choosers — decorative Soon rows, not wired.
+  // mock's COMPONENTS_CHILDREN.
   { id: "comp-vinyl",    label: "Vinyl",         icon: Disc3,      section: "components", roles: ["press"] },
-  { id: "comp-jackets",  label: "Jackets",       icon: Square,     section: "components", soon: true, roles: ["press"] },
-  { id: "comp-sleeves",  label: "Inner Sleeves", icon: Layers,     section: "components", soon: true, roles: ["press"] },
+  { id: "comp-jackets",  label: "Jackets",       icon: Square,     section: "components", roles: ["press"] },
+  { id: "comp-sleeves",  label: "Inner Sleeves", icon: Layers,     section: "components", roles: ["press"] },
   { id: "comp-labels",   label: "Center Labels", icon: CircleDot,  section: "components", roles: ["press"] },
-  { id: "comp-inserts",  label: "Inserts",       icon: StickyNote, section: "components", soon: true, roles: ["press"] },
+  { id: "comp-inserts",  label: "Inserts",       icon: StickyNote, section: "components", roles: ["press"] },
   { id: "comp-stickers", label: "Stickers",      icon: Sticker,    section: "components", roles: ["press"] },
   { id: "comp-pricing",  label: "Pricing",       icon: Receipt,    section: "components", roles: ["press"] },
   { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },

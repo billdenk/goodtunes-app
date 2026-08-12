@@ -27,6 +27,12 @@ import {
   type SwatchKind,
   type VinylSizeId,
   type LabelsComponentConfig,
+  type JacketsComponentConfig,
+  type SleevesComponentConfig,
+  type InsertsComponentConfig,
+  JACKET_STYLE_IDS,
+  SLEEVE_STYLE_IDS,
+  INSERT_STYLE_IDS,
   type StickersComponentConfig,
   type PricingComponentConfig,
   type PricingRow,
@@ -70,8 +76,9 @@ const DEFAULT_STICKER_SHAPES: StickersComponentConfig = {
   ],
 };
 
-// The Black-only default state applies ONLY to a brand-new press with
-// nothing to import (README rule 2).
+const DEFAULT_JACKETS: JacketsComponentConfig = {
+  options: JACKET_STYLE_IDS.map((id) => ({ id, offered: true, templateUrl: null })),
+};
 const BLACK_ONLY_VINYL: VinylComponentConfig = {
   categories: [
     {
@@ -312,7 +319,10 @@ async function upsertComponentRow(
  */
 export async function loadPressComponents(pressId: string): Promise<{
   vinyl: VinylComponentConfig;
+  jackets: JacketsComponentConfig;
+  sleeves: SleevesComponentConfig;
   labels: LabelsComponentConfig;
+  inserts: InsertsComponentConfig;
   stickers: StickersComponentConfig;
   pricing: PricingComponentConfig;
 }> {
@@ -332,6 +342,24 @@ export async function loadPressComponents(pressId: string): Promise<{
   if (!labels) {
     labels = DEFAULT_LABEL_STYLES;
     await upsertComponentRow(pressId, "labels", labels as any, { seeded: true });
+  }
+
+  let jackets = byKey.get("jackets")?.config as JacketsComponentConfig | undefined;
+  if (!jackets) {
+    jackets = DEFAULT_JACKETS;
+    await upsertComponentRow(pressId, "jackets", jackets as any, { seeded: true });
+  }
+
+  let sleeves = byKey.get("sleeves")?.config as SleevesComponentConfig | undefined;
+  if (!sleeves) {
+    sleeves = DEFAULT_SLEEVES;
+    await upsertComponentRow(pressId, "sleeves", sleeves as any, { seeded: true });
+  }
+
+  let inserts = byKey.get("inserts")?.config as InsertsComponentConfig | undefined;
+  if (!inserts) {
+    inserts = DEFAULT_INSERTS;
+    await upsertComponentRow(pressId, "inserts", inserts as any, { seeded: true });
   }
 
   let stickers = byKey.get("stickers")?.config as StickersComponentConfig | undefined;
@@ -355,7 +383,7 @@ export async function loadPressComponents(pressId: string): Promise<{
     }
   }
 
-  return { vinyl, labels, stickers, pricing };
+  return { vinyl, jackets, sleeves, labels, inserts, stickers, pricing };
 }
 
 export function registerPressComponentRoutes(
@@ -438,3 +466,11 @@ export function registerPressComponentRoutes(
     },
   );
 }
+
+const DEFAULT_SLEEVES: SleevesComponentConfig = {
+  options: SLEEVE_STYLE_IDS.map((id) => ({ id, offered: true, templateUrl: null })),
+};
+
+const DEFAULT_INSERTS: InsertsComponentConfig = {
+  options: INSERT_STYLE_IDS.map((id) => ({ id, offered: true, templateUrl: null })),
+};

@@ -9,6 +9,9 @@ import { toast } from "@/hooks/use-toast";
 import type {
   PressComponentKey,
   VinylComponentConfig,
+  JacketsComponentConfig,
+  SleevesComponentConfig,
+  InsertsComponentConfig,
   LabelsComponentConfig,
   StickersComponentConfig,
   PricingComponentConfig,
@@ -26,7 +29,10 @@ export type PressComponentsPayload = {
     labelLogoUrl: string | null;
   };
   vinyl: VinylComponentConfig;
+  jackets: JacketsComponentConfig;
+  sleeves: SleevesComponentConfig;
   labels: LabelsComponentConfig;
+  inserts: InsertsComponentConfig;
   stickers: StickersComponentConfig;
   pricing: PricingComponentConfig;
 };
@@ -45,6 +51,9 @@ export function useSavePressComponent(pressId: string, key: PressComponentKey) {
     mutationFn: async (
       config:
         | VinylComponentConfig
+        | JacketsComponentConfig
+        | SleevesComponentConfig
+        | InsertsComponentConfig
         | LabelsComponentConfig
         | StickersComponentConfig
         | PricingComponentConfig,
