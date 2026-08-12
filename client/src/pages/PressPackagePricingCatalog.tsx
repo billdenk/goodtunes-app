@@ -302,7 +302,7 @@ const DotsTrigger = forwardRef<
  *  second line — every card stays the same height. Overflow ellipsizes, and
  *  hovering the card slides the text across (Apple-style marquee) to reveal
  *  the full name, easing back on mouse-out. Full name also rides on title. */
-function MarqueeName({ text, color }: { text: string; color: string }) {
+function MarqueeName({ text, color, ellipsis = false }: { text: string; color: string; ellipsis?: boolean }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const spanRef = useRef<HTMLSpanElement>(null);
   const [shift, setShift] = useState(0); // px the text must travel to show its tail
@@ -325,7 +325,15 @@ function MarqueeName({ text, color }: { text: string; color: string }) {
       title={overflowing ? text : undefined}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      style={{ overflow: "hidden", whiteSpace: "nowrap", maskImage: overflowing && !hover ? "linear-gradient(to right, black 85%, transparent)" : undefined, WebkitMaskImage: overflowing && !hover ? "linear-gradient(to right, black 85%, transparent)" : undefined }}
+      style={{
+        overflow: "hidden",
+        whiteSpace: "nowrap",
+        // Two rest-state devices: a literal "…" (Bill, Aug 11 2026 — template
+        // tiles) or the soft right-edge fade (color cards). Hover slides either.
+        textOverflow: ellipsis && overflowing && !hover ? "ellipsis" : "clip",
+        maskImage: !ellipsis && overflowing && !hover ? "linear-gradient(to right, black 85%, transparent)" : undefined,
+        WebkitMaskImage: !ellipsis && overflowing && !hover ? "linear-gradient(to right, black 85%, transparent)" : undefined,
+      }}
     >
       <span
         ref={spanRef}
@@ -4064,13 +4072,15 @@ function TemplateRow({
       <div className="text-[13px] font-semibold" style={{ color: INK, marginTop: 8 }}>
         {tile.label}
       </div>
+      {/* One-line filename rule (Bill, Aug 11 2026): never wraps — cards stay
+          the same height. Overflow shows "…"; hovering slides the text left
+          (same Apple-style marquee as the color cards) to reveal it all. */}
       <div
-        className="text-[11.5px] tabular-nums"
-        style={{ color: SUBINK, marginTop: 3 }}
-        title={fileName ?? undefined}
+        className="text-[11.5px] tabular-nums w-full min-w-0"
+        style={{ marginTop: 3 }}
         data-testid={`text-template-filename-${tile.key}`}
       >
-        {middleTruncate(fileName ?? "template")}
+        <MarqueeName text={fileName ?? "template"} color={SUBINK} ellipsis />
       </div>
     </button>
   );
