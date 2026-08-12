@@ -5,7 +5,7 @@
 // The mock's 3 tiles × variants are flattened into SIX flat style tiles
 // (SLEEVE_STYLE_IDS) so each carries its own offered/template ••• menu.
 import { useEffect, useState } from "react";
-import type { PressComponentsPayload } from "./usePressComponents";
+import { resolvePressMarkLogo, type PressComponentsPayload } from "./usePressComponents";
 import { SLEEVE_STYLE_IDS, type SleevesComponentConfig } from "@shared/pressComponents";
 import { useAdminDark } from "@/lib/adminAppearance";
 import {
@@ -402,7 +402,7 @@ export function PressInnerSleevesComponent({
   const t = THEMES[dark ? "dark" : "light"];
   const mt = menuTheme(t, dark);
   const press = payload.press;
-  const logoUrl = press.labelLogoUrl;
+  const logoUrl = resolvePressMarkLogo(press);
 
   const [offer, setOffer] = useState<OfferState>(() => offerStateFromConfig(SLEEVE_STYLE_IDS, payload.sleeves?.options));
   const [dirty, setDirty] = useState(false);

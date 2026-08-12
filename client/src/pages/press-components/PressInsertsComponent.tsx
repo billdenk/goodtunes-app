@@ -5,7 +5,7 @@
 // Four insert styles (INSERT_STYLE_IDS) persist offered/template; booklet
 // page-count and poster size stay selection-only preview toggles.
 import { useEffect, useState } from "react";
-import type { PressComponentsPayload } from "./usePressComponents";
+import { resolvePressMarkLogo, type PressComponentsPayload } from "./usePressComponents";
 import { INSERT_STYLE_IDS, type InsertsComponentConfig } from "@shared/pressComponents";
 import { useAdminDark } from "@/lib/adminAppearance";
 import {
@@ -640,7 +640,7 @@ export function PressInsertsComponent({
   const t = THEMES[dark ? "dark" : "light"];
   const mt = menuTheme(t, dark);
   const press = payload.press;
-  const logoUrl = press.labelLogoUrl;
+  const logoUrl = resolvePressMarkLogo(press);
 
   const [offer, setOffer] = useState<OfferState>(() => offerStateFromConfig(INSERT_STYLE_IDS, payload.inserts?.options));
   const [dirty, setDirty] = useState(false);

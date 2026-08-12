@@ -8,7 +8,7 @@
 // saved as one whole config on every change (Stickers pattern).
 import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import type { PressComponentsPayload } from "./usePressComponents";
+import { resolvePressMarkLogo, type PressComponentsPayload } from "./usePressComponents";
 import { JACKET_STYLE_IDS, type JacketsComponentConfig } from "@shared/pressComponents";
 import { useAdminDark } from "@/lib/adminAppearance";
 import {
@@ -720,7 +720,7 @@ export function PressJacketsComponent({
   const t = THEMES[dark ? "dark" : "light"];
   const mt = menuTheme(t, dark);
   const press = payload.press;
-  const logoUrl = press.labelLogoUrl;
+  const logoUrl = resolvePressMarkLogo(press);
 
   // Offered/template state seeded from payload; re-seed only on press
   // identity change when there are no unsaved edits.

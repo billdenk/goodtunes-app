@@ -17,6 +17,21 @@ import type {
   PricingComponentConfig,
 } from "@shared/pressComponents";
 
+// Shared press-mark resolution: uploaded logo variants first (label/product
+// logo, then square, main, light, identity icon), NEVER a hardcoded mock;
+// null lets the surface fall back to a neutral initials chip. Every
+// component page must render the same mark (Stickers set the precedent).
+export function resolvePressMarkLogo(press: PressComponentsPayload["press"]): string | null {
+  return (
+    press.labelLogoUrl ||
+    press.squareLogoUrl ||
+    press.logoUrl ||
+    press.lightLogoUrl ||
+    press.identityIconUrl ||
+    null
+  );
+}
+
 export type PressComponentsPayload = {
   canEdit: boolean;
   press: {
