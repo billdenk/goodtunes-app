@@ -11,6 +11,11 @@ each `.tsx` as-is, then wire data. The rendering is the spec.
   color cards, edit dialogs (with preview-image upload), the splatter composer.
 - `PressCatalogVinylLabels.tsx` — center labels.
 - `PressCatalogStickers.tsx` — stickers.
+- `PressGoodDeedPricing.tsx` — GoodDeed Certificates: the press-facing
+  editable batch ladder (25–49 → 300+, empty $ cells, 25-cert minimum). This
+  REPLACES the internal admin pricing matrix currently leaking into the press
+  catalog view — presses must never see GoodTunes margins or artist wholesale.
+  The wholesale ladder stays admin-only on Platform pricing.
 
 **Artist side**
 - `ArtistChooseJacket.tsx` — choose your jacket.
