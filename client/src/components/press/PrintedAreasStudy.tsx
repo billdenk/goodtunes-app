@@ -180,7 +180,10 @@ function StudyThumb({ spec, panel, zone, mode, flipped, onFlip, fixed, onFix, si
   });
   const zoneDef = zone ? zones.find((z) => z.id === zone) : null;
   const areas = mode === "areas" && zoneDef && !zoneDef.fold;
-  const imgSrc = fixed && panel.fixImg ? panel.fixImg : panel.img ?? gtPreviewTemplate;
+  // Task #3060 — the circle template placeholder backs LABEL (circular)
+  // panels only; rectangular products with no real image get a plain white
+  // panel so a jacket never renders as a center label.
+  const imgSrc = fixed && panel.fixImg ? panel.fixImg : panel.img ?? (circle ? gtPreviewTemplate : null);
   // Word tag: appears centered when the zone changes, then fades away.
   const [tagShown, setTagShown] = useState(false);
   useEffect(() => {
@@ -231,12 +234,16 @@ function StudyThumb({ spec, panel, zone, mode, flipped, onFlip, fixed, onFix, si
         style={{ backgroundColor: "#fff", border: `1px solid ${t.hairline}` }}
         aria-label={onExpand ? `Expand ${panel.label}` : undefined}
       >
-        <img
-          src={imgSrc}
-          alt={`${panel.label} — printed area with zones`}
-          className="w-full h-full object-cover"
-          style={{ transform: flipped ? "rotate(180deg)" : undefined, transition: "transform 220ms ease" }}
-        />
+        {imgSrc ? (
+          <img
+            src={imgSrc}
+            alt={`${panel.label} — printed area with zones`}
+            className="w-full h-full object-cover"
+            style={{ transform: flipped ? "rotate(180deg)" : undefined, transition: "transform 220ms ease" }}
+          />
+        ) : (
+          <div className="w-full h-full" style={{ backgroundColor: "#fff" }} aria-hidden />
+        )}
         {!areas && zones.map(({ id, inset, centered, fold }) => {
           const active = zone === id;
           if (fold) {

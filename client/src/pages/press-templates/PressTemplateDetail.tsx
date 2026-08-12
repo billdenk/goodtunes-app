@@ -26,10 +26,8 @@ import {
   PrintedAreasStudy,
   STUDY_DARK,
   STUDY_LIGHT,
-  type StudySpec,
-  type StudyZone,
-  type StudyPanel,
 } from "@/components/press/PrintedAreasStudy";
+import { buildStudySpec, INCHES_TO_MM } from "./buildStudySpec";
 import type {
   TemplatesPayload,
   TemplateSpecWithHistory,
@@ -154,7 +152,6 @@ function fmtDate(iso: string | null | undefined): string {
   }
 }
 
-const INCHES_TO_MM = (n: number) => Math.round(n * 25.4 * 10) / 10;
 
 // ─── Revision status → icon + word (never color-only) ────────────────
 function revisionStatusMeta(status: TemplateRevision["status"]) {
@@ -243,42 +240,8 @@ function GeoRow({ label, value, sub, source, t }: { label: string; value: string
   );
 }
 
-// ─── Build a StudySpec from real spec data — zones only for measured values ──
-function buildStudySpec(spec: TemplateSpecWithHistory, lead: string, rest: string): StudySpec {
-  const zones: StudyZone[] = [];
-  const printRules = (spec.printRules ?? {}) as Record<string, unknown>;
-
-  const bleed = spec.bleedLineInches ?? spec.measuredBleedLineInches;
-  if (typeof bleed === "number") {
-    zones.push({ id: "bleed", word: "Bleed", detail: `${INCHES_TO_MM(bleed)} mm — art must reach`, inset: "0%" });
-  }
-  const artW = spec.artboardWInches ?? spec.measuredArtboardWInches;
-  if (typeof artW === "number") {
-    zones.push({ id: "cut", word: "Cut", detail: `${INCHES_TO_MM(artW)} mm — trimmed edge`, inset: "3.5%" });
-  }
-  const safety = typeof printRules.safetyMarginInches === "number" ? (printRules.safetyMarginInches as number) : undefined;
-  if (typeof safety === "number") {
-    zones.push({ id: "safe", word: "Safe", detail: `${INCHES_TO_MM(safety)} mm — text stays inside`, inset: "8%" });
-  }
-
-  const shape: "circle" | "square" = spec.componentKey === "labels" ? "circle" : "square";
-
-  const pages = spec.measuredPages ?? spec.expectedPages ?? 0;
-  const panels: StudyPanel[] = [];
-  if (pages > 0) {
-    for (let i = 0; i < Math.min(pages, 8); i++) {
-      panels.push({ label: `Area ${i + 1}`, sub: `Page ${i + 1}` });
-    }
-  }
-
-  const caption = spec.templateFileName
-    ? `${spec.templateFileName}${pages > 0 ? ` · ${pages} ${pages === 1 ? "page" : "pages"}` : ""}`
-    : `${lead} · ${rest}`;
-
-  const defaultZone = zones.find((z) => z.id === "safe")?.id ?? zones[0]?.id ?? "";
-
-  return { title: "Template.", titleRest: `${lead} ${rest}`, caption, shape, defaultZone, zones, panels };
-}
+// ─── StudySpec builder lives in ./buildStudySpec (Task #3060) — the preview
+// is driven by the uploaded file's measured facts + the slot's product type.
 
 // ═════════════════════════════════════════════════════════════════════
 // The screen
