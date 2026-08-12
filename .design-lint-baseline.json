@@ -24512,7 +24512,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
-    "snippet": "<h2 className=\"text-[19px] font-semibold\" style={{ color: t.ink, letterSpacing: \"-0.01em\" }}>Create new template</h2>"
+    "snippet": "<h2 className=\"text-[19px] font-semibold\" style={{ color: t.ink, letterSpacing: \"-0.01em\" }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -24523,6 +24523,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
     "snippet": "className={cn(\"mt-3 w-full h-10 px-4 rounded-full text-[13px] focus:outline-none\", t.searchPlaceholder)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className={cn(\"w-full flex items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium disabled:opacity-60\", t.hoverWash)}"
   },
   {
     "rule": "hardcoded-font-size",

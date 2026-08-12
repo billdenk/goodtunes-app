@@ -995,6 +995,17 @@ export interface IStorage {
     iconKind: string;
     createdByUserId: string | null;
   }): Promise<PressCustomTemplateSlot>;
+  updatePressCustomTemplateSlot(
+    pressId: string,
+    slotId: string,
+    patch: { displayName?: string; note?: string | null; iconKind?: string },
+  ): Promise<PressCustomTemplateSlot | null>;
+  deletePressCustomTemplateSlot(pressId: string, slotId: string): Promise<void>;
+  deletePressCustomTemplateSlotWithSpecs(
+    pressId: string,
+    slotId: string,
+    specIds: string[],
+  ): Promise<void>;
   updatePressTemplateSpecMeasured(
     pressId: string,
     specId: string,
@@ -5664,6 +5675,42 @@ export class DbStorage implements IStorage {
   }): Promise<PressCustomTemplateSlot> {
     const [row] = await db.insert(pressCustomTemplateSlots).values(input).returning();
     return row;
+  }
+  // Task #3066 — rename (display name only; slotKey stays stable) + delete.
+  async updatePressCustomTemplateSlot(
+    pressId: string,
+    slotId: string,
+    patch: { displayName?: string; note?: string | null; iconKind?: string },
+  ): Promise<PressCustomTemplateSlot | null> {
+    const [row] = await db
+      .update(pressCustomTemplateSlots)
+      .set(patch)
+      .where(and(eq(pressCustomTemplateSlots.pressId, pressId), eq(pressCustomTemplateSlots.id, slotId)))
+      .returning();
+    return row ?? null;
+  }
+  async deletePressCustomTemplateSlot(pressId: string, slotId: string): Promise<void> {
+    await db
+      .delete(pressCustomTemplateSlots)
+      .where(and(eq(pressCustomTemplateSlots.pressId, pressId), eq(pressCustomTemplateSlots.id, slotId)));
+  }
+  // Task #3066 — slot + its bare orphan spec rows go in ONE transaction so a
+  // failure never leaves a half-deleted slot.
+  async deletePressCustomTemplateSlotWithSpecs(
+    pressId: string,
+    slotId: string,
+    specIds: string[],
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      if (specIds.length) {
+        await tx
+          .delete(pressTemplateSpecs)
+          .where(and(eq(pressTemplateSpecs.pressId, pressId), inArray(pressTemplateSpecs.id, specIds)));
+      }
+      await tx
+        .delete(pressCustomTemplateSlots)
+        .where(and(eq(pressCustomTemplateSlots.pressId, pressId), eq(pressCustomTemplateSlots.id, slotId)));
+    });
   }
 
   // ---- Press-templates flow (Ruby handoff) — revisions + test runs ----

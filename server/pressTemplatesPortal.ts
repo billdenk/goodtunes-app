@@ -38,6 +38,37 @@ import {
   type TemplateOption,
 } from "./templateOptions";
 import type { PressTemplateSpec } from "@shared/schema";
+import { pool } from "./db";
+
+// Task #3066 — attach vs delete on a CUSTOM slot must be mutually exclusive:
+// DELETE's "is this slot bare?" check and PUT's "does this slot exist?" check
+// are both check-then-act, and the slot/spec relationship has no FK. A
+// per-(press, slotKey) pg advisory lock serializes the two critical sections;
+// both re-check state after acquiring it. Session-level (not xact) locks are
+// used because each section spans several storage calls on pooled
+// connections — the lock lives on ONE dedicated client, always released.
+export function customSlotLockKey(pressId: string, slotKey: string): string {
+  return `press_custom_slot:${pressId}:${slotKey}`;
+}
+
+async function withCustomSlotLock<T>(
+  pressId: string,
+  slotKey: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  const key = customSlotLockKey(pressId, slotKey);
+  try {
+    await client.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [key]);
+    try {
+      return await fn();
+    } finally {
+      await client.query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [key]);
+    }
+  } finally {
+    client.release();
+  }
+}
 
 // Same closed vocabularies as the admin template-spec routes
 // (server/routes.ts) — a portal upload can only create slots the
@@ -77,6 +108,12 @@ const optionsSchema = z.object({
 
 const createSlotSchema = z.object({
   format: z.enum(FORMAT_VALUES),
+  name: z.string().trim().min(2).max(64),
+  note: z.string().trim().max(140).optional(),
+});
+
+// Task #3066 — rename keeps the slotKey stable; only display fields move.
+const renameSlotSchema = z.object({
   name: z.string().trim().min(2).max(64),
   note: z.string().trim().max(140).optional(),
 });
@@ -367,36 +404,43 @@ export function registerPressTemplateFlowRoutes(
           .status(400)
           .json({ message: "Upload the file or paste an https:// link." });
       }
-      // Task #3065 — a custom componentKey must match one of this press's
-      // defined custom slots for the same format (vocabulary stays closed).
-      if (d.componentKey.startsWith("custom_")) {
-        const slots = await storage.listPressCustomTemplateSlots(pressId);
-        const slot = slots.find((s) => s.format === d.format && s.slotKey === d.componentKey);
-        if (!slot) {
-          return res.status(400).json({ message: "Unknown custom template slot — create it first." });
-        }
-      }
       // Non-jacket components carry no variant (mirrors the admin route).
       const variantKey = d.componentKey === "jacket" ? d.variantKey : "";
-      const existing = (await storage.listPressTemplateSpecs(pressId, d.format)).find(
-        (r) =>
-          r.componentKey === d.componentKey &&
-          (r.variantKey ?? "") === variantKey &&
-          r.discCount === (d.discCount ?? 0),
-      );
-      let spec: PressTemplateSpec;
-      if (existing) {
-        const updated = await storage.updatePressTemplateSpecFile(
-          pressId,
-          existing.id,
-          d.fileUrl,
-          d.fileName ?? null,
-          req.session.userId ?? null,
+      // Slot check + spec write as ONE critical section. Task #3066 — for a
+      // custom componentKey this runs under the per-(press, slotKey) advisory
+      // lock so a concurrent slot DELETE can't interleave between "the slot
+      // exists" and "the spec row carries the file" (which is what DELETE's
+      // history check reads).
+      const attach = async (): Promise<
+        { spec: PressTemplateSpec; existing?: PressTemplateSpec } | { status: number; message: string }
+      > => {
+        // Task #3065 — a custom componentKey must match one of this press's
+        // defined custom slots for the same format (vocabulary stays closed).
+        if (d.componentKey.startsWith("custom_")) {
+          const slots = await storage.listPressCustomTemplateSlots(pressId);
+          const slot = slots.find((s) => s.format === d.format && s.slotKey === d.componentKey);
+          if (!slot) {
+            return { status: 400, message: "Unknown custom template slot — create it first." };
+          }
+        }
+        const existing = (await storage.listPressTemplateSpecs(pressId, d.format)).find(
+          (r) =>
+            r.componentKey === d.componentKey &&
+            (r.variantKey ?? "") === variantKey &&
+            r.discCount === (d.discCount ?? 0),
         );
-        if (!updated) return res.status(404).json({ message: "Template slot not found" });
-        spec = updated;
-      } else {
-        spec = await storage.upsertPressTemplateSpec(
+        if (existing) {
+          const updated = await storage.updatePressTemplateSpecFile(
+            pressId,
+            existing.id,
+            d.fileUrl,
+            d.fileName ?? null,
+            req.session.userId ?? null,
+          );
+          if (!updated) return { status: 404, message: "Template slot not found" };
+          return { spec: updated, existing };
+        }
+        const spec = await storage.upsertPressTemplateSpec(
           {
             pressId,
             format: d.format,
@@ -408,7 +452,15 @@ export function registerPressTemplateFlowRoutes(
           },
           req.session.userId ?? null,
         );
+        return { spec };
+      };
+      const attached = d.componentKey.startsWith("custom_")
+        ? await withCustomSlotLock(pressId, d.componentKey, attach)
+        : await attach();
+      if ("status" in attached) {
+        return res.status(attached.status).json({ message: attached.message });
       }
+      const { spec, existing } = attached;
       await clearTemplateSpecMeasurements(pressId, spec.id);
       await measureTemplateSpecRow(pressId, spec.id);
       const measured = (await storage.getPressTemplateSpecById(pressId, spec.id)) ?? spec;
@@ -528,6 +580,96 @@ export function registerPressTemplateFlowRoutes(
         createdByUserId: req.session.userId ?? null,
       });
       res.json({ slot });
+    },
+  );
+
+  // Task #3066 — PATCH /api/press/:id/templates/custom-slots/:slotId — rename
+  // a custom slot (display name / note only; slotKey stays stable so any
+  // attached spec row keeps its componentKey).
+  app.patch(
+    "/api/press/:id/templates/custom-slots/:slotId",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const body = renameSlotSchema.safeParse(req.body);
+      if (!body.success) return res.status(400).json({ message: body.error.message });
+      const d = body.data;
+      const slots = await storage.listPressCustomTemplateSlots(pressId);
+      const slot = slots.find((s) => s.id === String(req.params.slotId));
+      if (!slot) return res.status(404).json({ message: "Custom template slot not found" });
+      // Same collision rule as create: no two slots in a format share a name.
+      const collision = slots.some(
+        (s) =>
+          s.id !== slot.id &&
+          s.format === slot.format &&
+          s.displayName.trim().toLowerCase() === d.name.trim().toLowerCase(),
+      );
+      if (collision) {
+        return res.status(409).json({ message: "A template with that name already exists in this format." });
+      }
+      const updated = await storage.updatePressCustomTemplateSlot(pressId, slot.id, {
+        displayName: d.name.trim(),
+        note: d.note !== undefined ? d.note.trim() || null : undefined,
+        iconKind: iconKindForSlotName(d.name),
+      });
+      res.json({ slot: updated });
+    },
+  );
+
+  // Task #3066 — DELETE /api/press/:id/templates/custom-slots/:slotId — remove
+  // a slot made by mistake. Refuses (409) when the slot's spec already has
+  // revision history (uploads happened — history is never lost; archive the
+  // file instead). A bare, never-uploaded slot deletes cleanly, along with
+  // any empty orphan spec row.
+  app.delete(
+    "/api/press/:id/templates/custom-slots/:slotId",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      // Peek at the slot only to learn its slotKey for the lock; everything
+      // is re-checked INSIDE the critical section (a concurrent upload for
+      // this slot serializes on the same lock — see the PUT route).
+      const peek = (await storage.listPressCustomTemplateSlots(pressId)).find(
+        (s) => s.id === String(req.params.slotId),
+      );
+      if (!peek) return res.status(404).json({ message: "Custom template slot not found" });
+      const out = await withCustomSlotLock(pressId, peek.slotKey, async (): Promise<{
+        status: number;
+        body: Record<string, unknown>;
+      }> => {
+        const slot = (await storage.listPressCustomTemplateSlots(pressId)).find(
+          (s) => s.id === String(req.params.slotId),
+        );
+        if (!slot) return { status: 404, body: { message: "Custom template slot not found" } };
+        const specs = (await storage.listPressTemplateSpecs(pressId, slot.format)).filter(
+          (s) => s.componentKey === slot.slotKey,
+        );
+        if (specs.length) {
+          const revisions = await storage.listPressTemplateRevisions(specs.map((s) => s.id));
+          if (revisions.length || specs.some((s) => s.templateFileUrl)) {
+            return {
+              status: 409,
+              body: {
+                message:
+                  "This template has upload history — it can't be deleted. Archive the file instead; the slot and its revisions are kept.",
+              },
+            };
+          }
+        }
+        // Bare orphan spec rows (no file, no revisions) go with the slot —
+        // one transaction, so a failure never leaves a half-deleted slot.
+        await storage.deletePressCustomTemplateSlotWithSpecs(
+          pressId,
+          slot.id,
+          specs.map((s) => s.id),
+        );
+        return { status: 200, body: { ok: true } };
+      });
+      res.status(out.status).json(out.body);
     },
   );
 

@@ -19,7 +19,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   BadgeCheck, Clock3, XCircle, AlertTriangle, History, Upload, CloudUpload, X,
-  MoreHorizontal, Archive, Loader2, AlertCircle, Plus, Layers,
+  MoreHorizontal, Archive, Loader2, AlertCircle, Plus, Layers, Pencil, Trash2,
 } from "lucide-react";
 import { ChevronDown as NavChevron } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -225,6 +225,8 @@ type Slot = {
   variantKey?: string;
   discCount?: number;
   disabled?: boolean;
+  // Task #3066 — set on operator-created slots; enables rename / remove.
+  customSlot?: CustomTemplateSlot;
 };
 
 // Vinyl size → slot list. 7″ = 7_inch, 10″ = 10_inch (template canon only —
@@ -684,30 +686,39 @@ function UploadModal({
 }
 
 // ─── Task #3065 — "Create new template" dialog (custom slots) ──
+// Task #3066 — doubles as the rename dialog when `editSlot` is set (display
+// name / note only; the slot key + any attached spec stay put).
 function CreateSlotModal({
   t,
   pressId,
   dbFormat,
+  editSlot,
   onClose,
   onCreated,
 }: {
   t: Theme;
   pressId: string;
   dbFormat: string;
+  editSlot?: CustomTemplateSlot;
   onClose: () => void;
   onCreated: (slot: CustomTemplateSlot) => void;
 }) {
   const { toast } = useToast();
-  const [name, setName] = useState("");
-  const [note, setNote] = useState("");
+  const [name, setName] = useState(editSlot?.displayName ?? "");
+  const [note, setNote] = useState(editSlot?.note ?? "");
 
   const create = useMutation({
     mutationFn: async () => {
-      const r = await apiRequest("POST", `/api/press/${pressId}/templates/custom-slots`, {
-        format: dbFormat,
-        name: name.trim(),
-        note: note.trim() || undefined,
-      });
+      const r = editSlot
+        ? await apiRequest("PATCH", `/api/press/${pressId}/templates/custom-slots/${editSlot.id}`, {
+            name: name.trim(),
+            note: note.trim(),
+          })
+        : await apiRequest("POST", `/api/press/${pressId}/templates/custom-slots`, {
+            format: dbFormat,
+            name: name.trim(),
+            note: note.trim() || undefined,
+          });
       return (await r.json()) as { slot: CustomTemplateSlot };
     },
     onSuccess: (data) => {
@@ -715,7 +726,11 @@ function CreateSlotModal({
       onCreated(data.slot);
     },
     onError: (e: Error) =>
-      toast({ title: "Couldn't create the template", description: e.message.replace(/^\d{3}:\s*/, ""), variant: "destructive" }),
+      toast({
+        title: editSlot ? "Couldn't rename the template" : "Couldn't create the template",
+        description: e.message.replace(/^\d{3}:\s*/, ""),
+        variant: "destructive",
+      }),
   });
 
   const canSubmit = name.trim().length >= 2 && !create.isPending;
@@ -729,9 +744,13 @@ function CreateSlotModal({
       <div className="rounded-2xl overflow-hidden" style={{ width: 460, maxWidth: "92vw", backgroundColor: t.card, border: `1px solid ${t.hairline}`, boxShadow: t.modalShadow }}>
         <div className="flex items-start justify-between gap-4 px-7 pt-6">
           <div>
-            <h2 className="text-[19px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>Create new template</h2>
+            <h2 className="text-[19px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>
+              {editSlot ? "Rename template" : "Create new template"}
+            </h2>
             <p className="mt-1 text-[12.5px]" style={{ color: t.subink }}>
-              Name it — the upload and checks work exactly like the built-in tiles.
+              {editSlot
+                ? "The name and note change — any attached file and its history stay put."
+                : "Name it — the upload and checks work exactly like the built-in tiles."}
             </p>
           </div>
           <button
@@ -785,12 +804,87 @@ function CreateSlotModal({
               data-testid="button-submit-create-slot"
             >
               {create.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              Create — then add the file
+              {editSlot ? "Save name" : "Create — then add the file"}
             </button>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+// ─── Task #3066 — ⋯ actions on operator-created tiles (rename / remove) ──
+// Sits as an absolute overlay sibling of the tile button (tiles are <button>
+// roots — nesting is invalid HTML). Remove confirms; a slot whose spec has
+// upload history is refused server-side (409) with an archive hint.
+function CustomSlotActions({
+  t,
+  slot,
+  onRename,
+  onRemove,
+  removing,
+}: {
+  t: Theme;
+  slot: CustomTemplateSlot;
+  onRename: () => void;
+  onRemove: () => void;
+  removing: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        aria-label="Template actions"
+        onClick={() => setOpen((v) => !v)}
+        className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full inline-flex items-center justify-center hover:opacity-80 z-10"
+        style={{ backgroundColor: t.overlayBtn }}
+        data-testid={`button-slot-actions-${slot.id}`}
+      >
+        <MoreHorizontal className="w-4 h-4" style={{ color: t.ink }} />
+      </button>
+      {open && (
+        <div
+          className="absolute z-20 rounded-xl py-1.5 text-left"
+          style={{ top: 44, right: 10, minWidth: 170, backgroundColor: t.card, boxShadow: t.popShadow, border: `1px solid ${t.hairline}` }}
+          data-testid={`menu-slot-actions-${slot.id}`}
+        >
+          <button
+            type="button"
+            className={cn("w-full flex items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium", t.hoverWash)}
+            style={{ color: t.ink }}
+            onClick={() => {
+              setOpen(false);
+              onRename();
+            }}
+            data-testid={`button-rename-slot-${slot.id}`}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            Rename
+          </button>
+          <button
+            type="button"
+            disabled={removing}
+            className={cn("w-full flex items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium disabled:opacity-60", t.hoverWash)}
+            style={{ color: t.crit }}
+            onClick={() => {
+              setOpen(false);
+              if (
+                window.confirm(
+                  `Remove "${slot.displayName}"? A slot with upload history can't be deleted — archive the file instead.`,
+                )
+              ) {
+                onRemove();
+              }
+            }}
+            data-testid={`button-remove-slot-${slot.id}`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Remove
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -924,6 +1018,26 @@ export function PressTemplatesIndex({
   const [size, setSize] = useState<"7″" | "10″" | "12″">("12″");
   const [modal, setModal] = useState<ModalState | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // Task #3066 — rename dialog for an operator-created slot.
+  const [editSlot, setEditSlot] = useState<CustomTemplateSlot | null>(null);
+  const { toast } = useToast();
+
+  // Task #3066 — remove a custom slot made by mistake. The server refuses
+  // (409) when the slot's spec already has upload history.
+  const removeSlot = useMutation({
+    mutationFn: async (slotId: string) => {
+      await apiRequest("DELETE", `/api/press/${pressId}/templates/custom-slots/${slotId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Couldn't remove the template",
+        description: e.message.replace(/^\d{3}:\s*/, ""),
+        variant: "destructive",
+      }),
+  });
 
   const { data, isLoading, isError, error } = useQuery<TemplatesPayload>({
     queryKey: [`/api/press/${pressId}/templates`],
@@ -953,6 +1067,7 @@ export function PressTemplatesIndex({
     note: c.note ?? "Custom template",
     dbFormat: c.format,
     componentKey: c.slotKey,
+    customSlot: c,
   });
   const customSlots = (data?.customSlots ?? [])
     .filter((c) => c.format === sectionDbFormat)
@@ -1066,19 +1181,16 @@ export function PressTemplatesIndex({
             {slots.map((slot) => {
               const spec = matchSpec(specs, slot);
               const filled = spec && spec.templateFileUrl;
-              const key = `${slot.title}-${slot.variantKey ?? ""}`;
-              if (filled) {
-                return (
-                  <FilledTile
-                    key={key}
-                    t={t}
-                    slot={slot}
-                    spec={spec!}
-                    onOpen={() => onOpenSpec(spec!.id)}
-                  />
-                );
-              }
-              return (
+              const key = slot.customSlot ? `custom-${slot.customSlot.id}` : `${slot.title}-${slot.variantKey ?? ""}`;
+              const tile = filled ? (
+                <FilledTile
+                  key={key}
+                  t={t}
+                  slot={slot}
+                  spec={spec!}
+                  onOpen={() => onOpenSpec(spec!.id)}
+                />
+              ) : (
                 <EmptyTile
                   key={key}
                   t={t}
@@ -1087,6 +1199,23 @@ export function PressTemplatesIndex({
                   onAdd={() => setModal({ slot, spec: spec ?? undefined })}
                 />
               );
+              // Task #3066 — operator-created tiles get a ⋯ overlay with
+              // rename / remove (tiles are <button> roots — overlay sibling).
+              if (slot.customSlot && canEdit) {
+                return (
+                  <div key={key} className="relative [&>button]:w-full [&>button]:h-full">
+                    {tile}
+                    <CustomSlotActions
+                      t={t}
+                      slot={slot.customSlot}
+                      onRename={() => setEditSlot(slot.customSlot!)}
+                      onRemove={() => removeSlot.mutate(slot.customSlot!.id)}
+                      removing={removeSlot.isPending}
+                    />
+                  </div>
+                );
+              }
+              return tile;
             })}
             {/* Task #3065 — "Create new template": operator-defined slots for
                 this format section (needs an editable role + a real format). */}
@@ -1120,6 +1249,16 @@ export function PressTemplatesIndex({
             // Hand straight off to the normal upload flow for the new slot.
             setModal({ slot: customSlotToSlot(created) });
           }}
+        />
+      )}
+      {editSlot && (
+        <CreateSlotModal
+          t={t}
+          pressId={pressId}
+          dbFormat={editSlot.format}
+          editSlot={editSlot}
+          onClose={() => setEditSlot(null)}
+          onCreated={() => setEditSlot(null)}
         />
       )}
       {modal && (
