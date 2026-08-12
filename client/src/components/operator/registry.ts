@@ -189,8 +189,10 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // FLAT directly under Dashboard (no collapsible Catalog section —
   // flattened per Bill, Task #2838). The press's own "catalog" tab is
   // the VINYL PRODUCT catalog (not releases) — relabeled "Vinyl catalog"
-  // alongside GoodDeed pricing + Settings. GoodDeed pricing renders
-  // INLINE (Task #2075).
+  // alongside GoodDeed Certificates + Settings. GoodDeed Certificates
+  // renders the press-facing batch ladder from the Ruby handoff
+  // (Task #3057 — replaced the inline admin pricing matrix of Task #2075,
+  // which leaked GoodTunes margins/wholesale to presses).
   { id: "dashboard",   label: "Dashboard",        icon: LayoutDashboard,  roles: ["press"] },
   // Icons follow the press playground mock canon (Bill, Aug 2026):
   // Clients=Users, Acquisition=UserPlus, Catalog=Library, Referrals=Gift.

@@ -3,7 +3,14 @@
 // the ported handoff screen as a pure component. Screen prop contract
 // (authored against this exactly — trust it):
 //   { payload, canEdit, save: (config) => void, saving: boolean }
-import { usePressComponents, useSavePressComponent, type PressComponentsPayload } from "./usePressComponents";
+import {
+  usePressComponents,
+  useSavePressComponent,
+  useGoodDeedPrinting,
+  useSaveGoodDeedPrinting,
+  type PressComponentsPayload,
+  type GoodDeedPrintingConfig,
+} from "./usePressComponents";
 import type {
   VinylComponentConfig,
   LabelsComponentConfig,
@@ -20,6 +27,7 @@ import { PressJacketsComponent } from "./PressJacketsComponent";
 import { PressInnerSleevesComponent } from "./PressInnerSleevesComponent";
 import { PressInsertsComponent } from "./PressInsertsComponent";
 import { PressComponentPricing } from "./PressComponentPricing";
+import { PressGoodDeedPricingComponent } from "./PressGoodDeedPricingComponent";
 import { createSerialSaver } from "./saveQueue";
 import { Loader2 } from "lucide-react";
 import { useMemo, useRef } from "react";
@@ -120,6 +128,32 @@ export function PressComponentPricingTab({ pressId }: { pressId: string }) {
     <PressComponentPricing
       payload={data}
       canEdit={data.canEdit}
+      save={serialSave}
+      saving={save.isPending}
+    />
+  );
+}
+
+// GoodDeed Certificates ladder (Ruby handoff) — the ladder rides its own
+// gooddeed_printing_json store, but canEdit comes off the shared components
+// payload (pressUserCanEdit, same gate as every other components surface).
+export function PressGoodDeedPricingTab({ pressId }: { pressId: string }) {
+  const { data: components, isLoading: componentsLoading } = usePressComponents(pressId);
+  const { data: ladder, isLoading: ladderLoading } = useGoodDeedPrinting(pressId);
+  const save = useSaveGoodDeedPrinting(pressId);
+  // Serialize + coalesce whole-ladder PUTs (same as Pricing) so a slow
+  // earlier save can never complete after — and overwrite — a newer one.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const serialSave = useMemo(
+    () => createSerialSaver<GoodDeedPrintingConfig>((config) => saveRef.current.mutateAsync(config)),
+    [pressId],
+  );
+  if (componentsLoading || ladderLoading || !components || !ladder) return <LoadingRow />;
+  return (
+    <PressGoodDeedPricingComponent
+      payload={ladder}
+      canEdit={components.canEdit}
       save={serialSave}
       saving={save.isPending}
     />

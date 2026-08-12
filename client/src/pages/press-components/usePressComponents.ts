@@ -52,6 +52,50 @@ export type PressComponentsPayload = {
   pricing: PricingComponentConfig;
 };
 
+// ── GoodDeed Certificates printing ladder (Ruby handoff, Task #3057) ──
+// The press-facing batch ladder persists in the press's existing
+// gooddeed_printing_json store ({ active, tiers: [{ qty, perUnitCents }] })
+// via the press-manager-gated manufacturers GET/PUT (writes require
+// pressUserCanEdit — staff stay view-only).
+export type GoodDeedPrintingConfig = {
+  active: boolean;
+  tiers: Array<{ qty: number; perUnitCents: number }>;
+};
+
+export function useGoodDeedPrinting(pressId: string) {
+  return useQuery<GoodDeedPrintingConfig>({
+    queryKey: [`/api/admin/manufacturers/${pressId}/gooddeed-printing`],
+  });
+}
+
+export function useSaveGoodDeedPrinting(pressId: string) {
+  const qc = useQueryClient();
+  const qk = [`/api/admin/manufacturers/${pressId}/gooddeed-printing`];
+  return useMutation({
+    mutationFn: async (config: GoodDeedPrintingConfig) => {
+      const res = await apiRequest(
+        "PUT",
+        `/api/admin/manufacturers/${pressId}/gooddeed-printing`,
+        config,
+      );
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk });
+    },
+    // Surface failed saves instead of silently keeping optimistic local
+    // state (the serial saver swallows rejections to keep its queue moving).
+    onError: (err: any) => {
+      toast({
+        title: "Couldn't save changes",
+        description: err?.message ?? "Please try again.",
+        variant: "destructive",
+      });
+      qc.invalidateQueries({ queryKey: qk });
+    },
+  });
+}
+
 export function usePressComponents(pressId: string) {
   return useQuery<PressComponentsPayload>({
     queryKey: [`/api/press/${pressId}/components`],

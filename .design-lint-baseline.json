@@ -23566,6 +23566,96 @@
   },
   {
     "rule": "brand-hex-literal",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "blue: \"#319ED8\","
+  },
+  {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "searchPlaceholder: \"placeholder:text-slate-400\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "className=\"text-[14px] font-semibold tabular-nums\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<span className=\"text-[13px]\" style={{ color: value ? t.ink : t.faint }}>$</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "className={cn(\"text-right text-[14px] font-semibold tabular-nums focus:outline-none\", t.searchPlaceholder)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<div className=\"flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<span className=\"text-[12px] tabular-nums flex-shrink-0 inline-flex items-center gap-1.5\" style={{ marginTop: 6, color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 10, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<span className=\"flex-1 text-[11px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>Batch</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<span className=\"text-[11px] font-semibold uppercase tracking-wider text-right\" style={{ color: t.faint }}>Your price / unit</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<span className=\"text-[15px] font-semibold tabular-nums\" style={{ color: t.ink }}>{r.batch}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "{r.note && <span className=\"text-[11.5px]\" style={{ color: t.faint }}>{r.note}</span>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 14, maxWidth: 560, color: t.faint, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<h3 className=\"text-[15px] font-semibold tracking-tight\" style={{ color: t.ink }}>How a batch works.</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "className=\"flex items-center justify-center rounded-full text-[11px] font-semibold flex-shrink-0 tabular-nums\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<span className=\"block text-[13px] font-semibold\" style={{ color: t.ink }}>{title}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<span className=\"block text-[12px]\" style={{ marginTop: 2, color: t.subink, lineHeight: 1.45 }}>{body}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<p className=\"text-[11.5px]\" style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${t.hairline}`, color: t.faint, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "brand-hex-literal",
     "file": "client/src/pages/press-components/PressInnerSleevesComponent.tsx",
     "snippet": "blue: \"#319ED8\","
   },

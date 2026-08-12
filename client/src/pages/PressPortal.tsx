@@ -58,11 +58,11 @@ import {
   PressLabelsComponentTab,
   PressStickersComponentTab,
   PressComponentPricingTab,
+  PressGoodDeedPricingTab,
 } from "@/pages/press-components/tabs";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
-import { AdminGoodDeedPricing } from "@/pages/AdminGoodDeedPricing";
 import { PressPackagePricingCatalog } from "@/pages/PressPackagePricingCatalog";
 import { PressVinylColors } from "@/pages/PressVinylColors";
 import { PressSpecs } from "@/pages/PressSpecs";
@@ -415,7 +415,11 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       {tab === "comp-pricing" && <PressComponentPricingTab pressId={pressId} />}
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
       {tab === "reports" && <AdminReports embedded />}
-      {tab === "pricing" && <AdminGoodDeedPricing embedded />}
+      {/* Task #3057 — the press-facing GoodDeed Certificates batch ladder
+          (Ruby handoff). Replaces the internal admin pricing matrix that
+          previously leaked GoodTunes margins/wholesale into this portal;
+          that matrix stays admin-only on /admin/platform-pricing. */}
+      {tab === "pricing" && <PressGoodDeedPricingTab pressId={pressId} />}
       {tab === "acquisition" && (
         // Use press-specific funnel routes (/api/press/:id/funnel*) gated by
         // requirePressScope. requireReportScope explicitly 403s manufacturer-role
