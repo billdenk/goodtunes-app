@@ -62,6 +62,9 @@ import {
   VinylDisc,
 } from "./PressVinylColors";
 import { useAdminDark } from "@/lib/adminAppearance";
+import { PrintedAreasStudy, STUDY_DARK, STUDY_LIGHT, type StudySpec } from "@/components/press/PrintedAreasStudy";
+import { IconButton } from "@/components/ui/IconButton";
+import { templateStudySpecFor } from "./press-templates/catalogStudySpec";
 import { CdCatalogBody, CassetteCatalogBody } from "./PressMediaCatalog";
 
 // ─── Theme-aware brand tokens (Apple calm visual language) ───────────
@@ -3764,7 +3767,56 @@ type PressTemplateSpecRow = {
   // Task #3012 — per-component print-rule overrides (opaque here; edited on
   // the operator surface, preserved verbatim by this page's full-row resend).
   printRules: Record<string, unknown> | null;
+  // Task #3079 — measured PDF facts (read-only here; drive the Preview study).
+  // The GET returns the full row, so these ride along even though this page
+  // never writes them.
+  bleedLineInches?: number | null;
+  measuredArtboardWInches?: number | null;
+  measuredArtboardHInches?: number | null;
+  measuredPages?: number | null;
+  measuredBleedLineInches?: number | null;
 };
+
+// Task #3079 — centered Preview modal over a dimmed scrim, portaled to the
+// document root so page/layout transforms can't knock it off-center. Closes
+// via the top-right X or a click on the backdrop.
+function TemplatePreviewModal({ studySpec, onClose }: { studySpec: StudySpec; onClose: () => void }) {
+  const dark = useAdminDark();
+  const theme = dark ? STUDY_DARK : STUDY_LIGHT;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[120] flex items-center justify-center overflow-y-auto p-6"
+      style={{ backgroundColor: "rgba(0,0,0,0.62)" }}
+      onClick={onClose}
+      data-testid="template-preview-overlay"
+    >
+      <div
+        className="relative my-auto"
+        style={{ width: "min(1080px, 94vw)", maxHeight: "92vh", overflowY: "auto", borderRadius: 16 }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <PrintedAreasStudy
+          spec={studySpec}
+          embedded
+          theme={theme}
+          headerAction={
+            <IconButton
+              label="Close preview"
+              variant="ghost"
+              onClick={onClose}
+              className="shrink-0 -mt-1 -mr-2"
+              style={{ color: theme.subink }}
+              data-testid="template-preview-close"
+            >
+              <X />
+            </IconButton>
+          }
+        />
+      </div>
+    </div>,
+    document.body,
+  );
+}
 // Blueprint icons — line drawings of the actual piece, drawn like a die-line.
 // Solid strokes are edges; dashed strokes are folds, holes, and hidden parts.
 // (Same canon as the artist package builder — one icon language on both sides.)
@@ -3865,6 +3917,8 @@ export function TemplateTilesGrid({
   // Item 28 — ⋯ menu + centered add/replace dialog state
   const [menuKey, setMenuKey] = useState<string | null>(null);
   const [dialogKey, setDialogKey] = useState<string | null>(null);
+  // Task #3079 — Preview modal (printed-areas study) state
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
   const hiddenSet = new Set(hiddenTemplates);
   const visibleTiles = tiles.filter((t) => !hiddenSet.has(t.componentKey));
   const hiddenTiles = tiles.filter((t) => hiddenSet.has(t.componentKey));
@@ -3932,6 +3986,20 @@ export function TemplateTilesGrid({
                   </button>
                 </PopoverTrigger>
                 <PopoverContent align="start" sideOffset={6} className="w-48 rounded-2xl p-2" style={{ border: `1px solid ${HAIRLINE}` }}>
+                  {templateStudySpecFor(byComponent(tile.componentKey), tile.label, ALBUM_FORMAT_LABEL[fmt] ?? fmt) && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenuKey(null);
+                        setPreviewKey(tile.key);
+                      }}
+                      className="w-full rounded-lg px-3 py-2 text-left text-[13px] font-medium transition-colors hover:bg-black/5"
+                      style={{ color: INK }}
+                      data-testid={`template-preview-${tile.key}`}
+                    >
+                      Preview
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -3984,6 +4052,15 @@ export function TemplateTilesGrid({
           ))}
         </div>
       )}
+      {(() => {
+        const previewTile = tiles.find((t) => t.key === previewKey) ?? null;
+        const previewSpec = previewTile
+          ? templateStudySpecFor(byComponent(previewTile.componentKey), previewTile.label, ALBUM_FORMAT_LABEL[fmt] ?? fmt)
+          : null;
+        return previewSpec ? (
+          <TemplatePreviewModal studySpec={previewSpec} onClose={() => setPreviewKey(null)} />
+        ) : null;
+      })()}
       {dialogTile && (
         <TemplateDialog
           tile={dialogTile}
