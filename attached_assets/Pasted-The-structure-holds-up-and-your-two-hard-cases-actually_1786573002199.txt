@@ -1,0 +1,27 @@
+The structure holds up, and your two hard cases actually prove why. Let me answer the specific questions and flag the one modeling decision hiding in here.
+
+**The one decision: a Release doesn't have a status. Its lanes do.**
+
+HOPE is the proof. Digital is live and selling; print hasn't gone to a press. If "Release status" is a single field, HOPE is unrepresentable. So the Release is a dumb container, and status lives per-lane (digital) and per-format-draft/project (physical). The Release list view shows a derived rollup badge, never a stored one: HOPE reads "Digital live · Vinyl draft." Nick Carter's read "Sunset" because every lane underneath is sunset. Nothing to keep in sync, nothing to contradict itself.
+
+**Your cases, mapped:**
+
+- **Nick Carter:** seven Releases in his Catalog, each containing a completed, sunset physical Project (retroactively created to represent the already-pressed runs, so history reads correctly). Additive-only applies here: migration wraps legacy albums in Releases, touches nothing underneath.
+- **CALIFORNIALAND:** a Release containing one Draft (12" LP) with an estimate attached. Still a Draft. Getting a quote does not change its state, because the gate is commitment, not information. Give the Draft a sub-state so the UI can say "Draft · Estimated" versus "Draft · Building," but conversion to Project remains the only real transition. You can plug MRP's real numbers into that estimate whenever they land without touching the state model.
+- **HOPE:** yes, the print side is a Draft (or simply no draft yet, if nothing's been configured). Digital lane live, physical lane pre-commitment. That's not a contradiction, it's the normal shape of your business.
+
+**On the flow you described (1–5):** all sound. A few refinements:
+
+New Release needs only a name, agreed. Everything else attaches later. Inside the Release, "Create Draft" asks format first (Vinyl / CD / Cassette) because Projects are per-format, so the draft must be format-scoped from birth — that's what makes conversion clean later.
+
+Auto-save as "CALIFORNIALAND — Vinyl" works, with one addition: if a second vinyl draft is created in the same release (exploring two configurations), append a counter. Auto-save from the first keystroke, since you already have the name.
+
+**On sharing: don't pick between PDF and interactive link. The link is primary, PDF is an export of it.**
+
+You already architected the share link: view-only, revocable, server-scoped, surfaces in "Shared with you." The interactive estimate is strictly better as the canonical share because your snapshot rule applies to it — prices freeze at share time, and if components change, the viewer sees "pricing changed, refresh" instead of silently mutated numbers. A PDF is just a moment-in-time print of that same view, offered as a download button on it. One artifact, two skins, no divergence.
+
+**On testing without pricing:** don't render $0.00 — testers and anyone you demo to will read it as a bug or, worse, an offer. Add a "pricing pending" display state per component so the flow is fully testable end to end (build → save → share → draft in release folder) with prices as placeholders. When MRP tiers land, they drop in without touching flow logic.
+
+**Migration is the sleeper task here.** Every artist on the platform gets a Releases layer inserted, and every legacy album becomes a Release wrapping its existing objects. That's a data migration against live artist data, so it needs the additive-only treatment: create the new containers, re-parent, delete nothing, and verify Nick Carter, Niina, and Nightbirde render correctly before the layer goes visible.
+
+Want me to turn this into a paste-ready Otis brief? Scope would be: nav change (Catalog → Releases), Release container + derived rollup badge, format-scoped Create Draft into the builder, auto-save naming, draft sub-states, pricing-pending display state, share link with PDF export stub, and the legacy migration plan — with the one-session and merge-to-main rules baked in.
