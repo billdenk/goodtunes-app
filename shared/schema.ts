@@ -2728,6 +2728,53 @@ export const insertPressTemplateSpecSchema = createInsertSchema(pressTemplateSpe
 });
 export type InsertPressTemplateSpec = z.infer<typeof insertPressTemplateSpecSchema>;
 
+// Press-templates flow (Ruby handoff, handoff/press-templates/) — revision
+// history for a template slot. The LIVE file stays on press_template_specs
+// (template_file_url + measured_* columns, unchanged, so the completed-art
+// checks keep resolving exactly as before). Each attach/replace also mints a
+// revision row here so the portal can show "R-091125, superseded …" history.
+// status: 'pending' (uploaded, not yet certified) | 'certified' |
+// 'superseded' (a newer file replaced it) | 'archived' (pulled without a
+// replacement). measured_snapshot captures the measured_* values at attach
+// time (jsonb, display-only — never feeds checks).
+export const pressTemplateRevisions = pgTable("press_template_revisions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  specId: varchar("spec_id").notNull(),
+  revLabel: text("rev_label").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileName: text("file_name"),
+  status: text("status").notNull().default("pending"),
+  note: text("note"),
+  measuredSnapshot: jsonb("measured_snapshot").$type<Record<string, unknown>>(),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  supersededAt: timestamp("superseded_at"),
+  certifiedAt: timestamp("certified_at"),
+});
+export type PressTemplateRevision = typeof pressTemplateRevisions.$inferSelect;
+
+// Press-templates flow — certification test runs. A press user (or operator)
+// pastes/uploads a FINISHED test file against a template slot; the server
+// streams-scans it through the same engine as the album completed-template
+// check (validateCompletedComponent) and stores the resulting check rows +
+// verdict here, pinned to the revision that was live when the run executed.
+// A passing run can be promoted to certify that revision.
+export const pressTemplateTestRuns = pgTable("press_template_test_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  specId: varchar("spec_id").notNull(),
+  revisionId: varchar("revision_id"),
+  fileUrl: text("file_url").notNull(),
+  fileName: text("file_name"),
+  checks: jsonb("checks").$type<unknown[]>().notNull().default([]),
+  verdict: text("verdict").notNull(),
+  previewUrl: text("preview_url"),
+  previewUrl2: text("preview_url_2"),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  certifiedAt: timestamp("certified_at"),
+});
+export type PressTemplateTestRun = typeof pressTemplateTestRuns.$inferSelect;
+
 // Task #2324 — per-press AUDIO spec override. One row per press
 // (unique on pressId). The audio preflight baseline lives as measured
 // constants in shared/vendorSpecs.ts; this table lets an operator (or a

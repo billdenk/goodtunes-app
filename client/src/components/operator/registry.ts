@@ -54,6 +54,7 @@ import {
   Truck,
   Store,
   type LucideIcon,
+  FileText,
 } from "lucide-react";
 
 export type OperatorRole =
@@ -200,6 +201,9 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "whitelabel", label: "White Label",           icon: Layers,     section: "catalog", soon: true, roles: ["press"] },
   { id: "pricing",    label: "GoodDeed Certificates", icon: Award,      section: "catalog", roles: ["press"] },
   { id: "specs",      label: "Specs",                 icon: AudioLines, section: "catalog", roles: ["press"] },
+  // Press-templates flow (Ruby handoff, Aug 2026): template ingestion +
+  // finished-file certification, under the Catalog section beside Specs.
+  { id: "templates",  label: "Templates",             icon: FileText,   section: "catalog", roles: ["press"] },
   { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },
   { id: "referrals",  label: "Referrals",        icon: Gift,             roles: ["press"] },
 

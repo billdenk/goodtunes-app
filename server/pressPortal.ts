@@ -31,6 +31,7 @@ import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./ea
 import { sqlPersonIdByContactEmail } from "./partnerInvites";
 import { hasArtistShape } from "./lib/personArtistShape";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
+import { registerPressTemplateFlowRoutes } from "./pressTemplatesPortal";
 
 // SSRF-safe fetch helpers (mirrors the same logic in routes.ts registerRoutes).
 function ppIsPrivateIp(ip: string): boolean {
@@ -642,6 +643,10 @@ export function registerPressPortalRoutes(
     }
     next();
   };
+
+  // Press-templates flow (Ruby handoff) — templates index / upload /
+  // ingestion / certification API, in its own module.
+  registerPressTemplateFlowRoutes(app, requireAdmin, requirePressScope, requirePressEditor);
 
   // GET /api/press/:id/me — header payload (name + logo + is_maker flag).
   app.get("/api/press/:id/me", requireAdmin, requirePressScope, async (req, res) => {

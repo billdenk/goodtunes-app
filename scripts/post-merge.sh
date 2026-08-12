@@ -11884,3 +11884,50 @@ rescan_template_bleed_lines_task_3030() {
 }
 rescan_template_bleed_lines_task_3030 dev  "${DATABASE_URL:-}"
 rescan_template_bleed_lines_task_3030 prod "${PROD_DATABASE_URL:-}"
+
+# Press-templates flow (Ruby handoff wiring) — revision-history + test-run
+# tables. Idempotent CREATE TABLE on both DBs so the schema-drift guard and
+# publish diff stay clean.
+create_press_template_flow_tables() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press-template flow tables on $label (no URL set)"
+    return 0
+  fi
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: press-template flow tables ok on $label" \
+    || echo "post-merge: WARNING — press-template flow table create failed on $label"
+CREATE TABLE IF NOT EXISTS press_template_revisions (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  spec_id varchar NOT NULL,
+  rev_label text NOT NULL,
+  file_url text NOT NULL,
+  file_name text,
+  status text NOT NULL DEFAULT 'pending',
+  note text,
+  measured_snapshot jsonb,
+  created_by_user_id varchar,
+  created_at timestamp NOT NULL DEFAULT now(),
+  superseded_at timestamp,
+  certified_at timestamp
+);
+CREATE INDEX IF NOT EXISTS press_template_revisions_spec_idx ON press_template_revisions (spec_id);
+CREATE TABLE IF NOT EXISTS press_template_test_runs (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  spec_id varchar NOT NULL,
+  revision_id varchar,
+  file_url text NOT NULL,
+  file_name text,
+  checks jsonb NOT NULL DEFAULT '[]'::jsonb,
+  verdict text NOT NULL,
+  preview_url text,
+  preview_url_2 text,
+  created_by_user_id varchar,
+  created_at timestamp NOT NULL DEFAULT now(),
+  certified_at timestamp
+);
+CREATE INDEX IF NOT EXISTS press_template_test_runs_spec_idx ON press_template_test_runs (spec_id);
+SQL
+}
+create_press_template_flow_tables dev  "${DATABASE_URL:-}"
+create_press_template_flow_tables prod "${PROD_DATABASE_URL:-}"

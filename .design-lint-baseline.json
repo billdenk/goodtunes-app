@@ -13815,6 +13815,161 @@
     "snippet": "<div className=\"w-10 h-1 rounded-full mx-auto mb-5\" style={{ background: \"rgba(255,255,255,0.2)\" }} />"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "blue: \"#319ED8\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-[12px] font-semibold z-10 pointer-events-none transition-opacity duration-700 ${tagShown ? \"opacity-"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<div className=\"mt-2.5 flex items-center gap-1.5 text-[13px] font-medium\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "{panel.sub && <div className=\"text-[11.5px]\" style={{ color: t.faint }}>{panel.sub}</div>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "className=\"mt-1.5 text-[11.5px] rounded-full px-3 py-1 transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<span className=\"mt-0.5 text-[13px]\" style={{ color: review ? t.blue : fixed ? \"#34C759\" : t.subink }}>{review ? \"→\" : \"✓\"}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<div className=\"flex-1 text-[12.5px]\" style={{ color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<button type=\"button\" className=\"text-[12px] hover:opacity-80\" style={{ color: t.blue }} onClick={onReset} data-testid={`button-flag-change-${panel.label.toLowerCase()}`}>Change</button>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold leading-snug flex items-center gap-2\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<div className=\"mt-2 text-[12.5px] leading-relaxed\" style={{ color: t.faint }}>{flag.detail}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<div className=\"text-[12px] mb-1.5\" style={{ color: t.faint }}>We’ll email a proof report — the artwork, the measured zones, and what we found — with a link back to this page.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "className=\"w-full rounded-lg px-3 py-1.5 text-[12.5px] outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "className=\"rounded-full px-3.5 py-1.5 text-[12px] font-medium disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "className=\"rounded-full px-3.5 py-1.5 text-[12px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<button type=\"button\" onClick={() => setReviewing(false)} className=\"text-[12px] hover:opacity-80\" style={{ color: t.subink }} data-testid=\"button-review-cancel\">Back</button>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<button type=\"button\" onClick={onFix} className=\"rounded-full px-3.5 py-1.5 text-[12px] font-medium\" style={{ backgroundColor: t.blue, color: \"#fff\" }} data-testid={`button-flag-fix-${panel.label.toLo"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<button type=\"button\" onClick={() => setReviewing(true)} className=\"rounded-full px-3.5 py-1.5 text-[12px] font-medium\" style={{ backgroundColor: t.blue, color: \"#fff\" }} data-testid={`button-flag-rev"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<button type=\"button\" onClick={() => setAccepting(true)} className=\"rounded-full px-3.5 py-1.5 text-[12px] font-medium\" style={{ color: t.subink, border: `1px solid ${t.hairline}` }} data-testid={`but"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<div className=\"text-[12px] mb-1.5\" style={{ color: t.faint }}>Why is this okay? (kept with the order)</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<label key={r} className=\"flex items-center gap-2 text-[12.5px] cursor-pointer\" style={{ color: reason === r ? t.ink : t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "className=\"mt-2 w-full rounded-lg px-3 py-1.5 text-[12.5px] outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<button type=\"button\" onClick={() => setAccepting(false)} className=\"text-[12px] hover:opacity-80\" style={{ color: t.subink }} data-testid=\"button-accept-cancel\">Back</button>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "className=\"rounded-full px-3.5 py-1.5 text-[12px] font-medium flex items-center gap-1.5\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<span aria-label={shown === \"ok\" ? \"okay\" : \"needs attention\"} className=\"text-[11px] font-bold\" style={{ color: shown === \"ok\" ? \"#34C759\" : \"#FF9F0A\", lineHeight: 1 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<div className=\"absolute left-1 top-full mt-1.5 z-30 rounded-lg px-3 py-1.5 text-[12px] pointer-events-none\" style={{ backgroundColor: t.tooltip, border: `1px solid ${t.hairline}`, color: t.subink, bo"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<h3 className=\"text-[19px] font-semibold tracking-[-0.01em]\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<div className=\"mt-1 text-[12px]\" style={{ color: t.faint }}>{spec.caption}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<div className=\"text-[15px] font-semibold\" style={{ color: t.ink }}>{expanded.label}{expanded.sub && <span className=\"font-normal\" style={{ color: t.faint }}> · {expanded.sub}</span>}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<button type=\"button\" className=\"flex items-center gap-1.5 text-[13px] hover:opacity-80\" style={{ color: t.subink }} onClick={() => setExpanded(null)} data-testid=\"button-close-expanded\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "{spec.footnote && <div className=\"mt-5 text-[12px]\" style={{ color: t.faint }}>{spec.footnote}</div>}"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/components/press/PrintedAreasStudy.tsx",
+    "snippet": "<span className=\"w-1.5 h-1.5 rounded-full shrink-0\" style={{ backgroundColor: \"#FF9F0A\" }} aria-hidden />"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/search/views.tsx",
     "snippet": "<h2 className=\"text-fan-primary text-[15px] font-bold\">Recently Searched</h2>"
@@ -23241,6 +23396,411 @@
   },
   {
     "rule": "brand-hex-literal",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "blue: \"#319ED8\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[12.5px] font-semibold flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"text-[12px]\" style={{ color: t.subink }}>{label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-medium mt-0.5\" style={{ color: t.ink }}>{value}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "{sub && <div className=\"text-[12px] mt-0.5\" style={{ color: t.faint }}>{sub}</div>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1 text-[11.5px] flex-shrink-0 mt-0.5\" style={{ color: t.faint }} title={sourceLabel}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"flex items-center gap-2 text-[13.5px]\" style={{ color: t.subink }} data-testid=\"detail-loading\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<button type=\"button\" onClick={onBack} className={cn(\"inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-[13px] font-medium transition-colors\", t.hoverWash)} style={{ color: t.subink, border:"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"text-[15px] font-semibold\" style={{ color: t.ink }}>Template not found</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"mt-1.5 text-[13px]\" style={{ color: t.subink }}>This slot may have been removed. Head back to the Templates library.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-2 text-[13.5px]\" style={{ color: t.subink }} data-testid=\"live-revision\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 text-[13px] hover:opacity-80\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[13px]\" style={{ color: t.faint }} data-testid=\"no-file\">No file attached yet</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"text-[12.5px]\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<h3 className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>Measured geometry</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[11.5px]\" style={{ color: t.faint }}>Press-entered + measured from the template</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"py-4 text-[13px]\" style={{ color: t.faint }} data-testid=\"geometry-empty\">No geometry measured yet — attach a template file to populate this.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<h3 className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>Revision history</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[13.5px] font-medium\" style={{ color: t.ink }}>{rev.revLabel}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "{rev.note && <div className=\"text-[12px] mt-0.5\" style={{ color: t.faint }}>{rev.note}</div>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "{rev.certifiedAt && <div className=\"text-[12px] mt-0.5\" style={{ color: t.ready }}>Certified {fmtDate(rev.certifiedAt)}</div>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[12px] flex-shrink-0 mt-0.5\" style={{ color: t.faint }}>{fmtDate(rev.createdAt)}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"py-4 text-[13px]\" style={{ color: t.faint }} data-testid=\"revisions-empty\">No revisions yet.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<h3 className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>Certification</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"mt-0.5 text-[12px]\" style={{ color: t.faint }}>Run a finished file you know is right — every check runs against this template.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-8 px-4 rounded-full text-[13px] font-medium flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[13px] truncate\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[12px] flex-shrink-0\" style={{ color: t.faint }}>{fmtDate(run.createdAt)}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px] font-medium\" style={{ color: t.ready }} data-testid={`run-certified-${run.id}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[12.5px] font-medium disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[12.5px] font-semibold\" style={{ color: t.ink }}>{c.label}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[11.5px] font-semibold\" style={{ color }}>{cm.word}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"text-[12.5px] mt-0.5\" style={{ color: t.subink }}>{c.message}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "{c.source && <div className=\"text-[11.5px] mt-0.5\" style={{ color: t.faint }}>{c.source}</div>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"px-4 py-3 text-[12.5px]\" style={{ color: t.faint, backgroundColor: t.soft }}>No checks recorded for this run.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"py-4 text-[13px]\" style={{ color: t.faint, borderTop: `1px solid ${t.hairline}` }} data-testid=\"runs-empty\">No test runs yet. {canEdit ? \"Run a test to certify this template.\" : \"\"}</d"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"text-[17px] font-semibold\" style={{ color: t.ink }}>Test this template.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"mt-1 text-[12.5px]\" style={{ color: t.subink }}>Upload a finished file, or paste a link to one. We’ll run every check against this template.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<button type=\"button\" className=\"text-[13px] hover:opacity-80 flex-shrink-0 disabled:opacity-40\" style={{ color: t.subink }} onClick={() => setTestOpen(false)} disabled={runTest.isPending || uploading"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-medium\" style={{ color: t.ink }}>Scanning the file…</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"mt-1 text-[12px]\" style={{ color: t.faint }}>This can take 30–60 seconds. Keep this open.</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-medium\" style={{ color: t.ink }}>Choose the finished file</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"mt-1 text-[12px]\" style={{ color: t.faint }}>PDF with bleed included · layered vector preferred</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<label className={cn(\"mt-4 h-9 px-4 rounded-full text-[13px] font-medium transition-colors inline-flex items-center cursor-pointer\", t.hoverWash)} style={{ color: t.subink, border: `1px solid ${t.hair"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"w-full rounded-lg px-3 py-2 text-[13px] outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"h-9 px-4 rounded-full text-[13px] font-medium disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<button type=\"button\" onClick={() => setTestOpen(false)} className=\"text-[13px] hover:opacity-80\" style={{ color: t.subink }} data-testid=\"button-cancel-test\">Cancel</button>"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "blue: \"#319ED8\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 text-[12px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<h2 className=\"text-[19px] font-semibold\" style={{ color: t.ink, letterSpacing: \"-0.01em\" }} data-testid=\"text-modal-title\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<p className=\"mt-1 text-[12.5px]\" style={{ color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"h-7 flex items-center text-[11px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className={cn(\"w-full flex items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium\", t.hoverWash)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"px-3.5 pt-1.5 pb-1 text-[11px]\" style={{ color: t.faint, borderTop: `1px solid ${t.hairline}`, marginTop: 4, maxWidth: 200 }} data-testid=\"text-archive-note\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"text-[12.5px] font-medium break-all\" style={{ color: t.ink }}>{spec.templateFileName}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"mt-0.5 text-[11.5px] tabular-nums\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>New file</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<span className=\"text-[13.5px] font-medium\" style={{ color: t.ink }}>Uploading…</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<span className=\"text-[13.5px] font-medium break-all text-center\" style={{ color: t.ink }}>{fileName || \"File ready\"}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.faint }}>Click to pick a different file</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<span className=\"text-[13.5px] font-medium\" style={{ color: t.ink }}>Drag a file here, or click to pick</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.faint }}>Press-ready PDF · validated automatically</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className={cn(\"flex-1 h-9 px-3.5 rounded-full text-[12.5px] focus:outline-none\", t.searchPlaceholder)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.faint }}>We fetch the PDF from the link · validated automatically</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className={cn(\"mt-3 w-full h-9 px-3.5 rounded-full text-[12.5px] focus:outline-none\", t.searchPlaceholder)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-2 text-[12.5px]\" style={{ color: t.subink }} data-testid=\"text-scanning\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className=\"h-9 px-5 rounded-full inline-flex items-center gap-2 text-[13px] font-semibold text-white disabled:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"mt-4 text-[15px] font-semibold\" style={{ color: t.ink, letterSpacing: \"-0.01em\" }}>{slot.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"mt-1 text-[12.5px]\" style={{ color: t.subink }}>{slot.note}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"mt-0.5 text-[12.5px] tabular-nums\" style={{ color: t.subink }} data-testid={`text-rev-${spec.id}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<span className=\"text-[11.5px]\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div key={h.id} className=\"flex items-center justify-center gap-1.5 text-[11.5px]\" style={{ color: t.faint, opacity: 0.85 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"mt-1 text-[12.5px]\" style={{ color: t.faint }}>{slot.note || \"Needed for packages\"}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<span className=\"h-9 px-5 rounded-full inline-flex items-center gap-2 text-[13px] font-semibold text-white\" style={{ backgroundColor: t.blue }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"text-[12px] font-medium\" style={{ color: t.faint }}>Catalog · Templates</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<p className=\"mt-1.5 text-[13.5px]\" style={{ color: t.subink, maxWidth: 620 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>{format} · Templates</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "className=\"h-7 px-3 rounded-full text-[12px] font-semibold tabular-nums transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<div className=\"text-[13.5px]\" style={{ color: t.subink }}>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
+    "snippet": "<button type=\"button\" className={cn(\"w-8 h-8 -mr-2 rounded-full flex items-center justify-center transition-colors flex-shrink-0\", t.hoverWash)} style={{ color: t.subink }} aria-label=\"Close\" onClick="
+  },
+  {
+    "rule": "brand-hex-literal",
     "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
     "snippet": "BLUE: \"#319ED8\","
   },
@@ -24133,11 +24693,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "<div className=\"text-[11.5px]\" style={{ color: SUBINK, marginTop: 3 }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
-    "snippet": "className=\"text-[11.5px] tabular-nums\""
   },
   {
     "rule": "hardcoded-font-size",

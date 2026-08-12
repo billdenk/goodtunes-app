@@ -151,6 +151,10 @@ import {
   pressTemplateSpecs,
   type PressTemplateSpec,
   type InsertPressTemplateSpec,
+  pressTemplateRevisions,
+  type PressTemplateRevision,
+  pressTemplateTestRuns,
+  type PressTemplateTestRun,
   pressAudioSpecs,
   type PressAudioSpec,
   type InsertPressAudioSpec,
@@ -994,6 +998,47 @@ export interface IStorage {
       >
     >,
   ): Promise<PressTemplateSpec | null>;
+
+  // ---- Press-templates flow (Ruby handoff) — revisions + test runs ----
+  // File-only update: swaps the attached template on an EXISTING spec row
+  // without touching operator-entered artboard/pages/color/rules columns
+  // (upsertPressTemplateSpec's conflict-update would null them out).
+  updatePressTemplateSpecFile(
+    pressId: string,
+    specId: string,
+    fileUrl: string | null,
+    fileName: string | null,
+    updatedByUserId: string | null,
+  ): Promise<PressTemplateSpec | null>;
+  listPressTemplateRevisions(specIds: string[]): Promise<PressTemplateRevision[]>;
+  createPressTemplateRevision(input: {
+    specId: string;
+    revLabel: string;
+    fileUrl: string;
+    fileName: string | null;
+    createdByUserId: string | null;
+    measuredSnapshot?: Record<string, unknown> | null;
+  }): Promise<PressTemplateRevision>;
+  supersedePressTemplateRevisions(specId: string, exceptId: string | null, note: string | null): Promise<void>;
+  setPressTemplateRevisionStatus(
+    revisionId: string,
+    status: string,
+    certifiedAt?: Date | null,
+  ): Promise<PressTemplateRevision | null>;
+  listPressTemplateTestRuns(specIds: string[]): Promise<PressTemplateTestRun[]>;
+  getPressTemplateTestRunById(runId: string): Promise<PressTemplateTestRun | null>;
+  createPressTemplateTestRun(input: {
+    specId: string;
+    revisionId: string | null;
+    fileUrl: string;
+    fileName: string | null;
+    checks: unknown[];
+    verdict: string;
+    previewUrl?: string | null;
+    previewUrl2?: string | null;
+    createdByUserId: string | null;
+  }): Promise<PressTemplateTestRun>;
+  certifyPressTemplateTestRun(runId: string, when: Date): Promise<PressTemplateTestRun | null>;
 
   // ---- Task #2324 — Operator-editable press AUDIO spec override ------
   // One row per press (keyed manufacturers.id). The audio preflight
@@ -5562,6 +5607,129 @@ export class DbStorage implements IStorage {
       .update(pressTemplateSpecs)
       .set(patch)
       .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)))
+      .returning();
+    return row ?? null;
+  }
+
+  // ---- Press-templates flow (Ruby handoff) — revisions + test runs ----
+  async updatePressTemplateSpecFile(
+    pressId: string,
+    specId: string,
+    fileUrl: string | null,
+    fileName: string | null,
+    updatedByUserId: string | null,
+  ): Promise<PressTemplateSpec | null> {
+    const [row] = await db
+      .update(pressTemplateSpecs)
+      .set({ templateFileUrl: fileUrl, templateFileName: fileName, updatedByUserId, updatedAt: new Date() })
+      .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)))
+      .returning();
+    return row ?? null;
+  }
+  async listPressTemplateRevisions(specIds: string[]): Promise<PressTemplateRevision[]> {
+    if (specIds.length === 0) return [];
+    return db
+      .select()
+      .from(pressTemplateRevisions)
+      .where(inArray(pressTemplateRevisions.specId, specIds))
+      .orderBy(desc(pressTemplateRevisions.createdAt));
+  }
+  async createPressTemplateRevision(input: {
+    specId: string;
+    revLabel: string;
+    fileUrl: string;
+    fileName: string | null;
+    createdByUserId: string | null;
+    measuredSnapshot?: Record<string, unknown> | null;
+  }): Promise<PressTemplateRevision> {
+    const [row] = await db
+      .insert(pressTemplateRevisions)
+      .values({
+        specId: input.specId,
+        revLabel: input.revLabel,
+        fileUrl: input.fileUrl,
+        fileName: input.fileName,
+        createdByUserId: input.createdByUserId,
+        measuredSnapshot: input.measuredSnapshot ?? null,
+      })
+      .returning();
+    return row;
+  }
+  async supersedePressTemplateRevisions(
+    specId: string,
+    exceptId: string | null,
+    note: string | null,
+  ): Promise<void> {
+    const conds = [
+      eq(pressTemplateRevisions.specId, specId),
+      inArray(pressTemplateRevisions.status, ["pending", "certified"]),
+    ];
+    if (exceptId) conds.push(sql`${pressTemplateRevisions.id} <> ${exceptId}`);
+    await db
+      .update(pressTemplateRevisions)
+      .set({ status: "superseded", supersededAt: new Date(), ...(note ? { note } : {}) })
+      .where(and(...conds));
+  }
+  async setPressTemplateRevisionStatus(
+    revisionId: string,
+    status: string,
+    certifiedAt?: Date | null,
+  ): Promise<PressTemplateRevision | null> {
+    const [row] = await db
+      .update(pressTemplateRevisions)
+      .set({ status, ...(certifiedAt !== undefined ? { certifiedAt } : {}) })
+      .where(eq(pressTemplateRevisions.id, revisionId))
+      .returning();
+    return row ?? null;
+  }
+  async listPressTemplateTestRuns(specIds: string[]): Promise<PressTemplateTestRun[]> {
+    if (specIds.length === 0) return [];
+    return db
+      .select()
+      .from(pressTemplateTestRuns)
+      .where(inArray(pressTemplateTestRuns.specId, specIds))
+      .orderBy(desc(pressTemplateTestRuns.createdAt));
+  }
+  async getPressTemplateTestRunById(runId: string): Promise<PressTemplateTestRun | null> {
+    const [row] = await db
+      .select()
+      .from(pressTemplateTestRuns)
+      .where(eq(pressTemplateTestRuns.id, runId))
+      .limit(1);
+    return row ?? null;
+  }
+  async createPressTemplateTestRun(input: {
+    specId: string;
+    revisionId: string | null;
+    fileUrl: string;
+    fileName: string | null;
+    checks: unknown[];
+    verdict: string;
+    previewUrl?: string | null;
+    previewUrl2?: string | null;
+    createdByUserId: string | null;
+  }): Promise<PressTemplateTestRun> {
+    const [row] = await db
+      .insert(pressTemplateTestRuns)
+      .values({
+        specId: input.specId,
+        revisionId: input.revisionId,
+        fileUrl: input.fileUrl,
+        fileName: input.fileName,
+        checks: input.checks,
+        verdict: input.verdict,
+        previewUrl: input.previewUrl ?? null,
+        previewUrl2: input.previewUrl2 ?? null,
+        createdByUserId: input.createdByUserId,
+      })
+      .returning();
+    return row;
+  }
+  async certifyPressTemplateTestRun(runId: string, when: Date): Promise<PressTemplateTestRun | null> {
+    const [row] = await db
+      .update(pressTemplateTestRuns)
+      .set({ certifiedAt: when })
+      .where(eq(pressTemplateTestRuns.id, runId))
       .returning();
     return row ?? null;
   }

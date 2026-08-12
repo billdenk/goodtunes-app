@@ -116,6 +116,7 @@ import {
   type CompletedTemplateVerdict,
 } from "@shared/uploadValidation";
 import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches } from "./validators/completedTemplate";
+import { scanObjectPdf, measureTemplateSpecRow, clearTemplateSpecMeasurements } from "./templateSpecs";
 
 const scryptAsync = promisify(scrypt);
 
@@ -33665,21 +33666,9 @@ export async function registerRoutes(
     return resolveFinishedComponents({ vendorId, config, storeRows, pressPrintRules, pressName });
   }
 
-  // Task #2705 — scan a direct-uploaded print-ready PDF already sitting in
-  // OUR object storage (`/objects/uploads/<id>`), streaming it through the
-  // same bounded scanner the paste-a-URL path uses. No SSRF surface (never
-  // fetches an external host).
-  async function scanObjectPdf(objectPath: string) {
-    const file = await objectStorage.getObjectEntityFile(objectPath);
-    const scanner = new CompletedPdfScanner();
-    await new Promise<void>((resolve, reject) => {
-      const rs = file.createReadStream();
-      rs.on("data", (chunk: Buffer) => scanner.push(chunk));
-      rs.on("end", () => resolve());
-      rs.on("error", (e: Error) => reject(e));
-    });
-    return scanner.finish();
-  }
+  // Task #2705 — scan a direct-uploaded print-ready PDF: shared
+  // implementation now lives in server/templateSpecs.ts (scanObjectPdf),
+  // imported above so the press portal reuses the exact same code path.
 
   // Task #2705 — best-effort first-page thumbnail for a direct-uploaded
   // completed-art PDF: download to /tmp, rasterize page 1 with pdftoppm,
@@ -34418,88 +34407,9 @@ export async function registerRoutes(
     res.json({ printRules: updated?.printRules ?? null });
   });
 
-  // Task #3011 — measure an attached template file and persist what's in
-  // it (artboard dims, page count, convention observations) onto the spec
-  // row's measured-* columns. Never touches operator-entered fields. Any
-  // failure is recorded (measuredError) and the row keeps working on the
-  // baseline / computed fallback — a broken scan never breaks the check.
-  const TEMPLATE_SCAN_MAX_BYTES = 300 * 1024 * 1024;
-  async function measureTemplateSpecRow(pressId: string, specId: string): Promise<void> {
-    const row = await storage.getPressTemplateSpecById(pressId, specId);
-    if (!row?.templateFileUrl) return;
-    const url = row.templateFileUrl;
-    let scan: import("./validators/completedTemplate").CompletedPdfScan | null = null;
-    let error: string | null = null;
-    try {
-      if (url.startsWith("/objects/uploads/")) {
-        // Our own object storage — no SSRF surface.
-        scan = await scanObjectPdf(url);
-        if (!scan.isPdf) {
-          error = "The attached file isn't a PDF — only PDF templates can be measured.";
-          scan = null;
-        }
-      } else if (/^https?:\/\//i.test(url)) {
-        const fetched = await fetchAndScanPdf(url, {
-          maxBytes: TEMPLATE_SCAN_MAX_BYTES,
-          timeoutMs: 60_000,
-        });
-        if (fetched.ok) scan = fetched.scan;
-        else error = fetched.error;
-      } else {
-        error = "Unsupported template location — upload the file or paste an https:// link.";
-      }
-    } catch (e: any) {
-      error = e?.message ? `Couldn't measure this template: ${e.message}` : "Couldn't measure this template.";
-    }
-
-    if (scan) {
-      // Use the FIRST page's MediaBox as the artboard (all real vendor
-      // templates are uniform; a mixed-size file still records page 1).
-      const first = scan.pageSizesInches[0] ?? null;
-      // Task #3030 — the template's own drawn bleed line: per-side distance
-      // between its trim and bleed geometry (BleedBox preferred, MediaBox
-      // fallback). Null when the template carries no trim box.
-      const bleedLine = measuredBleedInches(scan);
-      await storage.updatePressTemplateSpecMeasured(pressId, specId, {
-        measuredArtboardWInches: first ? Math.round(first.w * 10000) / 10000 : null,
-        measuredArtboardHInches: first ? Math.round(first.h * 10000) / 10000 : null,
-        measuredPages: scan.pageCount > 0 ? scan.pageCount : null,
-        measuredBleedLineInches:
-          bleedLine != null && bleedLine > 0 ? Math.round(bleedLine * 10000) / 10000 : null,
-        measuredHasCmyk: scan.hasCMYK,
-        measuredHasRgb: scan.hasRGB,
-        measuredHasSpot: scan.hasSpot,
-        measuredHasLiveText: scan.hasFontDicts,
-        measuredHasEmbeddedFonts: scan.hasEmbeddedFonts,
-        measuredHasDieline: scan.hasDieline,
-        measuredAt: new Date(),
-        measuredError: null,
-      });
-    } else {
-      await storage.updatePressTemplateSpecMeasured(pressId, specId, {
-        measuredAt: new Date(),
-        measuredError: error ?? "Couldn't measure this template.",
-      });
-    }
-  }
-
-  /** Blank every measured-* column (template removed or replaced). */
-  async function clearTemplateSpecMeasurements(pressId: string, specId: string): Promise<void> {
-    await storage.updatePressTemplateSpecMeasured(pressId, specId, {
-      measuredArtboardWInches: null,
-      measuredArtboardHInches: null,
-      measuredPages: null,
-      measuredBleedLineInches: null,
-      measuredHasCmyk: null,
-      measuredHasRgb: null,
-      measuredHasSpot: null,
-      measuredHasLiveText: null,
-      measuredHasEmbeddedFonts: null,
-      measuredHasDieline: null,
-      measuredAt: null,
-      measuredError: null,
-    });
-  }
+  // Task #3011/#3030 — measureTemplateSpecRow / clearTemplateSpecMeasurements
+  // now live in server/templateSpecs.ts (imported above), shared with the
+  // press-portal templates flow.
 
   app.get("/api/admin/manufacturers/:id/template-specs", requireAdminBearer, async (req, res) => {
     if (!(await requirePressManager(req, res, req.params.id))) return;
