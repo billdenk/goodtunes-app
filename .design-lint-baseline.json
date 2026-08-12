@@ -23917,7 +23917,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
-    "snippet": "<div className=\"text-[12.5px]\" style={{ color: t.ink }}>"
+    "snippet": "<div className=\"min-w-0 flex-1 text-[12.5px]\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[12.5px] font-medium disabled:opacity-60\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -23928,6 +23933,16 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
     "snippet": "<span className=\"text-[11.5px]\" style={{ color: t.faint }}>Press-entered + measured from the template</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"text-[13px] font-medium\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<div className=\"text-[12px]\" style={{ color: t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",

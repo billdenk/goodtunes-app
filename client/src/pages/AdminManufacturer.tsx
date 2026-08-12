@@ -4750,6 +4750,18 @@ function TemplateComponentRow({
               >
                 {rescanBusy ? "Measuring…" : "Re-scan"}
               </button>
+              {/* Task #3044 — the error state must offer a recovery path: when
+                  the stored link isn't a PDF, let the operator upload the real
+                  file (same handler as "Replace file"; the PUT re-measures). */}
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={busy || uploading}
+                className="shrink-0 text-[var(--brand-blue)] hover:underline disabled:opacity-50"
+                data-testid={`button-template-attach-pdf-${spec.componentKey}`}
+              >
+                {uploading ? "Uploading…" : "Attach the PDF instead"}
+              </button>
             </div>
           ) : (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">

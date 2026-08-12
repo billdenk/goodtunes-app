@@ -12,7 +12,7 @@
 // House rules: statuses are icon + word (never color-only); data-testid on every
 // interactive element; rows/zones with no measurement are omitted, never faked.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft, Download, FileText, Cpu, Eye, Loader2, ChevronDown, ChevronRight,
@@ -332,6 +332,67 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
     },
   });
 
+  // ─── Task #3044 — broken-link recovery: attach the PDF instead ───
+  // When the stored link isn't a PDF (e.g. a vendor download PAGE), measuring
+  // fails and the error used to be a dead end. This path uploads the real PDF
+  // to our own object storage and swaps it in via the existing template PUT,
+  // which clears old measurements and re-measures — so the row permanently
+  // stores the file itself, not the breakable external link.
+  const attachFileRef = useRef<HTMLInputElement | null>(null);
+  const [attachBusy, setAttachBusy] = useState<"uploading" | "measuring" | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  const attachTemplate = useMutation({
+    mutationFn: async (payload: { fileUrl: string; fileName: string }) => {
+      if (!spec) throw new Error("Template not loaded yet.");
+      const r = await apiRequest("PUT", `/api/press/${pressId}/templates`, {
+        format: spec.format,
+        componentKey: spec.componentKey,
+        variantKey: spec.variantKey ?? "",
+        discCount: spec.discCount,
+        fileUrl: payload.fileUrl,
+        fileName: payload.fileName,
+      });
+      return (await r.json()) as { spec: TemplateSpecWithHistory };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: templatesKey });
+      if (data.spec.measuredError) {
+        toast({
+          title: "File attached, but it couldn't be measured",
+          description: data.spec.measuredError,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Template attached", description: "The PDF was measured and saved as this template's file." });
+      }
+    },
+    onError: (e: any) => {
+      toast({ title: "Couldn't attach the PDF", description: stripStatus(e?.message ?? ""), variant: "destructive" });
+    },
+    onSettled: () => setAttachBusy(null),
+  });
+
+  const onAttachPdf = async (file: File | undefined | null) => {
+    if (!file || attachBusy) return;
+    const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+    if (!isPdf) {
+      toast({ title: "PDF only", description: "Attach the template as a PDF file.", variant: "destructive" });
+      return;
+    }
+    setAttachBusy("uploading");
+    try {
+      const url = await uploadAdminDoc(file);
+      setAttachBusy("measuring");
+      attachTemplate.mutate({ fileUrl: url, fileName: file.name });
+    } catch (e: any) {
+      setAttachBusy(null);
+      toast({ title: "Upload failed", description: e?.message, variant: "destructive" });
+    } finally {
+      if (attachFileRef.current) attachFileRef.current.value = "";
+    }
+  };
+
   const [uploading, setUploading] = useState(false);
   const onUploadTestFile = async (file: File | undefined) => {
     if (!file) return;
@@ -463,10 +524,37 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
       {spec.measuredError && (
         <div className="mt-4 rounded-xl px-4 py-3 flex items-start gap-2.5" style={{ backgroundColor: t.critWash, border: `1px solid ${t.crit}59` }} data-testid="measured-error">
           <XCircle className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: t.crit }} />
-          <div className="text-[12.5px]" style={{ color: t.ink }}>
+          <div className="min-w-0 flex-1 text-[12.5px]" style={{ color: t.ink }}>
             <span className="font-semibold">Couldn’t measure this template.</span> <span style={{ color: t.subink }}>{spec.measuredError}</span>
+            {canEdit && (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => attachFileRef.current?.click()}
+                  disabled={attachBusy != null}
+                  className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[12.5px] font-medium disabled:opacity-60"
+                  style={{ color: "#fff", backgroundColor: t.blue }}
+                  data-testid="button-attach-pdf-instead"
+                >
+                  {attachBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                  {attachBusy === "uploading" ? "Uploading…" : attachBusy === "measuring" ? "Measuring…" : "Attach the PDF instead"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
+      )}
+
+      {/* Hidden PDF picker shared by the error banner and the geometry dropzone */}
+      {canEdit && (
+        <input
+          ref={attachFileRef}
+          type="file"
+          accept=".pdf,application/pdf"
+          className="hidden"
+          onChange={(e) => onAttachPdf(e.target.files?.[0])}
+          data-testid="input-attach-pdf"
+        />
       )}
 
       {/* ─── Ingestion: printed areas study ─── */}
@@ -481,7 +569,31 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
           <span className="text-[11.5px]" style={{ color: t.faint }}>Press-entered + measured from the template</span>
         </div>
         <div className="mt-2">
-          {geoRows.length > 0 ? geoRows : (
+          {geoRows.length > 0 ? geoRows : canEdit ? (
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => attachFileRef.current?.click()}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); attachFileRef.current?.click(); } }}
+              onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={(e) => { e.preventDefault(); setDragActive(false); onAttachPdf(e.dataTransfer.files?.[0]); }}
+              className="my-3 rounded-xl px-4 py-6 flex flex-col items-center justify-center gap-1.5 cursor-pointer text-center"
+              style={{
+                border: `1.5px dashed ${dragActive ? t.blue : t.hairline}`,
+                backgroundColor: dragActive ? `${t.blue}14` : "transparent",
+              }}
+              data-testid="geometry-dropzone"
+            >
+              {attachBusy ? <Loader2 className="w-4 h-4 animate-spin" style={{ color: t.blue }} /> : <Upload className="w-4 h-4" style={{ color: t.blue }} />}
+              <div className="text-[13px] font-medium" style={{ color: t.ink }}>
+                {attachBusy === "uploading" ? "Uploading…" : attachBusy === "measuring" ? "Measuring…" : "Attach the template PDF"}
+              </div>
+              <div className="text-[12px]" style={{ color: t.faint }}>
+                No geometry measured yet — drop a PDF here or click to upload. It'll be measured automatically.
+              </div>
+            </div>
+          ) : (
             <div className="py-4 text-[13px]" style={{ color: t.faint }} data-testid="geometry-empty">No geometry measured yet — attach a template file to populate this.</div>
           )}
         </div>
