@@ -687,13 +687,25 @@ function EmptyTile({
 }) {
   const disabled = !!slot.disabled;
   const testid = `tile-empty-${slot.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  // Hover invite (gogoods, 2026-08-12): alongside the Attach pill, the tile's
+  // dashed border turns blue with the faintest glow — "a teeny bit if at all".
+  const [hover, setHover] = useState(false);
+  const invite = hover && !disabled && canEdit;
   return (
     <button
       type="button"
       disabled={disabled || !canEdit}
       onClick={disabled || !canEdit ? undefined : onAdd}
-      className="group relative rounded-2xl px-6 py-9 flex flex-col items-center justify-center text-center disabled:cursor-default"
-      style={{ border: `1.5px dashed ${t.dashedBorder}`, opacity: disabled ? 0.5 : 1 }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      className="group relative rounded-2xl px-6 py-9 flex flex-col items-center justify-center text-center disabled:cursor-default transition-[border-color,box-shadow] duration-200"
+      style={{
+        border: `1.5px dashed ${invite ? t.blue : t.dashedBorder}`,
+        boxShadow: invite ? `0 0 0 1px ${t.blue}33, 0 0 14px ${t.blue}2e` : "none",
+        opacity: disabled ? 0.5 : 1,
+      }}
       data-testid={testid}
     >
       <div className={cn("flex flex-col items-center transition-opacity", !disabled && canEdit && "group-hover:opacity-30")}>
