@@ -1,0 +1,541 @@
+// PressTemplatesIndex — Surface 3 from the template-canon brief: the
+// library of canon, a new page under Specs. Each entry: component,
+// variant, template code, revision, certification date, status.
+// Statuses are icon + word (never color alone). One certified revision
+// is live per component; superseded revisions stay in history.
+// MOCK_ data from the worked example (MRP 12-LBL100M-2 R-091125).
+// Shares the apple-canon press shell verbatim with the other press mocks.
+//
+// Theme-aware: light + dark via the THEMES map; toggle floats on the mock
+// page (mock-only chrome). Dark is the canon default and unchanged.
+
+import { useState } from 'react';
+import {
+  LayoutDashboard, Users, Disc3, UserPlus, Library, ClipboardList, Cog, Gift,
+  Search, Bell, MessageSquarePlus, BadgeCheck, Clock3, XCircle, History, Upload, FileQuestion,
+  Moon, Sun,
+} from 'lucide-react';
+import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate } from 'lucide-react';
+import mrpLogo from './assets/mrp-logo.svg';
+import gtPreviewTemplate from './assets/gt-preview-template-circle.png';
+import goodtunesLogo from './assets/goodtunes-logo.png';
+import brandonPhoto from './assets/brandon-seavers.png';
+
+function cn(...parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(' ');
+}
+
+// ─── Themes — dark = canon charcoal (unchanged); light = apple-canon ──
+type Theme = {
+  blue: string;
+  ink: string;
+  subink: string;
+  faint: string;
+  hairline: string;
+  canvas: string;
+  rail: string;
+  card: string;
+  cardSoft: string;
+  pillActive: string;      // raised active pill on the segmented track
+  pillShadow: string;      // active nav/pill lift
+  segShadow: string;       // raised thumb on the segmented format/size control
+  headerBg: string;        // sticky translucent header
+  searchPlaceholder: string; // input placeholder class
+  avatarRing: string;      // logo/avatar carrier ring
+  hoverWash: string;       // rail/nav hover class
+  tileHover: string;       // filled-tile hover wash
+  dashedBorder: string;    // empty "add" slot dashed border
+  ready: string;           // certified accent
+  crit: string;            // failed accent
+  warn: string;            // pending / couldn't-read accent
+  iconFill: string;        // die-line icon "paper" fill (behind dashed context)
+  logoFilter?: string;     // CSS invert for the dark-only wordmark asset
+};
+
+const THEMES: Record<'light' | 'dark', Theme> = {
+  light: {
+    blue: '#319ED8',
+    ink: '#1d1d1f',
+    subink: '#6e6e73',
+    faint: '#a1a1a6',
+    hairline: '#e6e6ea',
+    canvas: '#f5f5f7',
+    rail: '#f5f5f7',
+    card: '#ffffff',
+    cardSoft: '#f0f0f2',
+    pillActive: '#ffffff',
+    pillShadow: '0 1px 3px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)',
+    segShadow: '0 1px 3px rgba(0,0,0,0.08)',
+    headerBg: 'rgba(255,255,255,0.72)',
+    searchPlaceholder: 'placeholder:text-black/30',
+    avatarRing: 'ring-black/10',
+    hoverWash: 'hover:bg-black/5',
+    tileHover: 'hover:bg-black/[0.02]',
+    dashedBorder: 'rgba(0,0,0,0.18)',
+    ready: '#1c8a5b',
+    crit: '#e0245e',
+    warn: '#c98a00',
+    iconFill: '#ffffff',
+    logoFilter: undefined,
+  },
+  dark: {
+    blue: '#319ED8',
+    ink: '#f5f5f7',
+    subink: '#98989d',
+    faint: '#6e6e73',
+    hairline: 'rgba(255,255,255,0.10)',
+    canvas: '#161617',
+    rail: '#1c1c1e',
+    card: '#1e1e20',
+    cardSoft: '#26262a',
+    pillActive: '#3a3a3e',
+    pillShadow: '0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)',
+    segShadow: '0 1px 3px rgba(0,0,0,0.4)',
+    headerBg: 'rgba(22,22,23,0.72)',
+    searchPlaceholder: 'placeholder:text-white/30',
+    avatarRing: 'ring-white/15',
+    hoverWash: 'hover:bg-white/5',
+    tileHover: 'hover:bg-white/[0.03]',
+    dashedBorder: 'rgba(255,255,255,0.22)',
+    ready: '#34c98e', // brightened ready accent on dark
+    crit: '#ff5d8f',  // brightened critical accent on dark
+    warn: '#e8b34b',  // brightened warning accent on dark
+    iconFill: '#1e1e20',
+    logoFilter: 'invert(1) brightness(1.8)',
+  },
+};
+
+const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean }> }> = [
+  { label: 'Dashboard', icon: LayoutDashboard },
+  { label: 'Clients', icon: Users },
+  { label: 'Projects', icon: Disc3 },
+  { label: 'Acquisition', icon: UserPlus },
+  {
+    label: 'Catalog',
+    icon: Library,
+    children: [
+      { label: 'GoodTunes Packages', icon: NavPackage },
+      { label: 'White Label', icon: NavLayers, soon: true },
+      { label: 'GoodDeed Certificates', icon: NavAward },
+      { label: 'Specs', icon: NavWave, soon: true },
+      { label: 'Templates', icon: NavTemplate, soon: true },
+    ],
+  },
+  { label: 'Settings', icon: Cog },
+  { label: 'Referrals', icon: Gift },
+];
+
+function PressShell({ active, t, children }: { active: string; t: Theme; children: React.ReactNode }) {
+  return (
+    <div className="h-screen flex flex-col font-sans" style={{ fontFamily: 'Inter, system-ui, sans-serif', backgroundColor: t.canvas, color: t.ink }}>
+      <header
+        className="h-14 flex-shrink-0 flex items-center justify-between gap-4 pl-3 pr-6 sticky top-0 z-20"
+        style={{
+          backgroundColor: t.headerBg,
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: `1px solid ${t.hairline}`,
+        }}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className={cn('h-9 w-9 rounded-full bg-white ring-1 flex items-center justify-center flex-shrink-0 p-1', t.avatarRing)}>
+            <img src={mrpLogo} alt="Memphis Record Pressing" className="w-full h-full object-contain" />
+          </span>
+          <span className="text-[15px] font-semibold whitespace-nowrap" style={{ color: t.ink }}>
+            Memphis Record Pressing
+          </span>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button
+            type="button"
+            className={cn('h-8 px-3 rounded-full inline-flex items-center gap-1.5 text-[13px] font-medium transition-colors', t.hoverWash)}
+            style={{ color: t.subink }}
+            data-testid="button-feedback"
+          >
+            <MessageSquarePlus className="w-3.5 h-3.5" />
+            Feedback
+          </button>
+          <button type="button" className={cn('w-8 h-8 rounded-full flex items-center justify-center transition-colors', t.hoverWash)} style={{ color: t.subink }} aria-label="Notifications">
+            <Bell className="w-4 h-4" />
+          </button>
+          <span className={cn('w-8 h-8 rounded-full overflow-hidden ring-1 flex-shrink-0', t.avatarRing)}>
+            <img src={brandonPhoto} alt="BS" className="w-full h-full object-cover" />
+          </span>
+        </div>
+      </header>
+
+      <div className="flex-1 min-h-0 flex">
+        <aside className="w-60 flex-shrink-0 flex flex-col" style={{ backgroundColor: t.rail, borderRight: `1px solid ${t.hairline}` }}>
+          <div className="px-2.5 py-2.5">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: t.faint }} />
+              <input
+                className={cn('w-full h-9 pl-8 pr-10 rounded-full text-[12.5px] focus:outline-none', t.searchPlaceholder)}
+                style={{ border: `1px solid ${t.hairline}`, color: t.ink, backgroundColor: t.cardSoft }}
+                placeholder="Search…"
+                readOnly
+              />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none" style={{ color: t.faint }}>
+                ⌘K
+              </span>
+            </div>
+          </div>
+          <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
+            {PRESS_NAV.map((item) => {
+              if (item.children) {
+                const groupActive = item.label === active;
+                return (
+                  <div key={item.label}>
+                    <button
+                      type="button"
+                      className={cn('w-full flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !groupActive && t.hoverWash)}
+                      style={{
+                        fontWeight: groupActive ? 600 : 500,
+                        color: groupActive ? t.ink : t.subink,
+                        backgroundColor: groupActive ? t.card : undefined,
+                        boxShadow: groupActive ? t.pillShadow : undefined,
+                      }}
+                    >
+                      <NavChevron className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
+                      <span className="truncate flex-1 text-left">{item.label}</span>
+                    </button>
+                    <div className="space-y-0.5">
+                      {item.children.map(({ label, icon: Icon, soon }) => {
+                        const isActive = label === active;
+                        return (
+                          <a
+                            key={label}
+                            href="#"
+                            onClick={(e) => e.preventDefault()}
+                            className={cn('flex items-center gap-2.5 pl-7 pr-2.5 h-9 rounded-lg text-[13px] transition-colors', !isActive && t.hoverWash)}
+                            style={{
+                              fontWeight: isActive ? 600 : 500,
+                              color: isActive ? t.ink : t.subink,
+                              backgroundColor: isActive ? t.card : undefined,
+                              boxShadow: isActive ? t.pillShadow : undefined,
+                            }}
+                          >
+                            <Icon className="w-4 h-4 flex-shrink-0" style={{ color: isActive ? t.ink : t.faint }} />
+                            <span className="truncate flex-1">{label}</span>
+                            {soon && (
+                              <span className="text-[10px] font-semibold px-2 h-[18px] inline-flex items-center rounded-full flex-shrink-0" style={{ backgroundColor: t.cardSoft, color: t.subink }}>
+                                Request
+                              </span>
+                            )}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              }
+              const { label, icon: Icon } = item;
+              const isActive = label === active;
+              return (
+                <a
+                  key={label}
+                  href="#"
+                  onClick={(e) => e.preventDefault()}
+                  className={cn('flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !isActive && t.hoverWash)}
+                  style={{
+                    fontWeight: isActive ? 600 : 500,
+                    color: isActive ? t.ink : t.subink,
+                    backgroundColor: isActive ? t.card : undefined,
+                    boxShadow: isActive ? t.pillShadow : undefined,
+                  }}
+                >
+                  <Icon className="w-4 h-4 flex-shrink-0" style={{ color: isActive ? t.ink : t.faint }} />
+                  <span className="truncate flex-1">{label}</span>
+                </a>
+              );
+            })}
+          </nav>
+          <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${t.hairline}` }}>
+            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: t.faint }}>
+              Powered by
+            </span>
+            <img src={goodtunesLogo} alt="GoodTunes" className="h-5 w-auto" style={{ filter: t.logoFilter }} />
+          </div>
+        </aside>
+
+        <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+type Status = 'certified' | 'pending' | 'failed' | 'superseded' | 'unread';
+
+const STATUS_META: Record<Status, { label: string; accent: (t: Theme) => string; Icon: typeof BadgeCheck }> = {
+  certified: { label: 'Certified', accent: (t) => t.ready, Icon: BadgeCheck },
+  pending: { label: 'Pending', accent: (t) => t.warn, Icon: Clock3 },
+  failed: { label: 'Failed', accent: (t) => t.crit, Icon: XCircle },
+  superseded: { label: 'Superseded', accent: (t) => t.faint, Icon: History },
+  unread: { label: "Couldn't read", accent: (t) => t.warn, Icon: FileQuestion },
+};
+
+function StatusChip({ status, t }: { status: Status; t: Theme }) {
+  const { label, accent, Icon } = STATUS_META[status];
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: accent(t) }}>
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </span>
+  );
+}
+
+// ─── Component icons — blueprint die-line canon from the package builder ────
+// Solid strokes are edges; dashed strokes are folds, holes, and hidden parts.
+// (Same drawings as BlueprintIcon in the catalog builder — one icon language.)
+type IconKind = 'jacket' | 'sleeve' | 'labels' | 'booklet';
+
+function ComponentIcon({ kind, color, fill, size = 44 }: { kind: IconKind; color: string; fill: string; size?: number }) {
+  const s: React.SVGProps<SVGSVGElement> = {
+    width: size, height: size, viewBox: '0 0 26 26', fill: 'none',
+    stroke: color, strokeWidth: 0.9, strokeLinecap: 'round', strokeLinejoin: 'round',
+  };
+  switch (kind) {
+    case 'jacket': // square jacket, record peeking out the right
+      return (
+        <svg {...s} aria-hidden>
+          <circle cx="17.5" cy="13" r="6.5" strokeDasharray="2 2.2" opacity={0.7} />
+          <circle cx="17.5" cy="13" r="1.4" strokeDasharray="1.2 1.6" opacity={0.7} />
+          <rect x="3" y="4" width="18" height="18" rx="1.2" fill={fill} />
+        </svg>
+      );
+    case 'labels': // center label — dashed record as context, solid label as the piece
+      return (
+        <svg {...s} aria-hidden>
+          <circle cx="13" cy="13" r="11" strokeDasharray="2 2.2" opacity={0.7} />
+          <circle cx="13" cy="13" r="6.5" fill={fill} />
+          <circle cx="13" cy="13" r="1.3" />
+          <path d="M9.6 10.4a4.6 4.6 0 0 1 6.8 0" opacity={0.6} />
+        </svg>
+      );
+    case 'sleeve': // inner sleeve — square sleeve half-hidden behind the dashed jacket
+      return (
+        <svg {...s} aria-hidden>
+          <rect x="9" y="5.5" width="15" height="15" rx="1" fill={fill} />
+          <rect x="2" y="5" width="16" height="16" rx="1.2" strokeDasharray="2 2.2" opacity={0.7} fill={fill} />
+        </svg>
+      );
+    case 'booklet': // folded booklet — dashed center fold, text lines
+      return (
+        <svg {...s} aria-hidden>
+          <rect x="4" y="4.5" width="18" height="17" rx="1.2" fill={fill} />
+          <path d="M13 4.5v17" strokeDasharray="2 2.2" opacity={0.7} />
+          <path d="M7 9.5h3.5M7 12.5h3.5M7 15.5h2.5M15.5 9.5h3.5M15.5 12.5h3.5" opacity={0.7} />
+        </svg>
+      );
+  }
+}
+
+const MOCK_TEMPLATES: Array<{
+  icon: IconKind; title: string;
+  component: string; variant: string; code: string; rev: string;
+  certified?: string; status: Status; note?: string; history?: Array<{ rev: string; note: string }>;
+}> = [
+  {
+    icon: 'labels', title: 'Center labels',
+    component: '12" LP center label', variant: '2LP · 100mm trim', code: '12-LBL100M-2', rev: 'R-091125',
+    certified: 'Certified Sep 14, 2026', status: 'certified',
+    history: [{ rev: 'R-072326', note: 'Superseded Sep 14, 2026 — 2 jobs in flight were flagged for review' }],
+  },
+];
+
+// Known-needed slots per vinyl size — straight from MRP's template catalog.
+const SLOT_SETS: Record<string, Array<{ kind: IconKind; title: string; note: string }>> = {
+  '7″': [
+    { kind: 'labels', title: 'Center labels', note: 'Small or large hole' },
+    { kind: 'jacket', title: 'Single jacket — no spine', note: 'Outer sleeve' },
+    { kind: 'jacket', title: 'Single jacket — 3 mm spine', note: 'Outer sleeve' },
+    { kind: 'jacket', title: 'Gatefold jacket', note: 'Opens flat' },
+    { kind: 'sleeve', title: 'Inner sleeve', note: 'Paper or board' },
+    { kind: 'labels', title: 'Flexi disc label', note: '7″ only' },
+  ],
+  '10″': [
+    { kind: 'labels', title: 'Center labels', note: '' },
+    { kind: 'jacket', title: 'Single jacket', note: 'Outer sleeve — no spine' },
+    { kind: 'jacket', title: 'Widespine jacket', note: 'Outer sleeve — wide spine' },
+    { kind: 'jacket', title: 'Gatefold jacket', note: 'Opens flat' },
+    { kind: 'sleeve', title: 'Inner sleeve', note: 'Paper or board' },
+    { kind: 'booklet', title: 'Insert', note: '10 × 10 in · 2 pages' },
+    { kind: 'booklet', title: 'Gatefold insert', note: '20 × 10 in · 4 pages — folds to 10 × 10' },
+  ],
+  '12″': [
+    { kind: 'jacket', title: 'Single jacket', note: 'Outer sleeve — no spine' },
+    { kind: 'jacket', title: 'Widespine jacket', note: 'Outer sleeve — wide spine' },
+    { kind: 'jacket', title: 'Gatefold jacket', note: 'Outer sleeve — opens flat' },
+    { kind: 'sleeve', title: 'Inner sleeve', note: 'Paper' },
+    { kind: 'booklet', title: 'Insert', note: '12 × 12 in · 2 pages' },
+  ],
+};
+
+// Known-needed slots for the coming formats — placeholders from the standard
+// packaging parts, so each library reads as "here's what belongs" from day one.
+const FORMAT_SLOTS: Record<string, Array<{ kind: IconKind; title: string; note: string }>> = {
+  CD: [
+    { kind: 'labels', title: 'Disc face', note: 'On-body print' },
+    { kind: 'booklet', title: 'Booklet', note: 'Front of the jewel case' },
+    { kind: 'sleeve', title: 'Tray card', note: 'Back inlay — spines included' },
+    { kind: 'jacket', title: 'Card wallet', note: 'Sleeve alternative to the jewel case' },
+  ],
+  Cassette: [
+    { kind: 'booklet', title: 'J-card', note: 'Folds into the Norelco case' },
+    { kind: 'jacket', title: 'O-card', note: 'Wraps around the case' },
+    { kind: 'labels', title: 'Shell print', note: 'On-body' },
+    { kind: 'labels', title: 'Shell labels', note: 'Stick-on — A & B sides' },
+  ],
+  // Confirmed against MRP's real sticker catalog (Aug 2026) — sizes are
+  // variants within each type, the way trim sizes work for center labels.
+  Stickers: [
+    { kind: 'labels', title: 'Rectangle sticker', note: '5 sizes · 1.5 × 1 to 2.5 × 1 in' },
+    { kind: 'labels', title: 'Square sticker', note: '7 sizes · 1 × 1 to 4 × 4 in' },
+    { kind: 'labels', title: 'Circle sticker', note: '7 sizes · 1 to 4 in' },
+    { kind: 'labels', title: 'UPC sticker', note: '1.75 × 0.75 in' },
+  ],
+};
+
+export default function PressTemplatesIndex() {
+  const [mode, setMode] = useState<'light' | 'dark'>('dark');
+  const t = THEMES[mode];
+  const [format, setFormat] = useState<'Vinyl' | 'CD' | 'Cassette' | 'Stickers'>('Vinyl');
+  const [size, setSize] = useState<'7″' | '10″' | '12″'>('12″');
+  return (
+    <PressShell active="Templates" t={t}>
+      <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
+        <div className="flex items-end justify-between gap-6 flex-wrap">
+          <div>
+            <div className="text-[12px] font-medium" style={{ color: t.faint }}>Catalog · Templates</div>
+            <h1 className="mt-1" style={{ fontSize: 30, letterSpacing: '-0.02em', fontWeight: 600, lineHeight: 1.12 }}>
+              <span style={{ color: t.ink }}>Templates. </span>
+              <span style={{ color: t.subink, fontWeight: 500 }}>Your standards, set.</span>
+            </h1>
+            <p className="mt-1.5 text-[13.5px]" style={{ color: t.subink, maxWidth: 620 }}>
+              Every file a client uploads is measured against the live canon below — your numbers, read straight
+              from your template PDFs. One certified revision is live per component.
+            </p>
+          </div>
+          {/* Format switcher — same segmented control as the catalog pricing pages */}
+          <div className="inline-flex items-center rounded-full flex-shrink-0" style={{ padding: 3, backgroundColor: t.cardSoft }} role="tablist" aria-label="Template format" data-testid="tabs-template-format">
+            {(['Vinyl', 'CD', 'Cassette', 'Stickers'] as const).map((label) => {
+              const on = format === label;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => setFormat(label)}
+                  className="rounded-full transition-colors"
+                  style={{
+                    padding: '6px 18px', fontSize: 13.5,
+                    fontWeight: on ? 600 : 500,
+                    color: on ? t.ink : t.faint,
+                    backgroundColor: on ? t.pillActive : 'transparent',
+                    boxShadow: on ? t.segShadow : 'none',
+                    cursor: 'pointer',
+                  }}
+                  data-testid={`tab-format-${label.toLowerCase()}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-between gap-4">
+          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.faint }}>{format} · Templates</div>
+          <div className="flex items-center gap-1.5">
+            {format === 'Vinyl' && (['7″', '10″', '12″'] as const).map((sz) => (
+              <button
+                key={sz}
+                type="button"
+                onClick={() => setSize(sz)}
+                className="h-7 px-3 rounded-full text-[12px] font-semibold tabular-nums transition-colors"
+                style={sz === size ? { backgroundColor: t.pillActive, color: t.ink, boxShadow: t.segShadow } : { color: t.faint, cursor: 'pointer' }}
+                data-testid={`filter-size-${sz.replace('″', '')}`}
+              >
+                {sz}
+              </button>
+            ))}
+            {/* Overflow menu hidden for now — "Duplicate a template" (reuse a file for
+                another size) is parked for a future pass per Bill, Aug 12 2026. */}
+          </div>
+        </div>
+
+        {/* Template tiles — Print-prep style containers (per Andrew, Aug 12 2026):
+            press picks the component (jacket / inner sleeve / center labels / booklet),
+            names it, the icon appears; each template lives in one of these tiles. */}
+        <div className="mt-6 grid gap-4" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+          {format === 'Vinyl' && size === '12″' && MOCK_TEMPLATES.map((tpl) => (
+            <div key={tpl.code + tpl.rev} className={cn('rounded-2xl px-6 pt-7 pb-5 flex flex-col items-center text-center transition-colors', t.tileHover)} style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }} data-testid={`tile-template-${tpl.code}`}>
+              {/* GT PREVIEW crop — the template shows itself; the component icon sits as a small badge */}
+              <div className="relative">
+                <span className="rounded-full overflow-hidden block" style={{ width: 104, height: 104, backgroundColor: '#fff', border: `1px solid ${t.hairline}` }}>
+                  <img src={gtPreviewTemplate} alt={`${tpl.title} — preview from the GT PREVIEW layer`} className="w-full h-full object-cover" data-testid={`img-tile-preview-${tpl.code}`} />
+                </span>
+                <span className="absolute -bottom-1 -right-1 rounded-full flex items-center justify-center" style={{ width: 30, height: 30, backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
+                  <ComponentIcon kind={tpl.icon} color={t.blue} fill={t.iconFill} size={18} />
+                </span>
+              </div>
+              <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{tpl.title}</div>
+              <div className="mt-1 text-[12.5px]" style={{ color: t.subink }}>{tpl.component} · {tpl.variant}</div>
+              <div className="mt-0.5 text-[12.5px] tabular-nums" style={{ color: t.subink }}>{tpl.code} <span style={{ color: t.faint }}>·</span> {tpl.rev}</div>
+              <div className="mt-3 flex items-center gap-2">
+                <StatusChip status={tpl.status} t={t} />
+                {tpl.certified && <span className="text-[11.5px]" style={{ color: t.faint }}>{tpl.certified.replace('Certified ', '')}</span>}
+              </div>
+              {tpl.history?.map((h) => (
+                <div key={h.rev} className="mt-2 flex items-center justify-center gap-1.5 text-[11.5px]" style={{ color: t.faint, opacity: 0.85 }}>
+                  <History className="w-3 h-3 flex-shrink-0" />
+                  <span className="tabular-nums">{h.rev}</span>
+                  <span>superseded · in history</span>
+                </div>
+              ))}
+            </div>
+          ))}
+
+          {/* Known-needed slots — every vinyl format needs these; empty ones sit
+              as dashed placeholders until the press fills them. */}
+          {(format === 'Vinyl' ? SLOT_SETS[size] : FORMAT_SLOTS[format]).map(({ kind, title, note }) => (
+            <button
+              key={title}
+              type="button"
+              className="group relative rounded-2xl px-6 py-9 flex flex-col items-center justify-center text-center"
+              style={{ border: `1.5px dashed ${t.dashedBorder}` }}
+              data-testid={`tile-empty-${title.toLowerCase().replace(/ /g, '-')}`}
+            >
+              {/* At rest: just the piece. On hover the content dims and "Click to add" appears. */}
+              <div className="flex flex-col items-center transition-opacity group-hover:opacity-30">
+                <ComponentIcon kind={kind} color={t.faint} fill={t.iconFill} />
+                <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{title}</div>
+                <div className="mt-1 text-[12.5px]" style={{ color: t.faint }}>{note || 'Needed for vinyl packages'}</div>
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="h-9 px-5 rounded-full inline-flex items-center gap-2 text-[13px] font-semibold text-white" style={{ backgroundColor: t.blue }}>
+                  <Upload className="w-4 h-4" />
+                  Click to add
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+
+      </div>
+
+      {/* MOCK-ONLY chrome — remove when wiring real theming. */}
+      <button
+        type="button"
+        onClick={() => setMode((m) => (m === 'light' ? 'dark' : 'light'))}
+        className="fixed bottom-4 right-4 z-30 h-9 px-3.5 rounded-full inline-flex items-center gap-2 text-[12.5px] font-medium shadow-lg"
+        style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
+        data-testid="button-theme-toggle"
+      >
+        {mode === 'light' ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
+        {mode === 'light' ? 'View dark' : 'View light'}
+      </button>
+    </PressShell>
+  );
+}
