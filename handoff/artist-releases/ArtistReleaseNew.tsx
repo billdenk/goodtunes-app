@@ -56,26 +56,29 @@ function NewReleaseModal({ t, onClose }: { t: Theme; onClose: () => void }) {
         data-testid="modal-backdrop"
       />
       <div
-        className="relative w-full max-w-md rounded-2xl p-8"
+        className="relative w-full rounded-3xl px-8 pt-7 pb-8"
         style={{
+          maxWidth: 500,
           backgroundColor: t.card,
           border: `1px solid ${t.hairline}`,
           boxShadow: '0 24px 60px rgba(0,0,0,0.28)',
         }}
       >
-        {/* Close — small gray circle with a dark × (canon) */}
+        {/* Close — small gray circle with a dark × (canon). Inset with real
+            air (right/top 20px) and the heading reserves space so the title
+            never crowds the circle (Bill, Aug 13 2026). */}
         <button
           type="button"
           aria-label="Close"
           onClick={onClose}
-          className="absolute right-4 top-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-          style={{ backgroundColor: t.chipBg, color: t.ink }}
+          className="absolute w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:opacity-80"
+          style={{ right: 20, top: 20, backgroundColor: t.chipBg, color: t.ink }}
           data-testid="button-new-release-close"
         >
           <X className="w-4 h-4" />
         </button>
 
-        <h2 id="new-release-title" className="text-[22px] tracking-tight" style={{ fontWeight: 600 }}>
+        <h2 id="new-release-title" className="text-[22px] tracking-tight" style={{ fontWeight: 600, paddingRight: 44 }}>
           <span style={{ color: t.ink }}>Name your release. </span>
           <span className="font-medium" style={{ color: t.subink }}>
             Change it anytime.
