@@ -1,0 +1,26 @@
+name = "GoodTunes (Niina)"
+client_id = "dba6763529f5ad8bb446917096ad6d34"
+application_url = "https://admin.goodtunes.music/api/shopify/install"
+embedded = false
+
+[access_scopes]
+scopes = "read_orders,write_orders,read_products"
+
+[auth]
+redirect_urls = ["https://admin.goodtunes.music/api/shopify/callback"]
+
+[webhooks]
+api_version = "2026-07"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request"]
+uri = "https://admin.goodtunes.music/api/webhooks/shopify/customers/data_request"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/redact"]
+uri = "https://admin.goodtunes.music/api/webhooks/shopify/customers/redact"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["shop/redact"]
+uri = "https://admin.goodtunes.music/api/webhooks/shopify/shop/redact"
+
