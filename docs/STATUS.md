@@ -1,6 +1,6 @@
 # GoodTunes — Living Status
 
-Last updated: 2026-08-12
+Last updated: 2026-08-13
 
 This file is the current-state summary for the design studio. It is kept
 current, not appended to: stale lines are overwritten when things change.
@@ -8,6 +8,7 @@ current, not appended to: stale lines are overwritten when things change.
 ## 1. Recent changes
 
 ### Done and live
+- Shopify custom-app bridge for Niina's store (gogoods, 2026-08-13): the public GoodTunes Shopify app is blocked from installing on live stores while it sits in Shopify's App Store review ("This app is under review" on the install screen). The backend now supports a second, custom-distribution Partner-Dashboard app as a bridge: an install link with `&appCred=custom` runs the whole OAuth round-trip (state signing, HMAC, token exchange, refresh) under the custom app's credentials, the connected store row remembers which app installed it, and webhook/extension-token verification accepts either app's signature. Awaiting the custom app's API key/secret (SHOPIFY_CUSTOM_API_KEY / SHOPIFY_CUSTOM_API_SECRET) to go live; when the public app clears review, a normal reinstall flips the store back.
 - Artist Completed Art access restored (gogoods, 2026-08-13): the artist Physical → Art tab's Completed Art flow (download templates, drag-and-drop the finished PDF, automatic vetting + trim preview) had gone blank — the press-portal access gate added in Task #2725 accidentally 403'd the album's own artist. The gate now also admits the album's own artist/label partners (dual-scope membership check); an unrelated artist stays blocked, and override/remove remain operator-only (the override affordance is now hidden for artist viewers too).
 - Artist package builder: type grid collapses once a color is picked (gogoods, 2026-08-13): the "Pick your vinyl" section in the artist Design-your-package builder now folds into the canon one-line summary row (disc thumb, type name, color count, blue "Change" pill — same collapsible-picker tool as the press Vinyl-colors page) as soon as a color has been chosen; Change re-expands, and picking a type or color collapses it again. Saved drafts open collapsed.
 - Operators can hand-enter fold and safety lines (Task #3101, 2026-08-13, manually applied after the merge card bounced): when a template's PDF carries no readable dieline guides, press editors can enter fold/score positions (X and Y) and a safety inset by hand on the template detail; press-entered values win over measured guides in the printed-areas study and survive template replaces (they're product geometry, not file facts). Idempotent columns added to dev + prod.

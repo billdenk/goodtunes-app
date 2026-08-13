@@ -3362,6 +3362,13 @@ export const shopifyStores = pgTable("shopify_stores", {
   // backwards compatibility — a null row reads as the $3.50 platform default
   // at accrual time (coalesce in the webhook handler).
   digitalUnitFeeCents: integer("digital_unit_fee_cents").default(350),
+  // Which Partner-Dashboard app this store installed under: 'public' (the
+  // App-Store-reviewed GoodTunes app) or 'custom' (the review-bypass
+  // custom-distribution bridge app, locked to one store — first user:
+  // Niina Soleil, while the public app sits in review). Token refresh must
+  // use the matching client_id/secret; webhook HMAC verification tries
+  // both secrets. A re-install under the other app flips this on callback.
+  appCredential: text("app_credential").notNull().default("public"),
 });
 
 // Mapping a Shopify product (or specific variant) on a connected store

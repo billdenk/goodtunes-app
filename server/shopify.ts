@@ -61,6 +61,39 @@ import { storage } from "./storage";
 // extra secret to provision.
 const SHOPIFY_API_KEY = process.env.SHOPIFY_API_KEY ?? "";
 const SHOPIFY_API_SECRET = process.env.SHOPIFY_API_SECRET ?? "";
+// ─── Second app: custom-distribution bridge ──────────────────────────
+// While the PUBLIC app sits in Shopify's App Store review queue, no live
+// merchant store can install it ("This app is under review" install
+// block). A second Partner-Dashboard app with CUSTOM distribution is
+// locked to one store but installs immediately with no review — we use
+// it as a bridge (first user: Niina Soleil's store). Same callback, same
+// scopes; the only differences are which client_id/secret sign the OAuth
+// round-trip and webhooks. Each shopify_stores row remembers which app
+// installed it (app_credential: 'public' | 'custom') so token refresh
+// uses the right secret. Webhook/JWT verification tries both secrets —
+// Shopify signs with the app the store installed, and HMAC comparison is
+// cheap. When the public app clears review, the store re-installs under
+// it and the row flips back to 'public' on that OAuth callback.
+const SHOPIFY_CUSTOM_API_KEY = process.env.SHOPIFY_CUSTOM_API_KEY ?? "";
+const SHOPIFY_CUSTOM_API_SECRET = process.env.SHOPIFY_CUSTOM_API_SECRET ?? "";
+
+export type ShopifyAppKind = "public" | "custom";
+function appCreds(kind: ShopifyAppKind): { key: string; secret: string } {
+  return kind === "custom"
+    ? { key: SHOPIFY_CUSTOM_API_KEY, secret: SHOPIFY_CUSTOM_API_SECRET }
+    : { key: SHOPIFY_API_KEY, secret: SHOPIFY_API_SECRET };
+}
+function appKindConfigured(kind: ShopifyAppKind): boolean {
+  const c = appCreds(kind);
+  return Boolean(c.key) && Boolean(c.secret);
+}
+function storeAppKind(store: { appCredential?: string | null }): ShopifyAppKind {
+  return store.appCredential === "custom" ? "custom" : "public";
+}
+// All configured webhook-signing secrets, public first (the common case).
+function allAppSecrets(): string[] {
+  return [SHOPIFY_API_SECRET, SHOPIFY_CUSTOM_API_SECRET].filter(Boolean);
+}
 // write_orders is required so we can stamp the redemption URL onto the
 // Shopify order as a note_attribute — that's what merchants reference
 // from their email-template Liquid snippet (see install guide).
@@ -98,24 +131,30 @@ function isValidShopDomain(shop: string): boolean {
 // minus the `hmac` and `signature` params themselves) keyed by the app
 // secret. Webhooks use HMAC-SHA256 over the raw request body, base64
 // encoded in `X-Shopify-Hmac-Sha256`.
-function verifyOAuthHmac(query: Record<string, any>): boolean {
+function verifyOAuthHmac(query: Record<string, any>, secret: string): boolean {
   const { hmac, signature: _sig, ...rest } = query;
   if (!hmac || typeof hmac !== "string") return false;
   const message = Object.keys(rest)
     .sort()
     .map((k) => `${k}=${Array.isArray(rest[k]) ? rest[k].join(",") : rest[k]}`)
     .join("&");
-  const digest = createHmac("sha256", SHOPIFY_API_SECRET).update(message).digest("hex");
+  const digest = createHmac("sha256", secret).update(message).digest("hex");
   const a = Buffer.from(digest);
   const b = Buffer.from(hmac);
   return a.length === b.length && timingSafeEqual(a, b);
 }
+// Webhooks arrive signed by whichever app the store installed (public or
+// the custom bridge); the header carries no app id, so try each configured
+// secret. Two HMAC-SHA256s over the body is negligible cost.
 function verifyWebhookHmac(rawBody: Buffer, headerHmac: string | undefined): boolean {
   if (!headerHmac) return false;
-  const digest = createHmac("sha256", SHOPIFY_API_SECRET).update(rawBody).digest("base64");
-  const a = Buffer.from(digest);
   const b = Buffer.from(headerHmac);
-  return a.length === b.length && timingSafeEqual(a, b);
+  for (const secret of allAppSecrets()) {
+    const digest = createHmac("sha256", secret).update(rawBody).digest("base64");
+    const a = Buffer.from(digest);
+    if (a.length === b.length && timingSafeEqual(a, b)) return true;
+  }
+  return false;
 }
 
 // ─── Storage helpers (inlined, mirroring server/commerce.ts pattern) ──
@@ -148,6 +187,11 @@ async function upsertStore(input: {
   // Task #2435 — same contract for the artist (Person) association when the
   // install is kicked off from the artist's Overview Shopify section.
   personId?: string;
+  // Which app minted this token ('public' | 'custom'). Always known at the
+  // OAuth callback (the only caller that mints tokens), and a re-install
+  // under the other app must flip it or token refresh signs with the wrong
+  // secret. Undefined on legacy paths = leave the existing value.
+  appCredential?: ShopifyAppKind;
 }): Promise<ShopifyStore> {
   const existing = await getStoreByDomain(input.shopDomain);
   const encrypted = encryptToken(input.accessToken);
@@ -170,6 +214,7 @@ async function upsertStore(input: {
         storeName: input.storeName ?? existing.storeName,
         labelId: input.labelId ?? existing.labelId,
         personId: input.personId ?? existing.personId,
+        appCredential: input.appCredential ?? existing.appCredential,
         installedAt: new Date(),
         uninstalledAt: null,
       })
@@ -189,6 +234,7 @@ async function upsertStore(input: {
       refreshTokenExpiresAt: input.refreshTokenExpiresAt ?? null,
       labelId: input.labelId ?? null,
       personId: input.personId ?? null,
+      appCredential: input.appCredential ?? "public",
     })
     .returning();
   return created;
@@ -222,12 +268,13 @@ async function refreshStoreToken(store: ShopifyStore): Promise<string> {
     } catch {
       return decryptToken(store.accessToken);
     }
+    const refreshCreds = appCreds(storeAppKind(store));
     const r = await fetch(`https://${store.shopDomain}/admin/oauth/access_token`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: new URLSearchParams({
-        client_id: SHOPIFY_API_KEY,
-        client_secret: SHOPIFY_API_SECRET,
+        client_id: refreshCreds.key,
+        client_secret: refreshCreds.secret,
         grant_type: "refresh_token",
         refresh_token: refreshTokenPlain,
       }).toString(),
@@ -1824,7 +1871,18 @@ export function registerShopifyRoutes(app: Express) {
   // authorization grant. We sign the `state` with the app secret so a
   // forged callback can't fool us into trusting an unrelated shop.
   app.get("/api/shopify/install", async (req, res) => {
-    if (!shopifyConfigured()) return res.status(500).send("Shopify not configured — set SHOPIFY_API_KEY and SHOPIFY_API_SECRET");
+    // `?appCred=custom` routes the install through the custom-distribution
+    // bridge app (no App Store review; locked to its one store — Shopify
+    // rejects the authorize for any other shop). Default: the public app.
+    const appKind: ShopifyAppKind = String(req.query.appCred ?? "") === "custom" ? "custom" : "public";
+    if (!appKindConfigured(appKind))
+      return res
+        .status(500)
+        .send(
+          appKind === "custom"
+            ? "Shopify custom app not configured — set SHOPIFY_CUSTOM_API_KEY and SHOPIFY_CUSTOM_API_SECRET"
+            : "Shopify not configured — set SHOPIFY_API_KEY and SHOPIFY_API_SECRET",
+        );
     const shop = String(req.query.shop ?? "").trim().toLowerCase();
     if (!isValidShopDomain(shop)) return res.status(400).send("shop must be a *.myshopify.com domain");
     // Task #2030 — optional label context. When the operator kicks off the
@@ -1902,7 +1960,11 @@ export function registerShopifyRoutes(app: Express) {
     // Task #2918 — direct installs ride a 4-part `nonce:link:<id>:<surface>`
     // flavor; delegated (copied) links keep the 3-part form, so old states
     // round-trip unchanged.
-    const statePayload = linkId
+    // Custom-bridge installs prefix the payload with `app2:` so the
+    // callback knows which app's secret verifies the state/OAuth HMAC and
+    // exchanges the code. `app2` can't collide with the hex nonce that
+    // starts every other flavor, and old public states parse unchanged.
+    const basePayload = linkId
       ? directReturn
         ? `${nonce}:link:${linkId}:${directReturn}`
         : `${nonce}:link:${linkId}`
@@ -1911,11 +1973,13 @@ export function registerShopifyRoutes(app: Express) {
         : labelId
           ? `${nonce}:${labelId}`
           : nonce;
-    const stateSig = createHmac("sha256", SHOPIFY_API_SECRET).update(statePayload).digest("hex").slice(0, 16);
+    const statePayload = appKind === "custom" ? `app2:${basePayload}` : basePayload;
+    const creds = appCreds(appKind);
+    const stateSig = createHmac("sha256", creds.secret).update(statePayload).digest("hex").slice(0, 16);
     const state = `${statePayload}.${stateSig}`;
     const redirectUri = `${appOrigin(req)}/api/shopify/callback`;
     const authorize = new URL(`https://${shop}/admin/oauth/authorize`);
-    authorize.searchParams.set("client_id", SHOPIFY_API_KEY);
+    authorize.searchParams.set("client_id", creds.key);
     authorize.searchParams.set("scope", SHOPIFY_SCOPES);
     authorize.searchParams.set("redirect_uri", redirectUri);
     authorize.searchParams.set("state", state);
@@ -1926,7 +1990,6 @@ export function registerShopifyRoutes(app: Express) {
   });
 
   app.get("/api/shopify/callback", async (req, res) => {
-    if (!shopifyConfigured()) return res.status(500).send("Shopify not configured");
     const shop = String(req.query.shop ?? "").trim().toLowerCase();
     const code = String(req.query.code ?? "");
     const state = String(req.query.state ?? "");
@@ -1937,18 +2000,24 @@ export function registerShopifyRoutes(app: Express) {
     // The signed payload is everything before the LAST dot (the signature
     // never contains a dot), so a `nonce:labelId` payload round-trips. Old
     // `nonce.sig` states still verify (payload = nonce, labelId undefined).
+    // A leading `app2:` segment marks a custom-bridge install: the whole
+    // round-trip (state sig, OAuth HMAC, code exchange) uses THAT app's
+    // credentials, and the store row is stamped app_credential='custom'.
     const dotIdx = state.lastIndexOf(".");
     const statePayload = dotIdx >= 0 ? state.slice(0, dotIdx) : "";
     const sig = dotIdx >= 0 ? state.slice(dotIdx + 1) : "";
-    const expectedSig = createHmac("sha256", SHOPIFY_API_SECRET).update(statePayload).digest("hex").slice(0, 16);
+    const appKind: ShopifyAppKind = statePayload.startsWith("app2:") ? "custom" : "public";
+    if (!appKindConfigured(appKind)) return res.status(500).send("Shopify not configured");
+    const creds = appCreds(appKind);
+    const expectedSig = createHmac("sha256", creds.secret).update(statePayload).digest("hex").slice(0, 16);
     if (!statePayload || !sig || sig !== expectedSig) return res.status(400).send("State mismatch");
-    if (!verifyOAuthHmac(req.query as Record<string, any>)) return res.status(400).send("HMAC failed");
+    if (!verifyOAuthHmac(req.query as Record<string, any>, creds.secret)) return res.status(400).send("HMAC failed");
     // Recover the (already-validated-at-install-time) association context so
     // we can stamp the store + return the operator to where they started.
     //   `nonce:person:<id>` (3-part) → artist context   (Task #2435)
     //   `nonce:<labelId>`   (2-part) → label context     (Task #2030)
     //   `nonce`             (1-part) → global / legacy
-    const stateParts = statePayload.split(":");
+    const stateParts = (appKind === "custom" ? statePayload.slice("app2:".length) : statePayload).split(":");
     let stateLabelId = "";
     let statePersonId = "";
     // Task #2914 — link-token context (`nonce:link:<install-link id>`).
@@ -2023,7 +2092,7 @@ export function registerShopifyRoutes(app: Express) {
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({ client_id: SHOPIFY_API_KEY, client_secret: SHOPIFY_API_SECRET, code, expiring: "1" }),
+      body: JSON.stringify({ client_id: creds.key, client_secret: creds.secret, code, expiring: "1" }),
     });
     if (!tokenRes.ok) {
       console.error(`[shopify-oauth] token exchange failed for ${shop}: ${tokenRes.status}`);
@@ -2075,6 +2144,7 @@ export function registerShopifyRoutes(app: Express) {
         : null,
       labelId: stateLabelId || undefined,
       personId: statePersonId || undefined,
+      appCredential: appKind,
     });
 
     // Task #2892 — flip any pending "Waiting for install" chip for this
@@ -2154,7 +2224,7 @@ export function registerShopifyRoutes(app: Express) {
     // against a development store before wiring real env vars. Same
     // posture as the Stripe webhook handler.
     let verified = false;
-    if (SHOPIFY_API_SECRET) {
+    if (allAppSecrets().length > 0) {
       verified = verifyWebhookHmac(raw, headerHmac);
       if (!verified) {
         console.error(`[shopify-webhook] HMAC failed for topic=${topic} shop=${shopDomain}`);
@@ -2216,7 +2286,7 @@ export function registerShopifyRoutes(app: Express) {
   function verifyGdprWebhook(req: Request, res: Response): Buffer | null {
     const raw = req.body as Buffer;
     const headerHmac = req.headers["x-shopify-hmac-sha256"] as string | undefined;
-    if (SHOPIFY_API_SECRET) {
+    if (allAppSecrets().length > 0) {
       if (!verifyWebhookHmac(raw, headerHmac)) {
         console.error(
           `[shopify-gdpr] HMAC failed from shop=${req.headers["x-shopify-shop-domain"] ?? "unknown"}`,
@@ -2791,17 +2861,28 @@ export function registerShopifyRoutes(app: Express) {
       const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
       if (!token) return res.status(401).json({ message: "Missing session token" });
       let shopDomain = "";
-      try {
-        const { payload } = await jwtVerify(token, new TextEncoder().encode(SHOPIFY_API_SECRET), {
-          algorithms: ["HS256"],
-          clockTolerance: 10,
-        });
-        const aud = Array.isArray(payload.aud) ? payload.aud[0] : payload.aud;
-        if (aud !== SHOPIFY_API_KEY) return res.status(401).json({ message: "Bad audience" });
-        shopDomain = new URL(String(payload.dest ?? "")).hostname;
-      } catch {
-        return res.status(401).json({ message: "Invalid session token" });
+      // The session token is signed by whichever app hosts the checkout
+      // extension on that store — try each configured app's secret and
+      // require the audience to match the SAME app's client_id.
+      let jwtOk = false;
+      for (const kind of ["public", "custom"] as const) {
+        if (!appKindConfigured(kind)) continue;
+        const c = appCreds(kind);
+        try {
+          const { payload } = await jwtVerify(token, new TextEncoder().encode(c.secret), {
+            algorithms: ["HS256"],
+            clockTolerance: 10,
+          });
+          const aud = Array.isArray(payload.aud) ? payload.aud[0] : payload.aud;
+          if (aud !== c.key) continue;
+          shopDomain = new URL(String(payload.dest ?? "")).hostname;
+          jwtOk = true;
+          break;
+        } catch {
+          // try the next app's secret
+        }
       }
+      if (!jwtOk) return res.status(401).json({ message: "Invalid session token" });
       const store = await getStoreByDomain(shopDomain);
       if (!store) return res.status(404).json({ message: "Unknown store" });
       const orderId = String(req.query.orderId ?? "").replace(/\D/g, "");

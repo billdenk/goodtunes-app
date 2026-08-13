@@ -1002,6 +1002,30 @@ SQL
     echo "post-merge: WARNING — shopify_store_person migration failed on $label (continuing)"
   fi
 }
+# Custom-distribution Shopify bridge app — shopify_stores.app_credential
+# records which Partner-Dashboard app ('public' | 'custom') installed the
+# store so token refresh signs with the matching secret. Declared in
+# shared/schema.ts; hand-apply on BOTH DBs (schema-drift guard + publish
+# diff). Idempotent.
+migrate_shopify_store_app_credential() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping shopify_store_app_credential migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE IF EXISTS shopify_stores
+  ADD COLUMN IF NOT EXISTS app_credential text NOT NULL DEFAULT 'public';
+SQL
+  then
+    echo "post-merge: shopify_store_app_credential migration ok on $label"
+  else
+    echo "post-merge: WARNING — shopify_store_app_credential migration failed on $label (continuing)"
+  fi
+}
+migrate_shopify_store_app_credential dev  "${DATABASE_URL:-}"
+migrate_shopify_store_app_credential prod "${PROD_DATABASE_URL:-}"
+
 migrate_shopify_store_person dev  "${DATABASE_URL:-}"
 migrate_shopify_store_person prod "${PROD_DATABASE_URL:-}"
 
