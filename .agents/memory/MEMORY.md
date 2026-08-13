@@ -154,4 +154,5 @@
 - [Template multi-option = single tile stamp](template-multi-option-single-tile.md) — one file covering small+large hole stays ONE spec row w/ display-only variant_options stamp (Bill's call); custom slots = press_custom_template_slots, own-geometry resolution.
 - [Delete-vs-attach race on FK-less siblings](custom-slot-delete-attach-race.md) — a delete gated on sibling rows with no FK must take a per-entity pg advisory lock shared with the create path + re-check inside; review rejects bare check-then-act.
 - [Completed-scan spot usage](completed-scan-spot-usage.md) — Pantone cert keys off spots USED in content, not defined; unknown warns reason-coded (file vs scanner-limitation); ObjStm files fall back — grep `[completed-scan]` logs.
+- [EasyPost label setup](easypost-labels-setup.md) — PRODUCTION key, UPS=UPSDAP by choice (own UPS account NOT linked); idempotent buys, pick carrier dynamically.
 - [Press template measurement](press-template-measurement.md) — attached templates are measured and drive checks (edit > measured > baseline > computed); truncated/partial scans always rejected; ShareFile share links can't measure.
