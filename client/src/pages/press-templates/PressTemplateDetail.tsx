@@ -346,6 +346,63 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack, onOpenTe
     }
   };
 
+  // ─── Task #3101 — operator-entered fold/safety lines ───
+  // For templates whose PDF carries no readable dieline guides: fold/score
+  // positions (inches from the left/top edge) + a safety inset (inches per
+  // side inside the cut line). Press-entered values win over measured
+  // guides. Local edit state re-seeds ONLY on spec-id switch so a sibling
+  // save's refetch can't wipe in-progress edits.
+  const [guidesOpen, setGuidesOpen] = useState(false);
+  const [foldXText, setFoldXText] = useState("");
+  const [foldYText, setFoldYText] = useState("");
+  const [safetyText, setSafetyText] = useState("");
+  const [guidesSeededFor, setGuidesSeededFor] = useState<string | null>(null);
+  if (spec && guidesSeededFor !== spec.id) {
+    setGuidesSeededFor(spec.id);
+    setFoldXText((spec.foldXInches ?? []).join(", "));
+    setFoldYText((spec.foldYInches ?? []).join(", "));
+    setSafetyText(spec.safetyInsetInches != null ? String(spec.safetyInsetInches) : "");
+  }
+
+  const saveGuides = useMutation({
+    mutationFn: async (payload: { foldXInches: number[] | null; foldYInches: number[] | null; safetyInsetInches: number | null }) => {
+      const r = await apiRequest("PUT", `/api/press/${pressId}/templates/${specId}/guides`, payload);
+      return (await r.json()) as { spec: TemplateSpecWithHistory };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: templatesKey });
+      toast({ title: "Fold & safety lines saved", description: "Press-entered values now drive the printed-areas study." });
+    },
+    onError: (e: any) => {
+      toast({ title: "Couldn't save", description: stripStatus(e?.message ?? ""), variant: "destructive" });
+    },
+  });
+
+  /** "12.25, 24.5" → sorted number list; null = empty; undefined = invalid. */
+  const parseInchList = (text: string): number[] | null | undefined => {
+    const parts = text.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean);
+    if (parts.length === 0) return null;
+    const nums = parts.map(Number);
+    if (nums.some((n) => !Number.isFinite(n) || n < 0 || n > 120)) return undefined;
+    return nums.sort((a, b) => a - b);
+  };
+
+  const onSaveGuides = () => {
+    const foldX = parseInchList(foldXText);
+    const foldY = parseInchList(foldYText);
+    if (foldX === undefined || foldY === undefined) {
+      toast({ title: "Check the fold positions", description: "Enter inch values (0–120) separated by commas.", variant: "destructive" });
+      return;
+    }
+    const safetyTrim = safetyText.trim();
+    const safetyNum = safetyTrim === "" ? null : Number(safetyTrim);
+    if (safetyNum !== null && (!Number.isFinite(safetyNum) || safetyNum < 0 || safetyNum > 2)) {
+      toast({ title: "Check the safety inset", description: "Enter inches between 0 and 2, or leave it blank.", variant: "destructive" });
+      return;
+    }
+    saveGuides.mutate({ foldXInches: foldX, foldYInches: foldY, safetyInsetInches: safetyNum });
+  };
+
   // ─── Loading / not-found ───
   if (isLoading) {
     return (
@@ -399,6 +456,17 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack, onOpenTe
   const bleed = spec.bleedLineInches ?? spec.measuredBleedLineInches;
   if (typeof bleed === "number") {
     push(<GeoRow key="bleed" label="Bleed line" value={`${bleed} in (${INCHES_TO_MM(bleed)} mm)`} sub="Art must reach this line" source={spec.bleedLineInches != null ? "press-entered" : "measured"} t={t} />);
+  }
+  // Task #3101 — press-entered fold/safety geometry rows (product geometry,
+  // kept across template replaces; wins over measured guides in the study).
+  if (spec.foldXInches?.length) {
+    push(<GeoRow key="foldX" label="Fold / score lines (vertical)" value={spec.foldXInches.map((v) => `${v} in`).join(", ")} sub="From the left edge" source="press-entered" t={t} />);
+  }
+  if (spec.foldYInches?.length) {
+    push(<GeoRow key="foldY" label="Fold / score lines (horizontal)" value={spec.foldYInches.map((v) => `${v} in`).join(", ")} sub="From the top edge" source="press-entered" t={t} />);
+  }
+  if (typeof spec.safetyInsetInches === "number") {
+    push(<GeoRow key="safetyInset" label="Safety inset" value={`${spec.safetyInsetInches} in (${INCHES_TO_MM(spec.safetyInsetInches)} mm)`} sub="Text stays inside the cut line by this much" source="press-entered" t={t} />);
   }
   const boolRow = (key: string, label: string, val: boolean | null, sub?: string) => {
     if (val == null) return;
@@ -549,6 +617,84 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack, onOpenTe
             <div className="py-4 text-[13px]" style={{ color: t.faint }} data-testid="geometry-empty">No geometry measured yet — attach a template file to populate this.</div>
           )}
         </div>
+
+        {/* Task #3101 — hand-entered fold & safety lines. For templates whose
+            PDF has no readable guides; press-entered values win over measured
+            guides and survive a template replace (product geometry). */}
+        {canEdit && (
+          <div className="pt-2 pb-3" style={{ borderTop: `1px solid ${t.hairline}` }} data-testid="section-operator-guides">
+            <button
+              type="button"
+              onClick={() => setGuidesOpen((v) => !v)}
+              className="mt-1 inline-flex items-center gap-1.5 text-[13px] font-medium"
+              style={{ color: t.blue }}
+              data-testid="button-toggle-operator-guides"
+            >
+              {guidesOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+              Enter fold & safety lines
+            </button>
+            {guidesOpen && (
+              <div className="mt-2">
+                <div className="text-[12px]" style={{ color: t.faint }}>
+                  For templates whose PDF has no readable guide lines. Positions are inches from the artboard's left/top edge; the safety inset is inches per side inside the cut line. Press-entered values win over measured guides and are kept when the file is replaced.
+                </div>
+                <div className="mt-2.5 grid gap-3" style={{ gridTemplateColumns: "1fr 1fr 160px" }}>
+                  <label className="block">
+                    <span className="text-[12px]" style={{ color: t.subink }}>Vertical fold lines (in, from left)</span>
+                    <input
+                      type="text"
+                      value={foldXText}
+                      onChange={(e) => setFoldXText(e.target.value)}
+                      placeholder="e.g. 12.25, 24.5"
+                      className="mt-1 w-full h-9 px-3 rounded-lg text-[13px] outline-none"
+                      style={{ backgroundColor: t.soft, color: t.ink, border: `1px solid ${t.hairline}` }}
+                      data-testid="input-fold-x"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[12px]" style={{ color: t.subink }}>Horizontal fold lines (in, from top)</span>
+                    <input
+                      type="text"
+                      value={foldYText}
+                      onChange={(e) => setFoldYText(e.target.value)}
+                      placeholder="e.g. 6.125"
+                      className="mt-1 w-full h-9 px-3 rounded-lg text-[13px] outline-none"
+                      style={{ backgroundColor: t.soft, color: t.ink, border: `1px solid ${t.hairline}` }}
+                      data-testid="input-fold-y"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-[12px]" style={{ color: t.subink }}>Safety inset (in)</span>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={safetyText}
+                      onChange={(e) => setSafetyText(e.target.value)}
+                      placeholder="e.g. 0.125"
+                      className="mt-1 w-full h-9 px-3 rounded-lg text-[13px] outline-none"
+                      style={{ backgroundColor: t.soft, color: t.ink, border: `1px solid ${t.hairline}` }}
+                      data-testid="input-safety-inset"
+                    />
+                  </label>
+                </div>
+                <div className="mt-2.5 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={onSaveGuides}
+                    disabled={saveGuides.isPending}
+                    className="inline-flex items-center gap-1.5 h-8 px-4 rounded-full text-[13px] font-medium disabled:opacity-60"
+                    style={{ color: "#fff", backgroundColor: t.blue }}
+                    data-testid="button-save-operator-guides"
+                  >
+                    {saveGuides.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                    Save
+                  </button>
+                  <span className="text-[12px]" style={{ color: t.faint }}>Leave a field blank to clear it.</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ─── Revision history ─── */}

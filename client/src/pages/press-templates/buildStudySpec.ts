@@ -110,8 +110,30 @@ function templateGeometry(spec: TemplateSpecWithHistory): {
   } else if (typeof w === "number") {
     zones.push({ id: "cut", word: "Cut", detail: `${mmDims} — trimmed edge`, inset: "3.5%" });
   }
+  // Task #3101 — operator-entered fold/safety geometry, for templates whose
+  // PDFs carry no readable guides. Operator values ALWAYS win over measured
+  // guides where they overlap (the spec row's operator-wins convention).
+  const opFoldX = Array.isArray(spec.foldXInches) && spec.foldXInches.length > 0 ? spec.foldXInches : null;
+  const opFoldY = Array.isArray(spec.foldYInches) && spec.foldYInches.length > 0 ? spec.foldYInches : null;
+  const opSafety = typeof spec.safetyInsetInches === "number" ? spec.safetyInsetInches : null;
+
   const safety = typeof printRules.safetyMarginInches === "number" ? (printRules.safetyMarginInches as number) : undefined;
-  if (guides?.safety) {
+  if (opSafety != null && typeof w === "number" && typeof h === "number" && w > 0 && h > 0) {
+    // Safety inset is inches per side INSIDE the cut line: measured cut
+    // edges when the dieline gave us any, else the bleed line (artboard →
+    // trim) as the cut basis.
+    const cutBase = guides?.cut ?? null;
+    const edge = (typeof bleed === "number" ? bleed : 0) + opSafety;
+    const e: GuideEdges = cutBase
+      ? { top: cutBase.top + opSafety, right: cutBase.right + opSafety, bottom: cutBase.bottom + opSafety, left: cutBase.left + opSafety }
+      : { top: edge, right: edge, bottom: edge, left: edge };
+    zones.push({
+      id: "safe",
+      word: "Safe",
+      detail: `${INCHES_TO_MM(opSafety)} mm — text stays inside`,
+      inset: guideInsetPct(e, w, h),
+    });
+  } else if (guides?.safety) {
     const safeMm = guides.safetyInsetInches ?? safety;
     zones.push({
       id: "safe",
@@ -134,20 +156,28 @@ function templateGeometry(spec: TemplateSpecWithHistory): {
     });
   }
 
-  // Fold/score lines — measured score lines from the dieline win; otherwise
-  // only where a spec exists for this exact variant (gatefold inference).
+  // Fold/score lines — operator-entered positions win (Task #3101), then
+  // measured score lines from the dieline; otherwise only where a spec
+  // exists for this exact variant (gatefold inference).
   const pctOf = (v: number, dim: number) => `${Math.round((v / dim) * 1000) / 10}%`;
+  const opFoldLines =
+    opFoldX && typeof w === "number" && w > 0 ? opFoldX.map((x) => pctOf(x, w)) : null;
+  const opFoldLinesY =
+    opFoldY && typeof h === "number" && h > 0 ? opFoldY.map((y) => pctOf(y, h)) : null;
   const guideFoldX =
     guides && guides.foldXInches.length > 0 ? guides.foldXInches.map((x) => pctOf(x, w as number)) : null;
   const guideFoldY =
     guides && guides.foldYInches.length > 0 ? guides.foldYInches.map((y) => pctOf(y, h as number)) : null;
-  const foldLines = guideFoldX ?? foldLinesFor(spec);
-  const foldLinesY = guideFoldY;
+  const foldLines = opFoldLines ?? guideFoldX ?? foldLinesFor(spec);
+  const foldLinesY = opFoldLinesY ?? guideFoldY;
   if (foldLines || foldLinesY) {
     zones.push({
       id: "fold",
       word: "Fold",
-      detail: guideFoldX || guideFoldY ? "Score lines — folds here" : "Spine — spread folds here",
+      detail:
+        opFoldLines || opFoldLinesY || guideFoldX || guideFoldY
+          ? "Score lines — folds here"
+          : "Spine — spread folds here",
       fold: true,
     });
   }

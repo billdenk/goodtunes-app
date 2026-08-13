@@ -79,6 +79,14 @@ export type TemplateSpecWithHistory = {
   // rasterize genuinely failed (honest blank panel, no fabrication).
   previewUrls?: string[] | null;
   measuredError: string | null;
+  // Task #3101 — operator-entered fold/score positions (inches from the
+  // artboard's left/top edge) + safety inset (inches per side inside the
+  // cut line). Set on the detail screen when the PDF has no readable
+  // guides; ALWAYS wins over measuredGuides where they overlap. Kept on
+  // template replace (product geometry, not file geometry).
+  foldXInches?: number[] | null;
+  foldYInches?: number[] | null;
+  safetyInsetInches?: number | null;
   // Task #3065 — option families this ONE template file covers (e.g. small
   // + large center-label holes). Stamped only after the operator confirms
   // the detection prompt; null/absent = single-option template.

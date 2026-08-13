@@ -11907,6 +11907,30 @@ SQL
 migrate_template_guides_task_3097 dev  "${DATABASE_URL:-}"
 migrate_template_guides_task_3097 prod "${PROD_DATABASE_URL:-}"
 
+# Task #3101 — operator-entered fold/score positions + safety inset for
+# templates whose PDFs carry no readable dieline guides. Idempotent ADD
+# COLUMN on both DBs so the schema-drift guard and publish diff stay clean.
+migrate_operator_guides_task_3101() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping operator-guides migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
+ALTER TABLE press_template_specs
+  ADD COLUMN IF NOT EXISTS fold_x_inches       jsonb,
+  ADD COLUMN IF NOT EXISTS fold_y_inches       jsonb,
+  ADD COLUMN IF NOT EXISTS safety_inset_inches double precision;
+SQL
+  then
+    echo "post-merge: operator-guides migration ok on $label"
+  else
+    echo "post-merge: WARNING — operator-guides migration failed on $label (continuing)"
+  fi
+}
+migrate_operator_guides_task_3101 dev  "${DATABASE_URL:-}"
+migrate_operator_guides_task_3101 prod "${PROD_DATABASE_URL:-}"
+
 # Task #3097 — one-time re-scan so already-attached templates gain the new
 # measured_guides facts without a re-upload. Marker-guarded: a guide-scanned
 # template with no guides stores the empty jsonb object (not NULL), so the

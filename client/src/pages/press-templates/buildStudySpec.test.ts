@@ -333,6 +333,77 @@ test("guides: labels keep the concentric-circle model even when guides exist", (
   assert.equal(bleed.inset, "0%", "circle rings stay concentric");
 });
 
+// ---------------------------------------------------------------------------
+// Task #3101 — operator-entered fold/safety lines: rendered when no guides
+// exist, and preferred over measured guides when both exist.
+// ---------------------------------------------------------------------------
+test("operator guides: folds + safety render with no measured guides, pending note clears", () => {
+  const spec = makeSpec({
+    componentKey: "jacket",
+    variantKey: "widespine",
+    measuredArtboardWInches: 31.4058,
+    measuredArtboardHInches: 19.1256,
+    measuredPages: 1,
+    measuredBleedLineInches: 0.125,
+    foldXInches: [15.584, 15.806],
+    foldYInches: [6.2],
+    safetyInsetInches: 0.25,
+  });
+  const s = buildStudySpec(spec, "Widespine jacket", '12" LP');
+  const ids = (s.zones ?? []).map((z) => z.id);
+  assert.deepEqual(ids, ["bleed", "cut", "safe", "fold"], "operator safety inset draws the Safe ring");
+  const safe = s.zones!.find((z) => z.id === "safe")!;
+  assert.ok(safe.detail.includes(`${INCHES_TO_MM(0.25)} mm`), safe.detail);
+  // Safe ring inset = bleed line + safety inset from the artboard edge.
+  const expectedPctW = `${Math.round(((0.125 + 0.25) / 31.4058) * 1000) / 10}%`;
+  assert.ok(String(safe.inset).includes(expectedPctW), `inset uses bleed+safety basis: ${safe.inset}`);
+  const panel = s.panels![0];
+  assert.equal(panel.foldLines?.length, 2, "operator vertical folds render");
+  assert.equal(panel.foldLines![0], `${Math.round((15.584 / 31.4058) * 1000) / 10}%`);
+  assert.equal(panel.foldLinesY?.length, 1, "operator horizontal folds render");
+  assert.equal(s.footnote, undefined, "operator folds suppress the pending-spec note");
+});
+
+test("operator guides: operator values win over measured guides (operator-wins convention)", () => {
+  const spec = makeSpec({
+    componentKey: "jacket",
+    variantKey: "widespine",
+    measuredArtboardWInches: 31.4058,
+    measuredArtboardHInches: 19.1256,
+    measuredPages: 1,
+    measuredGuides: JKTWS_GUIDES,
+    foldXInches: [10],
+    safetyInsetInches: 0.5,
+  });
+  const s = buildStudySpec(spec, "Widespine jacket", '12" LP');
+  const panel = s.panels![0];
+  assert.equal(panel.foldLines?.length, 1, "operator folds replace the measured score lines");
+  assert.equal(panel.foldLines![0], `${Math.round((10 / 31.4058) * 1000) / 10}%`);
+  const safe = s.zones!.find((z) => z.id === "safe")!;
+  assert.ok(safe.detail.includes(`${INCHES_TO_MM(0.5)} mm`), `operator safety wins: ${safe.detail}`);
+  // Operator safety sits inside the MEASURED cut basis when guides exist.
+  const expectedTop = `${Math.round(((3.388 + 0.5) / 19.1256) * 1000) / 10}%`;
+  assert.ok(String(safe.inset).startsWith(expectedTop), `safety rides the measured cut basis: ${safe.inset}`);
+});
+
+test("operator guides: absent values change nothing (measured guides still drive)", () => {
+  const spec = makeSpec({
+    componentKey: "jacket",
+    variantKey: "widespine",
+    measuredArtboardWInches: 31.4058,
+    measuredArtboardHInches: 19.1256,
+    measuredPages: 1,
+    measuredGuides: JKTWS_GUIDES,
+    foldXInches: null,
+    foldYInches: [],
+    safetyInsetInches: null,
+  });
+  const s = buildStudySpec(spec, "Widespine jacket", '12" LP');
+  assert.equal(s.panels![0].foldLines?.length, 2, "measured score lines still render");
+  const safe = s.zones!.find((z) => z.id === "safe")!;
+  assert.ok(safe.detail.includes(`${INCHES_TO_MM(0.125)} mm`), safe.detail);
+});
+
 test("guides: proof spec inherits the same guide-driven rings and folds", () => {
   const spec = makeSpec({
     componentKey: "jacket",

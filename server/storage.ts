@@ -1029,6 +1029,20 @@ export interface IStorage {
     >,
   ): Promise<PressTemplateSpec | null>;
 
+  // Task #3101 — operator-entered fold/score positions + safety inset for
+  // templates whose PDFs carry no readable dieline guides. Guides-only
+  // update; never touches file or measured_* columns.
+  updatePressTemplateSpecOperatorGuides(
+    pressId: string,
+    specId: string,
+    patch: {
+      foldXInches: number[] | null;
+      foldYInches: number[] | null;
+      safetyInsetInches: number | null;
+    },
+    updatedByUserId: string | null,
+  ): Promise<PressTemplateSpec | null>;
+
   // ---- Press-templates flow (Ruby handoff) — revisions + test runs ----
   // File-only update: swaps the attached template on an EXISTING spec row
   // without touching operator-entered artboard/pages/color/rules columns
@@ -5724,6 +5738,31 @@ export class DbStorage implements IStorage {
         .delete(pressCustomTemplateSlots)
         .where(and(eq(pressCustomTemplateSlots.pressId, pressId), eq(pressCustomTemplateSlots.id, slotId)));
     });
+  }
+
+  // Task #3101 — operator-entered fold/safety geometry (guides-only write).
+  async updatePressTemplateSpecOperatorGuides(
+    pressId: string,
+    specId: string,
+    patch: {
+      foldXInches: number[] | null;
+      foldYInches: number[] | null;
+      safetyInsetInches: number | null;
+    },
+    updatedByUserId: string | null,
+  ): Promise<PressTemplateSpec | null> {
+    const [row] = await db
+      .update(pressTemplateSpecs)
+      .set({
+        foldXInches: patch.foldXInches,
+        foldYInches: patch.foldYInches,
+        safetyInsetInches: patch.safetyInsetInches,
+        updatedByUserId,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)))
+      .returning();
+    return row ?? null;
   }
 
   // ---- Press-templates flow (Ruby handoff) — revisions + test runs ----

@@ -122,6 +122,17 @@ const renameSlotSchema = z.object({
   note: z.string().trim().max(140).optional(),
 });
 
+// Task #3101 — operator-entered fold/score positions + safety inset for
+// templates whose PDFs carry no readable dieline guides. Fold positions are
+// inches from the artboard's LEFT (X) / TOP (Y) edge (same coordinate space
+// as measuredGuides); the safety inset is inches per side inside the cut
+// line. Empty array / null clears a field.
+const operatorGuidesSchema = z.object({
+  foldXInches: z.array(z.number().min(0).max(120)).max(12).nullable().optional().default(null),
+  foldYInches: z.array(z.number().min(0).max(120)).max(12).nullable().optional().default(null),
+  safetyInsetInches: z.number().min(0).max(2).nullable().optional().default(null),
+});
+
 const testSchema = z.object({
   url: z.string().min(1).max(2048),
   fileName: z.string().max(512).nullable().optional(),
@@ -466,6 +477,37 @@ export function registerPressTemplateFlowRoutes(
       })),
     });
   });
+
+  // PUT /api/press/:id/templates/:specId/guides — Task #3101: hand-entered
+  // fold/score positions + safety inset. Guides-only write (never touches
+  // the file or measured_* columns); the Printed-areas study prefers these
+  // over measured guides, per the operator-wins convention on the spec row.
+  app.put(
+    "/api/press/:id/templates/:specId/guides",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const body = operatorGuidesSchema.safeParse(req.body);
+      if (!body.success) return res.status(400).json({ message: body.error.message });
+      const row = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+      if (!row) return res.status(404).json({ message: "Template slot not found" });
+      const norm = (a: number[] | null) =>
+        a && a.length ? [...a].sort((x, y) => x - y) : null;
+      const updated = await storage.updatePressTemplateSpecOperatorGuides(
+        pressId,
+        row.id,
+        {
+          foldXInches: norm(body.data.foldXInches),
+          foldYInches: norm(body.data.foldYInches),
+          safetyInsetInches: body.data.safetyInsetInches,
+        },
+        req.session.userId ?? null,
+      );
+      res.json({ spec: updated });
+    },
+  );
 
   // PUT /api/press/:id/templates — attach or replace the template file on a
   // slot (creating the spec row if the slot has never had one). Only the

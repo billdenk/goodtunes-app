@@ -24282,6 +24282,41 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"mt-1 inline-flex items-center gap-1.5 text-[13px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.subink }}>Vertical fold lines (in, from left)</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"mt-1 w-full h-9 px-3 rounded-lg text-[13px] outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.subink }}>Horizontal fold lines (in, from top)</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.subink }}>Safety inset (in)</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-8 px-4 rounded-full text-[13px] font-medium disabled:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.faint }}>Leave a field blank to clear it.</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateDetail.tsx",
     "snippet": "<h3 className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>Revision history</h3>"
   },
   {

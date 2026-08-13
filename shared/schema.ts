@@ -2739,6 +2739,20 @@ export const pressTemplateSpecs = pgTable(
     // Null/empty = single-option template (today's behavior). Display-only —
     // never feeds measurements or checks (the file is one file either way).
     variantOptions: jsonb("variant_options").$type<Array<{ key: string; label: string }>>(),
+    // Task #3101 — operator-entered fold/score lines + safety inset, for
+    // templates whose PDFs carry no readable dieline guides (or draw them in
+    // ways the conservative Task #3097 classifier won't guess at). Fold
+    // positions are INCHES from the artboard's LEFT (X) / TOP (Y) edge —
+    // same coordinate space as measuredGuides.foldXInches/foldYInches; the
+    // safety inset is inches per side inside the cut line. Operator values
+    // ALWAYS win over the measured guides (same operator-wins convention as
+    // bleedLineInches vs measuredBleedLineInches). These describe the
+    // PRODUCT, not a particular file, so a template replace KEEPS them
+    // (attach/replace only touches file + measured_* columns) — mirroring
+    // artboardWInches & friends, which also survive a replace.
+    foldXInches: jsonb("fold_x_inches").$type<number[]>(),
+    foldYInches: jsonb("fold_y_inches").$type<number[]>(),
+    safetyInsetInches: doublePrecision("safety_inset_inches"),
     updatedByUserId: varchar("updated_by_user_id"),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
