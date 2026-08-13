@@ -1250,12 +1250,6 @@ export function PressAlbumPackageBuilder({
                 placeholderIconUrl={PMP_ICON}
               />
             )}
-            {activeTier && (
-              <div className="text-[12.5px]" style={{ marginTop: 14, color: SUBINK, lineHeight: 1.4 }}>
-                <span className="font-semibold" style={{ color: INK }}>{activeTier.name}</span>
-                {selectedColor ? <> · {selectedColor.name}</> : null}
-              </div>
-            )}
           </div>
 
           {/* RIGHT — the decisions. Above the sliding jacket, opaque canvas bg. */}
