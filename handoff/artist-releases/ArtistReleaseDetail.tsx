@@ -892,25 +892,9 @@ export function ArtistReleaseDetail() {
             {MOCK_RELEASE.lanes.map((lane) => (
               <LaneRow key={lane.id} lane={lane} t={t} />
             ))}
-
-            {/* Quiet "add a format" affordance — dashed cell, not a primary pill */}
-            <button
-              type="button"
-              onClick={() => setPickerOpen(true)}
-              data-testid="button-add-lane"
-              className="rounded-2xl flex items-center justify-center gap-2 text-[13px] font-medium transition-colors"
-              style={{
-                minHeight: 64,
-                color: t.subink,
-                border: `1.5px dashed ${t.dashed}`,
-                backgroundColor: 'transparent',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = t.cardSoft)}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-            >
-              <Disc3 className="w-4 h-4" style={{ color: t.faint }} />
-              Add another format
-            </button>
+            {/* No "Add another format" cell — Create Draft (the screen's one
+                primary pill) IS the add action. One verb, one place
+                (Bill, Aug 13 2026: the dashed twin was redundant + noisy). */}
           </div>
         </section>
 
