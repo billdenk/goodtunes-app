@@ -12051,3 +12051,18 @@ SQL
 }
 add_fulfillment_gooddeed_cols dev  "${DATABASE_URL:-}"
 add_fulfillment_gooddeed_cols prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #3099 — template-page preview renders on press_template_specs ──
+# preview_urls jsonb: rendered PNG paths for the template file's own pages
+# (Test page study cards). Idempotent on both DBs (schema-drift guard).
+add_template_preview_urls_col() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[template-preview-urls] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: template preview_urls DDL ok on $label" \
+    || echo "post-merge: WARNING — template preview_urls DDL failed on $label"
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS preview_urls jsonb;
+SQL
+}
+add_template_preview_urls_col dev  "${DATABASE_URL:-}"
+add_template_preview_urls_col prod "${PROD_DATABASE_URL:-}"

@@ -2718,6 +2718,12 @@ export const pressTemplateSpecs = pgTable(
     // stores the object with null zones (drives the one-time backfill).
     // Measured-only: operator-entered fields always win where they overlap.
     measuredGuides: jsonb("measured_guides").$type<Record<string, unknown>>(),
+    // Task #3099 — rendered PNG previews of the template file's own pages
+    // (`/objects/uploads/<id>.png` paths, one per page, capped). NULL =
+    // never attempted (drives the lazy view-time backfill); [] = attempted
+    // and the rasterize genuinely failed (honest "no preview", no re-hammer).
+    // Cleared whenever the template file is replaced/removed.
+    previewUrls: jsonb("preview_urls").$type<string[]>(),
     measuredAt: timestamp("measured_at"),
     measuredError: text("measured_error"),
     // Task #3012 — per-component press print-rule overrides (bleed min/

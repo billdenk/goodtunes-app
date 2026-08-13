@@ -31,6 +31,8 @@ import {
   detectTemplateOptionsForUrl,
   renderTestRunPreviews,
   renderLocalPdfPreviews,
+  renderTemplateSpecPreviews,
+  renderUrlPreviewPages,
 } from "./templateSpecs";
 import {
   isKnownOptionSet,
@@ -353,6 +355,67 @@ export function registerPressTemplateFlowRoutes(
   requirePressScope: any,
   requirePressEditor: (req: Request, res: Response, next: any) => Promise<any>,
 ) {
+  // ── Task #3099 — lazy preview backfill helpers ──────────────────────
+  // De-dupe per process so concurrent views don't rasterize the same file
+  // twice; a genuine failure persists ([] on specs) or is remembered
+  // in-memory (runs) so views don't hammer a file that can't render.
+  const previewInFlight = new Set<string>();
+  const runPreviewFailed = new Set<string>();
+
+  async function backfillTemplatePreviews(
+    pressId: string,
+    specs: Array<{ id: string; templateFileUrl: string | null; previewUrls: string[] | null }>,
+  ): Promise<boolean> {
+    let changed = false;
+    for (const s of specs) {
+      if (!s.templateFileUrl || s.previewUrls !== null) continue;
+      const key = `spec:${s.id}`;
+      if (previewInFlight.has(key)) continue;
+      previewInFlight.add(key);
+      try {
+        await renderTemplateSpecPreviews(pressId, s.id);
+        changed = true;
+      } finally {
+        previewInFlight.delete(key);
+      }
+    }
+    return changed;
+  }
+
+  async function backfillRunPreviews(
+    specs: Array<{ id: string; componentKey: string }>,
+    runs: Array<{ id: string; specId: string; fileUrl: string; previewUrl: string | null; previewUrl2: string | null }>,
+  ) {
+    const out = [...runs];
+    for (const spec of specs) {
+      // Latest run per spec only — that's the one the Test page shows.
+      const idx = out.findIndex((r) => r.specId === spec.id);
+      if (idx === -1) continue;
+      const run = out[idx];
+      if (run.previewUrl) continue;
+      const key = `run:${run.id}`;
+      if (previewInFlight.has(key) || runPreviewFailed.has(key)) continue;
+      previewInFlight.add(key);
+      try {
+        const pages = spec.componentKey === "labels" ? 2 : 1;
+        const urls = await renderUrlPreviewPages(run.fileUrl, { pages });
+        if (urls.length === 0) {
+          runPreviewFailed.add(key); // genuine rasterize failure — honest no-preview
+          continue;
+        }
+        const updated = await storage.updatePressTemplateTestRunPreviews(
+          run.id,
+          urls[0] ?? null,
+          urls[1] ?? null,
+        );
+        if (updated) out[idx] = updated as (typeof out)[number];
+      } finally {
+        previewInFlight.delete(key);
+      }
+    }
+    return out;
+  }
+
   // GET /api/press/:id/templates — every slot row for this press with its
   // revision history and latest test runs, one payload for the whole flow.
   app.get("/api/press/:id/templates", requireAdmin, requirePressScope, async (req, res) => {
@@ -367,11 +430,28 @@ export function registerPressTemplateFlowRoutes(
       return false;
     });
     if (imported) specs = await storage.listPressTemplateSpecs(pressId);
+    // Task #3099 — lazy view-time backfill of rendered previews.
+    //   • Spec rows with a template file but NULL preview_urls (never
+    //     attempted) get their pages rasterized now, so the Test page's
+    //     template study always has real artwork under the rings.
+    //   • The latest run per spec missing a preview (runs that predate
+    //     preview rendering) gets one regenerated from its stored fileUrl.
+    // Both are best-effort and de-duped per process so concurrent views
+    // don't render the same file twice; [] persists a genuine failure.
+    const backfilled = await backfillTemplatePreviews(pressId, specs).catch((e) => {
+      console.error("[template-preview] backfill failed:", e?.message ?? e);
+      return false;
+    });
+    if (backfilled) specs = await storage.listPressTemplateSpecs(pressId);
     const specIds = specs.map((s) => s.id);
-    const [revisions, runs] = await Promise.all([
+    const [revisions, runsRaw] = await Promise.all([
       storage.listPressTemplateRevisions(specIds),
       storage.listPressTemplateTestRuns(specIds),
     ]);
+    const runs = await backfillRunPreviews(specs, runsRaw).catch((e) => {
+      console.error("[template-preview] run backfill failed:", e?.message ?? e);
+      return runsRaw;
+    });
     const { pressUserCanEdit } = await import("./auth/partnerPermissions");
     const canEdit = await pressUserCanEdit(req.session.userId!, pressId);
     // Task #3065 — operator-defined slots render alongside the built-ins.
@@ -465,6 +545,17 @@ export function registerPressTemplateFlowRoutes(
       const { spec, existing } = attached;
       await clearTemplateSpecMeasurements(pressId, spec.id);
       await measureTemplateSpecRow(pressId, spec.id);
+      // Task #3099 — kick off the template-page render in the background so
+      // the Test page has real artwork under the rings on next view (the
+      // lazy view-time backfill covers it either way; the in-flight set
+      // de-dupes a concurrent GET).
+      const renderKey = `spec:${spec.id}`;
+      if (!previewInFlight.has(renderKey)) {
+        previewInFlight.add(renderKey);
+        void renderTemplateSpecPreviews(pressId, spec.id)
+          .catch((e) => console.error("[template-preview] attach render failed:", e?.message ?? e))
+          .finally(() => previewInFlight.delete(renderKey));
+      }
       const measured = (await storage.getPressTemplateSpecById(pressId, spec.id)) ?? spec;
 
       const priorRevs = await storage.listPressTemplateRevisions([spec.id]);

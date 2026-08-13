@@ -208,14 +208,15 @@ function uploadDestination(id: string): { bucketName: string; objectName: string
   return { bucketName, objectName };
 }
 
-/** Rasterize page(s) of a LOCAL PDF into public object-storage PNGs. The
- *  shared core behind both intake paths (own-object download and external
- *  URL spool). Best-effort: returns nulls on any failure. */
-export async function renderLocalPdfPreviews(
+/** Rasterize the first `opts.pages` pages of a LOCAL PDF into public
+ *  object-storage PNGs, in page order. The shared core behind every
+ *  template/test preview path. Best-effort: [] on any failure; stops at the
+ *  first page that fails to render (never leaves gaps). */
+export async function renderLocalPdfPreviewPages(
   pdfPath: string,
   opts: { pages: number },
-): Promise<{ previewUrl: string | null; previewUrl2: string | null }> {
-  const none = { previewUrl: null, previewUrl2: null };
+): Promise<string[]> {
+  const none: string[] = [];
   const fsp = await import("node:fs/promises");
   const os = await import("node:os");
   const path = await import("node:path");
@@ -274,9 +275,13 @@ export async function renderLocalPdfPreviews(
       return storePng(png);
     };
 
-    const previewUrl = await renderPage(1);
-    const previewUrl2 = previewUrl && opts.pages >= 2 ? await renderPage(2) : null;
-    return { previewUrl, previewUrl2 };
+    const urls: string[] = [];
+    for (let page = 1; page <= Math.max(opts.pages, 0); page++) {
+      const url = await renderPage(page);
+      if (!url) break; // page missing or render failed — stop, never leave gaps
+      urls.push(url);
+    }
+    return urls;
   } catch (e: any) {
     console.warn(`[template-test] preview render failed for ${pdfPath}:`, e?.message ?? e);
     return none;
@@ -289,6 +294,118 @@ export async function renderLocalPdfPreviews(
       }
     }
   }
+}
+
+/** Legacy two-slot shape for the test-run rows (preview_url / preview_url_2). */
+export async function renderLocalPdfPreviews(
+  pdfPath: string,
+  opts: { pages: number },
+): Promise<{ previewUrl: string | null; previewUrl2: string | null }> {
+  const urls = await renderLocalPdfPreviewPages(pdfPath, { pages: Math.min(opts.pages, 2) });
+  return { previewUrl: urls[0] ?? null, previewUrl2: urls[1] ?? null };
+}
+
+/** Own-object page-list variant: download `/objects/uploads/<id>` to a temp
+ *  file and render through the shared local-PDF core. Best-effort: []. */
+export async function renderObjectPdfPreviewPages(
+  objectPath: string,
+  opts: { pages: number },
+): Promise<string[]> {
+  if (!objectPath.startsWith("/objects/uploads/")) return [];
+  const fsp = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  let tmpDir: string | null = null;
+  try {
+    const file = await objectStorage.getObjectEntityFile(objectPath);
+    const [meta] = await file.getMetadata();
+    const size = Number(meta?.size ?? 0);
+    if (!Number.isFinite(size) || size <= 0 || size > RENDER_MAX_SOURCE_BYTES) return [];
+    tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "template-src-"));
+    const pdfPath = path.join(tmpDir, "src.pdf");
+    await file.download({ destination: pdfPath });
+    return await renderLocalPdfPreviewPages(pdfPath, opts);
+  } catch (e: any) {
+    console.warn(`[template-preview] render failed for ${objectPath}:`, e?.message ?? e);
+    return [];
+  } finally {
+    if (tmpDir) {
+      try {
+        await fsp.rm(tmpDir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+}
+
+/** Render preview pages for ANY template/test file URL: own object storage
+ *  directly, or an external https URL through the SSRF-guarded fetcher
+ *  (spooled to disk just long enough to rasterize — the original is never
+ *  kept). Best-effort: []. */
+export async function renderUrlPreviewPages(url: string, opts: { pages: number }): Promise<string[]> {
+  if (url.startsWith("/objects/uploads/")) return renderObjectPdfPreviewPages(url, opts);
+  if (!/^https:\/\//i.test(url)) return [];
+  const fsp = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  let spoolDir: string | null = null;
+  try {
+    spoolDir = await fsp.mkdtemp(path.join(os.tmpdir(), "template-preview-spool-"));
+    const spoolPath = path.join(spoolDir, "src.pdf");
+    const { scan, spooled } = await scanTemplateUrl(url, { spoolTo: spoolPath });
+    if (!scan || !spooled) return [];
+    return await renderLocalPdfPreviewPages(spoolPath, opts);
+  } catch (e: any) {
+    console.warn(`[template-preview] external render failed for ${url}:`, e?.message ?? e);
+    return [];
+  } finally {
+    if (spoolDir) fsp.rm(spoolDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/** Task #3099 — rasterize the TEMPLATE file's own pages onto the spec row
+ *  (one PNG per real page, capped to the study's 8-panel limit). Stores []
+ *  on a genuine rasterize failure so views don't re-hammer; callers clear
+ *  to NULL on replace to force a fresh render. Best-effort, never throws. */
+export const TEMPLATE_PREVIEW_MAX_PAGES = 8;
+export async function renderTemplateSpecPreviews(
+  pressId: string,
+  specId: string,
+  // Test seam — concurrency tests inject a fake renderer + storage so the
+  // replace/archive race is provable without pdftoppm or a DB.
+  deps: {
+    render?: (url: string, opts: { pages: number }) => Promise<string[]>;
+    store?: Pick<typeof storage, "getPressTemplateSpecById" | "updatePressTemplateSpecPreviews">;
+  } = {},
+): Promise<string[]> {
+  const render = deps.render ?? renderUrlPreviewPages;
+  const store = deps.store ?? storage;
+  // Bounded retry: if the template file is REPLACED while a render is in
+  // flight, the guarded persist below misses (0 rows) and we re-render the
+  // NEW file instead of letting stale artwork win or leaving previews NULL.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let fileUrl: string;
+    try {
+      const row = await store.getPressTemplateSpecById(pressId, specId);
+      // Archived / removed file: nothing to render, and nothing to persist —
+      // clearTemplateSpecMeasurements already reset previews to NULL.
+      if (!row?.templateFileUrl) return [];
+      fileUrl = row.templateFileUrl;
+      const pages = Math.min(Math.max(row.measuredPages ?? row.expectedPages ?? 1, 1), TEMPLATE_PREVIEW_MAX_PAGES);
+      const urls = await render(fileUrl, { pages });
+      // Guarded persist: only lands if the spec still points at the file we
+      // rendered. A replace/archive during the render rejects the write, so
+      // a stale render can never overwrite the reset (Task #3099 review).
+      const persisted = await store.updatePressTemplateSpecPreviews(pressId, specId, urls, fileUrl);
+      if (persisted) return urls;
+      // File changed mid-render — loop to render the current file.
+    } catch (e: any) {
+      console.warn(`[template-preview] spec render failed for ${specId}:`, e?.message ?? e);
+      return [];
+    }
+  }
+  return [];
 }
 
 /** Own-object variant: download `/objects/uploads/<id>` to a temp file and
@@ -343,4 +460,7 @@ export async function clearTemplateSpecMeasurements(pressId: string, specId: str
     measuredAt: null,
     measuredError: null,
   });
+  // Task #3099 — a removed/replaced template's page renders are stale too;
+  // NULL (not []) so the next view lazily re-renders the new file.
+  await storage.updatePressTemplateSpecPreviews(pressId, specId, null);
 }

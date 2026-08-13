@@ -163,12 +163,16 @@ function templateGeometry(spec: TemplateSpecWithHistory): {
 export function buildStudySpec(spec: TemplateSpecWithHistory, lead: string, rest: string): StudySpec {
   const { zones, shape, isLabel, aspect, mmDims, pages, foldLines, foldLinesY } = templateGeometry(spec);
 
-  // One panel per REAL page.
+  // One panel per REAL page. Task #3099 — each panel shows the template
+  // PDF's own rendered page under the rings (Ruby's mockup); a page whose
+  // render failed stays an honest blank panel, never a borrowed image.
+  const previews = spec.previewUrls ?? [];
   const panels: StudyPanel[] = [];
   for (let i = 0; i < Math.min(Math.max(pages, 0), 8); i++) {
     panels.push({
       label: `Page ${i + 1}`,
       sub: mmDims ?? undefined,
+      img: previews[i] ?? undefined,
       aspect,
       foldLines: foldLines ?? undefined,
       foldLinesY: foldLinesY ?? undefined,
