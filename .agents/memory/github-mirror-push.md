@@ -214,6 +214,11 @@ byte-identical). So on a `libcrypto` error, DON'T ask for a re-paste — the scr
 spacing/newline mangling; just confirm the whole BEGIN…END block landed in the secret. (To test
 the normalizer offline: `eval "$(sed -n '/^write_normalized_deploy_key() {/,/^}/p' scripts/post-merge.sh)"`,
 then `write_normalized_deploy_key "$GITHUB_MIRROR_DEPLOY_KEY" out && ssh-keygen -y -f out`.)
+When rebuilding by hand in Python: the secret can be ONE line with header+body+footer all
+space-joined, so a "drop lines containing PRIVATE KEY" filter deletes everything (base64-decodes
+to 0 bytes → libcrypto error persists). Extract the body with a regex between the BEGIN/END
+markers instead: `re.search(r'-----BEGIN OPENSSH PRIVATE KEY-----(.*?)-----END', k, re.S)`,
+strip all whitespace, decode/re-encode, wrap at 70 cols. Verified working 2026-08-13.
 
 **Host-key pinning:** `github_mirror_known_hosts_contents()` in `scripts/post-merge.sh` embeds
 GitHub's 3 published host keys (ed25519/ecdsa/rsa) inline via heredoc. The **rsa** key rotated
