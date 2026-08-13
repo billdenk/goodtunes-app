@@ -2217,6 +2217,12 @@ export function registerCommerceRoutes(app: Express) {
         return res.json({ ok: true, verifyToken });
       }
     }
+    // Expired-only ≠ wrong code: if every outstanding code has lapsed (or
+    // burned its attempts), "didn't match" sends the fan back to re-read a
+    // stale email. Tell them to request a fresh code instead.
+    if (rows.length > 0 && !rows.some((r) => !(r.expiresAt && r.expiresAt < new Date()) && r.attempts < 5)) {
+      return res.status(400).json({ message: "That code has expired — tap “Resend code” and we'll email you a new one" });
+    }
     res.status(400).json({ message: "That code didn't match — check the latest email and try again" });
     } catch (err) {
       // A transient DB failure here must never surface as a bare 500 with a
@@ -2422,6 +2428,9 @@ export function registerCommerceRoutes(app: Express) {
         await storage.updateCustomer(customer.id, { email, emailVerifiedAt: new Date() });
         return res.json({ ok: true, email });
       }
+    }
+    if (rows.length > 0 && !rows.some((r) => !(r.expiresAt && r.expiresAt < new Date()) && r.attempts < 5)) {
+      return res.status(400).json({ message: "That code has expired — request a new one and we'll email it right over" });
     }
     res.status(400).json({ message: "That code didn't match — check the latest email and try again" });
   });

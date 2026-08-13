@@ -2880,6 +2880,9 @@ export async function registerRoutes(
       }
     }
     if (!verified) {
+      if (rows.length > 0 && !rows.some((r) => !(r.expiresAt && r.expiresAt < new Date()) && r.attempts < 5)) {
+        return res.status(400).json({ message: "That code has expired — request a new one and we'll email it right over." });
+      }
       return res.status(400).json({ message: "That code didn't match — check the latest email and try again." });
     }
     const existing = await storage.getCustomerByEmail(emailRaw);
