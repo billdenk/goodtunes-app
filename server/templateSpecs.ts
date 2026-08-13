@@ -369,18 +369,43 @@ export async function renderUrlPreviewPages(url: string, opts: { pages: number }
  *  on a genuine rasterize failure so views don't re-hammer; callers clear
  *  to NULL on replace to force a fresh render. Best-effort, never throws. */
 export const TEMPLATE_PREVIEW_MAX_PAGES = 8;
-export async function renderTemplateSpecPreviews(pressId: string, specId: string): Promise<string[]> {
-  try {
-    const row = await storage.getPressTemplateSpecById(pressId, specId);
-    if (!row?.templateFileUrl) return [];
-    const pages = Math.min(Math.max(row.measuredPages ?? row.expectedPages ?? 1, 1), TEMPLATE_PREVIEW_MAX_PAGES);
-    const urls = await renderUrlPreviewPages(row.templateFileUrl, { pages });
-    await storage.updatePressTemplateSpecPreviews(pressId, specId, urls);
-    return urls;
-  } catch (e: any) {
-    console.warn(`[template-preview] spec render failed for ${specId}:`, e?.message ?? e);
-    return [];
+export async function renderTemplateSpecPreviews(
+  pressId: string,
+  specId: string,
+  // Test seam — concurrency tests inject a fake renderer + storage so the
+  // replace/archive race is provable without pdftoppm or a DB.
+  deps: {
+    render?: (url: string, opts: { pages: number }) => Promise<string[]>;
+    store?: Pick<typeof storage, "getPressTemplateSpecById" | "updatePressTemplateSpecPreviews">;
+  } = {},
+): Promise<string[]> {
+  const render = deps.render ?? renderUrlPreviewPages;
+  const store = deps.store ?? storage;
+  // Bounded retry: if the template file is REPLACED while a render is in
+  // flight, the guarded persist below misses (0 rows) and we re-render the
+  // NEW file instead of letting stale artwork win or leaving previews NULL.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let fileUrl: string;
+    try {
+      const row = await store.getPressTemplateSpecById(pressId, specId);
+      // Archived / removed file: nothing to render, and nothing to persist —
+      // clearTemplateSpecMeasurements already reset previews to NULL.
+      if (!row?.templateFileUrl) return [];
+      fileUrl = row.templateFileUrl;
+      const pages = Math.min(Math.max(row.measuredPages ?? row.expectedPages ?? 1, 1), TEMPLATE_PREVIEW_MAX_PAGES);
+      const urls = await render(fileUrl, { pages });
+      // Guarded persist: only lands if the spec still points at the file we
+      // rendered. A replace/archive during the render rejects the write, so
+      // a stale render can never overwrite the reset (Task #3099 review).
+      const persisted = await store.updatePressTemplateSpecPreviews(pressId, specId, urls, fileUrl);
+      if (persisted) return urls;
+      // File changed mid-render — loop to render the current file.
+    } catch (e: any) {
+      console.warn(`[template-preview] spec render failed for ${specId}:`, e?.message ?? e);
+      return [];
+    }
   }
+  return [];
 }
 
 /** Own-object variant: download `/objects/uploads/<id>` to a temp file and

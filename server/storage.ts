@@ -1060,6 +1060,7 @@ export interface IStorage {
     pressId: string,
     specId: string,
     previewUrls: string[] | null,
+    expectedFileUrl?: string | null,
   ): Promise<PressTemplateSpec | null>;
   updatePressTemplateTestRunPreviews(
     runId: string,
@@ -5848,11 +5849,24 @@ export class DbStorage implements IStorage {
     pressId: string,
     specId: string,
     previewUrls: string[] | null,
+    // Task #3099 — guard against a stale render persisting over a replaced /
+    // archived template: when provided, the write only lands if the spec's
+    // file URL is still the one the render was made from. Returns null when
+    // the guard rejects the write.
+    expectedFileUrl?: string | null,
   ): Promise<PressTemplateSpec | null> {
+    const conds = [eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)];
+    if (expectedFileUrl !== undefined) {
+      conds.push(
+        expectedFileUrl === null
+          ? isNull(pressTemplateSpecs.templateFileUrl)
+          : eq(pressTemplateSpecs.templateFileUrl, expectedFileUrl),
+      );
+    }
     const [row] = await db
       .update(pressTemplateSpecs)
       .set({ previewUrls })
-      .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)))
+      .where(and(...conds))
       .returning();
     return row ?? null;
   }
