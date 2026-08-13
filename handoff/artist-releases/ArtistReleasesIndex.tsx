@@ -592,7 +592,7 @@ function LaneSummary({ lanes, t }: { lanes: Lane[]; t: Theme }) {
             ? null
             : lane.price
               ? lane.price
-              : 'Pricing pending';
+              : '$ —';
         return (
           <span key={`${lane.kind}-${i}`} className="inline-flex items-center gap-1.5">
             <span style={{ color: t.ink, fontWeight: 500 }}>{lane.kind}</span>
@@ -675,7 +675,7 @@ export function ReleaseRow({ release, t }: { release: Release; t: Theme }) {
         </p>
         <p className="text-[11.5px]" style={{ color: t.faint, marginTop: 3 }}>
           {release.year}
-          {pricingPending && <span style={{ fontStyle: 'italic' }}> · Pricing pending</span>}
+          {pricingPending && <span style={{ fontStyle: 'italic' }}> · $ —</span>}
         </p>
         <div className="flex-1" />
         <button
