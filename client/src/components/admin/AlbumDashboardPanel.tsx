@@ -48,6 +48,11 @@ type Lifetime = {
   ownerCompletes?: number;
   previewPlays?: number;
   uniquePreviewSessions?: number;
+  // Task #3115 — comped/grant tier (comp copies + unexpired previews, staff
+  // excluded). Shown as its own labeled line, never summed into "Full plays".
+  grantPlays?: number;
+  grantCompletes?: number;
+  grantListeners?: number;
 };
 type Addon = { sku: string; label: string; count: number; revenueCents: number };
 type TopSong = {
@@ -56,6 +61,9 @@ type TopSong = {
   plays: number;
   completes: number;
   favorites: number;
+  // Task #3115 — comped/grant tier per-song counts (staff/internal excluded).
+  grantPlays?: number;
+  grantCompletes?: number;
 };
 type GeoFan = { id: string; name: string };
 type GeoPoint = {
@@ -274,6 +282,9 @@ function PlaysAndPreviews({ lifetime }: { lifetime: Lifetime }) {
   const previewPlays = lifetime.previewPlays ?? 0;
   const uniquePreviewSessions = lifetime.uniquePreviewSessions ?? 0;
   const excludedPlays = lifetime.excludedPlays ?? 0;
+  const grantPlays = lifetime.grantPlays ?? 0;
+  const grantCompletes = lifetime.grantCompletes ?? 0;
+  const grantListeners = lifetime.grantListeners ?? 0;
   const completionPct = ownerPlays > 0 ? Math.round((ownerCompletes / ownerPlays) * 100) : 0;
 
   const donutData = [
@@ -324,6 +335,15 @@ function PlaysAndPreviews({ lifetime }: { lifetime: Lifetime }) {
             </div>
           </div>
         )}
+        {/* Task #3115 — comped/grant tier, spelled out but never summed into
+            the purchaser figure above. */}
+        {grantPlays > 0 && (
+          <div className="text-xs text-slate-500 mt-2" data-testid="kpi-plays-comped">
+            Comped listens: {grantPlays.toLocaleString()} play{grantPlays !== 1 ? "s" : ""}
+            &nbsp;·&nbsp;{grantCompletes.toLocaleString()} full play{grantCompletes !== 1 ? "s" : ""}
+            &nbsp;·&nbsp;{grantListeners.toLocaleString()} listener{grantListeners !== 1 ? "s" : ""}
+          </div>
+        )}
       </div>
 
       {/* Previews sub-card */}
@@ -341,7 +361,7 @@ function PlaysAndPreviews({ lifetime }: { lifetime: Lifetime }) {
         </div>
         {excludedPlays > 0 && (
           <div className="text-xs text-slate-400 mt-2" data-testid="kpi-listeners-excluded">
-            {excludedPlays.toLocaleString()} comp/internal excluded
+            {excludedPlays.toLocaleString()} staff/internal excluded
           </div>
         )}
       </div>
@@ -638,15 +658,19 @@ export function AlbumDashboardPanel({
   if (!data) return null;
 
   const { lifetime, addons, newVsReturning, topSongs, geo } = data;
+  // Task #3115 — the song table (and its average completion) spans the
+  // purchaser + comped/grant tiers so a pre-sale album with only comped
+  // listening doesn't read as all-zeros. Staff/internal never counts.
+  const tierPlays = (t: TopSong) => t.plays + (t.grantPlays ?? 0);
+  const tierCompletes = (t: TopSong) => t.completes + (t.grantCompletes ?? 0);
+  const totalTierPlays = topSongs.reduce((s, t) => s + tierPlays(t), 0);
   const completionRate =
-    lifetime.plays > 0
+    totalTierPlays > 0
       ? Math.round(
-          (topSongs.reduce((s, t) => s + t.completes, 0) /
-            Math.max(1, topSongs.reduce((s, t) => s + t.plays, 0))) *
-            100,
+          (topSongs.reduce((s, t) => s + tierCompletes(t), 0) / totalTierPlays) * 100,
         )
       : 0;
-  const maxPlays = Math.max(1, ...topSongs.map((t) => t.plays));
+  const maxPlays = Math.max(1, ...topSongs.map((t) => tierPlays(t)));
   const sortedCities = [...geo.points].sort((a, b) => b.orders - a.orders);
   // The server attaches `fanList` only for operators (super_admin/admin);
   // partners never receive customer ids. So its presence is the signal that
@@ -755,8 +779,9 @@ export function AlbumDashboardPanel({
         ) : (
           <ul className="divide-y divide-slate-100">
             {topSongs.map((t, i) => {
+              const rowPlays = tierPlays(t);
               const completion =
-                t.plays > 0 ? Math.round((t.completes / t.plays) * 100) : null;
+                rowPlays > 0 ? Math.round((tierCompletes(t) / rowPlays) * 100) : null;
               return (
                 <li
                   key={t.songId}
@@ -771,6 +796,11 @@ export function AlbumDashboardPanel({
                     {completion !== null && (
                       <div className="text-xs text-slate-400 tabular-nums leading-tight mt-0.5">
                         {completion}% completed
+                        {(t.grantPlays ?? 0) > 0 && (
+                          <span data-testid={`top-song-comped-${t.songId}`}>
+                            {" "}· {(t.grantPlays ?? 0).toLocaleString()} comped
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -790,7 +820,7 @@ export function AlbumDashboardPanel({
                     >
                       <div
                         className="h-full rounded-full bg-[var(--brand-blue)]"
-                        style={{ width: `${Math.round((t.plays / maxPlays) * 100)}%` }}
+                        style={{ width: `${Math.round((rowPlays / maxPlays) * 100)}%` }}
                       />
                     </div>
                     <span
@@ -798,7 +828,7 @@ export function AlbumDashboardPanel({
                       title="Plays"
                     >
                       <Play className="w-3 h-3 text-slate-300 flex-shrink-0" />
-                      {t.plays.toLocaleString()}
+                      {rowPlays.toLocaleString()}
                     </span>
                   </div>
                 </li>

@@ -28,7 +28,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, pool } from "./db";
-import { computeKpis, computeLifetime, computeTimeseries, type ArtistScope } from "./artistReports";
+import { computeKpis, computeLifetime, computeTimeseries, computeAlbumTopSongs, type ArtistScope } from "./artistReports";
 import { FULL_ACCESS_EMAILS } from "@shared/fullAccess";
 
 const exec = (q: any) => db.execute(q);
@@ -120,6 +120,8 @@ before(async () => {
   await ev(`${sInternal}-comp`, "play_start", {}, compId);
   await ev(`${sInternal}-comp`, "play_start", {}, compId);
   await ev(`${sInternal}-comp`, "play_start", {}, compId);
+  // Task #3115 — one grant full play so grantCompletes has coverage.
+  await ev(`${sInternal}-comp`, "play_complete", {}, compId);
 
   // ── Preview holder: unexpired preview grant, NO order → excluded. 1 play. ──
   await customer(previewId, `arx-preview-${tag}@example.com`);
@@ -178,6 +180,7 @@ test("computeKpis: four-tier split — purchaser headline, tiers never summed", 
   assert.equal(k.fanListeners, 1, "fan listeners = distinct purchasers");
   assert.equal(k.listeners, 3, "unique listeners = distinct fan + grant listeners");
   assert.equal(k.grantPlays, 4, "comp + unexpired-preview plays land in the grant bucket");
+  assert.equal(k.grantCompletes, 1, "grant full plays counted in the grant bucket");
   assert.equal(k.grantListeners, 2, "distinct grant holders counted");
   assert.equal(k.excludedPlays, 3, "staff/internal plays surfaced as excluded, not dropped");
   assert.equal(k.newFans, 3, "new fans = first fan-or-grant play in window (anon/staff out)");
@@ -193,6 +196,7 @@ test("computeLifetime: same buckets on the all-time totals (banner source)", asy
   assert.equal(l.plays, 3, "legacy fan+anon bucket unchanged");
   assert.equal(l.listeners, 2, "legacy fan listeners unchanged");
   assert.equal(l.grantPlays, 4, "grant bucket on lifetime totals");
+  assert.equal(l.grantCompletes, 1, "grant full plays on lifetime totals (Task #3115)");
   assert.equal(l.grantListeners, 2, "distinct grant holders on lifetime totals");
   assert.equal(l.excludedPlays, 3, "staff/internal surfaced as excluded");
   // Task #2893 — the merged page's banner headline is the OWNER tier.
@@ -212,6 +216,24 @@ test("sanity: total seeded plays = fan + preview + grant + staff/internal (nothi
     k.plays + (k.previewPlays ?? 0) + k.grantPlays + k.excludedPlays,
     "no play is silently dropped across the four tiers",
   );
+});
+
+// Task #3115 — album panel "Most popular songs" tiers: purchaser plays stay
+// the fan tier (buyer 2 + anon 1 = 3, identical to the old NOT-nonFanListen
+// filter); grant/comped listening shows up as its OWN per-song columns
+// (comp 3 + preview 1 starts, 1 complete); staff/internal (admin, full-
+// access, internal-stamped = 3 starts) never appears in ANY column.
+test("computeAlbumTopSongs: grant tier surfaced per song, staff/internal excluded", async () => {
+  const songs = await computeAlbumTopSongs(scope());
+  assert.equal(songs.length, 1, "one seeded track");
+  const t = songs[0];
+  assert.equal(t.title, "ARX Track");
+  assert.equal(t.plays, 3, "purchaser/fan plays unchanged (buyer 2 + anon 1)");
+  assert.equal(t.completes, 0, "no fan completes seeded");
+  assert.equal(t.grantPlays, 4, "comp + unexpired-preview plays in the comped column");
+  assert.equal(t.grantCompletes, 1, "grant full play counted per song");
+  // Staff/internal: 3 seeded staff starts appear nowhere.
+  assert.equal(t.plays + t.grantPlays, 7, "staff/internal starts excluded from every column");
 });
 
 // Task #2893 — daily series for the merged Dashboard's trend chart: plays/day

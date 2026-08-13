@@ -544,6 +544,9 @@ export type LifetimeTotals = {
   // Task #2815 — grant/comp bucket (staff/internal excluded)
   grantPlays: number;
   grantListeners: number;
+  // Task #3115 — grant/comp full plays (play_complete) so the album panel can
+  // show "Comped listens: N plays · M full plays" without summing tiers.
+  grantCompletes: number;
 };
 
 export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotals> {
@@ -552,7 +555,7 @@ export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotal
     refundedCents: 0, plays: 0, listeners: 0, excludedPlays: 0,
     ownerPlays: 0, uniqueOwners: 0, ownerCompletes: 0,
     previewPlays: 0, uniquePreviewSessions: 0,
-    grantPlays: 0, grantListeners: 0,
+    grantPlays: 0, grantListeners: 0, grantCompletes: 0,
   };
   if (scope.albumIds.length === 0 && scope.songIds.length === 0) return empty;
 
@@ -581,12 +584,12 @@ export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotal
   const emptyPlays = { starts: "0", listeners: "0", excluded: "0",
     owner_plays: "0", unique_owners: "0", owner_completes: "0",
     preview_plays: "0", unique_preview_sessions: "0",
-    grant_plays: "0", grant_listeners: "0" };
+    grant_plays: "0", grant_listeners: "0", grant_completes: "0" };
   const playRow = scope.songIds.length ? await db.execute<{
     starts: string; listeners: string; excluded: string;
     owner_plays: string; unique_owners: string; owner_completes: string;
     preview_plays: string; unique_preview_sessions: string;
-    grant_plays: string; grant_listeners: string;
+    grant_plays: string; grant_listeners: string; grant_completes: string;
   }>(sql`
     SELECT
       COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan)::text AS starts,
@@ -596,6 +599,7 @@ export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotal
       COUNT(*) FILTER (WHERE t.name = 'play_start' AND t.grant)::text AS grant_plays,
       COUNT(DISTINCT COALESCE(t.user_id, t.session_id))
         FILTER (WHERE t.name = 'play_start' AND t.grant)::text AS grant_listeners,
+      COUNT(*) FILTER (WHERE t.name = 'play_complete' AND t.grant)::text AS grant_completes,
       COUNT(*) FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner)::text AS owner_plays,
       COUNT(DISTINCT t.user_id)
         FILTER (WHERE t.name = 'play_start' AND NOT t.nonfan AND t.is_owner AND t.user_id IS NOT NULL)::text AS unique_owners,
@@ -642,7 +646,63 @@ export async function computeLifetime(scope: ArtistScope): Promise<LifetimeTotal
     uniquePreviewSessions: Number(p.unique_preview_sessions),
     grantPlays: Number(p.grant_plays),
     grantListeners: Number(p.grant_listeners),
+    grantCompletes: Number(p.grant_completes),
   };
+}
+
+// ─── Album panel "Most popular songs" (Task #3115) ─────────────────────
+// One shared compute for the album dashboard's song table AND its CSV
+// export, so the two can never drift. Per song, events are classified into
+// the same tiers as computeKpis by reusing the SAME predicate helpers:
+//   • purchaser/fan  = NOT staffInternalListen() AND NOT grantListen()
+//     (identical to the old `NOT nonFanListen()` filter — bit-for-bit
+//     unchanged purchaser counts),
+//   • grant/comped   = grantListen() (comp copies + unexpired previews,
+//     staff excluded),
+//   • staff/internal = excluded from every column (never shown).
+// Ranking orders by purchaser+grant plays so a pre-sale album where only
+// comped listeners played still ranks meaningfully; the columns stay
+// separate so tiers are spelled out, never blended.
+export type AlbumTopSong = {
+  songId: string;
+  title: string;
+  plays: number;
+  completes: number;
+  favorites: number;
+  grantPlays: number;
+  grantCompletes: number;
+};
+
+export async function computeAlbumTopSongs(scope: ArtistScope): Promise<AlbumTopSong[]> {
+  if (!scope.songIds.length) return [];
+  const rows = await db.execute<{
+    song_id: string; title: string; plays: string; completes: string;
+    favorites: string; grant_plays: string; grant_completes: string;
+  }>(sql`
+    SELECT s.id AS song_id, s.title,
+      COUNT(*) FILTER (WHERE e.name = 'play_start' AND NOT ${grantListen()})::text AS plays,
+      COUNT(*) FILTER (WHERE e.name = 'play_complete' AND NOT ${grantListen()})::text AS completes,
+      COUNT(*) FILTER (WHERE e.name = 'favorite_song' AND NOT ${grantListen()})::text AS favorites,
+      COUNT(*) FILTER (WHERE e.name = 'play_start' AND ${grantListen()})::text AS grant_plays,
+      COUNT(*) FILTER (WHERE e.name = 'play_complete' AND ${grantListen()})::text AS grant_completes
+    FROM songs s
+    LEFT JOIN analytics_events e
+      ON e.payload->>'songId' = s.id
+      AND e.name IN ('play_start', 'play_complete', 'favorite_song')
+      AND NOT ${staffInternalListen()}
+    WHERE s.id = ANY(${pgArray(scope.songIds)})
+    GROUP BY s.id, s.title
+    ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.track_number ASC, s.title ASC
+  `);
+  return ((rows as any).rows || []).map((r: any) => ({
+    songId: r.song_id,
+    title: r.title,
+    plays: Number(r.plays),
+    completes: Number(r.completes),
+    favorites: Number(r.favorites),
+    grantPlays: Number(r.grant_plays),
+    grantCompletes: Number(r.grant_completes),
+  }));
 }
 
 // ─── Endpoints ─────────────────────────────────────────────────────────
@@ -1543,31 +1603,11 @@ async function albumDashboardHandler(req: Request, res: Response) {
   const nvr = (nvrRow as any).rows?.[0] ?? { new_buyers: "0", returning_buyers: "0" };
 
   // (4) Most popular songs — every track on the album ranked by plays, with
-  // completions + favorites alongside. LEFT JOIN keeps 0-play tracks in the
-  // ranking so the list reads as a complete tracklist leaderboard.
-  const songRows = scope.songIds.length
-    ? await db.execute<{ song_id: string; title: string; plays: string; completes: string; favorites: string }>(sql`
-        SELECT s.id AS song_id, s.title,
-          COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS plays,
-          COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS completes,
-          COUNT(*) FILTER (WHERE e.name = 'favorite_song')::text AS favorites
-        FROM songs s
-        LEFT JOIN analytics_events e
-          ON e.payload->>'songId' = s.id
-          AND e.name IN ('play_start', 'play_complete', 'favorite_song')
-          AND NOT ${nonFanListen()}
-        WHERE s.id = ANY(${pgArray(scope.songIds)})
-        GROUP BY s.id, s.title
-        ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.track_number ASC, s.title ASC
-      `)
-    : ({ rows: [] } as any);
-  const topSongs = ((songRows as any).rows || []).map((r: any) => ({
-    songId: r.song_id,
-    title: r.title,
-    plays: Number(r.plays),
-    completes: Number(r.completes),
-    favorites: Number(r.favorites),
-  }));
+  // completions + favorites alongside (LEFT JOIN keeps 0-play tracks in the
+  // ranking). Task #3115 — shared compute with the CSV export; purchaser and
+  // grant/comped tiers come back as separate columns, staff/internal stays
+  // excluded from every figure.
+  const topSongs = await computeAlbumTopSongs(scope);
 
   // (5) Fan locations — reuse the partner buyer-map (city-level geocode) with
   // a single-album scope filter so the viz matches the artist dashboard.
@@ -1683,30 +1723,26 @@ async function albumExportHandler(req: Request, res: Response) {
   }
 
   if (dataset === "top-songs") {
-    // Same compute as the dashboard's "Most popular songs" table.
-    const songRows = scope.songIds.length
-      ? await db.execute<{ song_id: string; title: string; plays: string; completes: string; favorites: string }>(sql`
-          SELECT s.id AS song_id, s.title,
-            COUNT(*) FILTER (WHERE e.name = 'play_start')::text AS plays,
-            COUNT(*) FILTER (WHERE e.name = 'play_complete')::text AS completes,
-            COUNT(*) FILTER (WHERE e.name = 'favorite_song')::text AS favorites
-          FROM songs s
-          LEFT JOIN analytics_events e
-            ON e.payload->>'songId' = s.id
-            AND e.name IN ('play_start', 'play_complete', 'favorite_song')
-            AND NOT ${nonFanListen()}
-          WHERE s.id = ANY(${pgArray(scope.songIds)})
-          GROUP BY s.id, s.title
-          ORDER BY COUNT(*) FILTER (WHERE e.name = 'play_start') DESC, s.track_number ASC, s.title ASC
-        `)
-      : ({ rows: [] } as any);
-    const out = ((songRows as any).rows || []).map((r: any, i: number) => ({
-      rank: i + 1,
-      title: r.title ?? "",
-      plays: Number(r.plays),
-      completes: Number(r.completes),
-      favorites: Number(r.favorites),
-    }));
+    // Same compute as the dashboard's "Most popular songs" table (Task #3115
+    // — literally the same function, so the CSV can never drift from the
+    // on-screen tiers). `plays`/`completes` are purchaser-tier; the comped
+    // (grant) tier gets its own columns; completion % spans both tiers,
+    // matching the on-screen figure. Staff/internal never appears.
+    const songs = await computeAlbumTopSongs(scope);
+    const out = songs.map((t, i) => {
+      const tierPlays = t.plays + t.grantPlays;
+      const tierCompletes = t.completes + t.grantCompletes;
+      return {
+        rank: i + 1,
+        title: t.title ?? "",
+        plays: t.plays,
+        completes: t.completes,
+        comped_plays: t.grantPlays,
+        comped_completes: t.grantCompletes,
+        completion_pct: tierPlays > 0 ? Math.round((tierCompletes / tierPlays) * 100) : "",
+        favorites: t.favorites,
+      };
+    });
     return sendCsv(res, `${slug}-top-songs.csv`, out);
   }
 
