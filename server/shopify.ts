@@ -145,16 +145,24 @@ function verifyOAuthHmac(query: Record<string, any>, secret: string): boolean {
 }
 // Webhooks arrive signed by whichever app the store installed (public or
 // the custom bridge); the header carries no app id, so try each configured
-// secret. Two HMAC-SHA256s over the body is negligible cost.
-function verifyWebhookHmac(rawBody: Buffer, headerHmac: string | undefined): boolean {
-  if (!headerHmac) return false;
+// secret and report WHICH app verified. Callers that mutate store state
+// compare that kind against the row's app_credential so a stale event from
+// the OTHER app (e.g. app/uninstalled from the old custom install after a
+// public re-install) can't clobber a fresh token. Two HMAC-SHA256s over
+// the body is negligible cost.
+function verifyWebhookHmacKind(rawBody: Buffer, headerHmac: string | undefined): ShopifyAppKind | null {
+  if (!headerHmac) return null;
   const b = Buffer.from(headerHmac);
-  for (const secret of allAppSecrets()) {
-    const digest = createHmac("sha256", secret).update(rawBody).digest("base64");
-    const a = Buffer.from(digest);
-    if (a.length === b.length && timingSafeEqual(a, b)) return true;
+  for (const kind of ["public", "custom"] as const) {
+    const secret = appCreds(kind).secret;
+    if (!secret) continue;
+    const a = Buffer.from(createHmac("sha256", secret).update(rawBody).digest("base64"));
+    if (a.length === b.length && timingSafeEqual(a, b)) return kind;
   }
-  return false;
+  return null;
+}
+function verifyWebhookHmac(rawBody: Buffer, headerHmac: string | undefined): boolean {
+  return verifyWebhookHmacKind(rawBody, headerHmac) !== null;
 }
 
 // ─── Storage helpers (inlined, mirroring server/commerce.ts pattern) ──
@@ -2010,7 +2018,10 @@ export function registerShopifyRoutes(app: Express) {
     if (!appKindConfigured(appKind)) return res.status(500).send("Shopify not configured");
     const creds = appCreds(appKind);
     const expectedSig = createHmac("sha256", creds.secret).update(statePayload).digest("hex").slice(0, 16);
-    if (!statePayload || !sig || sig !== expectedSig) return res.status(400).send("State mismatch");
+    const sigBuf = Buffer.from(sig);
+    const expBuf = Buffer.from(expectedSig);
+    if (!statePayload || !sig || sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf))
+      return res.status(400).send("State mismatch");
     if (!verifyOAuthHmac(req.query as Record<string, any>, creds.secret)) return res.status(400).send("HMAC failed");
     // Recover the (already-validated-at-install-time) association context so
     // we can stamp the store + return the operator to where they started.
@@ -2223,10 +2234,10 @@ export function registerShopifyRoutes(app: Express) {
     // configured) allows unsigned replays so the operator can curl-test
     // against a development store before wiring real env vars. Same
     // posture as the Stripe webhook handler.
-    let verified = false;
+    let verifiedKind: ShopifyAppKind | null = null;
     if (allAppSecrets().length > 0) {
-      verified = verifyWebhookHmac(raw, headerHmac);
-      if (!verified) {
+      verifiedKind = verifyWebhookHmacKind(raw, headerHmac);
+      if (!verifiedKind) {
         console.error(`[shopify-webhook] HMAC failed for topic=${topic} shop=${shopDomain}`);
         return res.status(401).json({ message: "Invalid signature" });
       }
@@ -2246,6 +2257,16 @@ export function registerShopifyRoutes(app: Express) {
     const store = await getStoreByDomain(shopDomain);
     if (!store) {
       console.warn(`[shopify-webhook] no store record for ${shopDomain} — accepting & dropping`);
+      return res.json({ received: true });
+    }
+    // Credential provenance: a signature that verified under the OTHER
+    // app's secret is a stale event from a previous install (e.g. the old
+    // custom bridge's app/uninstalled arriving after a public re-install).
+    // Accept-and-drop so Shopify stops retrying but the row is untouched.
+    if (verifiedKind && verifiedKind !== storeAppKind(store)) {
+      console.warn(
+        `[shopify-webhook] app-kind mismatch for ${shopDomain}: signed by ${verifiedKind}, store is ${storeAppKind(store)} — accepting & dropping topic=${topic}`,
+      );
       return res.json({ received: true });
     }
 
@@ -2863,7 +2884,11 @@ export function registerShopifyRoutes(app: Express) {
       let shopDomain = "";
       // The session token is signed by whichever app hosts the checkout
       // extension on that store — try each configured app's secret and
-      // require the audience to match the SAME app's client_id.
+      // require the audience to match the SAME app's client_id. The kind
+      // that verified must also match the store row's app_credential
+      // (provenance — a stale token from a prior install proves nothing
+      // about the current one).
+      let jwtKind: ShopifyAppKind | null = null;
       let jwtOk = false;
       for (const kind of ["public", "custom"] as const) {
         if (!appKindConfigured(kind)) continue;
@@ -2876,6 +2901,7 @@ export function registerShopifyRoutes(app: Express) {
           const aud = Array.isArray(payload.aud) ? payload.aud[0] : payload.aud;
           if (aud !== c.key) continue;
           shopDomain = new URL(String(payload.dest ?? "")).hostname;
+          jwtKind = kind;
           jwtOk = true;
           break;
         } catch {
@@ -2885,6 +2911,9 @@ export function registerShopifyRoutes(app: Express) {
       if (!jwtOk) return res.status(401).json({ message: "Invalid session token" });
       const store = await getStoreByDomain(shopDomain);
       if (!store) return res.status(404).json({ message: "Unknown store" });
+      // Provenance: the app that signed the session token must be the app
+      // this store is currently installed under.
+      if (jwtKind !== storeAppKind(store)) return res.status(401).json({ message: "Invalid session token" });
       const orderId = String(req.query.orderId ?? "").replace(/\D/g, "");
       if (!orderId) return res.status(400).json({ message: "orderId required" });
       const [order] = await db
