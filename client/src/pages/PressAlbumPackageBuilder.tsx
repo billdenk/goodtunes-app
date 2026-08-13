@@ -1054,6 +1054,15 @@ export function PressAlbumPackageBuilder({
   const profitPerUnitCents = packageCostCents != null ? Math.max(0, retailCents - packageCostCents) : null;
   const baseTotalCents = profitPerUnitCents != null ? profitPerUnitCents * effectiveRunQty : null;
   const [showCost, setShowCost] = useState(false);
+
+  // Canon collapsible picker (same tool as PressVinylColors / the press
+  // catalog): once a color has actually been picked for the active type, the
+  // "Pick your vinyl" grid collapses into a one-line summary row; "Change"
+  // re-expands it. Note selectedColor falls back to the tier's first color
+  // for the disc stage, so collapse keys off an EXPLICIT pick in colorSel.
+  const [typeGridOpen, setTypeGridOpen] = useState(false);
+  const colorPicked = !!(activeTier && colorSel[activeTier.id]);
+  const typeGridExpanded = typeGridOpen || !colorPicked;
   const costParts =
     mfgCents != null
       ? [
@@ -1267,17 +1276,51 @@ export function PressAlbumPackageBuilder({
 
             {/* Pick a type (tier) */}
             <TwoTone lead="Pick your vinyl." rest="Black, color, or a wild splatter." />
-            <TypeCards
-              tiers={tiers}
-              value={activeTier?.id ?? null}
-              onChange={(id) => {
-                if (fmtRow) setTierSel((p) => ({ ...p, [fmtRow.format]: id }));
-                setRunQty(null);
-                markDirty();
-              }}
-              labelLogoUrl={labelLogoUrl}
-              labelBgColor={labelBgColor}
-            />
+            {!typeGridExpanded && activeTier ? (
+              // Collapsed summary — the picked type, one quiet row (canon:
+              // same as the press Vinyl-colors page).
+              <div
+                className="flex items-center gap-3 rounded-2xl"
+                style={{ marginTop: 14, padding: "10px 14px", backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}
+                data-testid="type-summary"
+              >
+                <VinylDisc size={44} color={activeTier.colors[0] ?? null} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold truncate" style={{ fontSize: 13.5, color: INK }}>
+                    {activeTier.name}
+                  </div>
+                  <div style={{ fontSize: 11.5, marginTop: 1, color: FAINT }}>
+                    Type · {activeTier.colors.length} {activeTier.colors.length === 1 ? "color" : "colors"}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTypeGridOpen(true)}
+                  className="flex-shrink-0 font-semibold rounded-full px-3 py-1.5 transition-colors"
+                  style={{ fontSize: 12.5, color: BLUE }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "rgba(49,158,216,0.12)")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                  data-testid="button-change-type"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <TypeCards
+                tiers={tiers}
+                value={activeTier?.id ?? null}
+                onChange={(id) => {
+                  if (fmtRow) setTierSel((p) => ({ ...p, [fmtRow.format]: id }));
+                  setRunQty(null);
+                  // Canon: picking a type collapses the grid (it stays open
+                  // automatically while the new type has no color picked yet).
+                  setTypeGridOpen(false);
+                  markDirty();
+                }}
+                labelLogoUrl={labelLogoUrl}
+                labelBgColor={labelBgColor}
+              />
+            )}
 
             <Divider />
 
@@ -1296,6 +1339,8 @@ export function PressAlbumPackageBuilder({
               labelBgColor={labelBgColor}
               onChange={(id) => {
                 if (activeTier) setColorSel((p) => ({ ...p, [activeTier.id]: id }));
+                // A choice closes the collapsible picker (standing rule).
+                setTypeGridOpen(false);
                 markDirty();
               }}
             />
