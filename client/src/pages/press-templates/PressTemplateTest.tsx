@@ -366,10 +366,30 @@ export function PressTemplateTest({
           )}
         </>
       ) : latestRun && !proofSpec ? (
-        // A run exists but no rendered preview — show the template study full
-        // width; the checks below still tell the whole story.
-        <div className="mt-6">
-          <PrintedAreasStudy spec={templateSpec} embedded theme={studyTheme} headerAction={uploadAgainBtn} />
+        // Task #3099 — a run exists but rasterizing its file genuinely
+        // failed (the server backfills previews on view, so this is the
+        // honest last resort). The test slot still holds its half of the
+        // grid — the page NEVER collapses to one column.
+        <div className="mt-6 grid gap-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
+          <PrintedAreasStudy spec={templateSpec} embedded panelSize={190} theme={studyTheme} />
+          <div className="rounded-2xl px-6 pt-5 pb-6 flex flex-col" style={{ backgroundColor: studyTheme.card, border: `1px solid ${studyTheme.hairline}` }} data-testid="test-no-preview">
+            <div className="flex items-start justify-between gap-6">
+              <div className="min-w-0">
+                <h3 className="text-[19px] font-semibold tracking-[-0.01em]" style={{ color: studyTheme.ink }}>
+                  Test. <span style={{ color: studyTheme.subink }}>{lead} {rest}</span>
+                </h3>
+                <div className="mt-1 text-[12px] truncate" style={{ color: studyTheme.faint }}>{testFileName}</div>
+              </div>
+              {uploadAgainBtn}
+            </div>
+            <div className="flex-1 flex flex-col items-center justify-center text-center px-8 py-10">
+              <FileText className="w-6 h-6 mb-2.5" style={{ color: studyTheme.faint }} />
+              <div className="text-[13.5px] font-semibold" style={{ color: studyTheme.ink }}>No preview rendered</div>
+              <div className="mt-1 text-[12.5px]" style={{ color: studyTheme.subink, maxWidth: 320 }}>
+                This file couldn’t be rasterized for review. The checks below still ran against the template.
+              </div>
+            </div>
+          </div>
         </div>
       ) : (
         // ─── Empty state: no test run yet ───

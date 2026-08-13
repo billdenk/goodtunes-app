@@ -74,6 +74,10 @@ export type TemplateSpecWithHistory = {
   // separation (bleed/cut/safety rings + fold/score lines). Null/absent =
   // never guide-scanned; an object with null zones = scanned, none drawn.
   measuredGuides?: MeasuredTemplateGuides | null;
+  // Task #3099 — rendered PNGs of the template file's own pages, one per
+  // page. null = never rendered (server backfills lazily on view); [] =
+  // rasterize genuinely failed (honest blank panel, no fabrication).
+  previewUrls?: string[] | null;
   measuredError: string | null;
   // Task #3065 — option families this ONE template file covers (e.g. small
   // + large center-label holes). Stamped only after the operator confirms

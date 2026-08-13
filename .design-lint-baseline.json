@@ -24637,6 +24637,26 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateTest.tsx",
+    "snippet": "<h3 className=\"text-[19px] font-semibold tracking-[-0.01em]\" style={{ color: studyTheme.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateTest.tsx",
+    "snippet": "<div className=\"mt-1 text-[12px] truncate\" style={{ color: studyTheme.faint }}>{testFileName}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateTest.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold\" style={{ color: studyTheme.ink }}>No preview rendered</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateTest.tsx",
+    "snippet": "<div className=\"mt-1 text-[12.5px]\" style={{ color: studyTheme.subink, maxWidth: 320 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateTest.tsx",
     "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>No test run yet</div>"
   },
   {

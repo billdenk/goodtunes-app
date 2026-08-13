@@ -1056,6 +1056,16 @@ export interface IStorage {
     status: string,
     certifiedAt?: Date | null,
   ): Promise<PressTemplateRevision | null>;
+  updatePressTemplateSpecPreviews(
+    pressId: string,
+    specId: string,
+    previewUrls: string[] | null,
+  ): Promise<PressTemplateSpec | null>;
+  updatePressTemplateTestRunPreviews(
+    runId: string,
+    previewUrl: string | null,
+    previewUrl2: string | null,
+  ): Promise<PressTemplateTestRun | null>;
   listPressTemplateTestRuns(specIds: string[]): Promise<PressTemplateTestRun[]>;
   getPressTemplateTestRunById(runId: string): Promise<PressTemplateTestRun | null>;
   createPressTemplateTestRun(input: {
@@ -5830,6 +5840,34 @@ export class DbStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+  // Task #3099 — stamp rendered template-page previews onto the spec row.
+  // [] means "attempted, rasterize genuinely failed" (no re-hammer); NULL
+  // means "never attempted" (drives the lazy view-time backfill).
+  async updatePressTemplateSpecPreviews(
+    pressId: string,
+    specId: string,
+    previewUrls: string[] | null,
+  ): Promise<PressTemplateSpec | null> {
+    const [row] = await db
+      .update(pressTemplateSpecs)
+      .set({ previewUrls })
+      .where(and(eq(pressTemplateSpecs.pressId, pressId), eq(pressTemplateSpecs.id, specId)))
+      .returning();
+    return row ?? null;
+  }
+  // Task #3099 — lazy backfill of a historical run's rendered previews.
+  async updatePressTemplateTestRunPreviews(
+    runId: string,
+    previewUrl: string | null,
+    previewUrl2: string | null,
+  ): Promise<PressTemplateTestRun | null> {
+    const [row] = await db
+      .update(pressTemplateTestRuns)
+      .set({ previewUrl, previewUrl2 })
+      .where(eq(pressTemplateTestRuns.id, runId))
+      .returning();
+    return row ?? null;
   }
   async certifyPressTemplateTestRun(runId: string, when: Date): Promise<PressTemplateTestRun | null> {
     const [row] = await db
