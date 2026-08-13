@@ -613,50 +613,78 @@ function LaneSummary({ lanes, t }: { lanes: Lane[]; t: Theme }) {
   );
 }
 
-// ─── Release row ────────────────────────────────────────────────────────────
+// ─── Release card — Apple "Explore the lineup" grammar (Bill, Aug 13 2026) ──
+// Wide rounded rects in a grid, the COVER ART is the hero (full-bleed square,
+// like a product shot), centered copy beneath: name, derived badge, quiet
+// lane line, then a blue "Open ›" text link. Sunset cards dim as a whole.
 export function ReleaseRow({ release, t }: { release: Release; t: Theme }) {
   const rollup = deriveRollup(release.lanes);
   const [hover, setHover] = useState(false);
 
+  // Compact centered lane line — "Digital Released · Vinyl Prepping".
+  const laneLine =
+    release.lanes.length === 0
+      ? 'No lanes yet — add the digital album to begin.'
+      : release.lanes.map((l) => `${l.kind} ${l.stage.toLowerCase()}`).join(' · ');
+  const pricingPending = release.lanes.some(
+    (l) => l.kind !== 'Digital' && l.stage !== 'Sunset' && !l.price,
+  );
+
   return (
     <div
-      className="group rounded-2xl transition-all cursor-pointer"
+      className="group rounded-3xl overflow-hidden cursor-pointer flex flex-col"
       style={{
         backgroundColor: t.card,
         border: `1px solid ${t.hairline}`,
         boxShadow: hover ? t.hoverLift : 'none',
-        transform: hover ? 'translateY(-2px)' : 'none',
-        opacity: rollup.dimmed ? 0.62 : 1,
-        transition: 'transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease',
+        transform: hover ? 'translateY(-3px)' : 'none',
+        opacity: rollup.dimmed ? 0.6 : 1,
+        transition: 'transform 0.25s ease, box-shadow 0.25s ease, opacity 0.2s ease',
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       data-testid={`row-release-${release.id}`}
     >
-      <div className="flex items-center gap-4 p-4">
-        <CoverThumb release={release} t={t} />
+      {/* Hero — full-bleed square cover art, the card's product shot. */}
+      <div className="relative w-full" style={{ aspectRatio: '1 / 1', backgroundColor: t.coverPlaceholder }}>
+        {release.cover ? (
+          <img
+            src={release.cover}
+            alt={`${release.name} artwork`}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ filter: rollup.dimmed ? 'saturate(0.4)' : 'none' }}
+            draggable={false}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Disc3 style={{ width: 56, height: 56, color: t.discGlyph, strokeWidth: 1.25 }} />
+          </div>
+        )}
+      </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h3 className="text-[16px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }}>
-              {release.name}
-            </h3>
-            <RollupBadge rollup={rollup} t={t} />
-          </div>
-          <p className="text-[12.5px] truncate" style={{ color: t.faint, marginTop: 3 }}>
-            {release.artist} · {release.year} · {release.lanes.length === 0 ? 'No albums' : `${release.lanes.length} ${release.lanes.length === 1 ? 'lane' : 'lanes'}`}
-          </p>
-          <div style={{ marginTop: 8 }}>
-            <LaneSummary lanes={release.lanes} t={t} />
-          </div>
+      {/* Centered copy block — Apple lineup card rhythm. */}
+      <div className="flex-1 flex flex-col items-center text-center px-6 pt-5 pb-6">
+        <h3 className="text-[17px] font-semibold w-full truncate" style={{ color: t.ink, letterSpacing: '-0.015em' }}>
+          {release.name}
+        </h3>
+        <div style={{ marginTop: 8 }}>
+          <RollupBadge rollup={rollup} t={t} />
         </div>
-
+        <p className="text-[12.5px] w-full" style={{ color: t.subink, marginTop: 10, lineHeight: 1.45 }}>
+          {laneLine}
+        </p>
+        <p className="text-[11.5px]" style={{ color: t.faint, marginTop: 3 }}>
+          {release.year}
+          {pricingPending && <span style={{ fontStyle: 'italic' }}> · Pricing pending</span>}
+        </p>
+        <div className="flex-1" />
         <button
           type="button"
-          className="flex-shrink-0 rounded-full text-[13px] font-medium transition-colors self-center hidden sm:inline-flex items-center gap-1"
+          className="inline-flex items-center gap-1 rounded-full text-[13px] font-medium transition-colors"
           style={{
             color: t.blue,
             padding: '6px 12px',
+            marginTop: 14,
             backgroundColor: hover ? (t.canvas === '#f5f5f7' ? '#f0f7fc' : 'rgba(49,158,216,0.14)') : 'transparent',
           }}
           onClick={(e) => e.stopPropagation()}
@@ -724,7 +752,7 @@ export function ArtistReleasesIndex() {
             </p>
           </div>
 
-          <section className="flex flex-col gap-3" data-testid="list-releases">
+          <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5" data-testid="list-releases">
             {MOCK_RELEASES.map((r) => (
               <ReleaseRow key={r.id} release={r} t={t} />
             ))}
