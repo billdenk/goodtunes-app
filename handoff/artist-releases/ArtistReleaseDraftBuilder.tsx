@@ -2847,66 +2847,17 @@ export function ArtistReleaseDraftBuilder() {
               <span style={{ color: '#d0d0d5' }}>›</span>
               <span style={{ color: SUBINK }} data-testid="crumb-current">Vinyl draft</span>
             </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <span
-                className="inline-flex items-center gap-1.5 text-[12.5px]"
-                style={{ color: '#a1a1a6' }}
-                data-testid="autosave-indicator"
-                title="Every change is saved automatically. A crash never loses your draft."
-              >
-                <Check className="w-3.5 h-3.5" />
-                Saved just now
-              </span>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button
-                    type="button"
-                    data-testid="button-drafts-switcher"
-                    className="inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium transition-colors hover:bg-black/5"
-                    style={{ color: SUBINK, padding: '5px 12px', border: `1px solid ${HAIRLINE}`, backgroundColor: '#fff' }}
-                  >
-                    2 drafts
-                    <ChevronDown className="w-3.5 h-3.5" style={{ color: '#a1a1a6' }} />
-                  </button>
-                </PopoverTrigger>
-                <PopoverContent align="end" sideOffset={8} className="w-72 p-1.5 rounded-2xl" style={{ border: `1px solid ${HAIRLINE}` }} data-testid="menu-drafts">
-                  <div className="px-2 py-1.5 text-[10.5px] font-bold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
-                    CALIFORNIALAND · Vinyl drafts
-                  </div>
-                  {[
-                    { id: 'vinyl-1', name: 'CALIFORNIALAND — Vinyl', note: '12″ · edited just now', active: true },
-                    { id: 'vinyl-2', name: 'CALIFORNIALAND — Vinyl 2', note: '12″ · alt jacket · edited 3d ago', active: false },
-                  ].map((d) => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      data-testid={`draft-option-${d.id}`}
-                      className="w-full flex items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-slate-50"
-                      style={{ backgroundColor: d.active ? '#f6f6f8' : undefined }}
-                    >
-                      <span className="mt-0.5 w-4 flex-shrink-0">
-                        {d.active && <Check className="w-4 h-4" style={{ color: BLUE }} />}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-[13px] font-medium truncate" style={{ color: INK }}>{d.name}</span>
-                        <span className="block text-[11.5px] truncate" style={{ color: '#a1a1a6' }}>{d.note}</span>
-                      </span>
-                    </button>
-                  ))}
-                  <div className="mt-1 pt-1" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
-                    <button
-                      type="button"
-                      data-testid="button-new-draft"
-                      className="w-full flex items-center gap-2 rounded-lg px-2 py-2 text-left text-[13px] font-medium transition-colors hover:bg-slate-50"
-                      style={{ color: BLUE }}
-                    >
-                      <span className="w-4 flex justify-center">+</span>
-                      New Vinyl draft
-                    </button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
+            {/* No drafts/variations dropdown for now (Bill, Aug 13 2026) —
+                just the ambient auto-save indicator. */}
+            <span
+              className="inline-flex items-center gap-1.5 text-[12.5px] flex-shrink-0"
+              style={{ color: '#a1a1a6' }}
+              data-testid="autosave-indicator"
+              title="Every change is saved automatically. A crash never loses your draft."
+            >
+              <Check className="w-3.5 h-3.5" />
+              Saved just now
+            </span>
           </div>
           <PageHeading lead="CALIFORNIALAND — Vinyl." rest="Your working draft." />
           <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: SUBINK }}>
@@ -2930,14 +2881,7 @@ export function ArtistReleaseDraftBuilder() {
                 Invited · pricing pending
               </div>
             </div>
-            <button
-              type="button"
-              data-testid="button-ping-press"
-              className="rounded-full text-[12.5px] font-medium transition-colors hover:bg-black/5"
-              style={{ color: BLUE, padding: '6px 12px' }}
-            >
-              Ping press
-            </button>
+            {/* No "Ping press" action for now (Bill, Aug 13 2026). */}
           </div>
         </div>
 
