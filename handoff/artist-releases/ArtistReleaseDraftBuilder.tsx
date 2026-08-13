@@ -3303,7 +3303,7 @@ export function ArtistReleaseDraftBuilder() {
             }
             right={
               <>
-                <StepHeading lead="Pick a style." rest="What the artwork ships on." />
+                <StepHeading lead="Add an insert." rest="Optional — or skip it." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {insertsAvailable
                     ? `${visibleInserts.length - 1} insert styles available from ${PARTNER_NAME} — or skip it.`
@@ -3353,7 +3353,7 @@ export function ArtistReleaseDraftBuilder() {
             right={
               <div className="flex flex-col" style={{ gap: 48 }}>
                 <section>
-                  <StepHeading lead="Pick a shape." rest="Die-cut to fit — or none." />
+                  <StepHeading lead="Add a sticker." rest="Die-cut to fit — or none." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Stickers apply to the shrink-wrap, not the jacket itself.
                   </p>
