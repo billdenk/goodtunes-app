@@ -46,6 +46,8 @@ import {
   EyeOff,
   Check,
   ChevronDown,
+  Plus,
+  X,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
@@ -2800,6 +2802,45 @@ export function ArtistReleaseDraftBuilder() {
   // Memphis hasn't returned confirmed pricing — every money surface reads a
   // quiet "$ —" (never $0.00). The math above stays wired for when it lands.
   const fmt = (_n: number) => '$ —';
+
+  // ── Earnings worksheet (artist-only section, Bill Aug 13 2026) ──
+  // The one place real numbers show: a what-if tool. Manufacturing uses the
+  // wired estimate math; a caveat line says it firms up when Memphis confirms.
+  const usd = (n: number, cents = true) =>
+    n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 });
+  const PUBLISHING_UNIT = 0.127 * 2 * 12; // $0.127 × 2 (vinyl+digital) × 12 tracks
+  const GOODTUNES_UNIT = 4.50;
+  const processingUnit = (retail: number) => retail * 0.029 + 0.30;
+  // Per-record manufacturing at a given run size — same wired math as above.
+  const manufacturingUnit = (q: number) =>
+    (color.price + WEIGHT_UP[weightId]) * qtyScale(q) +
+    LABEL_PRICE[labelId] +
+    JACKET_PRICE[jacketType.id] +
+    SLEEVE_PRICE[sleeveType.id] +
+    INSERT_PRICE[insertType.id] +
+    (stickerShapeId !== 'none' ? STICKER_PRICE[stickerShapeId] : 0);
+
+  type Scenario = { qty: number; retail: number };
+  const [scenarios, setScenarios] = useState<Scenario[]>([{ qty: 500, retail: 35 }]);
+  const [mathOpen, setMathOpen] = useState<Set<number>>(() => new Set());
+  const addScenario = () => {
+    setScenarios((prev) => {
+      if (prev.length >= 3) return prev;
+      const used = prev.map((s) => s.qty);
+      const nextQty = QUANTITIES.find((q) => q > Math.max(...used) && !used.includes(q)) ?? QUANTITIES[QUANTITIES.length - 1];
+      return [...prev, { qty: nextQty, retail: prev[prev.length - 1].retail }];
+    });
+  };
+  const removeScenario = (i: number) => setScenarios((prev) => prev.filter((_, idx) => idx !== i));
+  const patchScenario = (i: number, patch: Partial<Scenario>) =>
+    setScenarios((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  const toggleMath = (i: number) =>
+    setMathOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
   const sizeLabel = VINYL_SIZES.find((s) => s.id === sizeId)?.label ?? '';
 
   return (
@@ -2822,10 +2863,51 @@ export function ArtistReleaseDraftBuilder() {
               {picked('jacket') && (<><span style={{ color: '#d0d0d5' }}>·</span><span className="truncate">{jacketType.name}</span></>)}
             </>
           ) : (
-            <span>Start by picking a size below.</span>
+            <>
+              {/* Attention-drawing shimmer while the strip is empty (Bill,
+                  Aug 13 2026) — a soft gradient wave sweeps the invitation. */}
+              <style>{`
+                @keyframes gt-strip-shimmer {
+                  0%   { background-position: 200% center; }
+                  100% { background-position: -200% center; }
+                }
+              `}</style>
+              <span
+                className="font-medium"
+                data-testid="strip-empty-note"
+                style={{
+                  backgroundImage: `linear-gradient(90deg, ${SUBINK} 0%, ${SUBINK} 35%, ${BLUE} 50%, ${SUBINK} 65%, ${SUBINK} 100%)`,
+                  backgroundSize: '200% auto',
+                  WebkitBackgroundClip: 'text',
+                  backgroundClip: 'text',
+                  color: 'transparent',
+                  animation: 'gt-strip-shimmer 3.2s linear infinite',
+                }}
+              >
+                Pick a size to begin — your price will be up here.
+              </span>
+            </>
           )}
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
+          {/* Memphis lives up here (Bill, Aug 13 2026) — compact chip in the
+              quote strip, where confirmed pricing will land. */}
+          <span
+            className="flex items-center gap-2 text-[12.5px] min-w-0"
+            style={{ color: SUBINK }}
+            data-testid="press-chip"
+            title="Memphis Record Pressing — invited, pricing pending"
+          >
+            <span className="h-6 w-6 rounded-full bg-white ring-1 ring-black/10 flex items-center justify-center flex-shrink-0 p-[3px]">
+              <img src={mrpLabelLogo} alt={PARTNER_NAME} className="w-full h-full object-contain" style={{ filter: 'brightness(0)' }} />
+            </span>
+            <span className="font-medium truncate" style={{ color: INK }}>Memphis</span>
+            <span className="flex items-center gap-1.5" style={{ color: '#a1a1a6' }}>
+              <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 6, height: 6, border: '1.5px solid #a1a1a6' }} />
+              pricing pending
+            </span>
+          </span>
+          <span aria-hidden style={{ width: 1, height: 18, backgroundColor: HAIRLINE }} />
           <span className="text-[12.5px]" style={{ color: SUBINK }}>
             Est. <span className="font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }}>{fmt(perUnit)}</span> / unit
           </span>
@@ -2865,24 +2947,8 @@ export function ArtistReleaseDraftBuilder() {
             Every edit saves to your GoodTunes® draft automatically.
           </p>
 
-          {/* Invited press — pricing not yet confirmed */}
-          <div
-            className="flex items-center gap-3 rounded-2xl bg-white"
-            style={{ border: `1px solid ${HAIRLINE}`, padding: '14px 16px', marginTop: 22, maxWidth: 520 }}
-            data-testid="press-row"
-          >
-            <span className="h-10 w-10 rounded-full bg-white ring-1 ring-black/10 flex items-center justify-center flex-shrink-0 p-1.5">
-              <img src={mrpLabelLogo} alt={PARTNER_NAME} className="w-full h-full object-contain" style={{ filter: 'brightness(0)' }} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[13.5px] font-semibold truncate" style={{ color: INK }}>{PARTNER_NAME}</div>
-              <div className="text-[12px] flex items-center gap-1.5" style={{ color: '#a1a1a6' }}>
-                <span aria-hidden className="rounded-full" style={{ width: 6, height: 6, border: '1.5px solid #a1a1a6' }} />
-                Invited · pricing pending
-              </div>
-            </div>
-            {/* No "Ping press" action for now (Bill, Aug 13 2026). */}
-          </div>
+          {/* Press moved to the sticky quote strip above (Bill, Aug 13 2026) —
+              the big "Invited · pricing pending" card is gone. */}
         </div>
 
         {/* ═══ 1 · VINYL (Add your vinyl) ═══ */}
@@ -3397,7 +3463,158 @@ export function ArtistReleaseDraftBuilder() {
           </Gate>
         </section>
 
-        {/* ═══ 7 · SAVE ═══ */}
+        {/* ═══ 7 · EARNINGS WORKSHEET (artist-only) ═══
+            The choices are locked in above — this is the what-if sheet.
+            The BIG number is always what the artist earns, never a cost. */}
+        <section id="step-earnings" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+          <Gate on={allDone}>
+            <SectionHeading
+              lead="What you could earn."
+              rest="Your worksheet."
+              sub="Try a price. Try a bigger run. The big number is yours — after pressing, publishing, and processing. Playing here never changes your draft."
+            />
+
+            <div style={{ marginTop: 32, display: 'grid', gridTemplateColumns: `repeat(${Math.min(scenarios.length + (scenarios.length < 3 ? 1 : 0), 3)}, minmax(0, 1fr))`, gap: 20, alignItems: 'stretch' }}>
+              {scenarios.map((sc, i) => {
+                const mfg = manufacturingUnit(sc.qty);
+                const proc = processingUnit(sc.retail);
+                const costUnit = mfg + PUBLISHING_UNIT + proc + GOODTUNES_UNIT;
+                const profitUnit = sc.retail - costUnit;
+                const gross = profitUnit * sc.qty;
+                const open = mathOpen.has(i);
+                return (
+                  <div
+                    key={i}
+                    className="rounded-3xl bg-white relative flex flex-col"
+                    style={{ border: i === 0 ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, padding: 28 }}
+                    data-testid={`earn-card-${i}`}
+                  >
+                    {i > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => removeScenario(i)}
+                        aria-label="Remove this run"
+                        data-testid={`button-remove-earn-${i}`}
+                        className="absolute rounded-full transition-colors hover:bg-black/5 flex items-center justify-center"
+                        style={{ top: 14, right: 14, width: 28, height: 28, color: '#a1a1a6' }}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                    <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: i === 0 ? BLUE : '#a1a1a6' }}>
+                      {i === 0 ? 'Your run' : `What if · ${i + 1}`}
+                    </div>
+
+                    {/* The big number — always earnings, never cost */}
+                    <div style={{ marginTop: 18 }}>
+                      <div className="tracking-tight" style={{ fontSize: 44, fontWeight: 700, lineHeight: 1, color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid={`earn-gross-${i}`}>
+                        {usd(Math.max(gross, 0), false)}
+                      </div>
+                      <div className="text-[13px]" style={{ marginTop: 8, color: SUBINK }}>
+                        Potential gross profit — <span className="font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }}>{usd(Math.max(profitUnit, 0))}</span> yours on every record sold.
+                      </div>
+                    </div>
+
+                    {/* The two dials */}
+                    <div style={{ marginTop: 22, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <label className="block">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 6 }}>Your price</span>
+                        <span className="flex items-center rounded-xl" style={{ border: `1px solid ${HAIRLINE}`, height: 42, paddingLeft: 12 }}>
+                          <span className="text-[14px]" style={{ color: '#a1a1a6' }}>$</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={sc.retail}
+                            onChange={(e) => patchScenario(i, { retail: Number(e.target.value) || 0 })}
+                            data-testid={`input-earn-retail-${i}`}
+                            className="w-full h-full bg-transparent focus:outline-none text-[15px] font-semibold"
+                            style={{ color: INK, paddingLeft: 6, fontVariantNumeric: 'tabular-nums' }}
+                          />
+                        </span>
+                      </label>
+                      <label className="block">
+                        <span className="block text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 6 }}>Run size</span>
+                        <span className="relative block">
+                          <select
+                            value={sc.qty}
+                            onChange={(e) => patchScenario(i, { qty: Number(e.target.value) })}
+                            data-testid={`select-earn-qty-${i}`}
+                            className="w-full appearance-none rounded-xl bg-transparent focus:outline-none text-[15px] font-semibold"
+                            style={{ border: `1px solid ${HAIRLINE}`, height: 42, padding: '0 32px 0 12px', color: INK, fontVariantNumeric: 'tabular-nums' }}
+                          >
+                            {QUANTITIES.map((q) => (
+                              <option key={q} value={q}>{q.toLocaleString()} records</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none" style={{ color: '#a1a1a6' }} />
+                        </span>
+                      </label>
+                    </div>
+
+                    {/* The quiet math — per record, so a run never reads like a $22k bill */}
+                    <div style={{ marginTop: 18 }}>
+                      <button
+                        type="button"
+                        onClick={() => toggleMath(i)}
+                        data-testid={`button-earn-math-${i}`}
+                        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium transition-opacity hover:opacity-80"
+                        style={{ color: BLUE }}
+                        aria-expanded={open}
+                      >
+                        See the math
+                        <ChevronDown className="w-3.5 h-3.5 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
+                      </button>
+                      {open && (
+                        <div className="text-[13px]" style={{ marginTop: 12, borderTop: `1px solid ${HAIRLINE}`, paddingTop: 12, color: SUBINK }} data-testid={`earn-math-${i}`}>
+                          {[
+                            ['You sell each record for', usd(sc.retail), true],
+                            ['Pressing & packaging', `− ${usd(mfg)}`, false],
+                            ['Publishing (12 tracks, vinyl + digital)', `− ${usd(PUBLISHING_UNIT)}`, false],
+                            ['Payment processing', `− ${usd(proc)}`, false],
+                            ['GoodTunes®', `− ${usd(GOODTUNES_UNIT)}`, false],
+                          ].map(([label, val, strong]) => (
+                            <div key={label as string} className="flex items-baseline justify-between" style={{ padding: '3px 0' }}>
+                              <span style={{ color: strong ? INK : SUBINK, fontWeight: strong ? 600 : 400 }}>{label}</span>
+                              <span style={{ color: strong ? INK : SUBINK, fontVariantNumeric: 'tabular-nums', fontWeight: strong ? 600 : 400 }}>{val}</span>
+                            </div>
+                          ))}
+                          <div className="flex items-baseline justify-between" style={{ padding: '8px 0 0', marginTop: 6, borderTop: `1px solid ${HAIRLINE}` }}>
+                            <span className="font-semibold" style={{ color: INK }}>Yours, every record sold</span>
+                            <span className="font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }}>{usd(Math.max(profitUnit, 0))}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {scenarios.length < 3 && (
+                <button
+                  type="button"
+                  onClick={addScenario}
+                  data-testid="button-add-earn-scenario"
+                  className="rounded-3xl flex flex-col items-center justify-center gap-2 transition-colors hover:bg-black/[0.02]"
+                  style={{ border: `1.5px dashed #d0d0d5`, minHeight: 220, color: SUBINK }}
+                >
+                  <span className="flex items-center justify-center rounded-full" style={{ width: 36, height: 36, border: `1px solid ${HAIRLINE}`, backgroundColor: '#fff' }}>
+                    <Plus className="w-4 h-4" style={{ color: BLUE }} />
+                  </span>
+                  <span className="text-[13.5px] font-medium" style={{ color: INK }}>Try another run</span>
+                  <span className="text-[12px]" style={{ color: '#a1a1a6' }}>Bigger runs earn more per record.</span>
+                </button>
+              )}
+            </div>
+
+            <p className="text-[12px]" style={{ marginTop: 16, color: '#a1a1a6', maxWidth: 640, lineHeight: 1.6 }}>
+              Pressing costs use your press's estimate and firm up when Memphis Record Pressing confirms pricing.
+              Gross profit assumes the full run sells at your price.
+            </p>
+          </Gate>
+        </section>
+
+        {/* ═══ 8 · SAVE ═══ */}
         <section id="step-save" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
           <Gate on={allDone}>
           <div className="rounded-3xl bg-white" style={{ marginTop: 28, padding: 32, border: `1px solid ${HAIRLINE}` }}>
