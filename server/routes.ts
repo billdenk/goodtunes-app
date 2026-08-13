@@ -33539,10 +33539,19 @@ export async function registerRoutes(
         const { findMembershipForScope } = await import("./auth/roles");
         if (await findMembershipForScope(req.session.userId!, "manufacturer", pressId)) return true;
       }
+      // The album's OWN artist/label partners run this flow too (download
+      // templates → upload finished art → see the vetted preview) from the
+      // artist Physical → Art tab — this predates the press gate and was
+      // accidentally cut off by it (fail-closed #2725 gate admitted only
+      // operators + the press). Membership on either candidate album scope
+      // (label OR primary artist, dual-scope rule) is the canonical check.
+      // Override / remove stay operator-only (requireOperator), unchanged.
+      const { findAlbumScopeMembership } = await import("./auth/partnerPermissions");
+      if (await findAlbumScopeMembership(req.session.userId!, albumId, null)) return true;
     } catch (e) {
       console.warn("[completed-art] press gate resolution failed", e);
     }
-    res.status(403).json({ message: "Only an operator or this album's press can access the completed-art check." });
+    res.status(403).json({ message: "Only an operator, this album's press, or this album's own partners can access the completed-art check." });
     return false;
   }
 

@@ -222,6 +222,59 @@ test("a DIFFERENT press is 403'd from POST /check", async () => {
   assert.equal(res.status, 403, "cross-press check must fail the gate");
 });
 
+// ─── Album's own artist partner (Physical → Art tab flow) ─────────────
+// The artist downloads templates + uploads finished art from their own
+// portal; the #2725 press gate accidentally 403'd them. Membership on the
+// album's own scope (primary artist) must clear GET + POST /check, while
+// an unrelated artist partner stays 403'd and override/remove stay
+// operator-only.
+
+test("the album's OWN artist partner reads the completed-template payload", async () => {
+  const artistUserId = randomUUID();
+  const tag = artistUserId.slice(0, 8);
+  // Album's primary artist person id is the artist scope id.
+  const r: any = await exec(sql`SELECT primary_artist_id FROM albums WHERE id = ${albumId}`);
+  const artistScopeId = (r.rows ?? r)[0].primary_artist_id as string;
+  await exec(sql`
+    INSERT INTO users (id, username, password, display_name, email, is_admin, role, role_scope_id)
+    VALUES (${artistUserId}, ${"t2725art_" + tag}, ${"x"}, ${"t2725art"}, ${"t2725art_" + tag + "@example.test"},
+            true, ${"artist"}, ${artistScopeId})
+  `);
+  created.users.add(artistUserId);
+  const artistToken = await tokenFor(artistUserId);
+
+  const res = await req("GET", getPath(albumId), artistToken);
+  assert.equal(res.status, 200, "own artist is admitted to the READ");
+  assert.equal(res.json.configured, true);
+
+  const check = await req("POST", `${getPath(albumId)}/check`, artistToken, { url: "not-a-url" });
+  assert.notEqual(check.status, 401);
+  assert.notEqual(check.status, 403, "own artist must clear the check gate");
+
+  const override = await req("POST", `${getPath(albumId)}/override`, artistToken, {
+    componentId: "jacket",
+    justification: "artist trying to wave art through",
+  });
+  assert.equal(override.status, 403, "override stays operator-only for artists too");
+});
+
+test("an UNRELATED artist partner is 403'd from the read", async () => {
+  const strangerPerson = randomUUID();
+  await exec(sql`INSERT INTO people (id, name) VALUES (${strangerPerson}, ${"t2725 stranger " + strangerPerson.slice(0, 8)})`);
+  created.people.add(strangerPerson);
+  const strangerId = randomUUID();
+  const tag = strangerId.slice(0, 8);
+  await exec(sql`
+    INSERT INTO users (id, username, password, display_name, email, is_admin, role, role_scope_id)
+    VALUES (${strangerId}, ${"t2725str_" + tag}, ${"x"}, ${"t2725str"}, ${"t2725str_" + tag + "@example.test"},
+            true, ${"artist"}, ${strangerPerson})
+  `);
+  created.users.add(strangerId);
+  const strangerToken = await tokenFor(strangerId);
+  const res = await req("GET", getPath(albumId), strangerToken);
+  assert.equal(res.status, 403, "an unrelated artist must not read another album's art state");
+});
+
 test("override and remove stay operator-only — press gets 403", async () => {
   const override = await req("POST", `${getPath(albumId)}/override`, pressToken, {
     componentId: "jacket",

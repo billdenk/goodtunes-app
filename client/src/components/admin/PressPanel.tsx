@@ -658,7 +658,10 @@ export function PressPanel({
             each file. The legacy plant tooling below (vendor readout,
             master checks, art preflight, print PDFs) is hidden behind
             SHOW_LEGACY_PLANT_TOOLING per Bill. */}
-        <CompletedTemplatePanel albumId={albumId} vendor={vendorId} canOperate={!pressMode} />
+        {/* Override-with-justification stays operator-only (server 403s
+            press AND artist partners) — hide the affordance for both.
+            hideEntityLinks doubles as "artist viewer" here. */}
+        <CompletedTemplatePanel albumId={albumId} vendor={vendorId} canOperate={!pressMode && !hideEntityLinks} />
 
         {/* ── Single Press-tab vendor picker (Task #597) ──────────────
             Vendor is the only field lifted to the top of the tab —
