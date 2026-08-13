@@ -1056,13 +1056,13 @@ export function PressAlbumPackageBuilder({
   const [showCost, setShowCost] = useState(false);
 
   // Canon collapsible picker (same tool as PressVinylColors / the press
-  // catalog): once a color has actually been picked for the active type, the
-  // "Pick your vinyl" grid collapses into a one-line summary row; "Change"
-  // re-expands it. Note selectedColor falls back to the tier's first color
-  // for the disc stage, so collapse keys off an EXPLICIT pick in colorSel.
+  // catalog): the "Pick your vinyl" grid renders as a one-line summary row
+  // unless explicitly opened via "Change"; picking a type (or a color)
+  // collapses it again. The color row always has a valid default
+  // (selectedColor falls back to the tier's first color), so collapsing
+  // immediately on the type pick never leaves the stage colorless.
   const [typeGridOpen, setTypeGridOpen] = useState(false);
-  const colorPicked = !!(activeTier && colorSel[activeTier.id]);
-  const typeGridExpanded = typeGridOpen || !colorPicked;
+  const typeGridExpanded = typeGridOpen;
   const costParts =
     mfgCents != null
       ? [
@@ -1312,8 +1312,9 @@ export function PressAlbumPackageBuilder({
                 onChange={(id) => {
                   if (fmtRow) setTierSel((p) => ({ ...p, [fmtRow.format]: id }));
                   setRunQty(null);
-                  // Canon: picking a type collapses the grid (it stays open
-                  // automatically while the new type has no color picked yet).
+                  // Canon: picking a type collapses the grid back to the
+                  // summary row; the color section below shows the new
+                  // type's default color immediately.
                   setTypeGridOpen(false);
                   markDirty();
                 }}
