@@ -11,7 +11,7 @@
 //   2. Auto-save affordance — an ambient "Saved just now" indicator (faint
 //      check), no Save button anywhere. A crash never loses the draft.
 //   3. Pricing pending — the invited press (Memphis Record Pressing) hasn't
-//      confirmed pricing, so the estimate strip reads "Est. — pending pricing"
+//      confirmed pricing, so the estimate strip reads "Est. $ —"
 //      (never $0.00), per-component cost lines and run-quantity cards show a
 //      quiet "Pricing pending" placeholder.
 //
@@ -451,7 +451,7 @@ function PendingPill({ t }: { t: Theme }) {
         className="rounded-full"
         style={{ width: 6, height: 6, border: `1.5px solid ${t.faint}` }}
       />
-      Pricing pending
+      $ —
     </span>
   );
 }
@@ -530,7 +530,7 @@ export function ArtistReleaseDraftBuilder() {
   return (
     <ArtistShell t={t}>
       {/* ─── Running estimate strip — frosted, pinned under the top bar.
-          Pricing is pending, so it reads "Est. — pending pricing", NEVER $0.00. */}
+          Pricing is pending, so it reads "Est. $ —", NEVER $0.00. */}
       <div
         className="sticky top-0 z-20 flex items-center justify-between gap-4 flex-wrap"
         style={{
@@ -557,7 +557,7 @@ export function ArtistReleaseDraftBuilder() {
           <span className="text-[12.5px]" style={{ color: t.subink }}>
             Est.{' '}
             <span className="font-medium" style={{ color: t.subink }} data-testid="estimate-pending-label">
-              — pending pricing
+              $ —
             </span>
           </span>
           <span
@@ -570,7 +570,7 @@ export function ArtistReleaseDraftBuilder() {
               className="rounded-full"
               style={{ width: 6, height: 6, border: `1.5px solid ${t.faint}` }}
             />
-            Pricing pending
+            $ —
           </span>
         </div>
       </div>
@@ -726,7 +726,7 @@ export function ArtistReleaseDraftBuilder() {
                 Est. per unit
               </span>
               <span className="text-[13px] font-medium" style={{ color: t.subink }}>
-                — pending pricing
+                $ —
               </span>
             </div>
           </div>
