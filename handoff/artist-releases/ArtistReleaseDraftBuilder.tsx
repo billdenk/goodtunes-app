@@ -1179,8 +1179,8 @@ const SLEEVE_OPTIONS: SleeveOption[] = [
     name: 'Printed',
     note: 'Full-color print on the sleeve face. Artist supplies artwork.',
     variants: [
-      { id: 'paper', label: 'Paper',        note: 'Single-sided print on standard paper stock.' },
       { id: 'board', label: 'Board Weight', note: 'Heavier board stock. More rigid — protects the record better.' },
+      { id: 'paper', label: 'Paper',        note: 'Single-sided print on standard paper stock.' },
     ],
   },
   {
@@ -1444,9 +1444,9 @@ type LabelStyle = {
 };
 
 const LABEL_STYLES: LabelStyle[] = [
-  { id: 'blank', name: 'Blank',         note: 'Unprinted white label. No artwork required.' },
-  { id: 'bw',    name: 'Black & White', note: 'White label with a single-color black logo print.' },
   { id: 'color', name: 'Full Color',    note: 'Vibrant full-color label — artists supply the design.' },
+  { id: 'bw',    name: 'Black & White', note: 'White label with a single-color black logo print.' },
+  { id: 'blank', name: 'Blank',         note: 'Unprinted white label. No artwork required.' },
 ];
 
 function LabelLogo({ size, whiteFilter = true, offsetRight = false }: { size: number; whiteFilter?: boolean; offsetRight?: boolean }) {
@@ -2658,7 +2658,7 @@ export function ArtistReleaseDraftBuilder() {
   const [jacketVariantId, setJacketVariantId] = useState<string>('standard');
 
   const [sleeveId, setSleeveId] = useState<string>('printed');
-  const [sleeveVariantId, setSleeveVariantId] = useState<string>('white');
+  const [sleeveVariantId, setSleeveVariantId] = useState<string>('board');
 
   const [labelId, setLabelId] = useState<LabelKind>('bw');
   const [holeId, setHoleId] = useState<string>('small');
@@ -2763,7 +2763,7 @@ export function ArtistReleaseDraftBuilder() {
   const selectSleeve = (id: string) => {
     setSleeveId(id);
     const opt = SLEEVE_OPTIONS.find((s) => s.id === id);
-    setSleeveVariantId(opt?.variants[0]?.id ?? 'white');
+    setSleeveVariantId(opt?.variants[0]?.id ?? 'board');
     mark('sleeve');
     touch();
   };
