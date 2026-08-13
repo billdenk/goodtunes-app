@@ -1552,11 +1552,45 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // double-send). Fire-and-forget: mail failure never unwinds the order.
   if (payload.email) {
     (async () => {
-      const appUrl = process.env.APP_URL ?? `https://${process.env.GOODTUNES_HOST ?? "my.goodtunes.music"}`;
-      const redeemUrl = `${appUrl.replace(/\/$/, "")}/redeem/${code}`;
-      const [albumRow] = await db.select({ title: albums.title }).from(albums).where(eq(albums.id, albumId));
+      const appUrl = (process.env.APP_URL ?? `https://${process.env.GOODTUNES_HOST ?? "my.goodtunes.music"}`).replace(/\/$/, "");
+      const redeemUrl = `${appUrl}/redeem/${code}`;
+      const [mailAlbumRow] = await db
+        .select({ title: albums.title, artwork: albums.artwork, emailAppearance: albums.emailAppearance })
+        .from(albums)
+        .where(eq(albums.id, albumId));
+      // Task #3120 — per-album email branding. Hero resolution ladder:
+      // format-matched custom graphic → album-wide custom graphic → the
+      // album's cover art. Whatever wins is absolutized against the public
+      // fan host so it loads in email clients; a non-https result (e.g. no
+      // art at all) sends no hero. The format key comes from the line/
+      // mapping TITLES (classifyShopifyLineFormatKind), NOT skuKind —
+      // classifySkuKind calls every "shopify:*" bundle vinyl, which would
+      // hand CD/cassette buyers the vinyl graphic.
+      const { classifyShopifyLineFormatKind } = await import("./orderDesk");
+      const heroFormatKind = classifyShopifyLineFormatKind(
+        matchedLine?.title,
+        matchedMapping?.shopifyVariantTitle,
+        matchedMapping?.shopifyProductTitle,
+      );
+      const appear = mailAlbumRow?.emailAppearance ?? null;
+      const heroRaw =
+        (appear?.heroByFormat as Record<string, string> | undefined)?.[heroFormatKind] ||
+        appear?.heroDefaultUrl ||
+        mailAlbumRow?.artwork ||
+        null;
+      // SVGs (e.g. the branded /album-placeholder.svg fallback cover) don't
+      // render in Gmail/Outlook — send no hero rather than a broken image.
+      const heroUsable = heroRaw && !/\.svg(\?|$)/i.test(heroRaw) ? heroRaw : null;
+      const heroImageUrl = heroUsable
+        ? heroUsable.startsWith("/")
+          ? `${appUrl}${heroUsable}`
+          : heroUsable
+        : null;
       const { sendShopifyRedemptionEmail } = await import("./mail");
-      const r = await sendShopifyRedemptionEmail(payload.email!, albumRow?.title ?? null, redeemUrl);
+      const r = await sendShopifyRedemptionEmail(payload.email!, mailAlbumRow?.title ?? null, redeemUrl, {
+        heroImageUrl,
+        buttonColor: appear?.buttonColor ?? null,
+      });
       if (!r.ok) console.error(`[shopify] redemption email failed order=${shopifyOrderId}: ${r.reason}`);
     })().catch((e: any) => {
       console.error(`[shopify] redemption email threw order=${shopifyOrderId}: ${e?.message ?? e}`);

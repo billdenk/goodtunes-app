@@ -201,6 +201,23 @@ export function classifySkuKind(format: string | null | undefined): string {
   return format;
 }
 
+// Task #3120 — refine a Shopify-bundled line's physical format from the
+// human-readable text we DO have (line-item title, mapped product/variant
+// title snapshots). classifySkuKind can't do this — it only sees the
+// "shopify:<id>" sentinel and defaults every Shopify bundle to vinyl,
+// which would hand CD/cassette buyers the vinyl hero graphic. Word-bounded
+// matches so "orchid" never reads as CD; cassette/CD win over vinyl when
+// both appear ("CD + vinyl bundle" is ambiguous — vinyl stays the default
+// for anything unrecognized, matching the labels' dominant format).
+export function classifyShopifyLineFormatKind(
+  ...texts: Array<string | null | undefined>
+): "vinyl" | "cd" | "cassette" {
+  const t = texts.filter(Boolean).join(" ").toLowerCase();
+  if (/\bcassette\b|\btape\b/.test(t)) return "cassette";
+  if (/\bcds?\b|\bcompact disc\b/.test(t)) return "cd";
+  return "vinyl";
+}
+
 export function isPhysicalSkuKind(kind: string | null | undefined): boolean {
   return kind === "vinyl" || kind === "cassette" || kind === "cd" || kind === "bundle";
 }

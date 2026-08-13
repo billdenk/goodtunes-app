@@ -68,7 +68,7 @@ import {
 import { promisify } from "util";
 import { z } from "zod";
 import { insertTrackWriterSchema, insertTrackPerformerSchema, insertAlbumVideoSchema, insertAlbumPhotoSchema, insertCampaignGalleryItemSchema, insertCreditRoleSchema, insertTrackPublishingSplitSchema, insertTrackMechanicalSplitSchema, insertOrganizationSchema, insertReleaseNotifySignupSchema, insertRigQuoteRequestSchema, insertPartnerFeedbackSchema } from "@shared/schema";
-import { ALBUM_FORMATS, type AlbumFormat } from "@shared/schema";
+import { ALBUM_FORMATS, type AlbumFormat, EMAIL_HERO_FORMAT_KINDS } from "@shared/schema";
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { SHARE_LINK_HOST } from "@shared/shareSlug";
 import { normalizeAudioUrl } from "@shared/audioUrl";
@@ -9486,6 +9486,50 @@ export async function registerRoutes(
       const raw = req.body.shipperDisplayName;
       const trimmed = raw == null ? "" : String(raw).trim();
       updates.shipperDisplayName = trimmed || null;
+    }
+    // Task #3120 — per-album redemption-email branding (CTA color + hero
+    // graphics). Validated strictly: color must be #RRGGBB, graphic URLs
+    // must be our own /objects/uploads/ paths or absolute https URLs, and
+    // per-format keys must be known kinds. null clears the whole bag.
+    if (req.body?.emailAppearance !== undefined) {
+      const raw = req.body.emailAppearance;
+      if (raw === null) {
+        updates.emailAppearance = null;
+      } else if (typeof raw === "object" && !Array.isArray(raw)) {
+        const HEX = /^#[0-9a-fA-F]{6}$/;
+        const okUrl = (u: unknown) =>
+          typeof u === "string" &&
+          (u.startsWith("/objects/uploads/") || /^https:\/\//.test(u)) &&
+          u.length < 2048;
+        const out: { buttonColor?: string; heroDefaultUrl?: string; heroByFormat?: Record<string, string> } = {};
+        if (raw.buttonColor != null && raw.buttonColor !== "") {
+          if (!HEX.test(String(raw.buttonColor)))
+            return res.status(400).json({ message: "buttonColor must be a #RRGGBB hex color" });
+          out.buttonColor = String(raw.buttonColor);
+        }
+        if (raw.heroDefaultUrl != null && raw.heroDefaultUrl !== "") {
+          if (!okUrl(raw.heroDefaultUrl))
+            return res.status(400).json({ message: "heroDefaultUrl must be an uploaded image URL" });
+          out.heroDefaultUrl = String(raw.heroDefaultUrl);
+        }
+        if (raw.heroByFormat != null) {
+          if (typeof raw.heroByFormat !== "object" || Array.isArray(raw.heroByFormat))
+            return res.status(400).json({ message: "heroByFormat must be an object" });
+          const byFormat: Record<string, string> = {};
+          for (const [k, v] of Object.entries(raw.heroByFormat)) {
+            if (v == null || v === "") continue;
+            if (!(EMAIL_HERO_FORMAT_KINDS as readonly string[]).includes(k))
+              return res.status(400).json({ message: `Unknown hero format kind "${k}"` });
+            if (!okUrl(v))
+              return res.status(400).json({ message: `heroByFormat.${k} must be an uploaded image URL` });
+            byFormat[k] = String(v);
+          }
+          if (Object.keys(byFormat).length > 0) out.heroByFormat = byFormat;
+        }
+        updates.emailAppearance = Object.keys(out).length > 0 ? out : null;
+      } else {
+        return res.status(400).json({ message: "emailAppearance must be an object or null" });
+      }
     }
     if (req.body?.managerId !== undefined) {
       const normalizedManagerId = req.body.managerId ? String(req.body.managerId) : null;

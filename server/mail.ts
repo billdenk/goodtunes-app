@@ -490,11 +490,24 @@ export async function sendCustomerSignupCodeEmail(toEmail: string, code: string,
 // directly. Sent exactly once per order — the caller only invokes it
 // on a FRESH code mint (materializeOrderFromShopify early-returns the
 // existing code for replayed webhooks, skipping the send).
-export async function sendShopifyRedemptionEmail(
-  toEmail: string,
+// Task #3120 — per-album branding for the redemption email. `heroImageUrl`
+// must be a PUBLIC ABSOLUTE https URL (callers resolve format graphic →
+// album default graphic → cover art and absolutize before calling);
+// `buttonColor` is a #RRGGBB hex — we derive a gradient from it, keeping
+// the platform blue gradient as the default when unset.
+export type RedemptionEmailAppearance = {
+  heroImageUrl?: string | null;
+  heroAlt?: string | null;
+  buttonColor?: string | null;
+};
+
+// Pure builder — exported so the render (hero resolution ladder output,
+// custom button color, defaults) is testable without sending mail.
+export function buildShopifyRedemptionEmail(
   albumTitle: string | null,
   redeemUrl: string,
-): Promise<SendResult> {
+  appearance?: RedemptionEmailAppearance,
+): { subject: string; html: string; text: string } {
   const titled = (albumTitle ?? "").trim();
   const subject = titled
     ? `Your GoodTunes music is ready — ${titled}`
@@ -510,16 +523,37 @@ export async function sendShopifyRedemptionEmail(
     ``,
     `— The GoodTunes team`,
   ].join("\n");
+  // Task #3120 — per-album branding. Hero: rounded-rect album image at the
+  // top (custom graphic or cover art), only when the caller resolved a
+  // public absolute https URL. Alt text + explicit width keep the layout
+  // intact when the client blocks images (Outlook honors the width attr).
+  const heroUrl = (appearance?.heroImageUrl ?? "").trim();
+  const heroBlock = /^https:\/\//.test(heroUrl)
+    ? `<div style="margin: 20px 0 24px;">
+        <img src="${escapeHtml(heroUrl)}" width="432" alt="${escapeHtml((appearance?.heroAlt ?? "").trim() || (titled ? `${titled} album artwork` : "Album artwork"))}" style="display:block;width:100%;max-width:432px;height:auto;border:0;border-radius:12px;" />
+      </div>`
+    : "";
+  // Button: artist-picked flat color with a derived gradient, else the
+  // platform blue gradient. Outlook always gets the flat bgColor.
+  const rawButtonColor = (appearance?.buttonColor ?? "").trim();
+  const customColor = /^#[0-9a-fA-F]{6}$/.test(rawButtonColor) ? rawButtonColor : null;
+  const buttonOpts = customColor
+    ? {
+        bgColor: customColor,
+        gradient: `linear-gradient(135deg,${customColor},${lightenHex(customColor, 0.18)})`,
+      }
+    : { bgColor: "#1D5E8F", gradient: "linear-gradient(135deg,#1D5E8F,#319ED8)" };
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
       ${emailLogoImg("color")}
+      ${heroBlock}
       <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Your music is ready</div>
       <h1 style="font-size: 26px; margin: 12px 0 16px; font-weight: 700; line-height: 1.2;">${titled ? escapeHtml(titled) + " is waiting for you" : "Your album is waiting for you"}</h1>
       <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
         Thanks for your order! Tap your personal link below to unlock your album in the GoodTunes player.
       </p>
       <div style="margin: 28px 0 8px;">
-        ${bulletproofButton(redeemUrl, "Get my music", { bgColor: "#1D5E8F", gradient: "linear-gradient(135deg,#1D5E8F,#319ED8)", paddingV: 14, paddingH: 24, borderRadius: 12 })}
+        ${bulletproofButton(redeemUrl, "Get my music", { ...buttonOpts, paddingV: 14, paddingH: 24, borderRadius: 12 })}
       </div>
       <p style="font-size: 13px; color: #888; line-height: 1.55; margin: 0 0 24px;">
         Button not working? Open this link: <a href="${escapeHtml(redeemUrl)}" style="color: #319ED8; word-break: break-all;">${escapeHtml(redeemUrl)}</a>
@@ -529,6 +563,16 @@ export async function sendShopifyRedemptionEmail(
       </p>
     </div>
   `;
+  return { subject, html, text };
+}
+
+export async function sendShopifyRedemptionEmail(
+  toEmail: string,
+  albumTitle: string | null,
+  redeemUrl: string,
+  appearance?: RedemptionEmailAppearance,
+): Promise<SendResult> {
+  const { subject, html, text } = buildShopifyRedemptionEmail(albumTitle, redeemUrl, appearance);
   return sendViaResend("shopify-redemption", toEmail, subject, html, text);
 }
 
@@ -740,6 +784,17 @@ export async function sendNewMusicAnnouncementEmail(
     </div>
   `;
   return sendViaResend("new-music-announcement", toEmail, subject, html, text);
+}
+
+// Task #3120 — mix a #RRGGBB color toward white by `amount` (0..1) to derive
+// the second stop of a button gradient from a single artist-picked color.
+function lightenHex(hex: string, amount: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const mix = (c: number) => Math.min(255, Math.round(c + (255 - c) * amount));
+  const r = mix((n >> 16) & 0xff);
+  const g = mix((n >> 8) & 0xff);
+  const b = mix(n & 0xff);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
 }
 
 // ---- Bulletproof email CTA button -------------------------------------------

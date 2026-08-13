@@ -100,6 +100,7 @@ import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
 import { AlbumDesktopPreviewCard } from "@/components/admin/previews/AlbumDesktopPreviewCard";
 import { EditablePanel } from "@/components/admin/EditablePanel";
 import { AlbumNpoSplitPanel } from "@/components/admin/AlbumNpoSplitPanel";
+import { AlbumEmailAppearancePanel } from "@/components/admin/AlbumEmailAppearancePanel";
 import TrackCreditsPanel from "@/components/admin/TrackCreditsPanel";
 import { SplitsImportSheet, TrackSplitsEditor } from "@/components/admin/SplitsPanels";
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
@@ -208,6 +209,9 @@ interface AlbumFull {
   isSpinPromo?: boolean;
   // Task #965 — clean per-release share slug (get.goodtunes.music/<slug>).
   shareSlug?: string | null;
+  // Task #3120 — per-album redemption-email branding (CTA color + hero
+  // graphics). Null = defaults (blue gradient + cover-art hero).
+  emailAppearance?: import("@shared/schema").AlbumEmailAppearance | null;
   genre?: string | null;
   labelId?: string | null;
   // Server-joined label row from AlbumWithLabel (storage.getAlbumById).
@@ -5121,6 +5125,16 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           column. No fan-facing effect whatsoever. */}
       <SpinPromoPanel
         album={album}
+        disabled={disabled}
+        disabledReason={disabledReason}
+      />
+      {/* Task #3120 — redemption-email branding: CTA color + hero graphics
+          (default + per-format). Rides the standard album PUT gate, so
+          partner saves divert to review when approval is required. */}
+      <AlbumEmailAppearancePanel
+        albumId={album.id}
+        artworkUrl={album.artwork || null}
+        emailAppearance={(album as any).emailAppearance ?? null}
         disabled={disabled}
         disabledReason={disabledReason}
       />

@@ -635,6 +635,15 @@ export const albums = pgTable("albums", {
   earlyCutConsentByUserId: varchar("early_cut_consent_by_user_id"),
   earlyCutConsentForTierName: text("early_cut_consent_for_tier_name"),
   earlyCutConsentForFormat: text("early_cut_consent_for_format"),
+  // Task #3120 — per-album redemption-email branding. Optional bag:
+  //   buttonColor   — hex color for the "Get my music" CTA (null = the
+  //                   platform default blue gradient).
+  //   heroDefaultUrl— album-wide custom hero graphic (/objects/uploads/…).
+  //   heroByFormat  — per-format-kind overrides keyed by the order's
+  //                   skuKind ("vinyl" | "cd" | "cassette"); wins over
+  //                   heroDefaultUrl when the purchased format matches.
+  // Null / absent keys fall back to the album's cover art automatically.
+  emailAppearance: jsonb("email_appearance").$type<AlbumEmailAppearance>(),
   ...softDeleteCols,
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("albums_legacy_gogoods_id_uniq")
@@ -656,6 +665,17 @@ export const albums = pgTable("albums", {
 // routing, GoodDeed, fulfillment). Manufacturing is prepaid by the
 // customer via a staged ACH ledger (see manufacturer_payment_steps).
 // There is no GoodTunes fan checkout / fan-sale pool for these albums.
+// Task #3120 — redemption-email hero graphics are keyed by the ORDER's
+// physical kind (orderDesk.classifySkuKind output), not the finer
+// ALBUM_FORMATS enum, because that's what we know when the email sends.
+export const EMAIL_HERO_FORMAT_KINDS = ["vinyl", "cd", "cassette"] as const;
+export type EmailHeroFormatKind = (typeof EMAIL_HERO_FORMAT_KINDS)[number];
+export type AlbumEmailAppearance = {
+  buttonColor?: string | null;
+  heroDefaultUrl?: string | null;
+  heroByFormat?: Partial<Record<EmailHeroFormatKind, string>>;
+};
+
 export const ALBUM_SELL_MODES = ["direct", "shopify", "shopify_plus"] as const;
 export type AlbumSellMode = (typeof ALBUM_SELL_MODES)[number];
 export const ALBUM_PHYSICAL_FORMATS = [

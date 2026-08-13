@@ -12114,3 +12114,55 @@ SQL
 }
 add_template_preview_urls_col dev  "${DATABASE_URL:-}"
 add_template_preview_urls_col prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #3120 — per-album redemption-email branding ─────────────────────
+# albums.email_appearance jsonb: { buttonColor, heroDefaultUrl,
+# heroByFormat: {vinyl|cd|cassette: url} }. Idempotent on both DBs
+# (schema-drift guard covers it).
+add_email_appearance_col() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[email-appearance] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: email_appearance DDL ok on $label" \
+    || echo "post-merge: WARNING — email_appearance DDL failed on $label"
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS email_appearance jsonb;
+SQL
+}
+add_email_appearance_col dev  "${DATABASE_URL:-}"
+add_email_appearance_col prod "${PROD_DATABASE_URL:-}"
+
+# ── Task #3120 — seed CALIFORNIALAND's email branding (one-shot) ─────────
+# First real per-album email config: Niina Soleil's vinyl + CD lifestyle
+# scenes (uploaded once to the SHARED dev+prod Object Storage bucket) and
+# her palette red for the CTA button. Marker-guarded so a later operator
+# edit is never clobbered by re-merges. Targets the canonical live album
+# by its share slug (the row with songs; decoy shells are soft-deleted).
+seed_californialand_email_branding_task_3120() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[calland-email-brand] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: CALIFORNIALAND email branding ok on $label" \
+    || echo "post-merge: WARNING — CALIFORNIALAND email branding failed on $label"
+CREATE TABLE IF NOT EXISTS one_shot_markers (name text PRIMARY KEY, created_at timestamptz DEFAULT now());
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM one_shot_markers WHERE name = 'californialand-email-branding-task-3120') THEN
+    RETURN;
+  END IF;
+  UPDATE albums
+     SET email_appearance = jsonb_build_object(
+       'buttonColor', '#D0342C',
+       'heroByFormat', jsonb_build_object(
+         'vinyl', '/objects/uploads/3164b659-3066-4340-9d08-7967690ceab4.jpg',
+         'cd',    '/objects/uploads/bb0bb1a7-7674-49c8-97a7-0806a16358e7.jpg'
+       )
+     )
+   WHERE share_slug = 'californialand'
+     AND deleted_at IS NULL
+     AND email_appearance IS NULL;
+  INSERT INTO one_shot_markers (name) VALUES ('californialand-email-branding-task-3120');
+END $$;
+SQL
+}
+seed_californialand_email_branding_task_3120 dev  "${DATABASE_URL:-}"
+seed_californialand_email_branding_task_3120 prod "${PROD_DATABASE_URL:-}"
