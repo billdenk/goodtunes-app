@@ -21,6 +21,7 @@ import {
   measuredBleedInches,
   type CompletedPdfScan,
 } from "../server/validators/completedTemplate";
+import { emptyMeasuredGuides } from "../shared/templateGuides";
 
 const MAX_BYTES = 300 * 1024 * 1024;
 
@@ -49,10 +50,18 @@ async function main() {
     // (marker-guarded in post-merge.sh): templates without trim geometry
     // legitimately stay NULL and must not be re-scanned every merge.
     const rescanBleed = process.env.RESCAN_BLEED_LINE === "1";
+    // Task #3097 — RESCAN_GUIDES=1 re-scans rows measured before the
+    // measured_guides column existed (jsonb NULL = never guide-scanned; a
+    // guide-scanned template with no guides stores the empty object, so this
+    // predicate converges). One-time, marker-guarded in post-merge.sh.
+    const rescanGuides = process.env.RESCAN_GUIDES === "1";
     const where = rescanBleed
       ? `template_file_url IS NOT NULL AND (measured_at IS NULL
            OR (measured_error IS NULL AND measured_bleed_line_inches IS NULL))`
-      : `template_file_url IS NOT NULL AND measured_at IS NULL`;
+      : rescanGuides
+        ? `template_file_url IS NOT NULL AND (measured_at IS NULL
+             OR (measured_error IS NULL AND measured_guides IS NULL))`
+        : `template_file_url IS NOT NULL AND measured_at IS NULL`;
     const { rows } = await pool.query(
       `SELECT id, press_id, template_file_url
          FROM press_template_specs
@@ -102,6 +111,7 @@ async function main() {
              measured_has_embedded_fonts = $9,
              measured_has_dieline = $10,
              measured_bleed_line_inches = $11,
+             measured_guides = $12::jsonb,
              measured_at = now(),
              measured_error = NULL
            WHERE id = $1`,
@@ -117,6 +127,9 @@ async function main() {
             scan.hasEmbeddedFonts,
             scan.hasDieline,
             bleedLine != null && bleedLine > 0 ? Math.round(bleedLine * 10000) / 10000 : null,
+            // Task #3097 — dieline-guide geometry; "nothing found" persists
+            // the empty object (NOT null) so the rescan predicate converges.
+            JSON.stringify(scan.dielineGuides ?? emptyMeasuredGuides()),
           ],
         );
         ok++;

@@ -30,6 +30,9 @@ export type CatalogTemplateSpecRow = {
   measuredArtboardHInches?: number | null;
   measuredPages?: number | null;
   measuredBleedLineInches?: number | null;
+  // Task #3097 — dieline-guide facts; the study draws Bleed/Safe/Fold from
+  // these when present (shared/templateGuides.ts shape).
+  measuredGuides?: Record<string, unknown> | null;
 };
 
 export function templateStudySpecFor(

@@ -2711,6 +2711,13 @@ export const pressTemplateSpecs = pgTable(
     measuredHasLiveText: boolean("measured_has_live_text"),
     measuredHasEmbeddedFonts: boolean("measured_has_embedded_fonts"),
     measuredHasDieline: boolean("measured_has_dieline"),
+    // Task #3097 — guide geometry extracted from the template's own "does
+    // not print" dieline separation (bleed/cut/safety rings + fold/score
+    // lines). Shape: shared/templateGuides.ts MeasuredTemplateGuides. NULL =
+    // never guide-scanned; a scanned template with no classifiable guides
+    // stores the object with null zones (drives the one-time backfill).
+    // Measured-only: operator-entered fields always win where they overlap.
+    measuredGuides: jsonb("measured_guides").$type<Record<string, unknown>>(),
     measuredAt: timestamp("measured_at"),
     measuredError: text("measured_error"),
     // Task #3012 — per-component press print-rule overrides (bleed min/

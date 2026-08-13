@@ -14,6 +14,7 @@ import {
 } from "./validators/completedTemplate";
 import { ObjectStorageService } from "./replit_integrations/object_storage/objectStorage";
 import { detectOptionsInText, type TemplateOption } from "./templateOptions";
+import { emptyMeasuredGuides } from "@shared/templateGuides";
 
 const objectStorage = new ObjectStorageService();
 
@@ -103,6 +104,11 @@ export async function measureTemplateSpecRow(pressId: string, specId: string): P
       measuredHasLiveText: scan.hasFontDicts,
       measuredHasEmbeddedFonts: scan.hasEmbeddedFonts,
       measuredHasDieline: scan.hasDieline,
+      // Task #3097 — dieline-guide geometry (bleed/cut/safety/fold) from the
+      // template's "does not print" separation. Always an object after a
+      // successful scan ("nothing found" = empty object, NOT null — jsonb
+      // NULL means "never guide-scanned" and drives the one-time backfill).
+      measuredGuides: (scan.dielineGuides ?? emptyMeasuredGuides()) as unknown as Record<string, unknown>,
       measuredAt: new Date(),
       measuredError: null,
     });
@@ -333,6 +339,7 @@ export async function clearTemplateSpecMeasurements(pressId: string, specId: str
     measuredHasLiveText: null,
     measuredHasEmbeddedFonts: null,
     measuredHasDieline: null,
+    measuredGuides: null,
     measuredAt: null,
     measuredError: null,
   });

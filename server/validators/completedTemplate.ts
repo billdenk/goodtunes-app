@@ -44,6 +44,7 @@ import net from "node:net";
 import zlib from "node:zlib";
 import type { CheckResult } from "@shared/uploadValidation";
 import type { FinishedComponentSpec } from "@shared/vendorSpecs";
+import type { GuideEdges, MeasuredTemplateGuides } from "@shared/templateGuides";
 
 // ─── Scanner ──────────────────────────────────────────────────────────
 
@@ -118,6 +119,15 @@ export type CompletedPdfScan = {
    * (subset semantics of spotColorNames; may be empty for used DeviceN /
    * unreadable names). */
   usedSpotColorNames: string[];
+  /**
+   * Task #3097 — guide geometry (bleed/cut/safety rings + fold/score lines)
+   * extracted from a "does not print" dieline spot separation's stroked
+   * vector paths. Conservative: null whenever extraction couldn't run or
+   * classification is ambiguous (multi-page files, encrypted/exotic
+   * structure, caps hit, no dieline-named separation, unclassifiable
+   * strokes) — never a guess.
+   */
+  dielineGuides: MeasuredTemplateGuides | null;
 };
 
 export type SpotUsage = "none" | "used" | "unused" | "unknown";
@@ -192,6 +202,13 @@ export class CompletedPdfScanner {
   private readonly csAmbiguous = new Set<string>(); // resource names mapped to CONFLICTING targets
   private readonly csNonSpot = new Set<string>(); // resource names aliased DIRECTLY to a standard non-spot space (/CS0 /DeviceCMYK)
   private readonly csRefTargets = new Set<string>(); // obj ids referenced via `/ColorSpace N 0 R` anywhere (incl. image dicts)
+  // Task #3097 — dieline guide extraction: first MediaBox rect (pts, with
+  // origin) + retained decoded content-stream code, interpreted at finish()
+  // once every separation-resource mapping has been seen.
+  private mediaRectPts: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  private readonly guideCode: string[] = [];
+  private guideCodeBytes = 0;
+  private guideOverflow = false;
   private spotImage = false; // image XObject with an inline Separation/DeviceN colorspace
   private readonly spotImageNames = new Set<string>(); // readable inline spot-image ink names
   private readonly contentCsNames = new Set<string>(); // names selected via cs/CS
@@ -322,6 +339,59 @@ export class CompletedPdfScanner {
           : ("system" as const);
 
     const pageCount = this.typePage > 0 ? this.typePage : this.media.length;
+
+    // Task #3097 — dieline guide extraction. Only attempted when the whole
+    // file was read cleanly, it is a single page (content stream ↔ page
+    // association is unknowable in a streaming scan), and at least one
+    // separation carries a guide-style name. Any failure → null (no guess).
+    let dielineGuides: MeasuredTemplateGuides | null = null;
+    if (
+      this._isPdf &&
+      !this._truncated &&
+      !this.encrypted &&
+      !this.zlibFailed &&
+      !this.lzwContent &&
+      !this.otherFilterContent &&
+      !this.objStm &&
+      !this.capHit &&
+      !this.guideOverflow &&
+      pageCount === 1 &&
+      this.mediaRectPts
+    ) {
+      try {
+        // Resolve which resource names select a guide separation.
+        const guideRes = new Map<string, string>(); // resource name → sep name
+        const seen = new Set<string>();
+        for (const [res, nm] of Array.from(this.csInlineSep)) {
+          if (!this.csAmbiguous.has(res) && nm && GUIDE_SEP_NAME_RE.test(nm)) {
+            guideRes.set(res, nm);
+          }
+        }
+        for (const [res, objId] of Array.from(this.csRefEntries)) {
+          if (this.csAmbiguous.has(res) || guideRes.has(res)) continue;
+          const nm = this.sepObjName.get(objId);
+          if (nm && GUIDE_SEP_NAME_RE.test(nm)) guideRes.set(res, nm);
+        }
+        if (guideRes.size > 0) {
+          const strokes: GuideStroke[] = [];
+          for (const code of this.guideCode) {
+            for (const st of interpretGuideStrokes(code)) {
+              if (!guideRes.has(st.csResource)) continue;
+              seen.add(guideRes.get(st.csResource)!);
+              strokes.push(st);
+            }
+          }
+          const classified = classifyDielineGuides(strokes, this.mediaRectPts);
+          if (classified) {
+            classified.sepNames = Array.from(seen).sort();
+            dielineGuides = classified;
+          }
+        }
+      } catch {
+        dielineGuides = null; // conservative — extraction must never break a scan
+      }
+    }
+
     return {
       isPdf: this._isPdf,
       bytes: this._bytes,
@@ -347,6 +417,7 @@ export class CompletedPdfScanner {
       spotUsageReason,
       spotUsageAttribution,
       usedSpotColorNames: Array.from(usedNames),
+      dielineGuides,
     };
   }
 
@@ -641,6 +712,17 @@ export class CompletedPdfScanner {
       this.contentCsNames.add(decodePdfName(m[1]));
       if (m.index === CONTENT_CS_RE.lastIndex) CONTENT_CS_RE.lastIndex++;
     }
+    // Task #3097 — retain path-bearing content code for guide extraction at
+    // finish() (resources routinely appear AFTER the content stream). Bounded;
+    // overflow disables guide extraction rather than trusting a partial view.
+    if (GUIDE_PATH_OPS_RE.test(code)) {
+      if (this.guideCodeBytes + code.length > GUIDE_CODE_CAP) {
+        this.guideOverflow = true;
+      } else {
+        this.guideCode.push(code);
+        this.guideCodeBytes += code.length;
+      }
+    }
   }
 
   private collectBoxes(re: RegExp, s: string, commit: number, into: BoxInches[]): void {
@@ -652,6 +734,18 @@ export class CompletedPdfScanner {
         const h = Math.abs(parseFloat(m[4]) - parseFloat(m[2]));
         if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
           into.push({ w: w / 72, h: h / 72 });
+          // Task #3097 — keep the FIRST MediaBox's raw rect (guide geometry
+          // is expressed relative to the artboard incl. its origin).
+          if (into === this.media && !this.mediaRectPts) {
+            const xs = [parseFloat(m[1]), parseFloat(m[3])];
+            const ys = [parseFloat(m[2]), parseFloat(m[4])];
+            this.mediaRectPts = {
+              x0: Math.min(xs[0], xs[1]),
+              y0: Math.min(ys[0], ys[1]),
+              x1: Math.max(xs[0], xs[1]),
+              y1: Math.max(ys[0], ys[1]),
+            };
+          }
         }
       }
       if (m.index === re.lastIndex) re.lastIndex++;
@@ -675,6 +769,376 @@ export function scanBuffer(
     sc.push(buf.subarray(i, Math.min(buf.length, i + step)));
   }
   return sc.finish();
+}
+
+// ─── Task #3097: dieline guide extraction ─────────────────────────────
+//
+// Press templates draw their cut/bleed/safety/fold guides as stroked vector
+// paths in a "does not print" spot separation. We interpret a minimal subset
+// of the content-stream language (q/Q/cm transform stack, CS stroking-space
+// selection, m/l/c/v/y/re/h path building, S/s/B/B*/b/b* stroking) and then
+// classify the resulting device-space strokes:
+//   • nested boundary rings (bounding boxes of ring-ish paths + the global
+//     stroke bbox) → bleed / cut / safety insets,
+//   • deep-interior full-span thin lines → fold/score positions.
+// Everything is tolerance-checked; when a configuration doesn't fit the
+// conservative model we emit nothing rather than guessing.
+
+/** Sep names that mark a non-printing guide separation. Deliberately does
+ * NOT match bare "dimension(s)" — those separations carry measurement
+ * arrows/callouts, not die geometry. */
+export const GUIDE_SEP_NAME_RE =
+  /(die\s*line|die[\s_-]?cut|kiss[\s_-]?cut|keyline|do(?:es)?[\s_-]?not[\s_-]?print)/i;
+
+/** Cheap pre-filter: only retain streams that stroke paths at all. */
+const GUIDE_PATH_OPS_RE = /(?:^|[\s\]])(?:re|l)[\s]/m;
+
+const GUIDE_CODE_CAP = 24 * 1024 * 1024; // retained decoded code, total
+const GUIDE_MAX_STROKES = 4000;
+const GUIDE_MAX_PTS_PER_PATH = 2000;
+
+export type GuideStroke = {
+  /** Device-space points of all subpaths (order preserved, breaks ignored). */
+  pts: { x: number; y: number }[];
+  hasCurve: boolean;
+  /** Resource name selected via `CS` when this path was stroked. */
+  csResource: string;
+};
+
+const GUIDE_TOKEN_RE = /\/[^\s/\[\]<>(){}%]+|\[[^\]]*\]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[Ee][-+]?\d+)?|[A-Za-z'"*]+/g;
+const GUIDE_NUM_RE = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:[Ee][-+]?\d+)?$/;
+
+type Mat = [number, number, number, number, number, number];
+const matMul = (a: Mat, b: Mat): Mat => [
+  a[0] * b[0] + a[1] * b[2],
+  a[0] * b[1] + a[1] * b[3],
+  a[2] * b[0] + a[3] * b[2],
+  a[2] * b[1] + a[3] * b[3],
+  a[4] * b[0] + a[5] * b[2] + b[4],
+  a[4] * b[1] + a[5] * b[3] + b[5],
+];
+const matApply = (m: Mat, x: number, y: number) => ({ x: m[0] * x + m[2] * y + m[4], y: m[1] * x + m[3] * y + m[5] });
+
+/** Interpret one stripped content stream, returning every stroked path with
+ * the stroking-colorspace resource name in effect. Pure; exported for tests.
+ * Throws only on the hard caps (callers treat that as "no guides"). */
+export function interpretGuideStrokes(code: string): GuideStroke[] {
+  const out: GuideStroke[] = [];
+  let ctm: Mat = [1, 0, 0, 1, 0, 0];
+  const stack: { ctm: Mat; cs: string }[] = [];
+  let strokeCs = "";
+  let nums: number[] = [];
+  let lastName = "";
+  let pts: { x: number; y: number }[] = [];
+  let hasCurve = false;
+  let start: { x: number; y: number } | null = null;
+  const flushPath = (stroked: boolean) => {
+    if (stroked && strokeCs && pts.length >= 2) {
+      if (out.length >= GUIDE_MAX_STROKES) throw new Error("guide stroke cap");
+      out.push({ pts, hasCurve, csResource: strokeCs });
+    }
+    pts = [];
+    hasCurve = false;
+    start = null;
+  };
+  const addPt = (x: number, y: number) => {
+    if (pts.length >= GUIDE_MAX_PTS_PER_PATH) throw new Error("guide point cap");
+    const p = matApply(ctm, x, y);
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) throw new Error("non-finite point");
+    pts.push(p);
+    return p;
+  };
+  GUIDE_TOKEN_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = GUIDE_TOKEN_RE.exec(code)) !== null) {
+    const t = m[0];
+    if (GUIDE_NUM_RE.test(t)) {
+      const v = parseFloat(t);
+      if (Number.isFinite(v)) nums.push(v);
+      if (nums.length > 12) nums = nums.slice(-12);
+      continue;
+    }
+    if (t[0] === "[") continue; // arrays (dash patterns, TJ) — ignored
+    if (t[0] === "/") {
+      lastName = decodePdfName(t.slice(1));
+      continue;
+    }
+    switch (t) {
+      case "q":
+        stack.push({ ctm, cs: strokeCs });
+        if (stack.length > 64) throw new Error("q stack cap");
+        break;
+      case "Q": {
+        const top = stack.pop();
+        if (top) {
+          ctm = top.ctm;
+          strokeCs = top.cs;
+        }
+        break;
+      }
+      case "cm":
+        if (nums.length >= 6) ctm = matMul(nums.slice(-6) as Mat, ctm);
+        break;
+      case "CS":
+        strokeCs = lastName;
+        break;
+      case "m":
+        if (nums.length >= 2) start = addPt(nums[nums.length - 2], nums[nums.length - 1]);
+        break;
+      case "l":
+        if (nums.length >= 2) addPt(nums[nums.length - 2], nums[nums.length - 1]);
+        break;
+      case "c":
+      case "v":
+      case "y":
+        if (nums.length >= 2) {
+          addPt(nums[nums.length - 2], nums[nums.length - 1]);
+          hasCurve = true;
+        }
+        break;
+      case "re":
+        if (nums.length >= 4) {
+          const [x, y, w, h] = nums.slice(-4);
+          addPt(x, y);
+          addPt(x + w, y);
+          addPt(x + w, y + h);
+          addPt(x, y + h);
+          addPt(x, y);
+        }
+        break;
+      case "h":
+        if (start && pts.length < GUIDE_MAX_PTS_PER_PATH) pts.push(start);
+        break;
+      case "S":
+      case "s":
+      case "B":
+      case "b":
+        flushPath(true);
+        break;
+      case "f":
+      case "F":
+      case "n":
+        flushPath(false);
+        break;
+      default:
+        // B* / b* / f* arrive as 'B'/'b'/'f' + '*'? No — tokenizer keeps
+        // letters+'*' together, so handle them here.
+        if (t === "B*" || t === "b*") flushPath(true);
+        else if (t === "f*") flushPath(false);
+        break;
+    }
+    nums = [];
+  }
+  return out;
+}
+
+type PtRect = { x0: number; y0: number; x1: number; y1: number };
+
+const rectOf = (pts: { x: number; y: number }[]): PtRect => {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const p of pts) {
+    if (p.x < x0) x0 = p.x;
+    if (p.y < y0) y0 = p.y;
+    if (p.x > x1) x1 = p.x;
+    if (p.y > y1) y1 = p.y;
+  }
+  return { x0, y0, x1, y1 };
+};
+
+const RING_MERGE_TOL = 3; // pts — bboxes this close are the same ring
+const EDGE_TOL = 4; // pts — a line this close to a bbox edge belongs to it
+const FOLD_MIN_EDGE_DIST = 0.3 * 72; // folds live deep in the interior
+const LINE_THIN = 1.5; // pts
+
+/**
+ * Classify guide strokes into bleed/cut/safety rings + fold lines.
+ * `media` is the page MediaBox in points. Pure; exported for tests.
+ * Returns null when nothing classifiable (or the picture is implausible).
+ */
+export function classifyDielineGuides(
+  strokes: GuideStroke[],
+  media: { x0: number; y0: number; x1: number; y1: number },
+): MeasuredTemplateGuides | null {
+  const straight = strokes.filter((s) => !s.hasCurve && s.pts.length >= 2);
+  if (straight.length === 0) return null;
+  const mediaW = media.x1 - media.x0;
+  const mediaH = media.y1 - media.y0;
+  if (!(mediaW > 0 && mediaH > 0)) return null;
+
+  const rects = straight.map((s) => rectOf(s.pts));
+  // Global bbox of every straight guide stroke = the outermost boundary.
+  const G = rectOf(rects.flatMap((r) => [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y1 }]));
+  const gW = G.x1 - G.x0;
+  const gH = G.y1 - G.y0;
+  // Sanity: the die must occupy a meaningful share of the artboard.
+  if (gW < 0.35 * mediaW || gH < 0.35 * mediaH) return null;
+
+  // Split thin full-span lines from ring-ish paths.
+  type Line = { axis: "x" | "y"; pos: number; lo: number; hi: number };
+  const lines: Line[] = [];
+  const ringRects: PtRect[] = [];
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i];
+    const w = r.x1 - r.x0;
+    const h = r.y1 - r.y0;
+    if (w <= LINE_THIN && h > LINE_THIN) {
+      lines.push({ axis: "x", pos: (r.x0 + r.x1) / 2, lo: r.y0, hi: r.y1 });
+    } else if (h <= LINE_THIN && w > LINE_THIN) {
+      lines.push({ axis: "y", pos: (r.y0 + r.y1) / 2, lo: r.x0, hi: r.x1 });
+    } else if (w > LINE_THIN && h > LINE_THIN) {
+      ringRects.push(r);
+    }
+  }
+
+  // Assemble rectangles out of thin-line quads (dotted safety rects are often
+  // drawn as four separate strokes with no closing ring path).
+  const vLines = lines.filter((l) => l.axis === "x");
+  const hLines = lines.filter((l) => l.axis === "y");
+  const quadRects: PtRect[] = [];
+  for (let i = 0; i < vLines.length; i++) {
+    for (let j = i + 1; j < vLines.length; j++) {
+      const L = vLines[i].pos < vLines[j].pos ? vLines[i] : vLines[j];
+      const R = vLines[i].pos < vLines[j].pos ? vLines[j] : vLines[i];
+      if (R.pos - L.pos < 4 * EDGE_TOL) continue;
+      const bot = hLines.find(
+        (l) =>
+          Math.abs(l.pos - Math.max(L.lo, R.lo)) <= 2 * EDGE_TOL &&
+          l.lo <= L.pos + 2 * EDGE_TOL &&
+          l.hi >= R.pos - 2 * EDGE_TOL,
+      );
+      const top = hLines.find(
+        (l) =>
+          Math.abs(l.pos - Math.min(L.hi, R.hi)) <= 2 * EDGE_TOL &&
+          l.lo <= L.pos + 2 * EDGE_TOL &&
+          l.hi >= R.pos - 2 * EDGE_TOL,
+      );
+      if (bot && top && top.pos - bot.pos > 4 * EDGE_TOL) {
+        quadRects.push({ x0: L.pos, y0: bot.pos, x1: R.pos, y1: top.pos });
+      }
+    }
+  }
+
+  // Ring set: G + deduped ring/quad bboxes.
+  const sameRect = (a: PtRect, b: PtRect) =>
+    Math.abs(a.x0 - b.x0) <= RING_MERGE_TOL &&
+    Math.abs(a.y0 - b.y0) <= RING_MERGE_TOL &&
+    Math.abs(a.x1 - b.x1) <= RING_MERGE_TOL &&
+    Math.abs(a.y1 - b.y1) <= RING_MERGE_TOL;
+  const rings: PtRect[] = [G];
+  for (const r of [...ringRects, ...quadRects]) {
+    // Ignore tiny decorations (icons, arrows) — a ring must be die-scale.
+    if (r.x1 - r.x0 < 0.25 * gW || r.y1 - r.y0 < 0.25 * gH) continue;
+    if (!rings.some((q) => sameRect(q, r))) rings.push(r);
+  }
+
+  // Nesting depth from G (side-by-side per-panel rects share a depth).
+  const inside = (inner: PtRect, outer: PtRect) =>
+    inner.x0 >= outer.x0 - RING_MERGE_TOL &&
+    inner.y0 >= outer.y0 - RING_MERGE_TOL &&
+    inner.x1 <= outer.x1 + RING_MERGE_TOL &&
+    inner.y1 <= outer.y1 + RING_MERGE_TOL &&
+    !sameRect(inner, outer);
+  const depth = rings.map((r) => rings.filter((q) => inside(r, q)).length);
+  const levels: PtRect[][] = [];
+  rings.forEach((r, i) => {
+    (levels[depth[i]] ??= []).push(r);
+  });
+  const union = (rs: PtRect[]): PtRect => ({
+    x0: Math.min(...rs.map((r) => r.x0)),
+    y0: Math.min(...rs.map((r) => r.y0)),
+    x1: Math.max(...rs.map((r) => r.x1)),
+    y1: Math.max(...rs.map((r) => r.y1)),
+  });
+  const levelRects = levels.filter((l) => l && l.length > 0).map(union);
+
+  // Per-side gap between consecutive rings (outer → inner).
+  const gaps = (outer: PtRect, inner: PtRect) => [
+    inner.x0 - outer.x0,
+    inner.y0 - outer.y0,
+    outer.x1 - inner.x1,
+    outer.y1 - inner.y1,
+  ];
+  const gapIn = (outer: PtRect, inner: PtRect, min: number, max: number) => {
+    const g = gaps(outer, inner);
+    return g.every((v) => v >= min * 72 && v <= max * 72);
+  };
+
+  let bleedR: PtRect | null = null;
+  let cutR: PtRect | null = null;
+  let safeR: PtRect | null = null;
+  if (levelRects.length >= 3) {
+    if (gapIn(levelRects[0], levelRects[1], 0.02, 0.5)) {
+      bleedR = levelRects[0];
+      cutR = levelRects[1];
+      if (gapIn(levelRects[1], levelRects[2], 0.03, 1.0)) safeR = levelRects[2];
+    } else {
+      cutR = levelRects[0];
+      if (gapIn(levelRects[0], levelRects[1], 0.03, 1.0)) safeR = levelRects[1];
+    }
+  } else if (levelRects.length === 2) {
+    // Two rings is ambiguous between (bleed,cut) and (cut,safety); safety is
+    // the more common companion when only one inner ring is drawn.
+    cutR = levelRects[0];
+    if (gapIn(levelRects[0], levelRects[1], 0.03, 1.0)) safeR = levelRects[1];
+  } else {
+    cutR = levelRects[0] ?? null;
+  }
+  if (!cutR) return null;
+
+  // Folds: thin full-span lines deep in the interior, not sitting on any
+  // ring edge (safety edges drawn as dotted lines would otherwise count).
+  const nearRingEdge = (l: Line) =>
+    rings.some((r) =>
+      l.axis === "x"
+        ? Math.abs(l.pos - r.x0) <= EDGE_TOL || Math.abs(l.pos - r.x1) <= EDGE_TOL
+        : Math.abs(l.pos - r.y0) <= EDGE_TOL || Math.abs(l.pos - r.y1) <= EDGE_TOL,
+    );
+  const foldX: number[] = [];
+  const foldY: number[] = [];
+  for (const l of lines) {
+    const spanDim = l.hi - l.lo;
+    const fullSpan = l.axis === "x" ? spanDim >= 0.6 * gH : spanDim >= 0.6 * gW;
+    if (!fullSpan || nearRingEdge(l)) continue;
+    if (l.axis === "x") {
+      if (l.pos - G.x0 < FOLD_MIN_EDGE_DIST || G.x1 - l.pos < FOLD_MIN_EDGE_DIST) continue;
+      if (!foldX.some((v) => Math.abs(v - l.pos) <= RING_MERGE_TOL)) foldX.push(l.pos);
+    } else {
+      if (l.pos - G.y0 < FOLD_MIN_EDGE_DIST || G.y1 - l.pos < FOLD_MIN_EDGE_DIST) continue;
+      if (!foldY.some((v) => Math.abs(v - l.pos) <= RING_MERGE_TOL)) foldY.push(l.pos);
+    }
+  }
+  // Too many "folds" = we're misreading the drawing — drop them, keep rings.
+  const foldsOk = foldX.length <= 6 && foldY.length <= 6;
+
+  // Convert to inches relative to the artboard (top-left origin for Y).
+  const edges = (r: PtRect): GuideEdges => ({
+    left: (r.x0 - media.x0) / 72,
+    bottom: (r.y0 - media.y0) / 72,
+    right: (media.x1 - r.x1) / 72,
+    top: (media.y1 - r.y1) / 72,
+  });
+  const round3 = (n: number) => Math.round(n * 1000) / 1000;
+  const roundEdges = (e: GuideEdges): GuideEdges => ({
+    left: round3(e.left),
+    top: round3(e.top),
+    right: round3(e.right),
+    bottom: round3(e.bottom),
+  });
+  const bleed = bleedR ? roundEdges(edges(bleedR)) : null;
+  const cut = roundEdges(edges(cutR));
+  const safety = safeR ? roundEdges(edges(safeR)) : null;
+  const minGap = (outer: PtRect, inner: PtRect) => round3(Math.min(...gaps(outer, inner)) / 72);
+  return {
+    version: 1,
+    sepNames: [],
+    bleed,
+    cut,
+    safety,
+    foldXInches: foldsOk ? foldX.sort((a, b) => a - b).map((p) => round3((p - media.x0) / 72)) : [],
+    foldYInches: foldsOk ? foldY.sort((a, b) => a - b).map((p) => round3((media.y1 - p) / 72)) : [],
+    bleedLineInches: bleedR ? minGap(bleedR, cutR) : null,
+    safetyInsetInches: safeR ? minGap(cutR, safeR) : null,
+  };
 }
 
 // ─── Validator ────────────────────────────────────────────────────────

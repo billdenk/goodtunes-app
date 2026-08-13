@@ -255,3 +255,96 @@ test("proof spec: run checks map onto zone chip statuses; advisory rows never cl
   assert.equal(byId.cut, "attention");
   assert.equal(byId.safe, undefined); // advisory — no machine claim
 });
+
+// ---------------------------------------------------------------------------
+// Task #3097 — dieline guide facts drive Bleed/Cut/Safe/Fold rings.
+// ---------------------------------------------------------------------------
+const JKTWS_GUIDES = {
+  version: 1,
+  sepNames: ["MRP DIELINE - Does Not Print"],
+  bleed: { left: 3.074, top: 3.073, right: 3.075, bottom: 3.08 },
+  cut: { left: 3.2, top: 3.388, right: 3.203, bottom: 3.388 },
+  safety: { left: 3.325, top: 3.524, right: 3.336, bottom: 3.515 },
+  foldXInches: [15.584, 15.806],
+  foldYInches: [],
+  bleedLineInches: 0.126,
+  safetyInsetInches: 0.125,
+};
+
+test("guides: widespine jacket renders Bleed/Cut/Safe/Fold, folds from score lines, no pending note", () => {
+  const spec = makeSpec({
+    componentKey: "jacket",
+    variantKey: "widespine",
+    templateFileName: "12-JKTWS-200.pdf",
+    measuredArtboardWInches: 31.4058,
+    measuredArtboardHInches: 19.1256,
+    measuredPages: 1,
+    measuredBleedLineInches: null, // TrimBox == MediaBox — box metadata gave nothing
+    measuredGuides: JKTWS_GUIDES,
+  });
+  const s = buildStudySpec(spec, "Widespine jacket", '12" LP');
+  const ids = (s.zones ?? []).map((z) => z.id);
+  assert.deepEqual(ids, ["bleed", "cut", "safe", "fold"]);
+  const bleed = s.zones!.find((z) => z.id === "bleed")!;
+  // Four-value inset computed from the guide edges (top right bottom left).
+  assert.match(String(bleed.inset), /^[\d.]+% [\d.]+% [\d.]+% [\d.]+%$/);
+  assert.ok(bleed.detail.includes(`${INCHES_TO_MM(0.126)} mm`), bleed.detail);
+  const safe = s.zones!.find((z) => z.id === "safe")!;
+  assert.ok(safe.detail.includes(`${INCHES_TO_MM(0.125)} mm`), safe.detail);
+  // Cut detail states the CUT dims (between the cut guides), not the artboard.
+  const cut = s.zones!.find((z) => z.id === "cut")!;
+  assert.ok(cut.detail.includes(`${INCHES_TO_MM(31.4058 - 3.2 - 3.203)} ×`), cut.detail);
+  // Spine folds at the measured x positions (≈49.6% / 50.3%).
+  const panel = s.panels![0];
+  assert.equal(panel.foldLines?.length, 2);
+  assert.equal(panel.foldLines![0], `${Math.round((15.584 / 31.4058) * 1000) / 10}%`);
+  assert.equal(s.footnote, undefined, "measured folds suppress the pending-spec note");
+});
+
+test("guides: empty guide object (scanned, nothing drawn) behaves exactly like today", () => {
+  const spec = makeSpec({
+    componentKey: "jacket",
+    variantKey: "widespine",
+    measuredArtboardWInches: 31.4058,
+    measuredArtboardHInches: 19.1256,
+    measuredPages: 1,
+    measuredGuides: {
+      version: 1, sepNames: [], bleed: null, cut: null, safety: null,
+      foldXInches: [], foldYInches: [], bleedLineInches: null, safetyInsetInches: null,
+    },
+  });
+  const s = buildStudySpec(spec, "Widespine jacket", '12" LP');
+  assert.deepEqual((s.zones ?? []).map((z) => z.id), ["cut"]);
+  assert.equal(s.footnote, "Fold and pocket lines pending spec");
+});
+
+test("guides: labels keep the concentric-circle model even when guides exist", () => {
+  const spec = makeSpec({
+    componentKey: "labels",
+    variantKey: "",
+    measuredArtboardWInches: 3.875,
+    measuredArtboardHInches: 3.875,
+    measuredPages: 2,
+    bleedLineInches: 0.125,
+    measuredGuides: JKTWS_GUIDES, // pathological; must be ignored on circles
+  });
+  const s = buildStudySpec(spec, "Center labels", '12" LP');
+  const bleed = s.zones!.find((z) => z.id === "bleed")!;
+  assert.equal(bleed.inset, "0%", "circle rings stay concentric");
+});
+
+test("guides: proof spec inherits the same guide-driven rings and folds", () => {
+  const spec = makeSpec({
+    componentKey: "jacket",
+    variantKey: "widespine",
+    templateFileName: "12-JKTWS-200.pdf",
+    measuredArtboardWInches: 31.4058,
+    measuredArtboardHInches: 19.1256,
+    measuredPages: 1,
+    measuredGuides: JKTWS_GUIDES,
+  });
+  const run = { fileName: "art.pdf", fileUrl: "/objects/uploads/x", previewUrl: "/objects/uploads/p.png", previewUrl2: null };
+  const proof = buildProofSpec(spec, run, "Widespine jacket", '12" LP')!;
+  assert.deepEqual(proof.zones!.map((z) => z.id), ["bleed", "cut", "safe", "fold"]);
+  assert.equal(proof.panels![0].foldLines?.length, 2);
+});

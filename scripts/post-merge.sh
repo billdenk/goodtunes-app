@@ -11885,6 +11885,55 @@ rescan_template_bleed_lines_task_3030() {
 rescan_template_bleed_lines_task_3030 dev  "${DATABASE_URL:-}"
 rescan_template_bleed_lines_task_3030 prod "${PROD_DATABASE_URL:-}"
 
+# Task #3097 — measured dieline-guide facts (bleed/cut/safety rings + fold
+# lines extracted from the template's "does not print" separation).
+# Idempotent ADD COLUMN on both DBs so the schema-drift guard and publish
+# diff stay clean.
+migrate_template_guides_task_3097() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping template-guides migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL'
+ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_guides jsonb;
+SQL
+  then
+    echo "post-merge: template-guides migration ok on $label"
+  else
+    echo "post-merge: WARNING — template-guides migration failed on $label (continuing)"
+  fi
+}
+migrate_template_guides_task_3097 dev  "${DATABASE_URL:-}"
+migrate_template_guides_task_3097 prod "${PROD_DATABASE_URL:-}"
+
+# Task #3097 — one-time re-scan so already-attached templates gain the new
+# measured_guides facts without a re-upload. Marker-guarded: a guide-scanned
+# template with no guides stores the empty jsonb object (not NULL), so the
+# predicate converges, but the marker still keeps clean merges cheap.
+rescan_template_guides_task_3097() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping template-guides rescan on $label (no URL set)"
+    return 0
+  fi
+  local done
+  done=$(psql "$url" -tAc "SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_3097_guides_rescan'" 2>/dev/null || echo "")
+  if [ "$done" = "1" ]; then
+    echo "post-merge: template-guides rescan already done on $label"
+    return 0
+  fi
+  if DATABASE_URL="$url" RESCAN_GUIDES=1 timeout 180 npx tsx scripts/backfill-template-spec-measurements.ts; then
+    psql "$url" -v ON_ERROR_STOP=1 -c "INSERT INTO post_merge_data_backfills (name) VALUES ('task_3097_guides_rescan') ON CONFLICT DO NOTHING" >/dev/null 2>&1 \
+      && echo "post-merge: template-guides rescan ok on $label" \
+      || echo "post-merge: WARNING — template-guides rescan ran on $label but the marker insert failed (will retry next merge)"
+  else
+    echo "post-merge: WARNING — template-guides rescan failed/timed out on $label (no marker written; will retry next merge)"
+  fi
+}
+rescan_template_guides_task_3097 dev  "${DATABASE_URL:-}"
+rescan_template_guides_task_3097 prod "${PROD_DATABASE_URL:-}"
+
 # Press-templates flow (Ruby handoff wiring) — revision-history + test-run
 # tables. Idempotent CREATE TABLE on both DBs so the schema-drift guard and
 # publish diff stay clean.

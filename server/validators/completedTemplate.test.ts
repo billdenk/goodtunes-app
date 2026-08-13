@@ -1428,3 +1428,174 @@ describe("Task #3012 — resolver: press rules merge + labelAdvisories routing",
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// Task #3097 — dieline guide extraction (interpreter + classifier)
+// ---------------------------------------------------------------------------
+import { interpretGuideStrokes, classifyDielineGuides, GUIDE_SEP_NAME_RE, type GuideStroke } from "./completedTemplate";
+
+describe("Task #3097 — GUIDE_SEP_NAME_RE", () => {
+  test("matches dieline/does-not-print style names, not Dimensions", () => {
+    assert.ok(GUIDE_SEP_NAME_RE.test("MRP DIELINE - Does Not Print"));
+    assert.ok(GUIDE_SEP_NAME_RE.test("Die Line"));
+    assert.ok(GUIDE_SEP_NAME_RE.test("kiss-cut"));
+    assert.ok(GUIDE_SEP_NAME_RE.test("Keyline"));
+    assert.ok(!GUIDE_SEP_NAME_RE.test("Dimensions"));
+    assert.ok(!GUIDE_SEP_NAME_RE.test("PANTONE 300 C"));
+  });
+});
+
+describe("Task #3097 — interpretGuideStrokes", () => {
+  test("tracks CS resource, cm transforms, and stroked paths only", () => {
+    const code = [
+      "q 2 0 0 2 10 10 cm /CS1 CS 1 1 SCN",
+      "0 0 m 5 0 l 5 5 l 0 5 l h S", // stroked square at ctm scale
+      "20 20 m 30 30 l f",           // filled — not a stroke
+      "Q /CS0 CS 0 0 m 1 1 l S",     // different resource
+    ].join("\n");
+    const strokes = interpretGuideStrokes(code);
+    assert.equal(strokes.length, 2);
+    assert.equal(strokes[0].csResource, "CS1");
+    // 5×5 square scaled ×2 offset (10,10) → 10..20
+    const xs = strokes[0].pts.map((p) => p.x);
+    assert.equal(Math.min(...xs), 10);
+    assert.equal(Math.max(...xs), 20);
+    assert.equal(strokes[1].csResource, "CS0");
+  });
+
+  test("curves mark hasCurve; re expands to a rectangle", () => {
+    const code = "/CS1 CS 0 0 m 1 1 2 2 3 3 c S 10 10 100 50 re S";
+    const [curved, rect] = interpretGuideStrokes(code);
+    assert.equal(curved.hasCurve, true);
+    assert.equal(rect.hasCurve, false);
+    const xs = rect.pts.map((p) => p.x);
+    assert.equal(Math.min(...xs), 10);
+    assert.equal(Math.max(...xs), 110);
+  });
+});
+
+describe("Task #3097 — classifyDielineGuides", () => {
+  const MEDIA = { x0: 0, y0: 0, x1: 2261.22, y1: 1377.04 };
+  const rectStroke = (x0: number, y0: number, x1: number, y1: number): GuideStroke => ({
+    csResource: "CS1",
+    hasCurve: false,
+    pts: [
+      { x: x0, y: y0 },
+      { x: x1, y: y0 },
+      { x: x1, y: y1 },
+      { x: x0, y: y1 },
+      { x: x0, y: y0 },
+    ],
+  });
+  const vLine = (x: number, y0: number, y1: number): GuideStroke => ({
+    csResource: "CS1",
+    hasCurve: false,
+    pts: [{ x, y: y0 }, { x, y: y1 }],
+  });
+
+  test("nested bleed/cut/safety rings + interior fold lines (JKTWS shape)", () => {
+    const strokes = [
+      rectStroke(221.3, 221.7, 2039.8, 1155.8),   // bleed boundary
+      rectStroke(230.4, 230.9, 2030.6, 1146.7),   // cut (~0.126" in)
+      rectStroke(239.6, 240.1, 2021.4, 1137.5),   // safety (~0.128" in)
+      vLine(1122, 230.9, 1146.7),                 // spine fold
+      vLine(1138, 230.9, 1146.7),                 // spine fold
+    ];
+    const g = classifyDielineGuides(strokes, MEDIA)!;
+    assert.ok(g, "classified");
+    assert.ok(g.bleed && g.cut && g.safety);
+    assert.ok(Math.abs(g.bleedLineInches! - 0.126) < 0.01, `bleed line ${g.bleedLineInches}`);
+    assert.ok(Math.abs(g.safetyInsetInches! - 0.128) < 0.01);
+    assert.equal(g.foldXInches.length, 2);
+    assert.ok(Math.abs(g.foldXInches[0] - 1122 / 72) < 0.01);
+    assert.deepEqual(g.foldYInches, []);
+  });
+
+  test("single rectangle → cut only, no fabricated bleed/safety/folds", () => {
+    const g = classifyDielineGuides([rectStroke(200, 200, 2000, 1150)], MEDIA)!;
+    assert.ok(g.cut);
+    assert.equal(g.bleed, null);
+    assert.equal(g.safety, null);
+    assert.deepEqual(g.foldXInches, []);
+  });
+
+  test("tiny decoration strokes alone (implausible die) → null", () => {
+    const g = classifyDielineGuides([rectStroke(10, 10, 60, 60)], MEDIA);
+    assert.equal(g, null);
+  });
+
+  test("curve-only strokes → null", () => {
+    const g = classifyDielineGuides(
+      [{ csResource: "CS1", hasCurve: true, pts: [{ x: 0, y: 0 }, { x: 2000, y: 1300 }] }],
+      MEDIA,
+    );
+    assert.equal(g, null);
+  });
+
+  test("edge-hugging lines never count as folds", () => {
+    const strokes = [
+      rectStroke(221.3, 221.7, 2039.8, 1155.8),
+      rectStroke(230.4, 230.9, 2030.6, 1146.7),
+      vLine(236, 221.7, 1155.8), // ~0.2" from bleed edge — staircase edge, not a fold
+    ];
+    const g = classifyDielineGuides(strokes, MEDIA)!;
+    assert.deepEqual(g.foldXInches, []);
+  });
+});
+
+describe("Task #3097 — CTM composition (PDF cm semantics)", () => {
+  // PDF spec: `cm` PREPENDS — new CTM = cm × CTM, so a transform issued
+  // later applies to points FIRST. These pin the affine algebra against
+  // hand-computed expectations for rotation, shear and nested non-uniform
+  // scale (a uniform-scale-only test would mask index bugs).
+  test("rotation after translation: point runs translate → rotate", () => {
+    // q ... [rot 90° CCW] cm [translate +5x] cm : (1,0) → T(6,0) → R(0,6)
+    const code = "/CS1 CS 0 1 -1 0 0 0 cm 1 0 0 1 5 0 cm 1 0 m 1 0 l S";
+    const [s] = interpretGuideStrokes(code);
+    assert.ok(Math.abs(s.pts[0].x - 0) < 1e-9 && Math.abs(s.pts[0].y - 6) < 1e-9, JSON.stringify(s.pts[0]));
+  });
+
+  test("shear under rotation", () => {
+    // rot 90° then shear [1 .5 0 1]: (2,1) → shear(2,2) → rot(-2,2)
+    const code = "/CS1 CS 0 1 -1 0 0 0 cm 1 0.5 0 1 0 0 cm 2 1 m 2 1 l S";
+    const [s] = interpretGuideStrokes(code);
+    assert.ok(Math.abs(s.pts[0].x - -2) < 1e-9 && Math.abs(s.pts[0].y - 2) < 1e-9, JSON.stringify(s.pts[0]));
+  });
+
+  test("nested non-uniform scale restores across q/Q", () => {
+    // outer scale (2,3); inner q adds translate; Q restores the outer CTM.
+    const code = [
+      "/CS1 CS 2 0 0 3 0 0 cm",
+      "q 1 0 0 1 10 10 cm 1 1 m 1 1 l S Q", // (11,11)→(22,33)
+      "1 1 m 1 1 l S",                      // (1,1)→(2,3)
+    ].join("\n");
+    const [inner, outer] = interpretGuideStrokes(code);
+    assert.deepEqual([inner.pts[0].x, inner.pts[0].y], [22, 33]);
+    assert.deepEqual([outer.pts[0].x, outer.pts[0].y], [2, 3]);
+  });
+
+  test("rotated dieline classifies identically to the unrotated one", () => {
+    // The whole die drawn under a 90° rotation + translation that lands it
+    // back on the same MEDIA rect (media is 2261.22×1377.04; rotate then
+    // shift x by +2261.22 maps [0..1377]×[0..2261] drawing onto the page).
+    const MEDIA = { x0: 0, y0: 0, x1: 2261.22, y1: 1377.04 };
+    const pre = "/CS1 CS 0 1 -1 0 2261.22 0 cm ";
+    // In the ROTATED frame, x' = y_dev, y' = 2261.22 - x_dev. Draw bleed +
+    // cut rects of the JKTWS die in that frame.
+    const rect = (x0: number, y0: number, x1: number, y1: number) =>
+      `${x0} ${y0} m ${x1} ${y0} l ${x1} ${y1} l ${x0} ${y1} l ${x0} ${y0} l S `;
+    // Device-space targets: bleed 221.3,221.7–2039.8,1155.8 → rotated-frame
+    // (y, 2261.22-x): x' 221.7–1155.8, y' 221.42–2039.92
+    const code =
+      pre +
+      rect(221.7, 2261.22 - 2039.8, 1155.8, 2261.22 - 221.3) +
+      rect(230.9, 2261.22 - 2030.6, 1146.7, 2261.22 - 230.4);
+    const strokes = interpretGuideStrokes(code);
+    const g = classifyDielineGuides(strokes, MEDIA)!;
+    assert.ok(g && g.cut && g.safety, "classified under rotation (2 rings = cut+safety)");
+    // Outer ring drew device-x from 221.3pt — transform must land it exactly.
+    assert.ok(Math.abs(g.cut!.left - 221.3 / 72) < 0.01, `cut.left ${g.cut!.left}`);
+    assert.ok(Math.abs(g.cut!.top - (1377.04 - 1155.8) / 72) < 0.01, `cut.top ${g.cut!.top}`);
+    assert.ok(Math.abs(g.safety!.left - 230.4 / 72) < 0.01, `safety.left ${g.safety!.left}`);
+  });
+});

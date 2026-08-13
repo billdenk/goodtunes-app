@@ -110,6 +110,9 @@ export type StudyPanel = {
   foldEdge?: "top" | "bottom";
   /** Vertical fold/score lines (spine etc.), as left-% positions. */
   foldLines?: string[];
+  /** Task #3097 — horizontal fold/score lines, as top-% positions
+   * (measured out of the template's dieline). */
+  foldLinesY?: string[];
   /** Width ÷ height. Defaults to 1 (square/circle). */
   aspect?: number;
   /** @deprecated Flip is now available on every panel; kept for old specs. */
@@ -249,14 +252,23 @@ function StudyThumb({ spec, panel, zone, mode, flipped, onFlip, fixed, onFix, si
           if (fold) {
             if (!active) return null;
             const lineStyle = `2.5px dashed ${t.blue}`;
-            if (panel.foldLines) {
-              return panel.foldLines.map((left) => (
-                <div
-                  key={`${id}-${left}`}
-                  className={`absolute top-[4%] bottom-[4%] pointer-events-none ${active ? "animate-pulse" : ""}`}
-                  style={{ left, width: 0, borderLeft: lineStyle, transition: "border 120ms ease" }}
-                />
-              ));
+            if (panel.foldLines || panel.foldLinesY) {
+              return [
+                ...(panel.foldLines ?? []).map((left) => (
+                  <div
+                    key={`${id}-${left}`}
+                    className={`absolute top-[4%] bottom-[4%] pointer-events-none ${active ? "animate-pulse" : ""}`}
+                    style={{ left, width: 0, borderLeft: lineStyle, transition: "border 120ms ease" }}
+                  />
+                )),
+                ...(panel.foldLinesY ?? []).map((top) => (
+                  <div
+                    key={`${id}-y-${top}`}
+                    className={`absolute left-[4%] right-[4%] pointer-events-none ${active ? "animate-pulse" : ""}`}
+                    style={{ top, height: 0, borderTop: lineStyle, transition: "border 120ms ease" }}
+                  />
+                )),
+              ];
             }
             const edge = foldEdgeFor(panel.foldEdge ?? "bottom");
             return (
@@ -287,10 +299,15 @@ function StudyThumb({ spec, panel, zone, mode, flipped, onFlip, fixed, onFix, si
         {areas && zoneDef && <RegionDim spec={spec} zoneDef={zoneDef} circle={circle} />}
         {mode === "areas" && zoneDef?.fold && zones.filter((z) => z.fold).map(({ id }) => {
           const lineStyle = `2.5px dashed ${t.blue}`;
-          if (panel.foldLines) {
-            return panel.foldLines.map((left) => (
-              <div key={`${id}-a-${left}`} className="absolute top-[4%] bottom-[4%] pointer-events-none animate-pulse" style={{ left, width: 0, borderLeft: lineStyle }} />
-            ));
+          if (panel.foldLines || panel.foldLinesY) {
+            return [
+              ...(panel.foldLines ?? []).map((left) => (
+                <div key={`${id}-a-${left}`} className="absolute top-[4%] bottom-[4%] pointer-events-none animate-pulse" style={{ left, width: 0, borderLeft: lineStyle }} />
+              )),
+              ...(panel.foldLinesY ?? []).map((top) => (
+                <div key={`${id}-a-y-${top}`} className="absolute left-[4%] right-[4%] pointer-events-none animate-pulse" style={{ top, height: 0, borderTop: lineStyle }} />
+              )),
+            ];
           }
           const edge = foldEdgeFor(panel.foldEdge ?? "bottom");
           return <div key={`${id}-a`} className="absolute left-[6%] right-[6%] pointer-events-none animate-pulse" style={{ [edge]: "1.5%", height: 0, borderTop: lineStyle }} />;

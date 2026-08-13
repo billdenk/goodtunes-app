@@ -1,6 +1,9 @@
 // Press-templates flow (Ruby handoff wiring) — one shared contract for the
 // Templates index / upload / ingestion / certification screens. Mirrors the
 // press-portal API in server/pressTemplatesPortal.ts exactly.
+import type { MeasuredTemplateGuides } from "@shared/templateGuides";
+
+export type { MeasuredTemplateGuides };
 
 /** shared/uploadValidation.ts CheckResult, as serialized in runs.checks. */
 export type TemplateCheck = {
@@ -67,6 +70,10 @@ export type TemplateSpecWithHistory = {
   measuredHasLiveText: boolean | null;
   measuredHasEmbeddedFonts: boolean | null;
   measuredHasDieline: boolean | null;
+  // Task #3097 — guide geometry extracted from the template's own dieline
+  // separation (bleed/cut/safety rings + fold/score lines). Null/absent =
+  // never guide-scanned; an object with null zones = scanned, none drawn.
+  measuredGuides?: MeasuredTemplateGuides | null;
   measuredError: string | null;
   // Task #3065 — option families this ONE template file covers (e.g. small
   // + large center-label holes). Stamped only after the operator confirms

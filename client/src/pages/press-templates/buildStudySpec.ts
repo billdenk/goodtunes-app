@@ -6,6 +6,7 @@
 // exact variant. Panels are one-per-real-page, captions state the measured
 // facts, and nothing is fabricated.
 import type { StudySpec, StudyZone, StudyPanel } from "@/components/press/PrintedAreasStudy";
+import { guidesHaveGeometry, type GuideEdges, type MeasuredTemplateGuides } from "@shared/templateGuides";
 import type { TemplateSpecWithHistory } from "./types";
 
 export const INCHES_TO_MM = (n: number) => Math.round(n * 25.4 * 10) / 10;
@@ -34,6 +35,19 @@ export function foldLinesFor(spec: Pick<TemplateSpecWithHistory, "componentKey" 
 /** Shared template-derived geometry: zones, shape, aspect, dims — the ONE
  *  source of truth for both the template preview and the certification
  *  proof view (rings always come from the TEMPLATE, never the artwork). */
+// Task #3097 — turn guide edge insets (inches from each artboard edge) into
+// a CSS inset string for the zone ring: "top right bottom left" percents.
+function guideInsetPct(e: GuideEdges, w: number, h: number): string {
+  const pct = (v: number, dim: number) => `${Math.round((v / dim) * 1000) / 10}%`;
+  return `${pct(e.top, h)} ${pct(e.right, w)} ${pct(e.bottom, h)} ${pct(e.left, w)}`;
+}
+
+/** The spec row's measured dieline guides, when they carry drawable geometry. */
+function measuredGuidesOf(spec: TemplateSpecWithHistory): MeasuredTemplateGuides | null {
+  const g = (spec.measuredGuides ?? null) as MeasuredTemplateGuides | null;
+  return guidesHaveGeometry(g) ? g : null;
+}
+
 function templateGeometry(spec: TemplateSpecWithHistory): {
   zones: StudyZone[];
   shape: "circle" | "square";
@@ -42,6 +56,7 @@ function templateGeometry(spec: TemplateSpecWithHistory): {
   mmDims: string | null;
   pages: number;
   foldLines: string[] | null;
+  foldLinesY: string[] | null;
 } {
   const zones: StudyZone[] = [];
   const printRules = (spec.printRules ?? {}) as Record<string, unknown>;
@@ -61,19 +76,50 @@ function templateGeometry(spec: TemplateSpecWithHistory): {
         ? `${INCHES_TO_MM(w)} mm`
         : null;
 
+  // Task #3097 — guide geometry measured out of the template's own dieline
+  // separation. When present, the rings sit exactly where the PDF draws its
+  // guides (labels keep the concentric-circle model — the die is circular,
+  // guide rectangles don't map onto it).
+  const guides = !isLabel && typeof w === "number" && typeof h === "number" && w > 0 && h > 0 ? measuredGuidesOf(spec) : null;
+
   // Bleed line: like the dims/pages above, the PREVIEW shows what's in the
-  // uploaded file — measured first, operator-entered only when measurement is
-  // absent. (Checks/validators keep their own operator-wins resolution; this
-  // surface's contract is "what the PDF actually contains".)
-  const bleed = spec.measuredBleedLineInches ?? spec.bleedLineInches;
-  if (typeof bleed === "number") {
+  // uploaded file — measured first (box metadata, then dieline guides),
+  // operator-entered only when measurement is absent. (Checks/validators
+  // keep their own operator-wins resolution; this surface's contract is
+  // "what the PDF actually contains".)
+  const bleed = spec.measuredBleedLineInches ?? guides?.bleedLineInches ?? spec.bleedLineInches;
+  if (guides?.bleed) {
+    zones.push({
+      id: "bleed",
+      word: "Bleed",
+      detail: `${typeof bleed === "number" ? `${INCHES_TO_MM(bleed)} mm — ` : ""}art must reach`,
+      inset: guideInsetPct(guides.bleed, w as number, h as number),
+    });
+  } else if (typeof bleed === "number") {
     zones.push({ id: "bleed", word: "Bleed", detail: `${INCHES_TO_MM(bleed)} mm — art must reach`, inset: "0%" });
   }
-  if (typeof w === "number") {
+  if (guides?.cut) {
+    const cutW = (w as number) - guides.cut.left - guides.cut.right;
+    const cutH = (h as number) - guides.cut.top - guides.cut.bottom;
+    zones.push({
+      id: "cut",
+      word: "Cut",
+      detail: `${INCHES_TO_MM(cutW)} × ${INCHES_TO_MM(cutH)} mm — trimmed edge`,
+      inset: guideInsetPct(guides.cut, w as number, h as number),
+    });
+  } else if (typeof w === "number") {
     zones.push({ id: "cut", word: "Cut", detail: `${mmDims} — trimmed edge`, inset: "3.5%" });
   }
   const safety = typeof printRules.safetyMarginInches === "number" ? (printRules.safetyMarginInches as number) : undefined;
-  if (typeof safety === "number") {
+  if (guides?.safety) {
+    const safeMm = guides.safetyInsetInches ?? safety;
+    zones.push({
+      id: "safe",
+      word: "Safe",
+      detail: `${typeof safeMm === "number" ? `${INCHES_TO_MM(safeMm)} mm — ` : ""}text stays inside`,
+      inset: guideInsetPct(guides.safety, w as number, h as number),
+    });
+  } else if (typeof safety === "number") {
     zones.push({ id: "safe", word: "Safe", detail: `${INCHES_TO_MM(safety)} mm — text stays inside`, inset: "8%" });
   }
   // Hole ring — labels ONLY, sized from the real artboard so the ring is to
@@ -88,10 +134,22 @@ function templateGeometry(spec: TemplateSpecWithHistory): {
     });
   }
 
-  // Fold/score lines — only where a spec exists for this exact variant.
-  const foldLines = foldLinesFor(spec);
-  if (foldLines) {
-    zones.push({ id: "fold", word: "Fold", detail: "Spine — spread folds here", fold: true });
+  // Fold/score lines — measured score lines from the dieline win; otherwise
+  // only where a spec exists for this exact variant (gatefold inference).
+  const pctOf = (v: number, dim: number) => `${Math.round((v / dim) * 1000) / 10}%`;
+  const guideFoldX =
+    guides && guides.foldXInches.length > 0 ? guides.foldXInches.map((x) => pctOf(x, w as number)) : null;
+  const guideFoldY =
+    guides && guides.foldYInches.length > 0 ? guides.foldYInches.map((y) => pctOf(y, h as number)) : null;
+  const foldLines = guideFoldX ?? foldLinesFor(spec);
+  const foldLinesY = guideFoldY;
+  if (foldLines || foldLinesY) {
+    zones.push({
+      id: "fold",
+      word: "Fold",
+      detail: guideFoldX || guideFoldY ? "Score lines — folds here" : "Spine — spread folds here",
+      fold: true,
+    });
   }
 
   // Panels render at the file's true aspect ratio — except labels, whose die
@@ -99,11 +157,11 @@ function templateGeometry(spec: TemplateSpecWithHistory): {
   // rectangle (the caption still states the measured page).
   const aspect = !isLabel && typeof w === "number" && typeof h === "number" && h > 0 ? w / h : 1;
 
-  return { zones, shape, isLabel, aspect, mmDims, pages, foldLines };
+  return { zones, shape, isLabel, aspect, mmDims, pages, foldLines, foldLinesY };
 }
 
 export function buildStudySpec(spec: TemplateSpecWithHistory, lead: string, rest: string): StudySpec {
-  const { zones, shape, isLabel, aspect, mmDims, pages, foldLines } = templateGeometry(spec);
+  const { zones, shape, isLabel, aspect, mmDims, pages, foldLines, foldLinesY } = templateGeometry(spec);
 
   // One panel per REAL page.
   const panels: StudyPanel[] = [];
@@ -113,6 +171,7 @@ export function buildStudySpec(spec: TemplateSpecWithHistory, lead: string, rest
       sub: mmDims ?? undefined,
       aspect,
       foldLines: foldLines ?? undefined,
+      foldLinesY: foldLinesY ?? undefined,
     });
   }
 
@@ -124,9 +183,10 @@ export function buildStudySpec(spec: TemplateSpecWithHistory, lead: string, rest
   ].filter(Boolean) as string[];
   const caption = facts.length > 0 ? facts.join(" · ") : `${lead} · ${rest}`;
 
-  // Foldable product with no fold/pocket spec yet: say so, don't borrow.
+  // Foldable product with no fold source yet (neither measured score lines
+  // nor a variant fold spec): say so, don't borrow.
   const footnote =
-    !isLabel && FOLDED_COMPONENTS.has(spec.componentKey) && !foldLines && panels.length > 0
+    !isLabel && FOLDED_COMPONENTS.has(spec.componentKey) && !foldLines && !foldLinesY && panels.length > 0
       ? "Fold and pocket lines pending spec"
       : undefined;
 
@@ -164,7 +224,7 @@ export function buildProofSpec(
   rest: string,
 ): StudySpec | null {
   if (!run.previewUrl) return null;
-  const { zones: baseZones, shape, isLabel, aspect, mmDims, foldLines } = templateGeometry(spec);
+  const { zones: baseZones, shape, isLabel, aspect, mmDims, foldLines, foldLinesY } = templateGeometry(spec);
 
   const zones: StudyZone[] = baseZones.map((z) => {
     const key = ZONE_CHECK_KEYS[z.id];
@@ -191,6 +251,7 @@ export function buildProofSpec(
       img: run.previewUrl,
       aspect,
       foldLines: foldLines ?? undefined,
+      foldLinesY: foldLinesY ?? undefined,
     });
   }
 

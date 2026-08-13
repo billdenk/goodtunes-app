@@ -1022,6 +1022,7 @@ export interface IStorage {
         | "measuredHasLiveText"
         | "measuredHasEmbeddedFonts"
         | "measuredHasDieline"
+        | "measuredGuides"
         | "measuredAt"
         | "measuredError"
       >
@@ -5628,6 +5629,7 @@ export class DbStorage implements IStorage {
         | "measuredHasLiveText"
         | "measuredHasEmbeddedFonts"
         | "measuredHasDieline"
+        | "measuredGuides"
         | "measuredAt"
         | "measuredError"
       >
