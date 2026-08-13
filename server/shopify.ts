@@ -90,6 +90,16 @@ function appKindConfigured(kind: ShopifyAppKind): boolean {
 function storeAppKind(store: { appCredential?: string | null }): ShopifyAppKind {
   return store.appCredential === "custom" ? "custom" : "public";
 }
+// Stores whose installs auto-route through the custom-distribution bridge
+// app while the public app is stuck in Shopify App Store review. Temporary
+// by design: when the public app is approved, remove the domain here (or
+// hit the install link with ?appCred=public) so a reinstall flips the
+// store back. Each custom app is locked to exactly one store in Shopify's
+// Partner Dashboard, so listing a domain without a matching bridge app
+// would just make Shopify reject the authorize.
+const CUSTOM_APP_BRIDGE_DOMAINS = new Set<string>([
+  "71gsth-ev.myshopify.com", // Niina Soleil — bridge app "GoodTunes (Niina)"
+]);
 // All configured webhook-signing secrets, public first (the common case).
 function allAppSecrets(): string[] {
   return [SHOPIFY_API_SECRET, SHOPIFY_CUSTOM_API_SECRET].filter(Boolean);
@@ -1881,8 +1891,18 @@ export function registerShopifyRoutes(app: Express) {
   app.get("/api/shopify/install", async (req, res) => {
     // `?appCred=custom` routes the install through the custom-distribution
     // bridge app (no App Store review; locked to its one store — Shopify
-    // rejects the authorize for any other shop). Default: the public app.
-    const appKind: ShopifyAppKind = String(req.query.appCred ?? "") === "custom" ? "custom" : "public";
+    // rejects the authorize for any other shop). Default: the public app —
+    // EXCEPT for shops in CUSTOM_APP_BRIDGE_DOMAINS, which auto-route to
+    // the bridge so existing connect buttons/links "just work" without
+    // anyone hand-editing URLs. `?appCred=public` still force-overrides
+    // (that's how the store moves back once the public app clears review).
+    const shopParam = String(req.query.shop ?? "").trim().toLowerCase();
+    const appCredParam = String(req.query.appCred ?? "");
+    const appKind: ShopifyAppKind =
+      appCredParam === "custom" ||
+      (appCredParam !== "public" && CUSTOM_APP_BRIDGE_DOMAINS.has(shopParam) && appKindConfigured("custom"))
+        ? "custom"
+        : "public";
     if (!appKindConfigured(appKind))
       return res
         .status(500)
