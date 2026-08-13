@@ -565,7 +565,7 @@ function LaneRow({ lane, t }: { lane: Lane; t: Theme }) {
               data-testid={`pricing-pending-${lane.kind}`}
             >
               <span aria-hidden className="inline-block rounded-full" style={{ width: 5, height: 5, backgroundColor: t.faint }} />
-              Pricing pending
+              $ —
             </span>
           ) : null}
           <span className="text-[12px]" style={{ color: t.faint }}>
