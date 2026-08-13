@@ -16,12 +16,12 @@ import { useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   ArrowLeft, Download, FileText, Cpu, Eye, Loader2, ChevronDown, ChevronRight,
-  BadgeCheck, Clock3, XCircle, AlertTriangle, HelpCircle, ShieldCheck, Upload, Link2, X,
+  BadgeCheck, Clock3, XCircle, AlertTriangle, HelpCircle, ShieldCheck, Upload,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminDark } from "@/lib/adminAppearance";
-import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
+import { uploadAdminDoc } from "@/lib/adminUpload";
 import {
   PrintedAreasStudy,
   STUDY_DARK,
@@ -36,13 +36,14 @@ import type {
   TemplateCheck,
 } from "./types";
 import { variantOptionsNote } from "./types";
+import { certifyRunPath } from "./apiPaths";
 
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
 // ─── Themes — handoff-verbatim (light = apple-canon, dark = canon charcoal) ──
-type Theme = {
+export type Theme = {
   canvas: string;
   card: string;
   soft: string;
@@ -63,7 +64,7 @@ type Theme = {
   modalShadow: string;
 };
 
-const THEMES: Record<"light" | "dark", Theme> = {
+export const THEMES: Record<"light" | "dark", Theme> = {
   light: {
     canvas: "#f5f5f7",
     card: "#ffffff",
@@ -107,7 +108,7 @@ const THEMES: Record<"light" | "dark", Theme> = {
 };
 
 // ─── Slot vocabulary → human label ───────────────────────────────────
-const FORMAT_LABELS: Record<string, string> = {
+export const FORMAT_LABELS: Record<string, string> = {
   "7_inch": '7" vinyl',
   "10_inch": '10" vinyl',
   "12_lp": '12" LP',
@@ -135,7 +136,7 @@ const VARIANT_LABELS: Record<string, string> = {
 };
 
 /** Human label for a spec, e.g. "Gatefold jacket · 12″ Double LP". */
-function slotLabel(
+export function slotLabel(
   spec: TemplateSpecWithHistory,
   customName?: string | null,
 ): { lead: string; rest: string } {
@@ -150,7 +151,7 @@ function slotLabel(
   return { lead, rest };
 }
 
-function fmtDate(iso: string | null | undefined): string {
+export function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "";
   try {
     return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -178,7 +179,7 @@ function revisionStatusMeta(status: TemplateRevision["status"]) {
 }
 
 // ─── Verdict → icon + word ────────────────────────────────────────────
-function verdictMeta(verdict: TemplateTestRun["verdict"]) {
+export function verdictMeta(verdict: TemplateTestRun["verdict"]) {
   switch (verdict) {
     case "pass":
       return { word: "Ready", Icon: BadgeCheck, tone: "ready" as const };
@@ -192,7 +193,7 @@ function verdictMeta(verdict: TemplateTestRun["verdict"]) {
   }
 }
 
-function checkStatusMeta(status: TemplateCheck["status"]) {
+export function checkStatusMeta(status: TemplateCheck["status"]) {
   switch (status) {
     case "pass":
       return { word: "Pass", Icon: BadgeCheck, tone: "ready" as const };
@@ -206,7 +207,7 @@ function checkStatusMeta(status: TemplateCheck["status"]) {
   }
 }
 
-function toneColor(t: Theme, tone: "ready" | "warn" | "crit" | "neutral"): string {
+export function toneColor(t: Theme, tone: "ready" | "warn" | "crit" | "neutral"): string {
   return tone === "ready" ? t.ready : tone === "warn" ? t.warn : tone === "crit" ? t.crit : t.subink;
 }
 function toneWash(t: Theme, tone: "ready" | "warn" | "crit" | "neutral"): string {
@@ -253,7 +254,7 @@ function GeoRow({ label, value, sub, source, t }: { label: string; value: string
 // ═════════════════════════════════════════════════════════════════════
 // The screen
 // ═════════════════════════════════════════════════════════════════════
-export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pressId: string; specId: string; canEdit: boolean; onBack: () => void }) {
+export function PressTemplateDetail({ pressId, specId, canEdit, onBack, onOpenTest }: { pressId: string; specId: string; canEdit: boolean; onBack: () => void; onOpenTest?: () => void }) {
   const dark = useAdminDark();
   const t = THEMES[dark ? "dark" : "light"];
   const studyTheme = dark ? STUDY_DARK : STUDY_LIGHT;
@@ -264,33 +265,15 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
 
   const spec = data?.specs.find((s) => s.id === specId);
 
-  // ─── Certification: run-a-test dialog + certify mutation ───
-  const [testOpen, setTestOpen] = useState(false);
-  const [testSource, setTestSource] = useState<"upload" | "url">("upload");
-  const [pasteUrl, setPasteUrl] = useState("");
+  // ─── Certification — test runs now live on the dedicated Test page
+  // (Task #3098); this screen keeps the run history + certify actions.
   const [expandedRun, setExpandedRun] = useState<string | null>(null);
 
   const stripStatus = (msg: string) => msg.replace(/^\d{3}:\s*/, "");
 
-  const runTest = useMutation({
-    mutationFn: async (payload: { url: string; fileName?: string | null }) => {
-      const r = await apiRequest("POST", `/api/press/${pressId}/templates/${specId}/test`, payload);
-      return (await r.json()) as { run: TemplateTestRun };
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: templatesKey });
-      setTestOpen(false);
-      setPasteUrl("");
-      toast({ title: "Test complete", description: "The finished-file check finished running." });
-    },
-    onError: (e: any) => {
-      toast({ title: "Couldn't run the test", description: stripStatus(e?.message ?? ""), variant: "destructive" });
-    },
-  });
-
   const certify = useMutation({
     mutationFn: async (runId: string) => {
-      const r = await apiRequest("POST", `/api/press/${pressId}/templates/${specId}/runs/${runId}/certify`, {});
+      const r = await apiRequest("POST", certifyRunPath(pressId, specId, runId), {});
       return (await r.json()) as { ok: boolean; certifiedAt: string };
     },
     onSuccess: () => {
@@ -361,29 +344,6 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
     } finally {
       if (attachFileRef.current) attachFileRef.current.value = "";
     }
-  };
-
-  const [uploading, setUploading] = useState(false);
-  const onUploadTestFile = async (file: File | undefined) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      const url = await uploadAdminDoc(file);
-      runTest.mutate({ url, fileName: file.name });
-    } catch (e: any) {
-      toast({ title: "Upload failed", description: e?.message, variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const onPasteTest = () => {
-    const url = pasteUrl.trim();
-    if (!/^https:\/\//i.test(url)) {
-      toast({ title: "Check the link", description: "Paste an https:// URL to the finished file.", variant: "destructive" });
-      return;
-    }
-    runTest.mutate({ url });
   };
 
   // ─── Loading / not-found ───
@@ -497,6 +457,19 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
             )}
           </div>
         </div>
+        {/* Task #3098 — "Test" pill opens the dedicated Test page. */}
+        {onOpenTest && (
+          <button
+            type="button"
+            onClick={onOpenTest}
+            className={cn("inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-semibold flex-shrink-0 transition-colors", t.hoverWash)}
+            style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
+            data-testid="button-open-test-page"
+          >
+            <ShieldCheck className="w-4 h-4" style={{ color: t.blue }} />
+            Test
+          </button>
+        )}
       </div>
 
       {/* Measured error */}
@@ -614,15 +587,15 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
             <h3 className="text-[14px] font-semibold" style={{ color: t.ink }}>Certification</h3>
             <div className="mt-0.5 text-[12px]" style={{ color: t.faint }}>Run a finished file you know is right — every check runs against this template.</div>
           </div>
-          {canEdit && (
+          {onOpenTest && (
             <button
               type="button"
-              onClick={() => setTestOpen(true)}
+              onClick={onOpenTest}
               className="inline-flex items-center gap-1.5 h-8 px-4 rounded-full text-[13px] font-medium flex-shrink-0"
               style={{ backgroundColor: t.blue, color: "#fff" }}
               data-testid="button-run-test"
             >
-              <ShieldCheck className="w-3.5 h-3.5" /> Run a test
+              <ShieldCheck className="w-3.5 h-3.5" /> {canEdit ? "Run a test" : "View tests"}
             </button>
           )}
         </div>
@@ -713,88 +686,6 @@ export function PressTemplateDetail({ pressId, specId, canEdit, onBack }: { pres
         </div>
       </div>
 
-      {/* ─── Run-a-test dialog ─── */}
-      {testOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: t.modalScrim }} onClick={() => !runTest.isPending && !uploading && setTestOpen(false)} data-testid="overlay-run-test">
-          <div className="rounded-3xl px-8 pt-7 pb-8" style={{ width: 540, backgroundColor: t.card, border: `1px solid ${t.hairline}`, boxShadow: t.modalShadow }} onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start justify-between gap-6">
-              <div>
-                <div className="text-[17px] font-semibold" style={{ color: t.ink }}>Test this template.</div>
-                <div className="mt-1 text-[12.5px]" style={{ color: t.subink }}>Upload a finished file, or paste a link to one. We’ll run every check against this template.</div>
-              </div>
-              <button type="button" className="text-[13px] hover:opacity-80 flex-shrink-0 disabled:opacity-40" style={{ color: t.subink }} onClick={() => setTestOpen(false)} disabled={runTest.isPending || uploading} data-testid="button-close-test">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Source toggle */}
-            <div className="mt-5 inline-flex rounded-full p-1" style={{ backgroundColor: t.soft }}>
-              {(["upload", "url"] as const).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setTestSource(s)}
-                  className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[12.5px] font-medium"
-                  style={{ color: testSource === s ? t.ink : t.subink, backgroundColor: testSource === s ? t.card : "transparent" }}
-                  data-testid={`toggle-source-${s}`}
-                >
-                  {s === "upload" ? <Upload className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
-                  {s === "upload" ? "Upload file" : "Paste a URL"}
-                </button>
-              ))}
-            </div>
-
-            {(runTest.isPending || uploading) ? (
-              <div className="mt-5 rounded-2xl flex flex-col items-center justify-center text-center px-6 py-12" style={{ border: `1.5px dashed ${t.hairline}`, backgroundColor: t.soft }} data-testid="test-scanning">
-                <Loader2 className="w-6 h-6 mb-2.5 animate-spin" style={{ color: t.blue }} />
-                <div className="text-[13.5px] font-medium" style={{ color: t.ink }}>Scanning the file…</div>
-                <div className="mt-1 text-[12px]" style={{ color: t.faint }}>This can take 30–60 seconds. Keep this open.</div>
-              </div>
-            ) : testSource === "upload" ? (
-              <div className="mt-5 rounded-2xl flex flex-col items-center justify-center text-center px-6 py-10" style={{ border: `1.5px dashed ${t.hairline}`, backgroundColor: t.soft }}>
-                <FileText className="w-6 h-6 mb-2.5" style={{ color: t.faint }} />
-                <div className="text-[13.5px] font-medium" style={{ color: t.ink }}>Choose the finished file</div>
-                <div className="mt-1 text-[12px]" style={{ color: t.faint }}>PDF with bleed included · layered vector preferred</div>
-                <label className={cn("mt-4 h-9 px-4 rounded-full text-[13px] font-medium transition-colors inline-flex items-center cursor-pointer", t.hoverWash)} style={{ color: t.subink, border: `1px solid ${t.hairline}` }} data-testid="button-choose-test-file">
-                  Choose file…
-                  <input
-                    type="file"
-                    accept={DOC_UPLOAD_ACCEPT}
-                    className="hidden"
-                    onChange={(e) => onUploadTestFile(e.target.files?.[0])}
-                    data-testid="input-test-file"
-                  />
-                </label>
-              </div>
-            ) : (
-              <div className="mt-5">
-                <input
-                  type="url"
-                  value={pasteUrl}
-                  onChange={(e) => setPasteUrl(e.target.value)}
-                  placeholder="https://…/finished-file.pdf"
-                  className="w-full rounded-lg px-3 py-2 text-[13px] outline-none"
-                  style={{ backgroundColor: t.soft, border: `1px solid ${t.hairline}`, color: t.ink }}
-                  data-testid="input-test-url"
-                />
-                <div className="mt-3 flex items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={onPasteTest}
-                    disabled={!pasteUrl.trim()}
-                    className="h-9 px-4 rounded-full text-[13px] font-medium disabled:opacity-40"
-                    style={{ backgroundColor: t.blue, color: "#fff" }}
-                    data-testid="button-submit-url"
-                  >
-                    Run the test
-                  </button>
-                  <button type="button" onClick={() => setTestOpen(false)} className="text-[13px] hover:opacity-80" style={{ color: t.subink }} data-testid="button-cancel-test">Cancel</button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
