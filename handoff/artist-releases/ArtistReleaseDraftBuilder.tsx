@@ -3122,7 +3122,7 @@ export function ArtistReleaseDraftBuilder() {
             }
             right={
               <>
-                <StepHeading lead="Pick a style." rest="How the jacket is built." />
+                <StepHeading lead="Pick a jacket." rest="How it&rsquo;s built." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {jacketOptions.length} styles available from {PARTNER_NAME} for {sizeLabel} records.
                 </p>
@@ -3170,7 +3170,7 @@ export function ArtistReleaseDraftBuilder() {
             }
             right={
               <>
-                <StepHeading lead="Pick a finish." rest="Printed, unprinted, or polylined." />
+                <StepHeading lead="Pick an inner sleeve." rest="Printed, unprinted, or polylined." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {SLEEVE_OPTIONS.length} inner sleeve styles available from {PARTNER_NAME}.
                 </p>
