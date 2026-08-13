@@ -513,104 +513,106 @@ function CoverThumb({ src, size, t }: { src: string | null; size: number; t: The
   );
 }
 
-// ─── Lane row — a single lane under the release ───────────────────────
+// ─── Lane card — Apple "Explore the lineup" grammar (Bill, Aug 13 2026) ─────
+// Wide rounded rects side by side; the artwork is the product shot up top,
+// centered copy beneath, quiet blue text actions at the foot. Same card
+// language as the Releases index grid.
 function LaneRow({ lane, t }: { lane: Lane; t: Theme }) {
   const [hover, setHover] = useState(false);
   const isDigital = lane.kind === 'digital';
   const LaneIcon = isDigital ? Music4 : Disc3;
   return (
     <div
-      className="rounded-2xl transition-shadow"
+      className="rounded-3xl overflow-hidden flex flex-col"
       style={{
         backgroundColor: t.card,
         border: `1px solid ${t.hairline}`,
         boxShadow: hover ? t.cardHoverShadow : 'none',
-        transform: hover ? 'translateY(-1px)' : 'none',
-        transition: 'box-shadow 0.2s ease, transform 0.2s ease',
+        transform: hover ? 'translateY(-3px)' : 'none',
+        transition: 'box-shadow 0.25s ease, transform 0.25s ease',
       }}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       data-testid={`lane-${lane.kind}`}
     >
-      <div className="flex items-center gap-4 p-4 flex-wrap sm:flex-nowrap">
-        <CoverThumb src={lane.cover} size={64} t={t} />
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <LaneIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.faint }} />
-            <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.faint }}>
-              {isDigital ? 'Digital album' : `${lane.kind === 'vinyl' ? 'Vinyl' : lane.kind === 'cd' ? 'CD' : 'Cassette'} draft`}
-            </span>
+      {/* Hero — the lane's product shot. Cover art full-bleed for the digital
+          album; a quiet disc on soft gray for a pressing still in progress. */}
+      <div className="relative w-full" style={{ aspectRatio: '16 / 9', backgroundColor: t.cardSoft }}>
+        {lane.cover ? (
+          <img src={lane.cover} alt="" className="absolute inset-0 w-full h-full object-cover" draggable={false} />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Disc3 style={{ width: 52, height: 52, color: t.faint }} strokeWidth={1.25} />
           </div>
-          <div className="text-[15.5px] font-semibold truncate mt-1" style={{ color: t.ink, letterSpacing: '-0.01em' }}>
-            {lane.title}
-          </div>
-          <div className="text-[13px] mt-0.5" style={{ color: t.subink }}>
-            {lane.note}
-          </div>
-        </div>
-
-        {/* Status + price column */}
-        <div className="flex flex-col items-start sm:items-end gap-2 flex-shrink-0">
-          <LaneStatusPill status={lane.status} t={t} />
-          {lane.price ? (
-            <span className="text-[13px] tabular-nums font-medium" style={{ color: t.ink }}>
-              {lane.price}
-            </span>
-          ) : !isDigital ? (
-            // Real press pricing missing — quiet "Pricing pending", never $0.00
-            <span
-              className="inline-flex items-center gap-1.5 text-[12px]"
-              style={{ color: t.faint }}
-              data-testid={`pricing-pending-${lane.kind}`}
-            >
-              <span aria-hidden className="inline-block rounded-full" style={{ width: 5, height: 5, backgroundColor: t.faint }} />
-              $ —
-            </span>
-          ) : null}
-          <span className="text-[12px]" style={{ color: t.faint }}>
-            {lane.lastEdited}
-          </span>
-        </div>
+        )}
       </div>
 
-      {/* Row footer action — quiet borderless text button */}
-      <div className="px-4 pb-3.5 -mt-1 flex items-center gap-1" style={{ borderTop: `1px solid ${t.hairline}`, paddingTop: 12 }}>
-        {isDigital ? (
-          <button
-            type="button"
-            data-testid="link-open-album"
-            className="inline-flex items-center gap-1.5 rounded-full h-8 px-3 text-[13px] font-medium transition-colors"
-            style={{ color: t.blue }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = t.blueWash)}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-          >
-            Open album view
-            <ArrowUpRight className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <>
+      {/* Centered copy — Apple lineup rhythm. */}
+      <div className="flex-1 flex flex-col items-center text-center px-6 pt-5 pb-6">
+        <div className="flex items-center gap-1.5">
+          <LaneIcon className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.faint }} />
+          <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.faint }}>
+            {isDigital ? 'Digital album' : `${lane.kind === 'vinyl' ? 'Vinyl' : lane.kind === 'cd' ? 'CD' : 'Cassette'} draft`}
+          </span>
+        </div>
+        <div className="text-[17px] font-semibold w-full truncate" style={{ color: t.ink, letterSpacing: '-0.015em', marginTop: 8 }}>
+          {lane.title}
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <LaneStatusPill status={lane.status} t={t} />
+        </div>
+        <div className="text-[13px]" style={{ color: t.subink, marginTop: 10, lineHeight: 1.45 }}>
+          {lane.note}
+        </div>
+        <div className="text-[12px]" style={{ color: t.faint, marginTop: 4 }}>
+          {lane.price ? (
+            <span className="tabular-nums font-medium" style={{ color: t.ink }}>{lane.price} · </span>
+          ) : !isDigital ? (
+            <span data-testid={`pricing-pending-${lane.kind}`}>$ — · </span>
+          ) : null}
+          {lane.lastEdited}
+        </div>
+
+        <div className="flex-1" />
+
+        {/* Foot actions — quiet blue text buttons, centered. */}
+        <div className="flex items-center justify-center gap-1" style={{ marginTop: 16 }}>
+          {isDigital ? (
             <button
               type="button"
-              data-testid="link-open-builder"
+              data-testid="link-open-album"
               className="inline-flex items-center gap-1.5 rounded-full h-8 px-3 text-[13px] font-medium transition-colors"
               style={{ color: t.blue }}
               onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = t.blueWash)}
               onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             >
-              Continue draft
-              <ArrowRight className="w-3.5 h-3.5" />
+              Open album view
+              <ArrowUpRight className="w-3.5 h-3.5" />
             </button>
-            <button
-              type="button"
-              data-testid="link-lane-duplicate"
-              className={`inline-flex items-center rounded-full h-8 px-3 text-[13px] font-medium transition-colors ${t.navHoverClass}`}
-              style={{ color: t.subink }}
-            >
-              Duplicate
-            </button>
-          </>
-        )}
+          ) : (
+            <>
+              <button
+                type="button"
+                data-testid="link-open-builder"
+                className="inline-flex items-center gap-1.5 rounded-full h-8 px-3 text-[13px] font-medium transition-colors"
+                style={{ color: t.blue }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = t.blueWash)}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              >
+                Continue draft
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
+                data-testid="link-lane-duplicate"
+                className={`inline-flex items-center rounded-full h-8 px-3 text-[13px] font-medium transition-colors ${t.navHoverClass}`}
+                style={{ color: t.subink }}
+              >
+                Duplicate
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -888,7 +890,7 @@ export function ArtistReleaseDetail() {
             </span>
           </div>
 
-          <div className="flex flex-col gap-3 mt-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-5">
             {MOCK_RELEASE.lanes.map((lane) => (
               <LaneRow key={lane.id} lane={lane} t={t} />
             ))}
