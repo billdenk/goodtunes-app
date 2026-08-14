@@ -10,5 +10,7 @@ Extracting per-layer renders from a multi-layer PSD (e.g. a vinyl-mockup templat
 - **Verify with mean alpha, not average color.** `magick f.png -format '%[fx:mean.a]' info:` → 0 means fully transparent (broken). Average color via `-resize 1x1 -alpha off` reads `#000000` for transparent pixels and hides the problem. For a representative fill color, flatten over a neutral bg first (`-background "#777" -flatten`).
 - `montage` / `+append` showing only one tile usually means the OTHER inputs are transparent (a real upstream data problem), not a tool bug.
 
+- **Mockup "art shows through" compositing:** when a mockup layer's placeholder window is semi-transparent white (check `%[pixel:p{x,y}]`), don't knock it out fully — multiply its alpha down (~0.3×) inside the placeholder-layer's region (`-alpha extract` masks + `-compose multiply` + `CopyOpacity`) and render app art BEHIND the PNG; the residual white reads as the plastic/glass sheen. Used for the CD jewel-case catalog render.
+
 **Why:** Hit all three while extracting 32 Splatter disc renders from `BONUS_VinylMockUp_Examples.psd`; the trim/extent fusion wasted a cycle because file sizes looked fine.
 **How to apply:** Any task that pulls individual layers out of a PSD via ImageMagick (swatch/mockup extraction).

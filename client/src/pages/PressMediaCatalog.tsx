@@ -28,6 +28,7 @@ import { TemplateTilesGrid } from "./PressPackagePricingCatalog";
 import type { AlbumFormat } from "@shared/schema";
 import cdShiny from "@/assets/cd-cassette/cd-shiny.png";
 import cdWhite from "@/assets/cd-cassette/cd-white.png";
+import cdJewelCase from "@/assets/cd-cassette/cd-jewel-case.png";
 import shellBlack from "@/assets/cd-cassette/shell-black.png";
 import shellWhite from "@/assets/cd-cassette/shell-white.png";
 import shellClear from "@/assets/cd-cassette/shell-clear.png";
@@ -190,12 +191,11 @@ function Waveform({ h, bar, color = '#ffffff' }: { h: number; bar: number; color
 // = matte cardboard wallet with a soft printed edge. ─────────────────────
 function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print: Print; spots: string[]; logoUrl: string | null }) {
   const S = 260; // case footprint
-  // Jewel-case render parked (Bill, 2026-08-11): the CSS-built jewel case
-  // didn't read as a real product, so BOTH cases draw the sleeve/wallet
-  // visual until a proper jewel-case asset arrives. Copy (caption, booklet
-  // step, "booklet and tray card included") still follows the real choice —
-  // only this render is unified. Flip back by restoring the caseName check.
-  const jewel = false as boolean; void caseName;
+  const jewel = caseName === 'Jewel case';
+  // Photographic jewel-case asset (CD_Mockup PSD, layer 1) with the booklet
+  // window's semi-transparent white knocked down so art shows THROUGH the
+  // clear lid. Natural aspect 1024×896; window rect measured off the crop.
+  const JH = S * (896 / 1024);
   const silk = print.name === 'Silkscreen';
   // Silkscreen inks band the white disc: first pick owns the disc, each
   // extra pick pushes the earlier ones out into rings (outermost = first).
@@ -251,107 +251,41 @@ function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print
       <style>{`.cd-render:hover .cd-peek { left: ${S * 0.56}px; }`}</style>
 
       {jewel ? (
-        // ─── JEWEL CASE — crystal-clear polycarbonate OVER a printed booklet.
-        // The container is the transparent tray (dark, barely tinted). The
-        // green waveform is the booklet insert, set in with clear margins so
-        // clear plastic edges show all around. A glass lid sits on top.
+        // ─── JEWEL CASE — photographic clear hinged case. The booklet art
+        // (green waveform) sits BEHIND the case photo; the photo's cover
+        // window was knocked down to a light plastic sheen, so the art reads
+        // as a printed booklet under the clear lid, with the spine/hinge and
+        // tray edges from the photo over it.
         <div
           className="absolute left-0"
           style={{
-            top: 0,
+            top: S * 0.5 - JH / 2,
             width: S,
-            height: S,
-            borderRadius: 7,
-            // dark, near-clear plastic tray — NOT green
-            background: 'linear-gradient(135deg, rgba(40,42,46,0.55) 0%, rgba(24,25,28,0.7) 55%, rgba(34,36,40,0.6) 100%)',
-            boxShadow: '0 18px 48px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.1)',
+            height: JH,
+            filter: 'drop-shadow(0 16px 36px rgba(0,0,0,0.5))',
           }}
         >
-          {/* printed booklet insert — inset with clear plastic margins around it */}
+          {/* printed booklet showing through the lid's cover window */}
           <div
             className="absolute flex items-center justify-center"
             style={{
-              left: S * 0.115,
-              right: S * 0.05,
-              top: S * 0.05,
-              bottom: S * 0.05,
-              borderRadius: 2,
+              left: '9%',
+              top: '1.7%',
+              width: '89.5%',
+              height: '97.1%',
               backgroundColor: COVER_GREEN,
-              boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.35)',
             }}
           >
-            <Waveform h={S * 0.46} bar={Math.round(S * 0.04)} />
+            <Waveform h={S * 0.42} bar={Math.round(S * 0.04)} />
           </div>
-
-          {/* clear polycarbonate lid — full glass sheet with soft body sheen */}
-          <div
+          {/* the case itself — clear lid, spine, hinge, tray edges */}
+          <img
+            src={cdJewelCase}
+            alt=""
+            draggable={false}
             className="absolute inset-0"
-            style={{
-              borderRadius: 7,
-              background:
-                'linear-gradient(118deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.05) 20%, rgba(255,255,255,0) 42%, rgba(255,255,255,0) 68%, rgba(255,255,255,0.14) 86%, rgba(255,255,255,0.02) 100%)',
-              border: '1px solid rgba(255,255,255,0.3)',
-              boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.4), inset 0 0 26px rgba(255,255,255,0.06)',
-            }}
+            style={{ width: '100%', height: '100%' }}
           />
-          {/* sharp glass streak — plastic catching a hard light */}
-          <div
-            className="absolute"
-            style={{
-              top: S * 0.03,
-              left: S * 0.28,
-              width: S * 0.12,
-              height: S * 0.98,
-              transform: 'rotate(19deg)',
-              background:
-                'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.4) 50%, rgba(255,255,255,0) 100%)',
-              filter: 'blur(2.5px)',
-              mixBlendMode: 'screen',
-            }}
-          />
-          {/* second faint streak higher up */}
-          <div
-            className="absolute"
-            style={{
-              top: S * 0.02,
-              left: S * 0.52,
-              width: S * 0.06,
-              height: S * 0.9,
-              transform: 'rotate(19deg)',
-              background:
-                'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.22) 50%, rgba(255,255,255,0) 100%)',
-              filter: 'blur(3px)',
-              mixBlendMode: 'screen',
-            }}
-          />
-          {/* clear hinge spine at left — transparent plastic, bright glass edge */}
-          <div
-            className="absolute inset-y-0 left-0"
-            style={{
-              width: S * 0.095,
-              borderRadius: '7px 0 0 7px',
-              background:
-                'linear-gradient(90deg, rgba(255,255,255,0.42) 0%, rgba(220,224,230,0.14) 34%, rgba(20,22,26,0.32) 72%, rgba(10,11,14,0.5) 100%)',
-              borderRight: '1px solid rgba(0,0,0,0.35)',
-              boxShadow: 'inset 1px 0 1px rgba(255,255,255,0.35)',
-            }}
-          />
-          {/* hinge teeth — clear-plastic interlocking nubs down the spine */}
-          {[0.08, 0.24, 0.4, 0.6, 0.76, 0.9].map((t) => (
-            <div
-              key={t}
-              className="absolute"
-              style={{
-                left: S * 0.06,
-                top: S * t,
-                width: S * 0.03,
-                height: S * 0.05,
-                borderRadius: 1.5,
-                background: 'linear-gradient(180deg, rgba(255,255,255,0.5), rgba(120,124,132,0.25) 45%, rgba(10,11,14,0.4))',
-                boxShadow: 'inset 0 0 0 0.5px rgba(255,255,255,0.2), 0 0 0 0.5px rgba(0,0,0,0.3)',
-              }}
-            />
-          ))}
         </div>
       ) : (
         // ─── SLEEVE — matte printed cardboard wallet, MRP black like the album.
