@@ -47,6 +47,8 @@ Save preferences here that don't fit a topic doc. Topic-scoped preferences belon
 ### Don't end in a "waiting for input" state for optional questions
 Agent names: Bill calls the main workspace agent "Otis" and the Playground/design-studio agent "Ruby". Use those names in conversation when referring to either agent.
 
+Never use the word "mint" for GoodDeed numbers in user-facing copy, emails, UI, or chat — say "assign" or "reserve" instead (gogoods, Aug 2026).
+
 Bill found it confusing when a task finishes by pausing on a non-blocking, optional preference ("let me know if you'd prefer X instead"). Don't do that. Make the sensible default call, ship it, and state plainly what you chose and how to change it later. Only pause for genuine blockers — missing access/secrets, a destructive/irreversible action, or a real fork where you can't infer the intent.
 
 ### Always propose relevant follow-up tasks
