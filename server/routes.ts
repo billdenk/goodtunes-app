@@ -2221,6 +2221,29 @@ export async function registerRoutes(
     );
   });
 
+  // ─── Switchbridge standalone page ──────────────────────────────────
+  // Self-contained HTML animation page (built externally), shared by
+  // direct URL only — same serving pattern as /investors above (unlinked,
+  // noindex, no-store, wins over the SPA fallback on every host).
+  app.get("/switchbridge", async (_req, res) => {
+    const path = await import("path");
+    res.sendFile(
+      path.join(process.cwd(), "server", "assets", "switchbridge.html"),
+      {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "X-Robots-Tag": "noindex, nofollow",
+          "Cache-Control": "no-store, must-revalidate",
+        },
+      },
+      (err?: Error) => {
+        if (err && !res.headersSent) {
+          res.status(404).type("text/plain").send("switchbridge page is not available");
+        }
+      },
+    );
+  });
+
   // ─── OAuth: Google + Apple ─────────────────────────────────────────
   // Start endpoints redirect to the provider; callback endpoints come
   // back here. The `kind` (admin | customer) is taken from the host on

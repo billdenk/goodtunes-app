@@ -117,6 +117,9 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   // that shadows the path on get.goodtunes.music.
   "investors",
   "investor",
+  // /switchbridge hosts an unlisted standalone HTML page (Switchbridge loop
+  // animation), served straight from registerRoutes like /investors.
+  "switchbridge",
 ]);
 
 export const SHARE_SLUG_MIN = 2;
