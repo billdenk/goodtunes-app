@@ -587,6 +587,20 @@ export function buildShopifyRedemptionEmail(
   return { subject, html, text };
 }
 
+// "Send me a test" from the admin Email appearance preview dialog. Same
+// builder as the real send — only the subject gets a "[Test]" prefix so the
+// recipient can't mistake it for a live order email. Goes through the normal
+// Resend path, so it also shows up in the Resend dashboard log.
+export async function sendShopifyRedemptionTestEmail(
+  toEmail: string,
+  albumTitle: string | null,
+  redeemUrl: string,
+  appearance?: RedemptionEmailAppearance,
+): Promise<SendResult> {
+  const { subject, html, text } = buildShopifyRedemptionEmail(albumTitle, redeemUrl, appearance);
+  return sendViaResend("shopify-redemption-test", toEmail, `[Test] ${subject}`, html, text);
+}
+
 export async function sendShopifyRedemptionEmail(
   toEmail: string,
   albumTitle: string | null,

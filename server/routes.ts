@@ -32791,6 +32791,57 @@ export async function registerRoutes(
     },
   );
 
+  // "Send me a test" from the preview dialog. Sends the SAME rendered email
+  // through the normal Resend path (so it also shows in the Resend log) to
+  // the calling admin's OWN account email — the recipient is derived
+  // server-side, never client-supplied, so this can't be used to mail
+  // arbitrary addresses. Subject is prefixed "[Test]"; the redeem link is a
+  // placeholder that doesn't unlock anything. Same scope gate as the GET.
+  app.post(
+    "/api/admin/albums/:id/email-preview/send",
+    requireAdmin,
+    async (req, res) => {
+      const albumId = String(req.params.id);
+      const access = await getAlbumEditAccess(req.session.userId!, albumId);
+      if (!access || access.missingPermissions?.includes("out_of_scope")) {
+        return res.status(404).json({ message: "Album not found" });
+      }
+      const fmt = String(req.body?.format ?? "vinyl");
+      if (!(EMAIL_HERO_FORMAT_KINDS as readonly string[]).includes(fmt)) {
+        return res.status(400).json({ message: `Unknown format "${fmt}"` });
+      }
+      const caller = await storage.getUser(req.session.userId!);
+      const toEmail = (caller?.email ?? "").trim();
+      if (!toEmail) {
+        return res.status(400).json({ message: "Your admin account has no email address to send the test to" });
+      }
+      const [row] = await db
+        .select({ title: albums.title, artwork: albums.artwork, emailAppearance: albums.emailAppearance })
+        .from(albums)
+        .where(eq(albums.id, albumId));
+      if (!row) return res.status(404).json({ message: "Album not found" });
+      const appUrl = (process.env.APP_URL ?? `https://${process.env.GOODTUNES_HOST ?? "my.goodtunes.music"}`).replace(/\/$/, "");
+      const { sendShopifyRedemptionTestEmail, resolveRedemptionHeroUrl } = await import("./mail");
+      const appear = row.emailAppearance ?? null;
+      const heroImageUrl = resolveRedemptionHeroUrl(
+        appear as { heroDefaultUrl?: string | null; heroByFormat?: Record<string, string> | null } | null,
+        row.artwork,
+        fmt,
+        appUrl,
+      );
+      const r = await sendShopifyRedemptionTestEmail(
+        toEmail,
+        row.title,
+        `${appUrl}/redeem/EXAMPLE-CODE`,
+        { heroImageUrl, buttonColor: (appear as { buttonColor?: string | null } | null)?.buttonColor ?? null },
+      );
+      if (!r.ok) {
+        return res.status(502).json({ message: `Couldn't send the test email: ${r.reason ?? "mail delivery failed"}` });
+      }
+      res.json({ ok: true, sentTo: toEmail, format: fmt });
+    },
+  );
+
   // Task #2478 — a partner's own submitted change requests for this album.
   // When an artist owner edits a released/sold release their save diverts to
   // the pending-changes queue (202). This read lets them see WHAT they filed

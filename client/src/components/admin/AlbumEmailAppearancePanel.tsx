@@ -247,6 +247,26 @@ function EmailPreviewDialog({
     queryKey: [`/api/admin/albums/${albumId}/email-preview?format=${format}`],
     enabled: open,
   });
+  const { toast } = useToast();
+  const sendTest = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/email-preview/send`, { format });
+      return r.json();
+    },
+    onSuccess: (resp: { sentTo?: string }) => {
+      toast({
+        title: "Test email sent",
+        description: resp?.sentTo ? `Sent to ${resp.sentTo} — check your inbox.` : "Check your inbox.",
+      });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't send the test email",
+        description: e?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl" data-testid="dialog-email-preview">
@@ -294,10 +314,28 @@ function EmailPreviewDialog({
             />
           )}
         </div>
-        <p className="text-xs text-slate-400">
-          The "Get my music" link in the real email is unique per order — the
-          preview uses a placeholder.
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs text-slate-400">
+            The "Get my music" link in the real email is unique per order —
+            the preview uses a placeholder.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs shrink-0"
+            disabled={sendTest.isPending || preview.isLoading || preview.isError}
+            onClick={() => sendTest.mutate()}
+            data-testid="button-email-send-test"
+          >
+            {sendTest.isPending ? (
+              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+            ) : (
+              <Mail className="w-3 h-3 mr-1" />
+            )}
+            Send me a test
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
