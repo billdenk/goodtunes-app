@@ -501,6 +501,27 @@ export type RedemptionEmailAppearance = {
   buttonColor?: string | null;
 };
 
+// Shared hero resolution ladder for the redemption email: format-matched
+// custom graphic → album-wide custom graphic → cover art. SVGs are dropped
+// (Gmail/Outlook won't render them) and relative /objects paths are
+// absolutized against the public fan host. Used by BOTH the real send in
+// server/shopify.ts and the admin email-preview route, so the preview can
+// never drift from what fans actually receive.
+export function resolveRedemptionHeroUrl(
+  appearance:
+    | { heroDefaultUrl?: string | null; heroByFormat?: Record<string, string> | null }
+    | null
+    | undefined,
+  artwork: string | null | undefined,
+  formatKind: string,
+  appUrl: string,
+): string | null {
+  const heroRaw =
+    appearance?.heroByFormat?.[formatKind] || appearance?.heroDefaultUrl || artwork || null;
+  const heroUsable = heroRaw && !/\.svg(\?|$)/i.test(heroRaw) ? heroRaw : null;
+  return heroUsable ? (heroUsable.startsWith("/") ? `${appUrl}${heroUsable}` : heroUsable) : null;
+}
+
 // Pure builder — exported so the render (hero resolution ladder output,
 // custom button color, defaults) is testable without sending mail.
 export function buildShopifyRedemptionEmail(

@@ -32744,6 +32744,53 @@ export async function registerRoutes(
     },
   );
 
+  // Redemption-email preview for the Email appearance panel. Renders the
+  // REAL email builder (same hero ladder + button color as the production
+  // send in server/shopify.ts, via the shared resolveRedemptionHeroUrl) with
+  // a placeholder redeem link, so artists/operators can see exactly what
+  // fans receive per format. Read-only; same requireAdmin + edit-access
+  // existence gate as the sibling routes.
+  app.get(
+    "/api/admin/albums/:id/email-preview",
+    requireAdmin,
+    async (req, res) => {
+      const albumId = String(req.params.id);
+      const access = await getAlbumEditAccess(req.session.userId!, albumId);
+      // Out-of-scope partners get the same 404 as a missing album — the
+      // preview leaks title/artwork/branding, so unlike the sibling
+      // affordance reads it must NOT answer for albums outside the caller's
+      // scope. In-scope partners who merely can't edit (post-sale lock,
+      // approval divert) may still preview.
+      if (!access || access.missingPermissions?.includes("out_of_scope")) {
+        return res.status(404).json({ message: "Album not found" });
+      }
+      const fmt = String(req.query.format ?? "vinyl");
+      if (!(EMAIL_HERO_FORMAT_KINDS as readonly string[]).includes(fmt)) {
+        return res.status(400).json({ message: `Unknown format "${fmt}"` });
+      }
+      const [row] = await db
+        .select({ title: albums.title, artwork: albums.artwork, emailAppearance: albums.emailAppearance })
+        .from(albums)
+        .where(eq(albums.id, albumId));
+      if (!row) return res.status(404).json({ message: "Album not found" });
+      const appUrl = (process.env.APP_URL ?? `https://${process.env.GOODTUNES_HOST ?? "my.goodtunes.music"}`).replace(/\/$/, "");
+      const { buildShopifyRedemptionEmail, resolveRedemptionHeroUrl } = await import("./mail");
+      const appear = row.emailAppearance ?? null;
+      const heroImageUrl = resolveRedemptionHeroUrl(
+        appear as { heroDefaultUrl?: string | null; heroByFormat?: Record<string, string> | null } | null,
+        row.artwork,
+        fmt,
+        appUrl,
+      );
+      const { subject, html } = buildShopifyRedemptionEmail(
+        row.title,
+        `${appUrl}/redeem/EXAMPLE-CODE`,
+        { heroImageUrl, buttonColor: (appear as { buttonColor?: string | null } | null)?.buttonColor ?? null },
+      );
+      res.json({ subject, html, format: fmt });
+    },
+  );
+
   // Task #2478 — a partner's own submitted change requests for this album.
   // When an artist owner edits a released/sold release their save diverts to
   // the pending-changes queue (202). This read lets them see WHAT they filed

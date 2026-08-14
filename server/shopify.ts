@@ -1573,20 +1573,13 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
         matchedMapping?.shopifyProductTitle,
       );
       const appear = mailAlbumRow?.emailAppearance ?? null;
-      const heroRaw =
-        (appear?.heroByFormat as Record<string, string> | undefined)?.[heroFormatKind] ||
-        appear?.heroDefaultUrl ||
-        mailAlbumRow?.artwork ||
-        null;
-      // SVGs (e.g. the branded /album-placeholder.svg fallback cover) don't
-      // render in Gmail/Outlook — send no hero rather than a broken image.
-      const heroUsable = heroRaw && !/\.svg(\?|$)/i.test(heroRaw) ? heroRaw : null;
-      const heroImageUrl = heroUsable
-        ? heroUsable.startsWith("/")
-          ? `${appUrl}${heroUsable}`
-          : heroUsable
-        : null;
-      const { sendShopifyRedemptionEmail } = await import("./mail");
+      const { sendShopifyRedemptionEmail, resolveRedemptionHeroUrl } = await import("./mail");
+      const heroImageUrl = resolveRedemptionHeroUrl(
+        appear as { heroDefaultUrl?: string | null; heroByFormat?: Record<string, string> | null } | null,
+        mailAlbumRow?.artwork,
+        heroFormatKind,
+        appUrl,
+      );
       const r = await sendShopifyRedemptionEmail(payload.email!, mailAlbumRow?.title ?? null, redeemUrl, {
         heroImageUrl,
         buttonColor: appear?.buttonColor ?? null,

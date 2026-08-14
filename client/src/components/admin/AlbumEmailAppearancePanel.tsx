@@ -7,9 +7,15 @@
 // (edit_metadata gate + post-sale lock) and uploads use the shared admin
 // image-upload path (/api/admin/upload → Object Storage).
 import { useRef, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Mail, Upload, X, Loader2 } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Mail, Upload, X, Loader2, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { uploadImageFile } from "@/lib/adminUpload";
@@ -46,6 +52,8 @@ export function AlbumEmailAppearancePanel({
   const { toast } = useToast();
   const appearance = emailAppearance ?? {};
   const [uploadingSlot, setUploadingSlot] = useState<HeroSlotKey | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFormat, setPreviewFormat] = useState<EmailHeroFormatKind>("vinyl");
 
   const save = useMutation({
     mutationFn: async (next: AlbumEmailAppearance | null) => {
@@ -104,7 +112,25 @@ export function AlbumEmailAppearancePanel({
       <div className="flex items-center gap-1.5">
         <Mail className="w-4 h-4 text-[color:var(--brand-blue)]" />
         <span className="text-sm font-semibold text-slate-900">Email appearance</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs ml-auto"
+          onClick={() => setPreviewOpen(true)}
+          data-testid="button-email-preview"
+        >
+          <Eye className="w-3 h-3 mr-1" />
+          Preview email
+        </Button>
       </div>
+      <EmailPreviewDialog
+        albumId={albumId}
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        format={previewFormat}
+        onFormatChange={setPreviewFormat}
+      />
       <p className="text-xs text-slate-500 mt-1 leading-snug">
         Brand the "Your music is ready" email fans get after buying. Without
         custom graphics the album cover is used automatically; per-format
@@ -198,6 +224,82 @@ export function AlbumEmailAppearancePanel({
         ))}
       </div>
     </div>
+  );
+}
+
+// Renders the REAL email HTML from GET /api/admin/albums/:id/email-preview
+// (same builder + hero ladder as the production send) inside a sandboxed
+// iframe, with a format switcher matching the hero override slots.
+function EmailPreviewDialog({
+  albumId,
+  open,
+  onOpenChange,
+  format,
+  onFormatChange,
+}: {
+  albumId: string;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  format: EmailHeroFormatKind;
+  onFormatChange: (k: EmailHeroFormatKind) => void;
+}) {
+  const preview = useQuery<{ subject: string; html: string; format: string }>({
+    queryKey: [`/api/admin/albums/${albumId}/email-preview?format=${format}`],
+    enabled: open,
+  });
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl" data-testid="dialog-email-preview">
+        <DialogHeader>
+          <DialogTitle>Redemption email preview</DialogTitle>
+        </DialogHeader>
+        <div className="flex items-center gap-1.5">
+          {EMAIL_HERO_FORMAT_KINDS.map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => onFormatChange(kind)}
+              className={`text-xs rounded-full px-2.5 py-1 border ${
+                format === kind
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-slate-600 border-slate-200"
+              }`}
+              data-testid={`button-preview-format-${kind}`}
+            >
+              {KIND_LABEL[kind]}
+            </button>
+          ))}
+        </div>
+        {preview.data && (
+          <div className="text-xs text-slate-500 truncate">
+            Subject: <span className="text-slate-700">{preview.data.subject}</span>
+          </div>
+        )}
+        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+          {preview.isLoading ? (
+            <div className="h-[480px] flex items-center justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+            </div>
+          ) : preview.isError ? (
+            <div className="h-[480px] flex items-center justify-center text-sm text-slate-500 px-6 text-center">
+              Couldn't load the preview. Please try again.
+            </div>
+          ) : (
+            <iframe
+              title="Email preview"
+              sandbox=""
+              srcDoc={preview.data?.html ?? ""}
+              className="w-full h-[480px] border-0 bg-white"
+              data-testid="iframe-email-preview"
+            />
+          )}
+        </div>
+        <p className="text-xs text-slate-400">
+          The "Get my music" link in the real email is unique per order — the
+          preview uses a placeholder.
+        </p>
+      </DialogContent>
+    </Dialog>
   );
 }
 
