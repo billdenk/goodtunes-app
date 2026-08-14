@@ -37,6 +37,8 @@ interface Payload {
     pdfAssetUrl: string | null;
     pdfGeneratedAt: string | null;
     steps: Step[];
+    // Task #3091 — EasyPost round-trip labels.
+    shippingLabels: ShippingLabels | null;
   };
   counts: {
     reserved: number;
@@ -80,6 +82,255 @@ interface Payload {
 }
 
 const MIN_BATCH = 25;
+
+// Task #3091 — EasyPost shipping labels for the signing round-trip.
+type LabelSnap = {
+  trackingCode: string;
+  labelUrl: string;
+  carrier: string;
+  service: string;
+  rateCents: number;
+  purchasedAt: string;
+  toName: string;
+  toCity: string | null;
+  toState: string | null;
+};
+type ShippingLabels = {
+  status: "pending" | "purchased" | "partial" | "skipped";
+  skippedReason?: string | null;
+  signingAddress?: { name?: string | null; street1?: string | null; street2?: string | null; city?: string | null; state?: string | null; zip?: string | null; phone?: string | null } | null;
+  outbound?: LabelSnap | null;
+  return?: LabelSnap | null;
+  returnDestination?: { kind: string; id: string; name: string } | null;
+};
+
+// Interim operator surface (Task #3091) — minimal + functional until Ruby's
+// mocks land (see docs/cert-batch-shipping-labels-design-brief.md). Buys the
+// outbound + prepaid return labels via EasyPost on the GoodTunes UPS carrier
+// account on an EXPLICIT operator action; local pickup is honestly skippable.
+function ShippingLabelsSection({
+  albumId,
+  labels,
+}: {
+  albumId: string;
+  labels: ShippingLabels | null;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [to, setTo] = useState({
+    name: labels?.signingAddress?.name ?? "",
+    street1: labels?.signingAddress?.street1 ?? "",
+    street2: labels?.signingAddress?.street2 ?? "",
+    city: labels?.signingAddress?.city ?? "",
+    state: labels?.signingAddress?.state ?? "",
+    zip: labels?.signingAddress?.zip ?? "",
+    phone: labels?.signingAddress?.phone ?? "",
+  });
+  const [weightOz, setWeightOz] = useState("48");
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "cert-sale-window"] });
+
+  // Bill's flow (recommended): the operator only saves the artist's signing
+  // address; the PRINTER creates both labels from their portal after packing
+  // (they know the box size + weight). Direct buy stays as a backup.
+  const saveAddress = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/cert-batch/labels/signing-address`, {
+        ...to,
+        country: "US",
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      invalidate();
+      setOpen(false);
+      toast({
+        title: "Signing address saved",
+        description: "The printer can now create both labels from their portal after packing the batch.",
+      });
+    },
+    onError: (e: any) => toast({ title: "Address not saved", description: e?.message, variant: "destructive" }),
+  });
+
+  const buy = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/cert-batch/labels`, {
+        outboundTo: { ...to, country: "US" },
+        parcel: { weightOz: Number(weightOz) || 48 },
+      });
+      return r.json();
+    },
+    onSuccess: (r: any) => {
+      invalidate();
+      setOpen(false);
+      toast({
+        title: r.alreadyPurchased ? "Labels already purchased" : "Labels purchased",
+        description: r.alreadyPurchased
+          ? "Returning the stored labels — nothing was re-bought."
+          : "Outbound + prepaid return labels are ready to download.",
+      });
+    },
+    onError: (e: any) => {
+      invalidate(); // a partial (outbound-only) buy is persisted server-side
+      toast({ title: "Label purchase failed", description: e?.message, variant: "destructive" });
+    },
+  });
+  const skip = useMutation({
+    mutationFn: async () =>
+      (await apiRequest("POST", `/api/admin/albums/${albumId}/cert-batch/labels/skip`, { reason: "local_pickup" })).json(),
+    onSuccess: () => { invalidate(); toast({ title: "Labels skipped — local pickup" }); },
+    onError: (e: any) => toast({ title: "Could not skip", description: e?.message, variant: "destructive" }),
+  });
+  const unskip = useMutation({
+    mutationFn: async () =>
+      (await apiRequest("DELETE", `/api/admin/albums/${albumId}/cert-batch/labels/skip`)).json(),
+    onSuccess: () => { invalidate(); toast({ title: "Skip cleared" }); },
+  });
+
+  const labelRow = (kind: "outbound" | "return", snap: LabelSnap) => (
+    <div className="flex items-center gap-2 text-xs" data-testid={`label-row-${kind}`}>
+      <span className="w-24 flex-shrink-0 text-slate-500">{kind === "outbound" ? "To artist" : "Prepaid return"}</span>
+      <a
+        href={snap.labelUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex items-center gap-1 text-[var(--brand-blue)] font-medium hover:underline"
+        data-testid={`link-label-pdf-${kind}`}
+      >
+        <Download className="w-3 h-3" /> Label PDF
+      </a>
+      <span className="text-slate-700">
+        {snap.carrier} {snap.service} · {fmtUSD(snap.rateCents)} · <span className="font-mono">{snap.trackingCode}</span>
+      </span>
+      <span className="text-slate-400">→ {snap.toName}{snap.toCity ? `, ${snap.toCity}${snap.toState ? `, ${snap.toState}` : ""}` : ""}</span>
+    </div>
+  );
+
+  return (
+    <div className="rounded-md border border-slate-200 bg-white p-3 space-y-2" data-testid="panel-cert-shipping-labels">
+      <div>
+        <h4 className="text-sm font-semibold text-slate-900">Signing round-trip shipping labels</h4>
+        <p className="text-xs text-slate-500 mt-0.5">
+          EasyPost on the GoodTunes UPS account: one label to send the printed stack to the artist for
+          signing, plus a prepaid return label (rides in the box) back to the{" "}
+          {labels?.returnDestination?.name ?? "next destination"}.
+        </p>
+      </div>
+
+      {labels?.status === "skipped" ? (
+        <div className="flex items-center gap-2 text-xs text-slate-600" data-testid="text-labels-skipped">
+          <span>No labels — local pickup. The batch is handed off in person, so nothing ships.</span>
+          <button type="button" onClick={() => unskip.mutate()} className="text-[var(--brand-blue)] hover:underline" data-testid="button-clear-label-skip">
+            Undo
+          </button>
+        </div>
+      ) : (
+        <>
+          {labels?.status === "pending" && labels.signingAddress?.name && (
+            <p className="text-xs text-slate-600" data-testid="text-signing-address-saved">
+              Signing address saved ({labels.signingAddress.name}
+              {labels.signingAddress.city ? `, ${labels.signingAddress.city}` : ""}) — waiting for the
+              printer to pack the batch and create both labels from their portal.
+            </p>
+          )}
+          {labels?.outbound && labelRow("outbound", labels.outbound)}
+          {labels?.return && labelRow("return", labels.return)}
+          {labels?.status === "partial" && (
+            <p className="text-xs text-amber-600" data-testid="text-labels-partial">
+              Outbound label bought; the return label failed — retry below (the outbound leg won't be re-bought).
+            </p>
+          )}
+          {labels?.status !== "purchased" && !open && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="text-xs px-3 py-1.5 rounded bg-[var(--brand-blue)] text-white font-medium"
+                data-testid="button-open-label-form"
+              >
+                {labels?.status === "partial"
+                  ? "Retry return label…"
+                  : labels?.status === "pending"
+                    ? "Edit address / buy now…"
+                    : "Set signing address…"}
+              </button>
+              {!labels?.outbound && (
+                <button
+                  type="button"
+                  onClick={() => skip.mutate()}
+                  className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-600"
+                  data-testid="button-skip-labels"
+                >
+                  Skip — local pickup
+                </button>
+              )}
+            </div>
+          )}
+          {open && (
+            <div className="space-y-2 pt-1" data-testid="form-label-purchase">
+              <p className="text-xs text-slate-600 font-medium">Artist / manager signing address</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ["name", "Recipient name"],
+                  ["street1", "Street"],
+                  ["street2", "Street 2 (optional)"],
+                  ["city", "City"],
+                  ["state", "State"],
+                  ["zip", "ZIP"],
+                  ["phone", "Phone (optional)"],
+                ] as const).map(([k, label]) => (
+                  <label key={k} className="block text-xs text-slate-600">
+                    {label}
+                    <input
+                      type="text"
+                      value={(to as any)[k]}
+                      onChange={(e) => setTo((p) => ({ ...p, [k]: e.target.value }))}
+                      className="mt-1 w-full h-8 text-xs rounded border border-slate-200 px-2 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+                      data-testid={`input-label-to-${k}`}
+                    />
+                  </label>
+                ))}
+                <label className="block text-xs text-slate-600">
+                  Package weight (oz)
+                  <input
+                    type="number"
+                    value={weightOz}
+                    onChange={(e) => setWeightOz(e.target.value)}
+                    className="mt-1 w-full h-8 text-xs rounded border border-slate-200 px-2 focus:outline-none focus:ring-2 focus:ring-[var(--brand-blue)]/30"
+                    data-testid="input-label-weight"
+                  />
+                </label>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={saveAddress.isPending}
+                  onClick={() => saveAddress.mutate()}
+                  className="text-xs px-3 py-1.5 rounded bg-[var(--brand-blue)] text-white font-medium disabled:opacity-40"
+                  data-testid="button-save-signing-address"
+                >
+                  {saveAddress.isPending ? "Saving…" : "Save address — printer creates labels"}
+                </button>
+                <button
+                  type="button"
+                  disabled={buy.isPending}
+                  onClick={() => buy.mutate()}
+                  className="text-xs px-3 py-1.5 rounded border border-slate-200 text-slate-600 font-medium disabled:opacity-40"
+                  data-testid="button-buy-labels"
+                >
+                  {buy.isPending ? "Buying via EasyPost…" : "Buy labels now (operator)"}
+                </button>
+                <button type="button" onClick={() => setOpen(false)} className="text-xs px-2 py-1 rounded border border-slate-200 text-slate-600">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
 
 const LEG_SOURCE_LABELS: Record<string, string> = {
   vendor_assignment: "vendor routing",
@@ -632,6 +883,11 @@ export function CertSaleWindowPanel({ albumId }: { albumId: string }) {
           legOwners={data.legOwners ?? null}
           returnLabel={data.returnLabel ?? null}
         />
+      )}
+
+      {/* Task #3091 — EasyPost signing round-trip labels */}
+      {(w.status === "in_production" || w.status === "shipped") && (
+        <ShippingLabelsSection albumId={albumId} labels={w.shippingLabels ?? null} />
       )}
 
       {/* True-up ledger */}

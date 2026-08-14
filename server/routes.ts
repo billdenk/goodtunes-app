@@ -35222,6 +35222,8 @@ export async function registerRoutes(
         notes: album.certBatchNotes ?? {},
         pdfAssetUrl: album.certBatchPdfAssetUrl,
         pdfGeneratedAt: album.certBatchPdfGeneratedAt,
+        // Task #3091 — EasyPost round-trip labels (outbound + prepaid return).
+        shippingLabels: album.certBatchShippingLabels ?? null,
         steps: CERT_BATCH_STEPS.map((s) => ({
           key: s.key,
           label: s.label,
@@ -35480,6 +35482,71 @@ export async function registerRoutes(
           }
         })().catch(() => {});
       }
+      res.json({ ok: true });
+    });
+
+    // ─── Task #3091 — EasyPost shipping labels (signing round-trip) ───
+    // POST buys BOTH labels on an explicit operator action: outbound
+    // (printer → artist/manager signing address) + prepaid return
+    // (artist → printer for the hologram leg, else the routed fulfillment
+    // partner). Idempotent — a re-request returns the stored snapshot and
+    // never double-buys. Failures surface the carrier/EasyPost message.
+    app.post("/api/admin/albums/:id/cert-batch/labels", requireAdmin, async (req, res) => {
+      const albumId = String(req.params.id);
+      const body = req.body ?? {};
+      try {
+        const { purchaseCertBatchLabels } = await import("./certBatch");
+        const result = await purchaseCertBatchLabels({
+          albumId,
+          outboundTo: body.outboundTo ?? {},
+          outboundFrom: body.outboundFrom ?? null,
+          returnTo: body.returnTo ?? null,
+          parcel: body.parcel ?? null,
+        });
+        if (!result.ok) {
+          return res
+            .status(result.status)
+            .json({ message: result.message, reason: result.reason, labels: result.labels ?? null });
+        }
+        // Mirror the return tracking into the Task #3075 return-label
+        // fields when the return targets a fulfillment partner — this
+        // also fires that partner's one-shot inbound heads-up email, so
+        // the downstream party sees the return tracking without hunting.
+        // Run the mirror on EVERY successful response — including stored-purchase
+        // retries — so a crash/failure between purchase-commit and mirroring is
+        // reconciled on the next request. saveCertBatchReturnLabel's one-shot claim
+        // makes the email at-most-once; the tracking write itself is idempotent.
+        const { mirrorReturnTrackingAndNotify } = await import("./certBatch");
+        const { notifyProblem } = await mirrorReturnTrackingAndNotify(albumId, result.labels);
+        res.json({ ok: true, alreadyPurchased: result.alreadyPurchased, labels: result.labels, notifyProblem });
+      } catch (e: any) {
+        console.error("[cert-batch/labels]", e);
+        res.status(500).json({ message: e?.message ?? "Label purchase failed" });
+      }
+    });
+
+    // Operator pre-saves the artist/manager signing address (Bill's flow):
+    // the PRINTER then creates both labels from their portal after packing,
+    // supplying only box size + weight.
+    app.put("/api/admin/albums/:id/cert-batch/labels/signing-address", requireAdmin, async (req, res) => {
+      const { saveCertBatchSigningAddress } = await import("./certBatch");
+      const r = await saveCertBatchSigningAddress(String(req.params.id), req.body ?? {});
+      if (!r.ok) return res.status(422).json({ message: r.message, missing: r.missing ?? null });
+      res.json({ ok: true });
+    });
+
+    // Local pickup — labels are skippable, recorded honestly. DELETE clears
+    // a skip (only a skip; purchased labels are never erasable).
+    app.post("/api/admin/albums/:id/cert-batch/labels/skip", requireAdmin, async (req, res) => {
+      const { skipCertBatchLabels } = await import("./certBatch");
+      const reason = typeof req.body?.reason === "string" && req.body.reason.trim() ? req.body.reason.trim() : "local_pickup";
+      const r = await skipCertBatchLabels(String(req.params.id), reason);
+      if (!r.ok) return res.status(409).json({ message: r.message });
+      res.json({ ok: true });
+    });
+    app.delete("/api/admin/albums/:id/cert-batch/labels/skip", requireAdmin, async (req, res) => {
+      const { clearCertBatchLabelSkip } = await import("./certBatch");
+      await clearCertBatchLabelSkip(String(req.params.id));
       res.json({ ok: true });
     });
 

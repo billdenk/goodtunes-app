@@ -213,6 +213,49 @@ export const managers = pgTable("managers", {
     .where(sql`${table.domain} IS NOT NULL AND ${table.deletedAt} IS NULL`),
 }));
 
+// Task #3091 — purchase snapshot for one EasyPost cert-batch label.
+export type CertBatchLabelSnapshot = {
+  shipmentId: string;
+  trackingCode: string;
+  labelUrl: string; // EasyPost-hosted PDF
+  carrier: string;
+  service: string;
+  rateCents: number;
+  isReturn: boolean;
+  purchasedAt: string; // ISO
+  toName: string;
+  toCity: string | null;
+  toState: string | null;
+};
+
+export type CertBatchShippingLabels = {
+  // "pending" = operator saved the signing address; printer buys the labels
+  // from their portal (they know the box size/weight after packing).
+  status: "pending" | "purchased" | "partial" | "skipped";
+  skippedReason?: string | null; // e.g. "local_pickup"
+  // Durable per-leg purchase intents: the EasyPost shipment id is persisted
+  // BEFORE /buy (creating a shipment is free). A crash after the buy is
+  // reconciled by retrieving the shipment instead of re-buying postage.
+  intents?: { outbound?: string | null; return?: string | null } | null;
+  // Artist/manager signing address, pre-set by the operator so the printer
+  // only enters parcel basics and clicks once.
+  signingAddress?: {
+    name?: string | null;
+    street1?: string | null;
+    street2?: string | null;
+    city?: string | null;
+    state?: string | null;
+    zip?: string | null;
+    country?: string | null;
+    phone?: string | null;
+  } | null;
+  outbound?: CertBatchLabelSnapshot | null;
+  return?: CertBatchLabelSnapshot | null;
+  // Where the prepaid return label points (printer for the hologram/
+  // shrinkwrap leg, else the routed fulfillment partner).
+  returnDestination?: { kind: "vendor" | "fulfillment_partner"; id: string; name: string } | null;
+};
+
 export const albums = pgTable("albums", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
@@ -488,6 +531,15 @@ export const albums = pgTable("albums", {
   certBatchReturnCarrier: text("cert_batch_return_carrier"),
   certBatchReturnTracking: text("cert_batch_return_tracking"),
   certBatchReturnNotifiedAt: timestamp("cert_batch_return_notified_at"),
+  // Task #3091 — EasyPost shipping labels for the signing round-trip.
+  // One jsonb bag per album batch: outbound label (printer → artist/manager
+  // signing address) + prepaid return label (artist → printer for the
+  // hologram/shrinkwrap leg, else the routed fulfillment partner), each a
+  // full purchase snapshot (EasyPost shipment id, tracking, label PDF URL,
+  // carrier/service/rate). status "skipped" records the honest local-pickup
+  // case. Purchases are idempotent — re-requesting returns the stored
+  // snapshot, never double-buys (advisory-locked in certBatch.ts).
+  certBatchShippingLabels: jsonb("cert_batch_shipping_labels").$type<CertBatchShippingLabels>(),
   // Task #335 — sell mode + physical format.
   // `sellMode`: "direct" (GoodTunes Direct: digital + optional press) or
   // "shopify" (digital + optional GoodDeed addon only; label fulfills

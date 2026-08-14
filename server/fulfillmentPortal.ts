@@ -207,6 +207,47 @@ export function registerFulfillmentPortalRoutes(app: Express, requireAdmin: any)
     res.json({ service });
   });
 
+  // GET /api/fulfillment/:id/cert-batches — Task #3091. Signed cert batches
+  // whose prepaid return label targets THIS warehouse: the partner sees the
+  // return tracking (and batch stage) so they know what's inbound without
+  // waiting on the heads-up email. Read-only; label PDFs stay with the
+  // printer/operator — the warehouse only needs the tracking.
+  app.get("/api/fulfillment/:id/cert-batches", requireAdmin, requireFulfillmentScope, async (req, res) => {
+    const partnerId = String(req.params.id);
+    const rows = await db
+      .select({
+        id: albums.id,
+        title: albums.title,
+        artist: albums.artist,
+        artwork: albums.artwork,
+        labels: albums.certBatchShippingLabels,
+        returnCarrier: albums.certBatchReturnCarrier,
+        returnTracking: albums.certBatchReturnTracking,
+        returnedAt: albums.certBatchReturnedAt,
+        hologramAt: albums.certBatchHologramAt,
+        shippedAt: albums.certBatchShippedToFulfillmentAt,
+      })
+      .from(albums)
+      .where(sql`${albums.certBatchReturnFulfillmentId} = ${partnerId} AND ${albums.deletedAt} IS NULL`)
+      .limit(200);
+    res.json(
+      rows.map((r) => {
+        const ret = (r.labels as any)?.return ?? null;
+        return {
+          albumId: r.id,
+          albumTitle: r.title,
+          albumArtist: r.artist,
+          albumArtwork: r.artwork,
+          returnCarrier: ret?.carrier ?? r.returnCarrier ?? null,
+          returnTracking: ret?.trackingCode ?? r.returnTracking ?? null,
+          returnedAt: r.returnedAt ? new Date(r.returnedAt as any).toISOString() : null,
+          hologramAt: r.hologramAt ? new Date(r.hologramAt as any).toISOString() : null,
+          shippedAt: r.shippedAt ? new Date(r.shippedAt as any).toISOString() : null,
+        };
+      }),
+    );
+  });
+
   // GET /api/fulfillment/:id/inbound — approved press runs whose finished
   // goods land at this warehouse. Routed via album splits / album override /
   // platform default, mirroring the OD routing rules exactly.

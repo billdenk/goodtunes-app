@@ -12095,6 +12095,8 @@ ALTER TABLE albums ADD COLUMN IF NOT EXISTS cert_batch_return_fulfillment_id var
 ALTER TABLE albums ADD COLUMN IF NOT EXISTS cert_batch_return_carrier text;
 ALTER TABLE albums ADD COLUMN IF NOT EXISTS cert_batch_return_tracking text;
 ALTER TABLE albums ADD COLUMN IF NOT EXISTS cert_batch_return_notified_at timestamp;
+-- Task #3091 — EasyPost round-trip shipping labels (outbound + prepaid return).
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS cert_batch_shipping_labels jsonb;
 SQL
 }
 add_fulfillment_gooddeed_cols dev  "${DATABASE_URL:-}"

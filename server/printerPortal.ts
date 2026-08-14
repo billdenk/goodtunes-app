@@ -400,6 +400,76 @@ export function registerPrinterPortalRoutes(app: Express, requireAdmin: any) {
     });
   });
 
+  // GET /api/printer/:id/shipping-labels — Task #3091. The round-trip
+  // shipping labels for batches this printer prints: outbound (this printer →
+  // artist signing address) + prepaid return. Surfaced as click-to-download
+  // PDFs alongside the cert print queue — one place, no hunting. Read-only;
+  // labels are bought by the operator on the admin side.
+  app.get("/api/printer/:id/shipping-labels", requireAdmin, requirePrinterScope, async (req, res) => {
+    const vendorId = String(req.params.id);
+    const scope = await resolvePrinterAlbumScope(vendorId);
+    if (!scope.isDefault && scope.forUs.size === 0) return res.json([]);
+    const rows = await db
+      .select({
+        id: albums.id,
+        title: albums.title,
+        artist: albums.artist,
+        artwork: albums.artwork,
+        labels: albums.certBatchShippingLabels,
+      })
+      .from(albums)
+      .where(sql`${albums.certBatchShippingLabels} IS NOT NULL AND ${albums.deletedAt} IS NULL`)
+      .limit(200);
+    res.json(
+      rows
+        .filter((r) => certRoutesToPrinter(r.id, scope))
+        .map((r) => ({
+          albumId: r.id,
+          albumTitle: r.title,
+          albumArtist: r.artist,
+          albumArtwork: r.artwork,
+          labels: r.labels,
+        })),
+    );
+  });
+
+  // POST /api/printer/:id/shipping-labels/:albumId — Task #3091, Bill's flow:
+  // after downloading + printing the batch, the PRINTER enters box basics
+  // (size + weight) and clicks once to create BOTH labels — outbound to the
+  // artist (address pre-saved by the operator) and the prepaid return to the
+  // next destination. Idempotent server-side; carrier errors surface verbatim.
+  app.post("/api/printer/:id/shipping-labels/:albumId", requireAdmin, requirePrinterScope, async (req, res) => {
+    const vendorId = String(req.params.id);
+    const albumId = String(req.params.albumId);
+    const scope = await resolvePrinterAlbumScope(vendorId);
+    if (!certRoutesToPrinter(albumId, scope)) return res.status(404).json({ message: "Not found" });
+    try {
+      const { purchaseCertBatchLabels, mirrorReturnTrackingAndNotify } = await import("./certBatch");
+      const body = req.body ?? {};
+      const result = await purchaseCertBatchLabels({
+        albumId,
+        outboundTo: {}, // uses the operator-saved signing address
+        parcel: {
+          weightOz: Number(body.weightOz) || undefined,
+          lengthIn: Number(body.lengthIn) || undefined,
+          widthIn: Number(body.widthIn) || undefined,
+          heightIn: Number(body.heightIn) || undefined,
+        },
+      });
+      if (!result.ok) {
+        return res.status(result.status).json({ message: result.message, reason: result.reason, labels: result.labels ?? null });
+      }
+      // Mirror on EVERY success (incl. stored-purchase retries) so a crash between
+      // purchase-commit and mirroring reconciles on retry; the one-shot notify claim
+      // keeps the email at-most-once.
+      const { notifyProblem } = await mirrorReturnTrackingAndNotify(albumId, result.labels);
+      res.json({ ok: true, alreadyPurchased: result.alreadyPurchased, labels: result.labels, notifyProblem });
+    } catch (e: any) {
+      console.error("[printer shipping-labels]", e);
+      res.status(500).json({ message: e?.message ?? "Label purchase failed" });
+    }
+  });
+
   // PATCH /api/printer/:id/profile — editable Settings fields (printer self-serve).
   app.patch("/api/printer/:id/profile", requireAdmin, requirePrinterScope, async (req, res) => {
     const vendorId = String(req.params.id);

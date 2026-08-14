@@ -21,7 +21,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Printer, Loader2, Disc3, Users } from "lucide-react";
+import { Printer, Loader2, Disc3, Users, Download } from "lucide-react";
 import { apiRequest, queryClient, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { OperatorShell } from "@/components/operator/OperatorShell";
@@ -223,6 +223,134 @@ const STATUS_DOT: Record<QueueRow["nameStatus"], string> = {
   printed: "var(--apple-faint)",
 };
 
+// Task #3091 — round-trip shipping labels next to the cert print PDFs so the
+// printer never hunts: outbound label (this shop → artist signing address) +
+// the prepaid return label that rides inside the box. Interim surface —
+// final UI ships to Ruby's mocks.
+type PrinterLabelRow = {
+  albumId: string;
+  albumTitle: string;
+  albumArtist: string;
+  labels: {
+    status: string;
+    signingAddress?: { name?: string | null; city?: string | null; state?: string | null } | null;
+    outbound?: { labelUrl: string; trackingCode: string; carrier: string; service: string; toName: string } | null;
+    return?: { labelUrl: string; trackingCode: string; carrier: string; service: string; toName: string } | null;
+    returnDestination?: { name: string } | null;
+  } | null;
+};
+
+// Printer-side "create both labels" form — after packing, the printer knows
+// the box size + weight; one click buys outbound + prepaid return.
+function CreateLabelsForm({ vendorId, albumId }: { vendorId: string; albumId: string }) {
+  const { toast } = useToast();
+  const [dims, setDims] = useState({ weightOz: "48", lengthIn: "", widthIn: "", heightIn: "" });
+  const buy = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/printer/${vendorId}/shipping-labels/${albumId}`, {
+        weightOz: Number(dims.weightOz) || undefined,
+        lengthIn: Number(dims.lengthIn) || undefined,
+        widthIn: Number(dims.widthIn) || undefined,
+        heightIn: Number(dims.heightIn) || undefined,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/printer/${vendorId}/shipping-labels`] });
+      toast({ title: "Labels created", description: "Affix the outbound label to the box; the prepaid return label goes inside." });
+    },
+    onError: (e: any) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/printer/${vendorId}/shipping-labels`] });
+      toast({ title: "Label creation failed", description: e?.message, variant: "destructive" });
+    },
+  });
+  return (
+    <div className="mt-1 flex flex-wrap items-end gap-2" data-testid={`form-create-labels-${albumId}`}>
+      {([["weightOz", "Weight (oz)"], ["lengthIn", "L (in)"], ["widthIn", "W (in)"], ["heightIn", "H (in)"]] as const).map(([k, label]) => (
+        <label key={k} className="block text-xs text-[color:var(--apple-subink)]">
+          {label}
+          <input
+            type="number"
+            value={(dims as any)[k]}
+            onChange={(e) => setDims((p) => ({ ...p, [k]: e.target.value }))}
+            className="mt-0.5 block w-20 h-8 text-xs rounded-lg border border-[color:var(--apple-hairline)] px-2"
+            data-testid={`input-parcel-${k}-${albumId}`}
+          />
+        </label>
+      ))}
+      <button
+        type="button"
+        disabled={buy.isPending}
+        onClick={() => buy.mutate()}
+        className="h-8 px-3 rounded-full text-xs font-semibold bg-[color:var(--apple-ink)] text-white disabled:opacity-40"
+        data-testid={`button-create-labels-${albumId}`}
+      >
+        {buy.isPending ? "Creating labels…" : "Create both labels"}
+      </button>
+    </div>
+  );
+}
+
+function ShippingLabelsCard({ vendorId }: { vendorId: string }) {
+  const { data: rows } = useQuery<PrinterLabelRow[]>({
+    queryKey: [`/api/printer/${vendorId}/shipping-labels`],
+    queryFn: async () => {
+      const token = getAuthToken();
+      const r = await fetch(`/api/printer/${vendorId}/shipping-labels`, {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!r.ok) throw new Error(`Request failed (${r.status})`);
+      return r.json();
+    },
+  });
+  const withLabels = (rows ?? []).filter(
+    (r) => r.labels && (r.labels.outbound || r.labels.return || r.labels.status === "pending" || r.labels.status === "partial"),
+  );
+  if (withLabels.length === 0) return null;
+  return (
+    <div className="bg-white text-[color:var(--apple-ink)] rounded-2xl p-4 sm:p-6 ring-1 ring-[color:var(--apple-hairline)] mb-4" data-testid="printer-shipping-labels">
+      <h3 className="text-sm font-semibold mb-1">Shipping labels</h3>
+      <p className="text-[color:var(--apple-subink)] text-sm mb-4">
+        Print these alongside the cert batch: the outbound label ships the stack to the artist for signing,
+        and the prepaid return label goes INSIDE the box so the signed stack comes back to the right place.
+      </p>
+      <div className="space-y-3">
+        {withLabels.map((r) => (
+          <div key={r.albumId} className="text-sm" data-testid={`shipping-labels-${r.albumId}`}>
+            <div className="font-semibold">{r.albumTitle} <span className="text-[color:var(--apple-subink)] font-normal">— {r.albumArtist}</span></div>
+            <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1">
+              {r.labels?.outbound && (
+                <a href={r.labels.outbound.labelUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[color:var(--brand-blue)] font-medium hover:underline" data-testid={`link-outbound-label-${r.albumId}`}>
+                  <Download className="w-3.5 h-3.5" /> Outbound label ({r.labels.outbound.carrier} · {r.labels.outbound.trackingCode})
+                </a>
+              )}
+              {r.labels?.return && (
+                <a href={r.labels.return.labelUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[color:var(--brand-blue)] font-medium hover:underline" data-testid={`link-return-label-${r.albumId}`}>
+                  <Download className="w-3.5 h-3.5" /> Prepaid return label ({r.labels.return.carrier} · {r.labels.return.trackingCode})
+                </a>
+              )}
+              {r.labels?.returnDestination?.name && (
+                <span className="text-[color:var(--apple-subink)]">Return goes to {r.labels.returnDestination.name}</span>
+              )}
+            </div>
+            {(r.labels?.status === "pending" || r.labels?.status === "partial") && (
+              <>
+                <p className="mt-1 text-xs text-[color:var(--apple-subink)]">
+                  {r.labels.status === "partial"
+                    ? "Outbound label is bought — retry below to create the return label (nothing gets re-bought)."
+                    : `After packing, enter the box size and weight, then create both labels${r.labels.signingAddress?.name ? ` — outbound ships to ${r.labels.signingAddress.name}` : ""}.`}
+                </p>
+                <CreateLabelsForm vendorId={vendorId} albumId={r.albumId} />
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PrintQueueTab({ vendorId }: { vendorId: string }) {
   const { toast } = useToast();
   const [tab, setTab] = useState<QueueRow["nameStatus"]>("confirmed");
@@ -382,6 +510,9 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
   );
 
   return (
+    <>
+    {/* Task #3091 — labels ride next to the cert print PDFs, one place */}
+    <ShippingLabelsCard vendorId={vendorId} />
     <div className="bg-white text-[color:var(--apple-ink)] rounded-2xl p-4 sm:p-6 ring-1 ring-[color:var(--apple-hairline)]" data-testid="printer-print-queue">
       {/* Section H1 ("Print Queue") comes from the shell's pageTitle band —
           no duplicate heading inside the card. */}
@@ -547,6 +678,7 @@ function PrintQueueTab({ vendorId }: { vendorId: string }) {
         </div>
       )}
     </div>
+    </>
   );
 }
 
