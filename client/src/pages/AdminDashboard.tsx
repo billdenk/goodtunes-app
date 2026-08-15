@@ -253,6 +253,12 @@ function fmtNum(n: number | null | undefined): string {
   if (typeof n !== "number" || !Number.isFinite(n)) return DASH;
   return n.toLocaleString("en-US");
 }
+// Time-of-day greeting — uses the viewer's device clock, matching the artist/press dashboards.
+const timeGreeting = () => {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+};
+
 function fmtRel(date: Date): string {
   const diff = Date.now() - date.getTime();
   const s = Math.floor(diff / 1000);
@@ -451,7 +457,7 @@ export function AdminDashboard() {
         >
           <SectionBoundary section="page-header">
             <AdminPageHeader
-              title={<span>Good morning, {firstName}.</span>}
+              title={<span>{timeGreeting()}, {firstName}.</span>}
               subtitle={isArtist ? "Your releases and recent fan activity." : (attentionCount(ops, pendingPayouts) > 0 ? `${attentionCount(ops, pendingPayouts)} thing${attentionCount(ops, pendingPayouts) === 1 ? "" : "s"} need${attentionCount(ops, pendingPayouts) === 1 ? "s" : ""} you before anything else.` : "Nothing needs you before anything else.")}
               testId="heading-admin-dashboard"
               actions={<div className="flex items-center gap-3"><RangeSwitcher value={range} onChange={setRange} />{isSuperAdmin && <button type="button" className="gt-primary-pill" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-run-payouts-header"><Banknote className="w-4 h-4" />Run payouts</button>}</div>}
