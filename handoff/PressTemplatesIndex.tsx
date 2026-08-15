@@ -14,7 +14,7 @@ import { pendingTemplateFile, savedLiveTemplates } from './PressTemplateLiveTest
 import {
   LayoutDashboard, Users, Disc3, UserPlus, Library, ClipboardList, Cog, Gift,
   Search, Bell, MessageSquarePlus, BadgeCheck, Clock3, XCircle, History, Upload, FileQuestion,
-  Moon, Sun, MoreHorizontal, Archive, X, RotateCcw, Plus,
+  Moon, Sun, MoreHorizontal, Archive, X, RotateCcw, Plus, Info,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate } from 'lucide-react';
 import mrpLogo from '../assets/mrp-logo.svg';
@@ -792,7 +792,17 @@ export default function PressTemplatesIndex() {
               It leaves the live shelf and stops measuring client files. It moves to Archived —
               nothing is ever deleted, and you can restore it any time.
             </p>
+            {/* Canon (Bill, Aug 15 2026): confirming action is always rightmost; Cancel is quiet text to its left. */}
             <div className="mt-6 flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setConfirmArchive(null)}
+                className={cn('h-9 px-4 rounded-full text-[13px] font-medium transition-colors', t.hoverWash)}
+                style={{ color: t.subink }}
+                data-testid="button-cancel-archive"
+              >
+                Cancel
+              </button>
               <button
                 type="button"
                 onClick={() => doArchive(confirmArchive.key)}
@@ -801,15 +811,6 @@ export default function PressTemplatesIndex() {
                 data-testid="button-confirm-archive"
               >
                 Archive template
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmArchive(null)}
-                className="h-9 px-5 rounded-full text-[13px] font-semibold"
-                style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
-                data-testid="button-cancel-archive"
-              >
-                Cancel
               </button>
             </div>
           </div>
@@ -832,6 +833,16 @@ export default function PressTemplatesIndex() {
             aria-label="Upload your template"
             data-testid="sheet-upload-template"
           >
+            <button
+              type="button"
+              onClick={() => setUploadOpen(false)}
+              className={cn('absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-colors', t.hoverWash)}
+              style={{ color: t.subink }}
+              aria-label="Close"
+              data-testid="button-close-upload"
+            >
+              <X className="w-4 h-4" />
+            </button>
             <div
               className="mx-auto w-12 h-12 rounded-full flex items-center justify-center"
               style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}
@@ -839,9 +850,17 @@ export default function PressTemplatesIndex() {
               <Upload className="w-5 h-5" style={{ color: t.subink }} />
             </div>
             <div className="mt-4 text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>Upload your template</div>
-            <p className="mt-1.5 text-[13px] mx-auto" style={{ color: t.subink, maxWidth: 400 }}>
-              This is your PDF saved from Illustrator with &ldquo;GT Layers&rdquo; in it: &ldquo;GT CUT LINE&rdquo;,
-              &ldquo;GT BLEED AREA&rdquo;, and so on. Each layer is read by name, exactly where you drew it.
+            {/* One line, Apple-quiet; the detail lives behind the i (Bill, Aug 15 2026) */}
+            <p className="mt-1.5 text-[13px] mx-auto inline-flex items-center gap-1.5" style={{ color: t.subink }}>
+              Your Illustrator PDF, GT layers included.
+              <span
+                className="inline-flex items-center justify-center cursor-help"
+                title={'Layers named "GT CUT LINE", "GT BLEED AREA", and so on are read by name, exactly where you drew them.'}
+                aria-label="About GT layers"
+                data-testid="info-gt-layers"
+              >
+                <Info className="w-3.5 h-3.5" style={{ color: t.faint }} />
+              </span>
             </p>
             {uploadSlot ? (
               <div className="mt-4 text-[12.5px] font-semibold" style={{ color: t.subink }} data-testid="text-upload-for">
@@ -888,7 +907,17 @@ export default function PressTemplatesIndex() {
                 </div>
               </div>
             )}
+            {/* Canon (Bill, Aug 15 2026): confirming action is always rightmost; Cancel is quiet text to its left. */}
             <div className="mt-6 flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setUploadOpen(false)}
+                className={cn('h-9 px-4 rounded-full text-[13px] font-medium transition-colors', t.hoverWash)}
+                style={{ color: t.subink }}
+                data-testid="button-cancel-upload"
+              >
+                Cancel
+              </button>
               <button
                 type="button"
                 onClick={() => uploadInput.current?.click()}
@@ -897,15 +926,6 @@ export default function PressTemplatesIndex() {
                 data-testid="button-choose-pdf"
               >
                 Choose PDF
-              </button>
-              <button
-                type="button"
-                onClick={() => setUploadOpen(false)}
-                className="h-9 px-5 rounded-full text-[13px] font-semibold"
-                style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
-                data-testid="button-cancel-upload"
-              >
-                Cancel
               </button>
             </div>
           </div>
