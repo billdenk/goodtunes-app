@@ -159,7 +159,16 @@ export function slotStatus(spec: TemplateSpecWithHistory | undefined): SlotStatu
   // this slot sit in "review" until the press re-attaches or archives.
   if (!live && spec.revisions.some((r) => r.status === "review")) return "review";
   if (live?.status === "certified") return "certified";
+  // A failed finished-file run only fails the tile if it tested the file
+  // that's live NOW. A run pinned to (or predating) a superseded revision
+  // is history — replacing the template must clear the red chip, not
+  // inherit a verdict from a file that no longer exists on the slot.
   const latestRun = spec.runs[0];
-  if (latestRun && latestRun.verdict === "fail") return "failed";
+  const runIsCurrent =
+    !!latestRun &&
+    (latestRun.revisionId
+      ? latestRun.revisionId === live?.id
+      : !live?.createdAt || latestRun.createdAt >= live.createdAt);
+  if (latestRun && latestRun.verdict === "fail" && runIsCurrent) return "failed";
   return "pending";
 }
