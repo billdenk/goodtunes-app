@@ -337,10 +337,10 @@ function ComponentIcon({ kind, color, fill, size = 44 }: { kind: IconKind; color
 
 // Per-tile ••• overflow — appears on hover in the tile's top-right corner.
 // Archive lives here (with a confirm); archived tiles get Restore instead.
-function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore }: {
+function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore, onReplace }: {
   tileKey: string; title: string; archived: boolean; t: Theme;
   menuFor: string | null; setMenuFor: (k: string | null) => void;
-  onArchive: () => void; onRestore: () => void;
+  onArchive: () => void; onRestore: () => void; onReplace?: () => void;
 }) {
   const open = menuFor === tileKey;
   return (
@@ -378,6 +378,20 @@ function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArch
                 Restore template
               </button>
             ) : (
+              <>
+              {onReplace && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onReplace(); }}
+                  className={cn('w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] font-medium text-left', t.hoverWash)}
+                  style={{ color: t.ink }}
+                  role="menuitem"
+                  data-testid={`menuitem-replace-${tileKey}`}
+                >
+                  <Upload className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} />
+                  Replace template&hellip;
+                </button>
+              )}
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setMenuFor(null); onArchive(); }}
@@ -389,6 +403,7 @@ function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArch
                 <Archive className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} />
                 Archive template…
               </button>
+              </>
             )}
           </div>
         </>
@@ -516,6 +531,7 @@ export default function PressTemplatesIndex() {
     const blob = await fetch(labelTemplatePdfUrl).then((r) => r.blob());
     pendingTemplateFile.file = new File([blob], '12-LBL100M-2 — R-091125.pdf', { type: 'application/pdf' });
     pendingTemplateFile.name = name;
+    pendingTemplateFile.fromSaved = true; // reopening — arrives clean, Save stays quiet
     window.location.hash = '#/PressTemplateLiveTest';
   };
   const uploadInput = useRef<HTMLInputElement>(null);
@@ -525,7 +541,15 @@ export default function PressTemplatesIndex() {
     if (!f) return;
     pendingTemplateFile.file = f;
     pendingTemplateFile.name = uploadName.trim() || uploadSlot || null;
+    pendingTemplateFile.fromSaved = false; // fresh file = unsaved work
     window.location.hash = '#/PressTemplateLiveTest';
+  };
+  // ••• → Replace template… (Bill, Aug 15 2026): pick a new file under the same
+  // name; the old revision supersedes into history — the tile never moves or
+  // duplicates. One tile per template, always.
+  const startReplace = (title: string) => {
+    setUploadSlot(title); setUploadName(title); setMenuFor(null);
+    uploadInput.current?.click();
   };
   return (
     <PressShell active="Templates" t={t}>
@@ -623,44 +647,6 @@ export default function PressTemplatesIndex() {
             press picks the component (jacket / inner sleeve / center labels / booklet),
             names it, the icon appears; each template lives in one of these tiles. */}
         <div className="mt-6 grid gap-4" style={{ gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
-          {/* Demo shelf — templates saved from the live test this session; tap to reopen live (Bill, Aug 14 2026) */}
-          {format === 'Vinyl' && size === '12″' && savedLiveTemplates.map((sv, i) => {
-            const key = `saved:${i}`;
-            const isArchived = archivedSaved.has(i);
-            if ((view === 'Current' && isArchived) || (view === 'Archived' && !isArchived)) return null;
-            return (
-            <div key={`saved-${i}`} className="relative group" style={{ opacity: isArchived ? 0.7 : 1 }}>
-            <button
-              type="button"
-              onClick={() => { pendingTemplateFile.file = sv.file; window.location.hash = '#/PressTemplateLiveTest'; }}
-              className={cn('gt-tile w-full h-full rounded-2xl px-6 pt-7 pb-5 flex flex-col items-center text-center transition-colors cursor-pointer', t.tileHover)}
-              style={{
-                backgroundColor: t.card,
-                border: `1px solid ${sv.fresh && flashFresh ? '#319ED8' : t.hairline}`,
-                boxShadow: sv.fresh && flashFresh ? '0 0 0 1px #319ED8' : 'none',
-                transition: 'border-color 700ms ease, box-shadow 700ms ease',
-              }}
-              data-testid={`tile-saved-template-${i}`}
-            >
-              <span className="rounded-full overflow-hidden block" style={{ width: 104, height: 104, backgroundColor: '#fff', border: `1px solid ${t.hairline}` }}>
-                <img src={sv.img} alt={`${sv.name} — saved from the live test`} className="w-full h-full object-cover" />
-              </span>
-              <div className="mt-4 text-[15px] font-semibold truncate w-full" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={sv.name}>{sv.name}</div>
-              <div className="gt-detail mt-1 text-[12.5px] tabular-nums" style={{ color: t.subink }}>{sv.wMm.toFixed(1)} × {sv.hMm.toFixed(1)} mm · {sv.layerCount} GT layers</div>
-              <div className="mt-3 flex items-center gap-2 text-[11.5px]" style={{ color: t.faint }}>
-                {isArchived ? (
-                  <><Archive className="w-3.5 h-3.5 flex-shrink-0" /><span style={{ fontWeight: 600 }}>Archived</span></>
-                ) : (
-                  <><BadgeCheck className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.ready }} /><span style={{ color: t.ready, fontWeight: 600 }}>Saved</span></>
-                )}
-                <span>{sv.savedAt}</span>
-                {sv.tests.length > 0 && <span>· {sv.tests.length} art file{sv.tests.length === 1 ? '' : 's'} tested</span>}
-              </div>
-            </button>
-            <TileOverflow tileKey={key} title={sv.name} archived={isArchived} t={t} menuFor={menuFor} setMenuFor={setMenuFor} onArchive={() => setConfirmArchive({ key, title: sv.name })} onRestore={() => doRestore(key)} />
-            </div>
-            );
-          })}
           {format === 'Vinyl' && size === '12″' && MOCK_TEMPLATES.map((tpl) => {
             const isArchived = archivedCodes.has(tpl.code);
             if ((view === 'Current' && isArchived) || (view === 'Archived' && !isArchived)) return null;
@@ -698,7 +684,49 @@ export default function PressTemplatesIndex() {
                 </div>
               ))}
             </button>
-            <TileOverflow tileKey={tpl.code} title={tpl.title} archived={isArchived} t={t} menuFor={menuFor} setMenuFor={setMenuFor} onArchive={() => setConfirmArchive({ key: tpl.code, title: tpl.title })} onRestore={() => doRestore(tpl.code)} />
+            <TileOverflow tileKey={tpl.code} title={tpl.title} archived={isArchived} t={t} menuFor={menuFor} setMenuFor={setMenuFor} onArchive={() => setConfirmArchive({ key: tpl.code, title: tpl.title })} onRestore={() => doRestore(tpl.code)} onReplace={() => startReplace(tpl.title)} />
+            </div>
+            );
+          })}
+
+          {/* Demo shelf — templates saved from the live test this session; tap to
+              reopen live (Bill, Aug 14 2026). Renders AFTER the certified canon:
+              tiles never rearrange when a save lands — existing tiles keep their
+              spots, new ones append (Bill, Aug 15 2026). */}
+          {format === 'Vinyl' && size === '12″' && savedLiveTemplates.map((sv, i) => {
+            const key = `saved:${i}`;
+            const isArchived = archivedSaved.has(i);
+            if ((view === 'Current' && isArchived) || (view === 'Archived' && !isArchived)) return null;
+            return (
+            <div key={`saved-${i}`} className="relative group" style={{ opacity: isArchived ? 0.7 : 1 }}>
+            <button
+              type="button"
+              onClick={() => { pendingTemplateFile.file = sv.file; window.location.hash = '#/PressTemplateLiveTest'; }}
+              className={cn('gt-tile w-full h-full rounded-2xl px-6 pt-7 pb-5 flex flex-col items-center text-center transition-colors cursor-pointer', t.tileHover)}
+              style={{
+                backgroundColor: t.card,
+                border: `1px solid ${sv.fresh && flashFresh ? '#319ED8' : t.hairline}`,
+                boxShadow: sv.fresh && flashFresh ? '0 0 0 1px #319ED8' : 'none',
+                transition: 'border-color 700ms ease, box-shadow 700ms ease',
+              }}
+              data-testid={`tile-saved-template-${i}`}
+            >
+              <span className="rounded-full overflow-hidden block" style={{ width: 104, height: 104, backgroundColor: '#fff', border: `1px solid ${t.hairline}` }}>
+                <img src={sv.img} alt={`${sv.name} — saved from the live test`} className="w-full h-full object-cover" />
+              </span>
+              <div className="mt-4 text-[15px] font-semibold truncate w-full" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={sv.name}>{sv.name}</div>
+              <div className="gt-detail mt-1 text-[12.5px] tabular-nums" style={{ color: t.subink }}>{sv.wMm.toFixed(1)} × {sv.hMm.toFixed(1)} mm · {sv.layerCount} GT layers</div>
+              <div className="mt-3 flex items-center gap-2 text-[11.5px]" style={{ color: t.faint }}>
+                {isArchived ? (
+                  <><Archive className="w-3.5 h-3.5 flex-shrink-0" /><span style={{ fontWeight: 600 }}>Archived</span></>
+                ) : (
+                  <><BadgeCheck className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.ready }} /><span style={{ color: t.ready, fontWeight: 600 }}>Saved</span></>
+                )}
+                <span>{sv.savedAt}</span>
+                {sv.tests.length > 0 && <span>· {sv.tests.length} art file{sv.tests.length === 1 ? '' : 's'} tested</span>}
+              </div>
+            </button>
+            <TileOverflow tileKey={key} title={sv.name} archived={isArchived} t={t} menuFor={menuFor} setMenuFor={setMenuFor} onArchive={() => setConfirmArchive({ key, title: sv.name })} onRestore={() => doRestore(key)} onReplace={() => startReplace(sv.name)} />
             </div>
             );
           })}
