@@ -372,6 +372,9 @@ export function registerPressTemplateFlowRoutes(
   // in-memory (runs) so views don't hammer a file that can't render.
   const previewInFlight = new Set<string>();
   const runPreviewFailed = new Set<string>();
+  // One background maintenance chain per press at a time (import + preview
+  // backfills kicked off the templates GET without blocking the response).
+  const maintainInFlight = new Set<string>();
 
   async function backfillTemplatePreviews(
     pressId: string,
@@ -403,7 +406,11 @@ export function registerPressTemplateFlowRoutes(
       const idx = out.findIndex((r) => r.specId === spec.id);
       if (idx === -1) continue;
       const run = out[idx];
-      if (run.previewUrl) continue;
+      // NULL = never attempted; "" = attempted and failed (durable across
+      // instances — the in-memory set alone let every fresh autoscale
+      // instance re-download unrenderable legacy files on the GET path,
+      // which is what made the prod Templates page take ~10s to load).
+      if (run.previewUrl !== null) continue;
       const key = `run:${run.id}`;
       if (previewInFlight.has(key) || runPreviewFailed.has(key)) continue;
       previewInFlight.add(key);
@@ -412,6 +419,7 @@ export function registerPressTemplateFlowRoutes(
         const urls = await renderUrlPreviewPages(run.fileUrl, { pages });
         if (urls.length === 0) {
           runPreviewFailed.add(key); // genuine rasterize failure — honest no-preview
+          await storage.updatePressTemplateTestRunPreviews(run.id, "", null); // persist the failure
           continue;
         }
         const updated = await storage.updatePressTemplateTestRunPreviews(
@@ -433,36 +441,39 @@ export function registerPressTemplateFlowRoutes(
     const pressId = String(req.params.id);
     const press = await storage.getManufacturerById(pressId);
     if (!press) return res.status(404).json({ message: "Press not found" });
-    let specs = await storage.listPressTemplateSpecs(pressId);
-    // Legacy uploads (file on the slot, no revision history) get imported
-    // into the revision flow on first view — best-effort, never blocks.
-    const imported = await autoImportLegacyTemplates(press, specs).catch((e) => {
-      console.error("[templates-import] failed:", e?.message ?? e);
-      return false;
-    });
-    if (imported) specs = await storage.listPressTemplateSpecs(pressId);
-    // Task #3099 — lazy view-time backfill of rendered previews.
-    //   • Spec rows with a template file but NULL preview_urls (never
-    //     attempted) get their pages rasterized now, so the Test page's
-    //     template study always has real artwork under the rings.
-    //   • The latest run per spec missing a preview (runs that predate
-    //     preview rendering) gets one regenerated from its stored fileUrl.
-    // Both are best-effort and de-duped per process so concurrent views
-    // don't render the same file twice; [] persists a genuine failure.
-    const backfilled = await backfillTemplatePreviews(pressId, specs).catch((e) => {
-      console.error("[template-preview] backfill failed:", e?.message ?? e);
-      return false;
-    });
-    if (backfilled) specs = await storage.listPressTemplateSpecs(pressId);
+    const specs = await storage.listPressTemplateSpecs(pressId);
     const specIds = specs.map((s) => s.id);
-    const [revisions, runsRaw] = await Promise.all([
+    const [revisions, runs] = await Promise.all([
       storage.listPressTemplateRevisions(specIds),
       storage.listPressTemplateTestRuns(specIds),
     ]);
-    const runs = await backfillRunPreviews(specs, runsRaw).catch((e) => {
-      console.error("[template-preview] run backfill failed:", e?.message ?? e);
-      return runsRaw;
-    });
+    // Lazy maintenance — legacy-upload import (revision minting) plus
+    // preview rasterization for spec files and legacy test runs — used to
+    // run INSIDE this GET, which meant downloading + rasterizing PDFs
+    // before the page could paint (observed ~9s on prod). It now runs in
+    // the background, de-duped per press: this response serves what's
+    // already persisted, and the results land on the next fetch. All
+    // outcomes (including failures) persist, so the work never repeats.
+    if (!maintainInFlight.has(pressId)) {
+      maintainInFlight.add(pressId);
+      void (async () => {
+        try {
+          const imported = await autoImportLegacyTemplates(press, specs).catch((e) => {
+            console.error("[templates-import] failed:", e?.message ?? e);
+            return false;
+          });
+          const fresh = imported ? await storage.listPressTemplateSpecs(pressId) : specs;
+          await backfillTemplatePreviews(pressId, fresh).catch((e) => {
+            console.error("[template-preview] backfill failed:", e?.message ?? e);
+          });
+          await backfillRunPreviews(fresh, runs).catch((e) => {
+            console.error("[template-preview] run backfill failed:", e?.message ?? e);
+          });
+        } finally {
+          maintainInFlight.delete(pressId);
+        }
+      })();
+    }
     const { pressUserCanEdit } = await import("./auth/partnerPermissions");
     const canEdit = await pressUserCanEdit(req.session.userId!, pressId);
     // Task #3065 — operator-defined slots render alongside the built-ins.
