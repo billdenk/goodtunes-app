@@ -30,11 +30,23 @@ export const pendingTemplateFile: {
 export const freshLiveSave = { flag: false };
 
 export type SavedTest = { art: string; at: string; verdict: string };
-import * as pdfjs from 'pdfjs-dist';
-// Vite-friendly worker wiring — ?url gives us the served asset path.
-// eslint-disable-next-line import/no-unresolved
-import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+import type * as pdfjs from 'pdfjs-dist';
+// pdf.js is loaded LAZILY: a top-level `import 'pdfjs-dist'` (and its static
+// `?url` worker import) crashed any node test that transitively imported this
+// file (DOMMatrix isn't defined outside the browser; `?url` isn't a real
+// module). Vite code-splits both dynamic imports; the browser behavior is
+// unchanged. Only type imports stay at module scope.
+let pdfjsModule: typeof import('pdfjs-dist') | null = null;
+async function loadPdfjs(): Promise<typeof import('pdfjs-dist')> {
+  if (!pdfjsModule) {
+    const m = await import('pdfjs-dist');
+    // eslint-disable-next-line import/no-unresolved
+    const w = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')) as { default: string };
+    m.GlobalWorkerOptions.workerSrc = w.default;
+    pdfjsModule = m;
+  }
+  return pdfjsModule;
+}
 // pdf.js 5.x calls Map.getOrInsertComputed (a stage-3 JS proposal) that
 // current browsers don't ship yet — polyfill it on Map + WeakMap.
 for (const proto of [Map.prototype, WeakMap.prototype] as unknown as Array<Record<string, unknown>>) {
@@ -160,7 +172,7 @@ async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: number): Pr
   const page = await doc.getPage(pageNum);
   const vp1 = page.getViewport({ scale: 1 });
   const ol = await page.getOperatorList();
-  const OPS = pdfjs.OPS as Record<string, number>;
+  const OPS = (await loadPdfjs()).OPS as Record<string, number>;
   // Paint ops that mean REAL geometry. Clips (endPath) are skipped.
   const PAINT = new Set([OPS.fill, OPS.eoFill, OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke].filter((v) => typeof v === 'number'));
 
@@ -409,7 +421,7 @@ export default function PressTemplateLiveTest({
     setTestLog([]);
     setBusy('template'); setError(null);
     try {
-      const doc = await pdfjs.getDocument({ data: await f.arrayBuffer() }).promise;
+      const doc = await (await loadPdfjs()).getDocument({ data: await f.arrayBuffer() }).promise;
       const [{ img, wMm, hMm }, { layers, layerNames }] = [await renderPage(doc, 1), await extractGtLayers(doc, 1)];
       const gt = layers.filter((l) => l.name.toUpperCase().includes('LINE') || l.name.toUpperCase().includes('AREA') || l.name.toUpperCase().startsWith('GT'));
       if (!gt.length) {
@@ -448,7 +460,7 @@ export default function PressTemplateLiveTest({
     setBusy('art'); setError(null);
     try {
       if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
-        const doc = await pdfjs.getDocument({ data: await f.arrayBuffer() }).promise;
+        const doc = await (await loadPdfjs()).getDocument({ data: await f.arrayBuffer() }).promise;
         const { img, wMm, hMm } = await renderPage(doc, 1);
         const { layerNames } = await extractGtLayers(doc, 1);
         const gtNames = layerNames.filter((n) => n.trim().toUpperCase().startsWith('GT'));
