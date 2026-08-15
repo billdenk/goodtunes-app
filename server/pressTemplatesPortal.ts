@@ -305,6 +305,17 @@ export async function autoImportLegacyTemplates(
         await measureTemplateSpecRow(press.id, row.id);
         row = (await storage.getPressTemplateSpecById(press.id, row.id)) ?? row;
       }
+      // Race guard (now that this runs in the background off the GET): a
+      // concurrent PUT attach may have replaced the file and minted its own
+      // revision while we were measuring. Reload and only import if the
+      // spec still carries the SAME file and still has NO revision history —
+      // otherwise the attach owns the truth and a delayed legacy import
+      // would insert a stale second live revision.
+      const current = await storage.getPressTemplateSpecById(press.id, spec.id);
+      if (!current || current.templateFileUrl !== spec.templateFileUrl) continue;
+      const nowRevs = await storage.listPressTemplateRevisions([spec.id]);
+      if (nowRevs.length > 0) continue;
+      row = current;
 
       let status: "pending" | "review" = "pending";
       let note = "Imported from an earlier upload";
@@ -469,6 +480,10 @@ export function registerPressTemplateFlowRoutes(
           await backfillRunPreviews(fresh, runs).catch((e) => {
             console.error("[template-preview] run backfill failed:", e?.message ?? e);
           });
+        } catch (e: any) {
+          // Belt-and-braces: nothing in this detached chain may reject
+          // unhandled (e.g. the spec re-read between the guarded steps).
+          console.error("[templates-maintain] background chain failed:", e?.message ?? e);
         } finally {
           maintainInFlight.delete(pressId);
         }
