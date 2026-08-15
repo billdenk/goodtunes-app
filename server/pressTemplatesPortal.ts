@@ -617,6 +617,10 @@ export function registerPressTemplateFlowRoutes(
   // append the new trail rows (and refresh name/metadata if they changed).
   const livePatchSchema = z.object({
     name: z.string().trim().min(1).max(200).optional(),
+    // Replace template… (Bill, Aug 15 2026): the swapped-in PDF persists on
+    // the SAME row — one tile, the old file simply superseded.
+    fileUrl: z.string().trim().min(1).max(2000).optional(),
+    fileName: z.string().trim().min(1).max(300).nullable().optional(),
     previewImg: livePreviewImg.nullable().optional(),
     wMm: liveMm.nullable().optional(),
     hMm: liveMm.nullable().optional(),

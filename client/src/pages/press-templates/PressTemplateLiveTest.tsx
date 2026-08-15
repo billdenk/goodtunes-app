@@ -32,7 +32,14 @@ export const pendingTemplateFile: {
     discCount?: number;
     title: string;
   } | null;
-} = { file: null, name: null, liveId: null, component: null, slot: null };
+  /** Reopening a saved template arrives CLEAN — Save stays quiet until
+   *  something changes (Bill's handoff, Addendum 4). Fresh uploads are dirty. */
+  fromSaved?: boolean;
+  /** Already-persisted test trail for a reopened shelf template — shown in
+   *  the History & tests panel only, NEVER re-sent on Save (the server
+   *  appends payload tests; re-sending would duplicate the trail). */
+  priorTests?: Array<{ artName: string; verdict: string }> | null;
+} = { file: null, name: null, liveId: null, component: null, slot: null, fromSaved: false, priorTests: null };
 
 // Just-saved marker — the Index pulses the fresh shelf tile once (blue
 // hairline, then back to gray) when it sees this flag on mount.
@@ -68,7 +75,7 @@ for (const proto of [Map.prototype, WeakMap.prototype] as unknown as Array<Recor
   }
 }
 import {
-  CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Upload, RotateCcw, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History,
+  CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Upload, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck,
 } from 'lucide-react';
 import { saveLiveTestDraft, loadLiveTestDraft, clearLiveTestDraft, type LiveTestDraft } from './draftStore';
 import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
@@ -423,7 +430,25 @@ export default function PressTemplateLiveTest({
   const dragRef = useRef<{ px: number; py: number; cx: number; cy: number; w: number; h: number } | null>(null);
   // Bill, Aug 14 2026: layer table pops open over the page (icon right of Line/Area).
   const [showLayers, setShowLayers] = useState(false);
-  const [confirmSave, setConfirmSave] = useState(false);
+  // Save is the only act that creates a revision — so it stays quiet until
+  // something actually changed (Bill, Aug 15 2026). Opening a saved template
+  // arrives clean; replace / rename / new test results make it dirty.
+  const [dirty, setDirty] = useState(true);
+  // Header ••• under Save — view the saved tests, or replace the template
+  // (replace = supersede: the old revision slides into history automatically,
+  // per template canon; the new file loads here for testing) (Bill, Aug 15 2026).
+  const [headerMenu, setHeaderMenu] = useState(false);
+  const [showTests, setShowTests] = useState(false);
+  const replacingName = useRef<string | null>(null);
+  // True when the CURRENT file differs from the one stored on the saved row —
+  // Save's PATCH must then upload + persist the new PDF (review, Aug 15 2026).
+  const fileReplaced = useRef(false);
+  // Already-persisted trail for a reopened shelf template — panel display
+  // only, never re-sent on Save (the server APPENDS payload tests).
+  const [priorTests, setPriorTests] = useState<SavedTest[]>([]);
+  // One tile per template, forever (Bill, Aug 15 2026): replacing supersedes —
+  // the old revision moves into history *inside the same block*, tests attached.
+  const [revisions, setRevisions] = useState<Array<{ name: string; wMm: number; hMm: number; at: string; tests: SavedTest[] }>>([]);
   // Task #3065 consent kept in slot mode: one file covering several options
   // (e.g. both center-hole sizes) asks before stamping the note.
   const [detected, setDetected] = useState<{ specId: string; options: Array<{ key: string; label: string }> } | null>(null);
@@ -435,22 +460,38 @@ export default function PressTemplateLiveTest({
   const [openGroup, setOpenGroup] = useState<'Front' | 'Back' | null>(null);
   const templateInput = useRef<HTMLInputElement>(null);
   const artInput = useRef<HTMLInputElement>(null);
+  const replaceTemplate = () => {
+    if (template) {
+      replacingName.current = template.name;
+      setRevisions((r) => [{ name: template.name, wMm: template.wMm, hMm: template.hMm, at: uploadedAt ?? '', tests: testLog }, ...r]);
+    }
+    setHeaderMenu(false);
+    templateInput.current?.click();
+  };
 
   const onPickTemplate = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    liveId.current = null; // a fresh file is a fresh shelf row
-    await loadTemplate(f);
-    // The draft snapshot must follow the replacement, or a crash would
-    // resume the file that was just swapped out (review, Aug 15 2026).
+    // Replace (header •••) supersedes in place: keep the name AND the saved
+    // row / slot target, so Save updates the same tile — never a second one
+    // (Bill, Aug 15 2026). A non-replace pick is a fresh shelf row as before.
+    const keepName = replacingName.current;
+    replacingName.current = null;
+    if (!keepName) liveId.current = null; // a fresh file is a fresh shelf row
+    if (liveId.current) fileReplaced.current = true; // PATCH must persist the new PDF
+    await loadTemplate(f, keepName ?? undefined);
+    setDirty(true);
+    // The draft snapshot must follow the replacement — keeping the saved row's
+    // identity (liveId + name), or a crash-resume would mint a SECOND tile
+    // and lose the display name (review, Aug 15 2026).
     void saveLiveTestDraft({
       pressId,
       blob: f,
       fileName: f.name,
-      name: null,
+      name: keepName ?? null,
       component: componentPill.current,
-      liveId: null,
+      liveId: liveId.current,
       slot: slotTarget.current
         ? { format: slotTarget.current.format, componentKey: slotTarget.current.componentKey, variantKey: slotTarget.current.variantKey ?? null, discCount: slotTarget.current.discCount ?? null, title: (slotTarget.current as { title?: string }).title }
         : null,
@@ -491,7 +532,14 @@ export default function PressTemplateLiveTest({
     componentPill.current = pendingTemplateFile.component ?? null;
     slotTarget.current = pendingTemplateFile.slot ?? null;
     if (f) {
-      pendingTemplateFile.file = null; pendingTemplateFile.name = null; pendingTemplateFile.liveId = null; pendingTemplateFile.component = null; pendingTemplateFile.slot = null;
+      const fromSaved = pendingTemplateFile.fromSaved === true;
+      const prior = pendingTemplateFile.priorTests ?? null;
+      pendingTemplateFile.file = null; pendingTemplateFile.name = null; pendingTemplateFile.liveId = null; pendingTemplateFile.component = null; pendingTemplateFile.slot = null; pendingTemplateFile.fromSaved = false; pendingTemplateFile.priorTests = null;
+      setDirty(!fromSaved); // reopening a saved template = clean; fresh upload = unsaved work
+      // A saved reopen carries the row's own file; anything else riding in
+      // with a liveId (Index tile Replace) is a NEW file the PATCH must persist.
+      fileReplaced.current = !fromSaved && !!liveId.current;
+      if (prior) setPriorTests(prior.map((t) => ({ art: t.artName, at: '', verdict: t.verdict })));
       setArriving(true);
       void loadTemplate(f, nm ?? undefined);
       // Automatic browser-local draft (canon, Aug 15 2026) — a crash or
@@ -535,6 +583,7 @@ export default function PressTemplateLiveTest({
           if (cancelled) return;
           const file = new File([blob], spec.templateFileName ?? 'template.pdf', { type: 'application/pdf' });
           await loadTemplate(file, spec.templateFileName ?? undefined);
+          setDirty(false); // opening a saved template arrives clean (Bill, Aug 15 2026)
         } catch (err) {
           if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
           setBusy(null);
@@ -571,10 +620,15 @@ export default function PressTemplateLiveTest({
     liveId.current = d.liveId;
     componentPill.current = d.component;
     slotTarget.current = d.slot as typeof slotTarget.current;
+    // A draft can't prove its blob matches the saved row's file, so a
+    // liveId draft re-persists the PDF on Save — harmless when identical,
+    // correct when the draft was a replacement (review, Aug 15 2026).
+    fileReplaced.current = !!d.liveId;
     setArriving(true);
     try {
       const file = new File([d.blob], d.fileName, { type: 'application/pdf' });
       await loadTemplate(file, d.name ?? undefined);
+      setDirty(true); // a draft is in-progress unsaved work by definition
     } catch {
       setArriving(false);
       setError('Could not reopen the draft.');
@@ -610,6 +664,7 @@ export default function PressTemplateLiveTest({
         setArt({ name: f.name, img, wMm: null, hMm: null, pageCount: null, gtLayerNames: [] });
         setShowTemplate(false);
       }
+      setDirty(true); // a loaded art result is unsaved work — Save persists it
     } catch (err) {
       setArt(null);
       setError(err instanceof Error ? err.message : 'Could not read that file.');
@@ -682,6 +737,7 @@ export default function PressTemplateLiveTest({
     if (art) {
       const at = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       setTestLog((log) => [...log, { art: art.name, at, verdict: verdictWord }]);
+      setDirty(true); // new results are unsaved work until Save
     }
     artInput.current?.click();
   };
@@ -692,7 +748,11 @@ export default function PressTemplateLiveTest({
     if (!template || !currentFile.current) { onExit(); return; }
     setBusy('save'); setError(null);
     try {
-      const tests = art ? [...testLog, { art: art.name, at: '', verdict: verdictWord }] : testLog;
+      // "Save result & test another" may have already logged the CURRENT art
+      // (picker cancelled) — don't serialize the same result twice.
+      const last = testLog[testLog.length - 1];
+      const currentLogged = !!(art && last && last.art === art.name && last.verdict === verdictWord);
+      const tests = art && !currentLogged ? [...testLog, { art: art.name, at: '', verdict: verdictWord }] : testLog;
       const testsPayload = tests.map((e) => ({ artName: e.art, verdict: e.verdict }));
       const previewImg = await shrinkDataUrl(template.img);
       if (slotTarget.current) {
@@ -719,6 +779,11 @@ export default function PressTemplateLiveTest({
           return;
         }
       } else if (liveId.current) {
+        // Replace (••• menu / Index tile): the swapped-in PDF must persist on
+        // the same row, or reopening the tile would serve the OLD file.
+        const replacedFile = fileReplaced.current
+          ? { fileUrl: await uploadAdminDoc(currentFile.current), fileName: originalName ?? currentFile.current.name }
+          : {};
         await apiRequest('PATCH', `/api/press/${pressId}/templates/live/${liveId.current}`, {
           name: template.name,
           previewImg,
@@ -726,6 +791,7 @@ export default function PressTemplateLiveTest({
           hMm: template.hMm,
           layerCount: template.layers.length,
           tests: testsPayload,
+          ...replacedFile,
         });
       } else {
         const fileUrl = await uploadAdminDoc(currentFile.current);
@@ -746,7 +812,6 @@ export default function PressTemplateLiveTest({
       await queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
       onExit();
     } catch (err) {
-      setConfirmSave(false);
       setError(err instanceof Error ? err.message : 'Could not save the template.');
     } finally { setBusy(null); }
   };
@@ -877,18 +942,8 @@ export default function PressTemplateLiveTest({
               straight from the template&rsquo;s own Illustrator layers — exact to the hundredth of a millimeter.
             </p>
           </div>
-          {(template || art) && (
-            <button
-              type="button"
-              onClick={() => { setTemplate(null); setArt(null); setError(null); liveId.current = null; }}
-              className={cn('inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-medium flex-shrink-0 transition-colors', t.hoverWash)}
-              style={{ color: t.subink, border: `1px solid ${t.hairline}` }}
-              data-testid="button-start-over"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Start over
-            </button>
-          )}
+          {/* "Start over" removed (Bill, Aug 15 2026) — it was playground chrome.
+              Cancel leaves; Replace template… (header •••) swaps the file. */}
         </div>
 
         {/* Step rail — quiet Apple-style text steps, no pills (Bill, Aug 14 2026) */}
@@ -1045,7 +1100,7 @@ export default function PressTemplateLiveTest({
                       onChange={(e) => setNameDraft(e.target.value)}
                       onBlur={() => {
                         const v = nameDraft.trim();
-                        if (v) setTemplate((prev) => (prev ? { ...prev, name: v } : prev));
+                        if (v && v !== template.name) { setTemplate((prev) => (prev ? { ...prev, name: v } : prev)); setDirty(true); }
                         setEditingName(false);
                       }}
                       onKeyDown={(e) => {
@@ -1199,18 +1254,121 @@ export default function PressTemplateLiveTest({
                           Test
                         </button>
                       )}
+                      {/* Save stays quiet until something changed — opening a saved
+                          template arrives clean (Bill, Aug 15 2026). */}
                       {canEdit && (
                         <button
                           type="button"
-                          onClick={() => setConfirmSave(true)}
-                          disabled={busy !== null}
-                          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold text-white transition-opacity disabled:opacity-60"
+                          onClick={() => void saveAndExit()}
+                          disabled={busy !== null || !dirty}
+                          title={dirty ? undefined : 'No changes to save'}
+                          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold text-white transition-opacity disabled:opacity-40"
                           style={{ backgroundColor: t.blue }}
                           data-testid="button-accept-save"
                         >
-                          Save
+                          {busy === 'save' ? 'Saving…' : 'Save'}
                         </button>
                       )}
+                      {/* ••• under Save — history & tests live here; Replace supersedes
+                          in place so the template keeps one tile forever (Bill, Aug 15 2026). */}
+                      <div className="relative flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setHeaderMenu((v) => !v)}
+                          aria-label="More actions"
+                          aria-expanded={headerMenu}
+                          className="w-8 h-8 rounded-full inline-flex items-center justify-center transition-colors"
+                          style={{ border: `1px solid ${t.hairline}`, color: t.subink }}
+                          data-testid="button-template-overflow"
+                        >
+                          <span aria-hidden="true" style={{ letterSpacing: 1, fontWeight: 700, fontSize: 13, lineHeight: 1 }}>•••</span>
+                        </button>
+                        {headerMenu && (
+                          <>
+                            <div className="fixed inset-0 z-[70]" onClick={() => setHeaderMenu(false)} />
+                            <div
+                              className="absolute z-[71] rounded-xl overflow-hidden shadow-2xl py-1"
+                              style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, top: 'calc(100% + 6px)', right: 0, minWidth: 220 }}
+                              role="menu"
+                              data-testid="menu-template-overflow"
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => { setHeaderMenu(false); setShowTests(true); }}
+                                className={cn('w-full text-left px-4 py-2 text-[13px] font-medium transition-colors flex items-center gap-2.5', t.hoverWash)}
+                                style={{ color: t.ink }}
+                                data-testid="menuitem-history-tests"
+                              >
+                                <History style={{ width: 14, height: 14, color: t.subink }} />
+                                History &amp; tests
+                              </button>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  role="menuitem"
+                                  onClick={replaceTemplate}
+                                  className={cn('w-full text-left px-4 py-2 text-[13px] font-medium transition-colors flex items-center gap-2.5', t.hoverWash)}
+                                  style={{ color: t.ink }}
+                                  data-testid="menuitem-replace-template"
+                                >
+                                  <Upload style={{ width: 14, height: 14, color: t.subink }} />
+                                  Replace template&hellip;
+                                </button>
+                              )}
+                              <div className="px-4 pb-2 pt-1 text-[11px] leading-snug" style={{ color: t.faint, maxWidth: 230 }}>
+                                Replacing supersedes this revision — it moves into history with its tests. One tile, always.
+                              </div>
+                            </div>
+                          </>
+                        )}
+                        {showTests && (
+                          <>
+                            <div className="fixed inset-0 z-[70]" onClick={() => setShowTests(false)} />
+                            <div
+                              className="absolute z-[71] rounded-2xl overflow-hidden shadow-2xl"
+                              style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, top: 'calc(100% + 6px)', right: 0, width: 380 }}
+                              role="dialog"
+                              aria-label="History and tests"
+                              data-testid="panel-history-tests"
+                            >
+                              <div className="flex items-start justify-between gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${t.hairline}` }}>
+                                <div>
+                                  <div className="text-[13.5px] font-semibold" style={{ color: t.ink }}>History &amp; tests</div>
+                                  <div className="text-[12px] mt-0.5" style={{ color: t.subink }}>Every revision of this template, tests attached</div>
+                                </div>
+                                <button type="button" onClick={() => setShowTests(false)} aria-label="Close" className="w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${t.hairline}`, color: t.subink }} data-testid="button-close-history">
+                                  <X style={{ width: 14, height: 14 }} />
+                                </button>
+                              </div>
+                              <div className="px-5 py-3 max-h-[420px] overflow-y-auto">
+                                {[{ name: template.name, wMm: template.wMm, hMm: template.hMm, at: uploadedAt ?? '', tests: [...priorTests, ...testLog], current: true }, ...revisions.map((r) => ({ ...r, current: false }))].map((rev, ri) => (
+                                  <div key={ri} className="py-3" style={{ borderBottom: `1px solid ${t.hairline}` }}>
+                                    <div className="flex items-baseline justify-between gap-3">
+                                      <span className="text-[12.5px] font-semibold truncate" style={{ color: t.ink }} title={rev.name}>{rev.name}</span>
+                                      <span className="text-[11px] font-semibold flex-shrink-0 inline-flex items-center gap-1" style={{ color: rev.current ? t.ready : t.faint }}>
+                                        {rev.current ? <><BadgeCheck style={{ width: 12, height: 12 }} /> Current</> : <><History style={{ width: 12, height: 12 }} /> Superseded</>}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11.5px] mt-0.5 tabular-nums" style={{ color: t.subink }}>
+                                      {rev.wMm.toFixed(1)} × {rev.hMm.toFixed(1)} mm{rev.at ? ` · uploaded ${rev.at}` : ''}
+                                    </div>
+                                    {rev.tests.length === 0 ? (
+                                      <div className="text-[11.5px] mt-1.5" style={{ color: t.faint }}>No art files tested</div>
+                                    ) : rev.tests.map((e, ei) => (
+                                      <div key={ei} className="mt-1.5 flex items-center gap-1.5 text-[11.5px]" style={{ color: t.subink }}>
+                                        {e.verdict === 'Pass' ? <CheckCircle2 style={{ width: 12, height: 12, color: t.ready, flexShrink: 0 }} /> : e.verdict === 'Flagged' ? <XCircle style={{ width: 12, height: 12, color: t.crit, flexShrink: 0 }} /> : <MinusCircle style={{ width: 12, height: 12, color: t.faint, flexShrink: 0 }} />}
+                                        <span className="truncate" title={e.art}>{e.art}</span>
+                                        <span className="flex-shrink-0" style={{ color: t.faint }}>— {e.verdict}{e.at ? ` · ${e.at}` : ''}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
@@ -1672,53 +1830,8 @@ export default function PressTemplateLiveTest({
               </div>
             )}
 
-            {/* Pop-over: layers read from the file */}
-            {/* Save confirm — Apple-style alert (Bill, Aug 14 2026) */}
-            {confirmSave && (
-              <>
-                <div className="fixed inset-0 z-[70]" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={() => { if (busy !== 'save') setConfirmSave(false); }} />
-                <div
-                  role="alertdialog"
-                  aria-modal="true"
-                  aria-labelledby="confirm-save-title"
-                  className="fixed z-[71] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl px-6 pt-6 pb-5 text-center shadow-2xl"
-                  style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, width: 340 }}
-                  data-testid="dialog-confirm-save"
-                >
-                  {/* Copy knows where you are: mid-test = congrats, untested = a gentle nudge (Bill, Aug 14 2026) */}
-                  <div id="confirm-save-title" className="text-[15px] font-semibold" style={{ color: t.ink }}>
-                    {art ? 'Test saved' : 'Save this template?'}
-                  </div>
-                  <p className="mt-1.5 text-[12.5px] leading-relaxed" style={{ color: t.subink }}>
-                    {art
-                      ? 'Congrats — your test has been saved, and you can compare these results at any time. Your template is ready to go.'
-                      : 'The GT layers are read and look good. Save it to your Templates page now, or go back and run an art test first.'}
-                  </p>
-                  <div className="mt-5 flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void saveAndExit()}
-                      disabled={busy === 'save'}
-                      className="h-9 rounded-full text-[13px] font-semibold text-white disabled:opacity-60"
-                      style={{ backgroundColor: t.blue }}
-                      data-testid="button-save-exit"
-                    >
-                      {busy === 'save' ? 'Saving…' : art ? 'Back to Templates' : 'Save & exit'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmSave(false)}
-                      disabled={busy === 'save'}
-                      className="h-9 rounded-full text-[13px] font-semibold disabled:opacity-60"
-                      style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
-                      data-testid="button-return-test"
-                    >
-                      {art ? 'Stay here' : 'Return & test'}
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
+            {/* No save-confirm dialog (Bill, Aug 15 2026): Save in the header
+                saves and returns to Templates — one act, no congrats sheet. */}
 
             {/* Task #3065 consent, slot mode: the attach found a template that
                 mentions several options (e.g. both center-hole sizes). Nothing

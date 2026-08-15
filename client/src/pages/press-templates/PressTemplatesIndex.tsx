@@ -293,11 +293,18 @@ function matchSpec(
   slot: Slot,
 ): TemplateSpecWithHistory | undefined {
   if (!slot.dbFormat || !slot.componentKey) return undefined;
-  return specs.find(
+  const matches = specs.filter(
     (s) =>
       s.format === slot.dbFormat &&
       s.componentKey === slot.componentKey &&
       (slot.variantKey === undefined || (s.variantKey ?? "") === slot.variantKey),
+  );
+  // Duplicate rows happen (empty legacy shells beside the real spec) — prefer
+  // the one carrying a live file, then one with revision history.
+  return (
+    matches.find((s) => s.templateFileUrl) ??
+    matches.find((s) => s.revisions.length > 0) ??
+    matches[0]
   );
 }
 
@@ -508,10 +515,10 @@ function CustomSlotActions({
 // ─── Per-tile ••• overflow (handoff, Aug 15 2026) — appears on hover in the
 // tile's top-right corner. Archive lives here (with a confirm); archived
 // tiles get Restore instead. Handoff-verbatim styling; wired handlers.
-function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore }: {
+function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore, onReplace }: {
   tileKey: string; title: string; archived: boolean; t: Theme;
   menuFor: string | null; setMenuFor: (k: string | null) => void;
-  onArchive: () => void; onRestore: () => void;
+  onArchive: () => void; onRestore: () => void; onReplace?: () => void;
 }) {
   const open = menuFor === tileKey;
   return (
@@ -549,6 +556,20 @@ function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArch
                 Restore template
               </button>
             ) : (
+              <>
+              {onReplace && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onReplace(); }}
+                  className={cn("w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] font-medium text-left", t.hoverWash)}
+                  style={{ color: t.ink }}
+                  role="menuitem"
+                  data-testid={`menuitem-replace-${tileKey}`}
+                >
+                  <Upload className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} />
+                  Replace template&hellip;
+                </button>
+              )}
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); setMenuFor(null); onArchive(); }}
@@ -560,6 +581,7 @@ function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArch
                 <Archive className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} />
                 Archive template…
               </button>
+              </>
             )}
           </div>
         </>
@@ -773,6 +795,15 @@ export function PressTemplatesIndex({
   };
   const [reopening, setReopening] = useState<string | null>(null); // shelf tile id being fetched
   const uploadInput = useRef<HTMLInputElement>(null);
+  // ••• → Replace template… on a saved shelf tile (Bill, Aug 15 2026): pick a
+  // new file under the same name; the old revision supersedes into history —
+  // the tile never moves or duplicates. One tile per template, always.
+  const replaceLive = useRef<LiveTemplate | null>(null);
+  const startReplaceLive = (sv: LiveTemplate) => {
+    replaceLive.current = sv;
+    setMenuFor(null);
+    uploadInput.current?.click();
+  };
   // Just-saved tile gets a one-time hairline pulse — blue, then back to gray.
   const [flashFresh, setFlashFresh] = useState(() => freshLiveSave.flag);
   useEffect(() => {
@@ -785,10 +816,23 @@ export function PressTemplatesIndex({
     const f = e.target.files?.[0];
     e.target.value = "";
     if (!f) return;
+    // ••• → Replace on a saved shelf tile: the new file rides in under the
+    // SAME saved row (liveId) and name — Save updates that tile in place,
+    // never a second one (Bill, Aug 15 2026).
+    const rl = replaceLive.current;
+    replaceLive.current = null;
     pendingTemplateFile.file = f;
-    pendingTemplateFile.name = uploadName.trim() || uploadSlot?.title || null;
-    pendingTemplateFile.liveId = null;
-    pendingTemplateFile.component = uploadComponent;
+    pendingTemplateFile.name = rl ? rl.name : (uploadName.trim() || uploadSlot?.title || null);
+    pendingTemplateFile.liveId = rl ? rl.id : null;
+    pendingTemplateFile.component = rl ? rl.component : uploadComponent;
+    pendingTemplateFile.fromSaved = false; // fresh file = unsaved work
+    pendingTemplateFile.priorTests = rl ? rl.tests.map((t) => ({ artName: t.artName, verdict: t.verdict })) : null;
+    if (rl) {
+      pendingTemplateFile.slot = null;
+      setUploadOpen(false);
+      onOpenLiveTest();
+      return;
+    }
     // Slot-mode upload (dashed tile / Replace): the live test saves back to
     // THIS slot — Accept & Save mints a revision instead of a shelf row.
     pendingTemplateFile.slot =
@@ -816,6 +860,8 @@ export function PressTemplatesIndex({
       pendingTemplateFile.name = sv.name;
       pendingTemplateFile.liveId = sv.id;
       pendingTemplateFile.component = sv.component;
+      pendingTemplateFile.fromSaved = true; // reopening — arrives clean, Save stays quiet
+      pendingTemplateFile.priorTests = sv.tests.map((t) => ({ artName: t.artName, verdict: t.verdict })); // display-only trail
       onOpenLiveTest();
     } catch (e: any) {
       toast({ title: "Couldn't reopen the template", description: e?.message, variant: "destructive" });
@@ -851,6 +897,11 @@ export function PressTemplatesIndex({
   const canEdit = data?.canEdit ?? false;
   const specs = data?.specs ?? [];
   const liveTemplates = data?.liveTemplates ?? [];
+  // Stable shelf order (Bill, Aug 15 2026): oldest first, so a fresh save
+  // APPENDS — tiles never rearrange when a save lands.
+  const sortedLiveTemplates = [...liveTemplates].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
   // Standard slots this press archived off the shelf ("not offered").
   const archivedSlotKeys = new Set(data?.archivedSlots ?? []);
 
@@ -881,8 +932,31 @@ export function PressTemplatesIndex({
     .filter((c) => c.format === sectionDbFormat)
     .map(customSlotToSlot);
 
+  // 12_double rows shown when present (per the slot-list note above): a 2LP
+  // spec (e.g. the imported 2LP center labels) gets its own tile beside the
+  // 12″ canon — otherwise a certified template would have nowhere to appear.
+  const DOUBLE_TITLES: Record<string, { kind: IconKind; title: string; note: string }> = {
+    labels: { kind: "labels", title: "Center labels — 2LP", note: "Two discs" },
+    jacket: { kind: "jacket", title: "Jacket — 2LP", note: "Double pocket" },
+    inner_sleeve: { kind: "sleeve", title: "Inner sleeve — 2LP", note: "Paper" },
+    booklet: { kind: "booklet", title: "Insert — 2LP", note: "12 × 12 in" },
+  };
+  const doubleSlots: Slot[] =
+    format === "Vinyl" && size === "12″"
+      ? specs
+          .filter((s) => s.format === "12_double" && (s.templateFileUrl || s.revisions.length > 0))
+          // One slot per component+variant — empty legacy shells can sit
+          // beside the real spec row; matchSpec prefers the live one.
+          .filter((s, i, arr) => arr.findIndex((o) => o.componentKey === s.componentKey && (o.variantKey ?? "") === (s.variantKey ?? "")) === i)
+          .map((s) => {
+            const d = DOUBLE_TITLES[s.componentKey] ?? { kind: "labels" as IconKind, title: `${s.componentKey} — 2LP`, note: "Two discs" };
+            return { kind: d.kind, title: d.title, note: d.note, dbFormat: "12_double", componentKey: s.componentKey, variantKey: s.variantKey || undefined } as Slot;
+          })
+      : [];
+
   const slots: Slot[] = [
     ...(format === "Vinyl" ? VINYL_SLOTS[size] : FORMAT_SLOTS[format]),
+    ...doubleSlots,
     ...customSlots,
   ];
 
@@ -1018,11 +1092,93 @@ export function PressTemplatesIndex({
           </div>
         ) : (
           <div className="mt-6 grid gap-4" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
-            {/* Saved live-test shelf (handoff): appears with the 12″ vinyl
-                slots — reopening a tile rides its stored PDF back into the
-                live test and appends to the same test trail. */}
+            {slots.map((slot) => {
+              const spec = matchSpec(specs, slot);
+              const filled = !!(spec && spec.templateFileUrl);
+              // A spec with no live file but archived revisions = an archived
+              // template (restorable); a slot key on the press's dismissal
+              // list = "Archived — not offered" (standard slot the press
+              // doesn't carry). Both live under the Archived view.
+              const specArchived = !!(spec && !spec.templateFileUrl && spec.revisions.some((r) => r.status === "archived"));
+              const slotKey = `${slot.dbFormat ?? ""}:${slot.componentKey ?? ""}:${slot.variantKey ?? ""}:${slot.discCount ?? ""}`;
+              const slotArchived = !filled && !specArchived && archivedSlotKeys.has(slotKey);
+              const isArchived = specArchived || slotArchived;
+              if (view === "Current" && isArchived) return null;
+              if (view === "Archived" && !isArchived) return null;
+              const key = slot.customSlot ? `custom-${slot.customSlot.id}` : `${slot.title}-${slot.variantKey ?? ""}`;
+              const tile = filled ? (
+                <FilledTile
+                  key={key}
+                  t={t}
+                  slot={slot}
+                  spec={spec!}
+                  onOpen={() => onOpenSpec(spec!.id)}
+                />
+              ) : (
+                <EmptyTile
+                  key={key}
+                  t={t}
+                  slot={slot}
+                  canEdit={canEdit}
+                  archived={isArchived}
+                  archivedNote={specArchived ? "Archived" : "Archived — not offered"}
+                  onAdd={() => openUpload(slot)}
+                />
+              );
+              // Per-tile ••• (archive / restore) + Task #3066 custom-slot
+              // rename / remove — overlay siblings (tiles are <button> roots).
+              const overflowKey = slot.customSlot ? `custom-${slot.customSlot.id}` : slotKey.replace(/[^a-z0-9_-]+/gi, "-");
+              const canArchiveHere = canEdit && !slot.disabled && (filled || spec || slot.dbFormat) && !slot.customSlot;
+              const showOverflow = canArchiveHere || isArchived;
+              if ((slot.customSlot && canEdit) || showOverflow) {
+                return (
+                  <div key={key} className="relative group [&>button]:w-full [&>button]:h-full">
+                    {tile}
+                    {showOverflow && (
+                      <TileOverflow
+                        tileKey={overflowKey}
+                        title={slot.title}
+                        archived={isArchived}
+                        t={t}
+                        menuFor={menuFor}
+                        setMenuFor={setMenuFor}
+                        onArchive={() =>
+                          setConfirmArchive(
+                            filled
+                              ? { kind: "spec", id: spec!.id, title: slot.title }
+                              : { kind: "slot", id: slotKey, title: slot.title },
+                          )
+                        }
+                        onRestore={() =>
+                          doRestore(
+                            specArchived
+                              ? { kind: "spec", id: spec!.id }
+                              : { kind: "slot", id: slotKey },
+                          )
+                        }
+                        onReplace={canEdit && filled ? () => { setMenuFor(null); openUpload(slot); } : undefined}
+                      />
+                    )}
+                    {slot.customSlot && canEdit && (
+                      <CustomSlotActions
+                        t={t}
+                        slot={slot.customSlot}
+                        onRename={() => setEditSlot(slot.customSlot!)}
+                        onRemove={() => removeSlot.mutate(slot.customSlot!.id)}
+                        removing={removeSlot.isPending}
+                      />
+                    )}
+                  </div>
+                );
+              }
+              return tile;
+            })}
+            {/* Saved live-test shelf — renders AFTER the certified canon:
+                tiles never rearrange when a save lands; existing tiles keep
+                their spots, new saves append (Bill, Aug 15 2026). Reopening a
+                tile rides its stored PDF back into the live test. */}
             {format === "Vinyl" && size === "12″" &&
-              liveTemplates.map((sv) => {
+              sortedLiveTemplates.map((sv) => {
                 const fresh = flashFresh;
                 const busy = reopening === sv.id;
                 const isArchived = !!sv.archivedAt;
@@ -1089,91 +1245,12 @@ export function PressTemplatesIndex({
                       setMenuFor={setMenuFor}
                       onArchive={() => setConfirmArchive({ kind: "live", id: sv.id, title: sv.name })}
                       onRestore={() => doRestore({ kind: "live", id: sv.id })}
+                      onReplace={() => startReplaceLive(sv)}
                     />
                   )}
                   </div>
                 );
               })}
-            {slots.map((slot) => {
-              const spec = matchSpec(specs, slot);
-              const filled = !!(spec && spec.templateFileUrl);
-              // A spec with no live file but archived revisions = an archived
-              // template (restorable); a slot key on the press's dismissal
-              // list = "Archived — not offered" (standard slot the press
-              // doesn't carry). Both live under the Archived view.
-              const specArchived = !!(spec && !spec.templateFileUrl && spec.revisions.some((r) => r.status === "archived"));
-              const slotKey = `${slot.dbFormat ?? ""}:${slot.componentKey ?? ""}:${slot.variantKey ?? ""}:${slot.discCount ?? ""}`;
-              const slotArchived = !filled && !specArchived && archivedSlotKeys.has(slotKey);
-              const isArchived = specArchived || slotArchived;
-              if (view === "Current" && isArchived) return null;
-              if (view === "Archived" && !isArchived) return null;
-              const key = slot.customSlot ? `custom-${slot.customSlot.id}` : `${slot.title}-${slot.variantKey ?? ""}`;
-              const tile = filled ? (
-                <FilledTile
-                  key={key}
-                  t={t}
-                  slot={slot}
-                  spec={spec!}
-                  onOpen={() => onOpenSpec(spec!.id)}
-                />
-              ) : (
-                <EmptyTile
-                  key={key}
-                  t={t}
-                  slot={slot}
-                  canEdit={canEdit}
-                  archived={isArchived}
-                  archivedNote={specArchived ? "Archived" : "Archived — not offered"}
-                  onAdd={() => openUpload(slot)}
-                />
-              );
-              // Per-tile ••• (archive / restore) + Task #3066 custom-slot
-              // rename / remove — overlay siblings (tiles are <button> roots).
-              const overflowKey = slot.customSlot ? `custom-${slot.customSlot.id}` : slotKey.replace(/[^a-z0-9_-]+/gi, "-");
-              const canArchiveHere = canEdit && !slot.disabled && (filled || spec || slot.dbFormat) && !slot.customSlot;
-              const showOverflow = canArchiveHere || isArchived;
-              if ((slot.customSlot && canEdit) || showOverflow) {
-                return (
-                  <div key={key} className="relative group [&>button]:w-full [&>button]:h-full">
-                    {tile}
-                    {showOverflow && (
-                      <TileOverflow
-                        tileKey={overflowKey}
-                        title={slot.title}
-                        archived={isArchived}
-                        t={t}
-                        menuFor={menuFor}
-                        setMenuFor={setMenuFor}
-                        onArchive={() =>
-                          setConfirmArchive(
-                            filled
-                              ? { kind: "spec", id: spec!.id, title: slot.title }
-                              : { kind: "slot", id: slotKey, title: slot.title },
-                          )
-                        }
-                        onRestore={() =>
-                          doRestore(
-                            specArchived
-                              ? { kind: "spec", id: spec!.id }
-                              : { kind: "slot", id: slotKey },
-                          )
-                        }
-                      />
-                    )}
-                    {slot.customSlot && canEdit && (
-                      <CustomSlotActions
-                        t={t}
-                        slot={slot.customSlot}
-                        onRename={() => setEditSlot(slot.customSlot!)}
-                        onRemove={() => removeSlot.mutate(slot.customSlot!.id)}
-                        removing={removeSlot.isPending}
-                      />
-                    )}
-                  </div>
-                );
-              }
-              return tile;
-            })}
             {/* Task #3065 — "Create new template": operator-defined slots for
                 this format section (needs an editable role + a real format). */}
             {canEdit && sectionDbFormat && (
