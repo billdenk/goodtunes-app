@@ -1905,7 +1905,6 @@ export function PressPackagePricingCatalog({
   pressLogoUrl = null,
   hideHeading = false,
   onOpenColors,
-  sectionPulldown,
 }: {
   pressId: string;
   pressDomain: string | null;
@@ -1913,10 +1912,6 @@ export function PressPackagePricingCatalog({
   pressLogoUrl?: string | null;
   hideHeading?: boolean;
   onOpenColors?: () => void;
-  // handoff/press-specs — super-admin quiet section pull-down (GoodTunes
-  // Packages / White Label / GoodDeed Certificates / Specs), rendered next
-  // to the Catalog heading. Only AdminManufacturer passes it.
-  sectionPulldown?: React.ReactNode;
 }) {
   const { toast } = useToast();
   const dark = useAdminDark();
@@ -2702,7 +2697,6 @@ export function PressPackagePricingCatalog({
               <h1 className="tracking-tight" style={{ color: INK, fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
                 GoodTunes Packages
               </h1>
-              {sectionPulldown}
             </div>
             <div className="inline-flex items-center rounded-full" style={{ marginTop: 16, padding: 3, backgroundColor: dark ? CARD_SOFT : "#ececf0" }} role="tablist" aria-label="Catalog format">
               {(() => {
