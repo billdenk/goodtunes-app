@@ -2179,6 +2179,7 @@ function ArtistUrlPanel({ person }: { person: PersonFull }) {
   });
 
   const commit = () => {
+    userInteracted.current = true;
     if (save.isPending) return;
     const trimmed = draft.trim();
     if (trimmed === "") {
@@ -2192,9 +2193,12 @@ function ArtistUrlPanel({ person }: { person: PersonFull }) {
   };
 
   const clear = () => {
+    userInteracted.current = true;
     if (save.isPending) return;
     setDraft("");
-    if (savedSlug !== "") save.mutate(null);
+    // Also persist null when the auto-prefill saved a slug this mount but
+    // the person query hasn't refetched yet (savedSlug still "").
+    if (savedSlug !== "" || autoSavedSlug.current) save.mutate(null);
   };
 
   const checkAvailable = async (slug: string): Promise<boolean> => {
@@ -2208,7 +2212,63 @@ function ArtistUrlPanel({ person }: { person: PersonFull }) {
     } catch { return false; }
   };
 
+  // Find the first available slug candidate derived from the artist's
+  // name ("name", then "name-2" … "name-9"). Shared by the Suggest button
+  // and the auto-prefill below. Returns null when nothing validates or
+  // all nine candidates are taken.
+  const findAvailableSlug = async (): Promise<string | null> => {
+    const v = validateShareSlug(person.name ?? "");
+    if (!v.ok) return null;
+    for (let n = 1; n <= 9; n++) {
+      const candidate = n === 1 ? v.slug : `${v.slug}-${n}`;
+      const cv = validateShareSlug(candidate);
+      if (!cv.ok) continue;
+      if (await checkAvailable(cv.slug)) return cv.slug;
+    }
+    return null;
+  };
+
+  // Auto-prefill: an artist with no slug yet gets one derived from their
+  // name saved automatically on first view, so the share link works
+  // without an operator remembering to hit Suggest. Silent (no toast),
+  // artists-only (never mints slugs for pure business contacts), runs
+  // once per mount, and the operator can still edit or clear it.
+  // Guards for the auto-prefill race with manual editing: any operator
+  // interaction (typing, Suggest, Clear, commit) makes the pending
+  // auto-save bail, and a completed auto-save is remembered so Clear can
+  // persist null even before the person query refetches.
+  const autoPrefillTried = useRef(false);
+  const userInteracted = useRef(false);
+  const autoSavedSlug = useRef<string | null>(null);
+  useEffect(() => {
+    if (autoPrefillTried.current) return;
+    if (savedSlug !== "") return;
+    if (!personIsArtist(person)) return;
+    if (!(person.name ?? "").trim()) return;
+    autoPrefillTried.current = true;
+    (async () => {
+      try {
+        const slug = await findAvailableSlug();
+        // Bail if the operator has touched the field (or saved/cleared)
+        // while the availability checks were in flight — their intent wins.
+        if (!slug || userInteracted.current) return;
+        await apiRequest("PUT", `/api/admin/people/${person.id}`, {
+          artistShareSlug: slug,
+        });
+        autoSavedSlug.current = slug;
+        if (!userInteracted.current) setDraft(slug);
+        qc.invalidateQueries({ queryKey: ["/api/admin/people", person.id] });
+        qc.invalidateQueries({ queryKey: ["/api/people", person.id] });
+        qc.invalidateQueries({ queryKey: ["/api/people"] });
+      } catch {
+        // Best-effort — the operator can still use Suggest manually.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedSlug, person.id, person.name]);
+
   const suggest = async () => {
+    userInteracted.current = true;
     if (save.isPending || suggesting) return;
     const v = validateShareSlug(person.name ?? "");
     if (!v.ok) { toast({ title: "No artist name to suggest from." }); return; }
@@ -2274,7 +2334,7 @@ function ArtistUrlPanel({ person }: { person: PersonFull }) {
           <Input
             value={draft}
             disabled={save.isPending}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => { userInteracted.current = true; setDraft(e.target.value); }}
             onBlur={commit}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); } }}
             placeholder="nightbirde"
