@@ -192,13 +192,6 @@ function Waveform({ h, bar, color = '#ffffff' }: { h: number; bar: number; color
 function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print: Print; spots: string[]; logoUrl: string | null }) {
   const S = 260; // case footprint
   const jewel = caseName === 'Jewel case';
-  // Photographic jewel-case asset (CD_Mockup PSD, layer 1) with the booklet
-  // window's semi-transparent white knocked down so art shows THROUGH the
-  // clear lid. Natural aspect 1024×896; window rect measured off the crop.
-  // Fit like the sleeve: the case fills the same S-tall footprint (top 0,
-  // same floor line); width follows the photo's natural aspect.
-  const JH = S;
-  const JW = S * (1024 / 896);
   const silk = print.name === 'Silkscreen';
   // Silkscreen inks band the white disc: first pick owns the disc, each
   // extra pick pushes the earlier ones out into rings (outermost = first).
@@ -207,7 +200,7 @@ function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print
   // Near-black outermost ink needs an edge ring against the dark canvas.
   const darkEdge = silk && spots.length > 0 && isDarkInk(spots[0]);
   return (
-    <div className="relative cd-render" style={{ width: S * 1.42, height: S * 1.06 }}>
+    <div className="relative cd-render" style={{ width: S * (jewel ? 1.62 : 1.42), height: S * 1.06 }}>
       {/* floor shadow so the object sits on the page */}
       <div
         aria-hidden
@@ -226,7 +219,7 @@ function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print
           Tucked mostly inside the case at rest; slides out on hover. */}
       <div
         className="absolute cd-peek"
-        style={{ left: S * 0.3, top: S * 0.01, width: S * 0.98, height: S * 0.98, transition: 'left 0.45s cubic-bezier(0.22, 1, 0.36, 1)' }}
+        style={{ top: S * 0.01, width: S * 0.98, height: S * 0.98, transition: 'left 0.45s cubic-bezier(0.22, 1, 0.36, 1)' }}
       >
         <img
           src={silk ? cdWhite : cdShiny}
@@ -251,55 +244,68 @@ function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print
           />
         )}
       </div>
-      <style>{`.cd-render:hover .cd-peek { left: ${S * 0.56}px; }`}</style>
+      {/* Jewel case body is wider than the sleeve, so the disc travels farther
+          to clearly emerge. Just the slide — no shine (Bill, Aug 14 2026).
+          NOTE: rest position must live here too — an inline `left` would
+          override the :hover rule and freeze the disc. */}
+      <style>{`
+        .cd-render .cd-peek { left: ${S * 0.3}px; }
+        .cd-render:hover .cd-peek { left: ${S * (jewel ? 0.65 : 0.56)}px; }
+      `}</style>
 
       {jewel ? (
-        // ─── JEWEL CASE — photographic clear hinged case. The booklet art
-        // sits BEHIND the case photo; the photo's cover window was knocked
-        // down to a light plastic sheen, so the art reads as a printed
-        // booklet under the clear lid, with the spine/hinge and tray edges
-        // from the photo over it. Booklet cover matches the sleeve: press
-        // black with the press's own mark (waveform only as fallback).
-        <div
-          className="absolute left-0"
-          style={{
-            top: 0,
-            width: JW,
-            height: JH,
-            filter: 'drop-shadow(0 16px 36px rgba(0,0,0,0.5))',
-          }}
-        >
-          {/* printed booklet showing through the lid's cover window */}
-          <div
-            className="absolute flex items-center justify-center"
-            style={{
-              left: '9%',
-              top: '1.7%',
-              width: '89.5%',
-              height: '97.1%',
-              backgroundColor: '#0b0b0c',
-            }}
-          >
-            {logoUrl ? (
+        // ─── JEWEL CASE — real product photo (layers from CD_Mockup.psd).
+        // The photo layer is the case; the PSD's "Label" layer marks where the
+        // album cover goes, so the booklet art is positioned at that exact
+        // geometry (label rect 213,213 → 1507×1431 inside the 1800² frame)
+        // ABOVE the case photo, with a soft inset shade for depth
+        // (handoff correction round, Aug 14 2026 — the art must not render
+        // under the semi-transparent lid or it reads ghosted).
+        (() => {
+          const D = S * 1.235; // photo frame size so the case body ≈ S tall
+          const OX = -(69 / 1800) * D; // case left edge → x 0
+          const OY = -(196 / 1800) * D; // case top edge → y 0
+          const LBL = { left: 213 / 1800, top: 213 / 1800, w: 1507 / 1800, h: 1431 / 1800 };
+          return (
+            <div className="absolute" style={{ left: OX, top: OY, width: D, height: D }}>
+              {/* case photo — clear lid, spine, hinge, shadows */}
               <img
-                src={logoUrl}
+                src={cdJewelCase}
                 alt=""
                 draggable={false}
-                style={{ width: '42%', height: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.92 }}
+                className="absolute inset-0"
+                style={{ width: D, height: D }}
               />
-            ) : (
-              <Waveform h={S * 0.3} bar={Math.round(S * 0.03)} color="rgba(255,255,255,0.9)" />
-            )}
-          </div>
-          {/* the case itself — clear lid, spine, hinge, tray edges */}
-          <img
-            src={cdJewelCase}
-            alt=""
-            draggable={false}
-            className="absolute inset-0"
-            style={{ width: '100%', height: '100%' }}
-          />
-        </div>
+              {/* album cover — the PSD "Label" layer sits ABOVE the case,
+                  so the art goes on top at that exact geometry; a soft inset
+                  shade keeps it reading as printed paper under glass */}
+              <div
+                className="absolute flex items-center justify-center"
+                style={{
+                  left: D * LBL.left,
+                  top: D * LBL.top,
+                  width: D * LBL.w,
+                  height: D * LBL.h,
+                  // no album art yet — the press's own branding fills the
+                  // booklet window (same press-black treatment as the sleeve)
+                  backgroundColor: '#0b0b0c',
+                  boxShadow: 'inset 0 1px 4px rgba(0,0,0,0.18)',
+                }}
+              >
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt=""
+                    draggable={false}
+                    style={{ width: '46%', height: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.92 }}
+                  />
+                ) : (
+                  <Waveform h={S * 0.3} bar={Math.round(S * 0.03)} color="rgba(255,255,255,0.9)" />
+                )}
+              </div>
+            </div>
+          );
+        })()
       ) : (
         // ─── SLEEVE — matte printed cardboard wallet, MRP black like the album.
         <div
