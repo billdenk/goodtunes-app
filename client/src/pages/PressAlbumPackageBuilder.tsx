@@ -682,21 +682,23 @@ function GoodDeedCard({
       </div>
       {on && (
         <>
-          <div
-            className="flex flex-wrap items-end gap-x-10 gap-y-5"
-            style={{ padding: "16px 18px", borderTop: `1px solid ${HAIRLINE}` }}
-          >
+          {/* Approved-mock layout (gogoods, Aug 15 2026): stacked, never
+              side-by-side — Certificate price is its own full-width row,
+              then How many with the two tiles; the follow-up control sits
+              in the COLUMN of the tile it belongs to (take-rate estimate
+              under No limit, cap stepper under Limit quantity). */}
+          <div style={{ padding: "16px 18px", borderTop: `1px solid ${HAIRLINE}` }}>
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 8 }}>
                 Certificate price
               </div>
               <RetailControl cents={retailCents} onCents={onRetailCents} testId="input-deed-retail" />
             </div>
-            <div className="flex-1" style={{ minWidth: 320 }}>
+            <div style={{ marginTop: 20 }}>
               <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 8 }}>
                 How many
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-x-2.5 gap-y-0">
                 {([
                   { m: "nolimit" as const, title: "No limit", sub: "Up to one per vinyl sold" },
                   { m: "cap" as const, title: "Limit quantity", sub: "Set a cap for scarcity" },
@@ -721,42 +723,55 @@ function GoodDeedCard({
                     </button>
                   );
                 })}
-              </div>
-              {mode === "cap" && (
-                <div className="flex items-center gap-3" style={{ marginTop: 10 }}>
-                  <div className="inline-flex items-center rounded-xl overflow-hidden" style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}>
-                    <button
-                      type="button"
-                      onClick={() => onCap(Math.max(50, cap - 50))}
-                      data-testid="deed-cap-minus"
-                      className="flex items-center justify-center transition-colors"
-                      style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = HOVER_WASH)}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                    >
-                      −
-                    </button>
-                    <div
-                      className="tabular-nums text-[14px] font-semibold text-center"
-                      style={{ color: INK, minWidth: 92, borderLeft: `1px solid ${HAIRLINE}`, borderRight: `1px solid ${HAIRLINE}`, padding: "8px 10px" }}
-                    >
-                      {cap.toLocaleString("en-US")} <span className="font-normal" style={{ color: SUBINK }}>certs</span>
+                {/* Follow-up row — left column under No limit, right column
+                    under Limit quantity; the inactive column stays empty. */}
+                <div>
+                  {mode === "nolimit" && (
+                    <div className="text-[11.5px]" style={{ color: FAINT, marginTop: 10 }} data-testid="deed-take-rate">
+                      Typically <span className="font-semibold tabular-nums" style={{ color: SUBINK }}>{Math.round(DEED_TAKE_RATE * 100)}%</span> sell certified — est.{" "}
+                      <span className="tabular-nums">{deedUnits.toLocaleString("en-US")}</span> of{" "}
+                      <span className="tabular-nums">{runQty.toLocaleString("en-US")}</span>.
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => onCap(Math.min(runQty, cap + 50))}
-                      data-testid="deed-cap-plus"
-                      className="flex items-center justify-center transition-colors"
-                      style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
-                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = HOVER_WASH)}
-                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                    >
-                      +
-                    </button>
-                  </div>
-                  <span className="text-[11.5px]" style={{ color: FAINT }}>Never more than one per vinyl sold.</span>
+                  )}
                 </div>
-              )}
+                <div>
+                  {mode === "cap" && (
+                    <div className="flex flex-wrap items-center gap-3" style={{ marginTop: 10 }}>
+                      <div className="inline-flex items-center rounded-xl overflow-hidden" style={{ backgroundColor: CARD, border: `1px solid ${HAIRLINE}` }}>
+                        <button
+                          type="button"
+                          onClick={() => onCap(Math.max(50, cap - 50))}
+                          data-testid="deed-cap-minus"
+                          className="flex items-center justify-center transition-colors"
+                          style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = HOVER_WASH)}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                        >
+                          −
+                        </button>
+                        <div
+                          className="tabular-nums text-[14px] font-semibold text-center"
+                          style={{ color: INK, minWidth: 92, borderLeft: `1px solid ${HAIRLINE}`, borderRight: `1px solid ${HAIRLINE}`, padding: "8px 10px" }}
+                        >
+                          {cap.toLocaleString("en-US")} <span className="font-normal" style={{ color: SUBINK }}>certs</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onCap(Math.min(runQty, cap + 50))}
+                          data-testid="deed-cap-plus"
+                          className="flex items-center justify-center transition-colors"
+                          style={{ width: 36, height: 38, color: SUBINK, fontSize: 16 }}
+                          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = HOVER_WASH)}
+                          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                        >
+                          +
+                        </button>
+                      </div>
+                      <span className="text-[11.5px]" style={{ color: FAINT }}>Never more than one per vinyl sold.</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -886,6 +901,41 @@ function TemplateTile({ tpl }: { tpl: PressTemplate }) {
         <Download className="w-3.5 h-3.5" />
       </a>
     </div>
+  );
+}
+
+// ─── Print templates section (approved as-is) ────────────────────────
+// Moved, not restyled (gogoods, Aug 15 2026): this exact section used to
+// sit at the bottom of the artist Package tab; it now renders on the
+// Physical → Art tab (PressPanel) for artist viewers.
+export function PackagePrintTemplates({
+  templates,
+  pressName,
+}: {
+  templates: PressTemplate[];
+  pressName?: string | null;
+}) {
+  // The palette consts (INK/SUBINK/…) are mutable module bindings set by
+  // applyTheme() when the *builder page* renders. This section now renders
+  // on the always-light Physical → Art tab, so pin light here — otherwise a
+  // prior visit to a dark-themed builder would leak dark ink onto the light
+  // admin surface (theme becomes route-history-dependent).
+  applyTheme("light");
+  if (templates.length === 0) return null;
+  return (
+    <>
+      <Divider />
+      <TwoTone lead="Print templates." rest="Everything your designer needs." />
+      <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
+        Sized for this package{pressName ? <> by {pressName}</> : null}. Download, hand to your artwork
+        team, drop the files back in.
+      </p>
+      <div className="grid grid-cols-3 gap-3" style={{ marginTop: 14 }}>
+        {templates.map((t) => (
+          <TemplateTile key={t.id} tpl={t} />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -1095,11 +1145,6 @@ export function PressAlbumPackageBuilder({
   const realArt = artworkUrl && artworkUrl !== PLACEHOLDER_ART ? artworkUrl : null;
   const pressDefaultJacket = pressRow?.vinylPlaceholderUrl ?? press?.vinylPlaceholderUrl ?? null;
   const jacketUrl = realArt ?? pressDefaultJacket ?? null;
-
-  const templates = useMemo(
-    () => (invited?.templates ?? []).filter((t) => t.format === format),
-    [invited, format],
-  );
 
   // ── Save — the same endpoints SellPanel writes ─────────────────────
   const save = useMutation({
@@ -1539,21 +1584,9 @@ export function PressAlbumPackageBuilder({
               />
             </div>
 
-            {templates.length > 0 && (
-              <>
-                <Divider />
-                <TwoTone lead="Print templates." rest="Everything your designer needs." />
-                <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
-                  Sized for this package{press?.name ? <> by {press.name}</> : null}. Download, hand to your artwork
-                  team, drop the files back in.
-                </p>
-                <div className="grid grid-cols-3 gap-3" style={{ marginTop: 14 }}>
-                  {templates.map((t) => (
-                    <TemplateTile key={t.id} tpl={t} />
-                  ))}
-                </div>
-              </>
-            )}
+            {/* Print templates moved to the Physical → Art tab (gogoods,
+                Aug 15 2026) — see PackagePrintTemplates below, rendered by
+                PressPanel. Same section, same styling, new home. */}
           </div>
         </div>
       </fieldset>

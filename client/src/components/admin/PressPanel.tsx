@@ -30,6 +30,7 @@ import type { UploadValidationResult } from "@shared/uploadValidation";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
 import { CompletedTemplatePanel } from "@/components/admin/CompletedTemplatePanel";
 import { PressTemplateDownloads, type PressTemplate } from "@/components/admin/PressTemplateDownloads";
+import { PackagePrintTemplates } from "@/pages/PressAlbumPackageBuilder";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { FulfillmentAssignmentPanel } from "@/components/admin/FulfillmentAssignmentPanel";
 import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
@@ -898,6 +899,26 @@ export function PressPanel({
               format={albumFormat}
               pressName={invitedPress?.press?.name}
               className="rounded-lg border border-slate-200 bg-slate-50 p-4"
+            />
+          );
+        })()}
+
+        {/* ── Print templates (artist view; moved from the bottom of the
+            Package tab, gogoods, Aug 15 2026 — approved section rendered
+            as-is, just relocated). `hideEntityLinks` doubles as "artist
+            viewer" on this panel. */}
+        {hideEntityLinks && (() => {
+          const albumFormat: AlbumFormat | null = physicalFormat
+            ? PHYSICAL_FORMAT_TO_ALBUM_FORMAT[
+                physicalFormat as keyof typeof PHYSICAL_FORMAT_TO_ALBUM_FORMAT
+              ] ?? null
+            : null;
+          const tpls = (invitedPress?.templates ?? []).filter((t) => t.format === albumFormat);
+          if (!albumFormat || tpls.length === 0) return null;
+          return (
+            <PackagePrintTemplates
+              templates={tpls}
+              pressName={invitedPress?.press?.name ?? invitedPress?.effectivePress?.name ?? null}
             />
           );
         })()}
