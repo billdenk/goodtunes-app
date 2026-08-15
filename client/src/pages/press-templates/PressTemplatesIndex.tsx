@@ -15,12 +15,15 @@
 // Status is icon + word (Bill is colorblind — never color alone) via
 // slotStatus() from "./types".
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   BadgeCheck, Clock3, XCircle, AlertTriangle, History, Upload, CloudUpload, X,
   MoreHorizontal, Archive, Loader2, AlertCircle, Plus, Layers, Pencil, Trash2,
 } from "lucide-react";
+// Live-test flow (handoff, Aug 14 2026): the upload sheet stashes the chosen
+// PDF in the transit store, then the tab routes to the Live test page.
+import { pendingTemplateFile, freshLiveSave } from "./PressTemplateLiveTest";
 import { ChevronDown as NavChevron } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +36,7 @@ import {
   type TemplateSpecWithHistory,
   type CustomTemplateSlot,
   type SlotStatus,
+  type LiveTemplate,
 } from "./types";
 
 function cn(...parts: Array<string | false | null | undefined>): string {
@@ -1008,9 +1012,11 @@ function EmptyTile({
 export function PressTemplatesIndex({
   pressId,
   onOpenSpec,
+  onOpenLiveTest,
 }: {
   pressId: string;
   onOpenSpec: (specId: string) => void;
+  onOpenLiveTest: () => void;
 }) {
   const dark = useAdminDark();
   const t = THEMES[dark ? "dark" : "light"];
@@ -1018,6 +1024,51 @@ export function PressTemplatesIndex({
   const [size, setSize] = useState<"7″" | "10″" | "12″">("12″");
   const [modal, setModal] = useState<ModalState | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // Live-test upload sheet (handoff, Aug 14 2026): header "Upload a template"
+  // opens it; pick the PDF here, then land on the live test with it.
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadName, setUploadName] = useState("");
+  const [uploadComponent, setUploadComponent] = useState<string | null>(null);
+  const [reopening, setReopening] = useState<string | null>(null); // shelf tile id being fetched
+  const uploadInput = useRef<HTMLInputElement>(null);
+  // Just-saved tile gets a one-time hairline pulse — blue, then back to gray.
+  const [flashFresh, setFlashFresh] = useState(() => freshLiveSave.flag);
+  useEffect(() => {
+    if (!freshLiveSave.flag) return;
+    freshLiveSave.flag = false;
+    const t1 = setTimeout(() => setFlashFresh(false), 900);
+    return () => clearTimeout(t1);
+  }, []);
+  const onPickLiveTemplate = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    pendingTemplateFile.file = f;
+    pendingTemplateFile.name = uploadName.trim() || null;
+    pendingTemplateFile.liveId = null;
+    pendingTemplateFile.component = uploadComponent;
+    setUploadOpen(false);
+    onOpenLiveTest();
+  };
+  // Reopen a saved shelf template: fetch its stored PDF back into a File and
+  // ride the same transit store (liveId set → the live test PATCHes on save).
+  const reopenSaved = async (sv: LiveTemplate) => {
+    setReopening(sv.id);
+    try {
+      const r = await fetch(sv.fileUrl, { credentials: "include" });
+      if (!r.ok) throw new Error(`Couldn't fetch the template file (${r.status})`);
+      const blob = await r.blob();
+      pendingTemplateFile.file = new File([blob], sv.fileName ?? `${sv.name}.pdf`, { type: "application/pdf" });
+      pendingTemplateFile.name = sv.name;
+      pendingTemplateFile.liveId = sv.id;
+      pendingTemplateFile.component = sv.component;
+      onOpenLiveTest();
+    } catch (e: any) {
+      toast({ title: "Couldn't reopen the template", description: e?.message, variant: "destructive" });
+    } finally {
+      setReopening(null);
+    }
+  };
   // Task #3066 — rename dialog for an operator-created slot.
   const [editSlot, setEditSlot] = useState<CustomTemplateSlot | null>(null);
   const { toast } = useToast();
@@ -1045,6 +1096,7 @@ export function PressTemplatesIndex({
 
   const canEdit = data?.canEdit ?? false;
   const specs = data?.specs ?? [];
+  const liveTemplates = data?.liveTemplates ?? [];
 
   // The DB format the current section maps to (custom slots + create flow).
   const sectionDbFormat =
@@ -1093,6 +1145,19 @@ export function PressTemplatesIndex({
               from your template PDFs. One certified revision is live per component.
             </p>
           </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => { setUploadName(""); setUploadComponent(null); setUploadOpen(true); }}
+              className="inline-flex items-center gap-2 h-9 px-4 rounded-full text-[13px] font-semibold flex-shrink-0"
+              style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
+              data-testid="button-upload-template"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              Upload a template
+            </button>
+          )}
           {/* Format switcher — Stickers disabled (no DB format yet) */}
           <div className="inline-flex items-center rounded-full flex-shrink-0" style={{ padding: 3, backgroundColor: t.cardSoft }} role="tablist" aria-label="Template format" data-testid="tabs-template-format">
             {(
@@ -1130,6 +1195,7 @@ export function PressTemplatesIndex({
                 </button>
               );
             })}
+          </div>
           </div>
         </div>
 
@@ -1178,6 +1244,60 @@ export function PressTemplatesIndex({
           </div>
         ) : (
           <div className="mt-6 grid gap-4" style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))" }}>
+            {/* Saved live-test shelf (handoff): appears with the 12″ vinyl
+                slots — reopening a tile rides its stored PDF back into the
+                live test and appends to the same test trail. */}
+            {format === "Vinyl" && size === "12″" &&
+              liveTemplates.map((sv) => {
+                const fresh = flashFresh;
+                const busy = reopening === sv.id;
+                return (
+                  <button
+                    key={`live-${sv.id}`}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => reopenSaved(sv)}
+                    className={cn("rounded-2xl px-6 py-7 flex flex-col items-center text-center transition-colors", t.tileHover)}
+                    style={{
+                      backgroundColor: t.card,
+                      border: `1px solid ${fresh ? t.blue : t.hairline}`,
+                      boxShadow: t.pillShadow,
+                      transition: "border-color 600ms ease",
+                      opacity: busy ? 0.6 : 1,
+                    }}
+                    data-testid={`tile-live-template-${sv.id}`}
+                  >
+                    {sv.previewImg ? (
+                      <img
+                        src={sv.previewImg}
+                        alt=""
+                        className="w-20 h-20 rounded-full object-cover"
+                        style={{ border: `1px solid ${t.hairline}` }}
+                      />
+                    ) : (
+                      <span className="w-20 h-20 rounded-full flex items-center justify-center" style={{ border: `1px solid ${t.hairline}` }}>
+                        <Layers className="w-6 h-6" style={{ color: t.faint }} />
+                      </span>
+                    )}
+                    <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>
+                      {sv.name}
+                    </div>
+                    <div className="mt-1 text-[12.5px]" style={{ color: t.faint }}>
+                      {sv.wMm && sv.hMm ? `${Math.round(sv.wMm)} × ${Math.round(sv.hMm)} mm · ` : ""}
+                      {sv.layerCount} GT layer{sv.layerCount === 1 ? "" : "s"}
+                    </div>
+                    <div className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: t.ready }}>
+                      {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BadgeCheck className="w-3.5 h-3.5" />}
+                      Saved · {new Date(sv.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    </div>
+                    {sv.tests.length > 0 && (
+                      <div className="mt-1 text-[12px]" style={{ color: t.faint }}>
+                        {sv.tests.length} art file{sv.tests.length === 1 ? "" : "s"} tested
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             {slots.map((slot) => {
               const spec = matchSpec(specs, slot);
               const filled = spec && spec.templateFileUrl;
@@ -1272,6 +1392,69 @@ export function PressTemplatesIndex({
             onOpenSpec(specId);
           }}
         />
+      )}
+
+      {/* Live-test upload sheet (handoff): name + optional component, then
+          pick the PDF — the file rides the transit store to the live test. */}
+      {uploadOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
+          <div className="absolute inset-0" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={() => setUploadOpen(false)} />
+          <div className="relative w-full max-w-md rounded-2xl p-6" style={{ backgroundColor: t.card, boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }} data-testid="sheet-live-upload">
+            <button type="button" onClick={() => setUploadOpen(false)} className="absolute right-4 top-4" aria-label="Close" data-testid="button-close-live-upload">
+              <X className="w-4.5 h-4.5" style={{ color: t.faint }} />
+            </button>
+            <div className="text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>Upload a template</div>
+            <div className="mt-1 text-[13px]" style={{ color: t.subink }}>
+              Pick a PDF and we'll read its GT layers so you can test real art against it.
+            </div>
+            <label className="mt-5 block text-[12.5px] font-medium" style={{ color: t.subink }}>
+              Name <span style={{ color: t.faint }}>(optional — we'll use the file name)</span>
+            </label>
+            <input
+              value={uploadName}
+              onChange={(e) => setUploadName(e.target.value)}
+              placeholder="e.g. 12″ gatefold jacket"
+              className="mt-1.5 w-full h-10 rounded-xl px-3 text-[14px] outline-none"
+              style={{ backgroundColor: t.cardSoft, color: t.ink, border: `1px solid ${t.hairline}` }}
+              data-testid="input-live-template-name"
+            />
+            <label className="mt-4 block text-[12.5px] font-medium" style={{ color: t.subink }}>
+              Component <span style={{ color: t.faint }}>(optional)</span>
+            </label>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {["Jacket", "Sleeve", "Labels", "Booklet", "Other"].map((c) => {
+                const on = uploadComponent === c;
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setUploadComponent(on ? null : c)}
+                    className="h-8 px-3.5 rounded-full text-[12.5px] font-medium"
+                    style={{
+                      backgroundColor: on ? t.blue : t.cardSoft,
+                      color: on ? "#fff" : t.subink,
+                      border: `1px solid ${on ? t.blue : t.hairline}`,
+                    }}
+                    data-testid={`pill-live-component-${c.toLowerCase()}`}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => uploadInput.current?.click()}
+              className="mt-6 w-full h-11 rounded-full inline-flex items-center justify-center gap-2 text-[14px] font-semibold"
+              style={{ backgroundColor: t.blue, color: "#fff" }}
+              data-testid="button-choose-live-pdf"
+            >
+              <CloudUpload className="w-4 h-4" />
+              Choose PDF
+            </button>
+            <input ref={uploadInput} type="file" accept="application/pdf,.pdf" className="hidden" onChange={onPickLiveTemplate} data-testid="input-live-pdf-file" />
+          </div>
+        </div>
       )}
     </div>
   );

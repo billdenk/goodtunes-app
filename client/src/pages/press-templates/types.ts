@@ -107,9 +107,36 @@ export type CustomTemplateSlot = {
   createdAt: string;
 };
 
+/** press_live_template_tests row — one art file's verdict in the trail. */
+export type LiveTemplateTest = {
+  id: string;
+  liveTemplateId: string;
+  artName: string;
+  verdict: string; // "Pass" | "Flagged" | "Visual only"
+  testedAt: string;
+};
+
+/** press_live_templates row (saved shelf on the Templates page) + trail. */
+export type LiveTemplate = {
+  id: string;
+  pressId: string;
+  name: string;
+  component: string | null;
+  fileUrl: string;
+  fileName: string | null;
+  previewImg: string | null; // small page-1 data URL
+  wMm: number | null;
+  hMm: number | null;
+  layerCount: number;
+  createdAt: string;
+  updatedAt: string;
+  tests: LiveTemplateTest[];
+};
+
 export type TemplatesPayload = {
   canEdit: boolean;
   customSlots?: CustomTemplateSlot[];
+  liveTemplates?: LiveTemplate[];
   specs: TemplateSpecWithHistory[];
 };
 

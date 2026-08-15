@@ -12080,6 +12080,42 @@ SQL
 create_template_variant_custom_slots dev  "${DATABASE_URL:-}"
 create_template_variant_custom_slots prod "${PROD_DATABASE_URL:-}"
 
+# ── Press-templates live-test flow (handoff, Aug 14 2026) ──
+# Templates saved from the client-side pdf.js live test + their test trail.
+# Idempotent on both DBs (schema-drift guard covers them).
+create_press_live_templates() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[press-live-templates] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: press-live-templates DDL ok on $label" \
+    || echo "post-merge: WARNING — press-live-templates DDL failed on $label"
+CREATE TABLE IF NOT EXISTS press_live_templates (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id varchar NOT NULL,
+  name text NOT NULL,
+  component text,
+  file_url text NOT NULL,
+  file_name text,
+  preview_img text,
+  w_mm real,
+  h_mm real,
+  layer_count integer NOT NULL DEFAULT 0,
+  created_by_user_id varchar,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS press_live_template_tests (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  live_template_id varchar NOT NULL,
+  art_name text NOT NULL,
+  verdict text NOT NULL,
+  tested_at timestamp NOT NULL DEFAULT now()
+);
+SQL
+}
+create_press_live_templates dev  "${DATABASE_URL:-}"
+create_press_live_templates prod "${PROD_DATABASE_URL:-}"
+
 # ── Task #3075 — fulfillment GoodDeed service pricing + cert-batch return label ──
 # gooddeed_service_json on fulfillment_partners (receive/hologram/shrinkwrap/
 # ship ladder) + 4 cert-batch return-label columns on albums. Idempotent on

@@ -157,6 +157,10 @@ import {
   type PressTemplateTestRun,
   pressCustomTemplateSlots,
   type PressCustomTemplateSlot,
+  pressLiveTemplates,
+  type PressLiveTemplate,
+  pressLiveTemplateTests,
+  type PressLiveTemplateTest,
   pressAudioSpecs,
   type PressAudioSpec,
   type InsertPressAudioSpec,
@@ -1006,6 +1010,31 @@ export interface IStorage {
     slotId: string,
     specIds: string[],
   ): Promise<void>;
+  // Press-templates live-test flow (handoff, Aug 14 2026).
+  listPressLiveTemplates(pressId: string): Promise<PressLiveTemplate[]>;
+  listPressLiveTemplateTests(liveTemplateIds: string[]): Promise<PressLiveTemplateTest[]>;
+  getPressLiveTemplateById(pressId: string, id: string): Promise<PressLiveTemplate | null>;
+  createPressLiveTemplate(input: {
+    pressId: string;
+    name: string;
+    component: string | null;
+    fileUrl: string;
+    fileName: string | null;
+    previewImg: string | null;
+    wMm: number | null;
+    hMm: number | null;
+    layerCount: number;
+    createdByUserId: string | null;
+  }): Promise<PressLiveTemplate>;
+  updatePressLiveTemplate(
+    pressId: string,
+    id: string,
+    patch: { name?: string; previewImg?: string | null; wMm?: number | null; hMm?: number | null; layerCount?: number },
+  ): Promise<PressLiveTemplate | null>;
+  appendPressLiveTemplateTests(
+    liveTemplateId: string,
+    tests: Array<{ artName: string; verdict: string }>,
+  ): Promise<PressLiveTemplateTest[]>;
   updatePressTemplateSpecMeasured(
     pressId: string,
     specId: string,
@@ -5720,6 +5749,66 @@ export class DbStorage implements IStorage {
     await db
       .delete(pressCustomTemplateSlots)
       .where(and(eq(pressCustomTemplateSlots.pressId, pressId), eq(pressCustomTemplateSlots.id, slotId)));
+  }
+  // Press-templates live-test flow (handoff, Aug 14 2026).
+  async listPressLiveTemplates(pressId: string): Promise<PressLiveTemplate[]> {
+    return db
+      .select()
+      .from(pressLiveTemplates)
+      .where(eq(pressLiveTemplates.pressId, pressId))
+      .orderBy(asc(pressLiveTemplates.createdAt));
+  }
+  async listPressLiveTemplateTests(liveTemplateIds: string[]): Promise<PressLiveTemplateTest[]> {
+    if (!liveTemplateIds.length) return [];
+    return db
+      .select()
+      .from(pressLiveTemplateTests)
+      .where(inArray(pressLiveTemplateTests.liveTemplateId, liveTemplateIds))
+      .orderBy(asc(pressLiveTemplateTests.testedAt));
+  }
+  async getPressLiveTemplateById(pressId: string, id: string): Promise<PressLiveTemplate | null> {
+    const [row] = await db
+      .select()
+      .from(pressLiveTemplates)
+      .where(and(eq(pressLiveTemplates.pressId, pressId), eq(pressLiveTemplates.id, id)));
+    return row ?? null;
+  }
+  async createPressLiveTemplate(input: {
+    pressId: string;
+    name: string;
+    component: string | null;
+    fileUrl: string;
+    fileName: string | null;
+    previewImg: string | null;
+    wMm: number | null;
+    hMm: number | null;
+    layerCount: number;
+    createdByUserId: string | null;
+  }): Promise<PressLiveTemplate> {
+    const [row] = await db.insert(pressLiveTemplates).values(input).returning();
+    return row;
+  }
+  async updatePressLiveTemplate(
+    pressId: string,
+    id: string,
+    patch: { name?: string; previewImg?: string | null; wMm?: number | null; hMm?: number | null; layerCount?: number },
+  ): Promise<PressLiveTemplate | null> {
+    const [row] = await db
+      .update(pressLiveTemplates)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(and(eq(pressLiveTemplates.pressId, pressId), eq(pressLiveTemplates.id, id)))
+      .returning();
+    return row ?? null;
+  }
+  async appendPressLiveTemplateTests(
+    liveTemplateId: string,
+    tests: Array<{ artName: string; verdict: string }>,
+  ): Promise<PressLiveTemplateTest[]> {
+    if (!tests.length) return [];
+    return db
+      .insert(pressLiveTemplateTests)
+      .values(tests.map((t) => ({ liveTemplateId, artName: t.artName, verdict: t.verdict })))
+      .returning();
   }
   // Task #3066 — slot + its bare orphan spec rows go in ONE transaction so a
   // failure never leaves a half-deleted slot.

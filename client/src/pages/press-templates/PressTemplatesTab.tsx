@@ -17,6 +17,10 @@ import { PressTemplateDetail } from "./PressTemplateDetail";
 // Task #3098 — dedicated Test page, deep-linked via `&test=1` on top of the
 // `?template=<specId>` scheme so refresh / back keep working.
 import { PressTemplateTest } from "./PressTemplateTest";
+// Live end-to-end GT-layer proof (handoff, Aug 14 2026) — reached from the
+// index's upload sheet via `&livetest=1`; the chosen file rides the transit
+// store, so a refresh on this URL bounces back to the index.
+import PressTemplateLiveTest from "./PressTemplateLiveTest";
 
 export function PressTemplatesTab({ pressId }: { pressId: string }) {
   const search = useSearch();
@@ -36,11 +40,15 @@ export function PressTemplatesTab({ pressId }: { pressId: string }) {
   const [testView, setTestView] = useState<boolean>(
     () => new URLSearchParams(window.location.search).get("test") === "1",
   );
+  const [liveTestView, setLiveTestView] = useState<boolean>(
+    () => new URLSearchParams(window.location.search).get("livetest") === "1",
+  );
 
   useEffect(() => {
     const sp = new URLSearchParams(search);
     setSpecId(sp.get("template"));
     setTestView(sp.get("test") === "1");
+    setLiveTestView(sp.get("livetest") === "1");
   }, [search]);
 
   const writeUrl = (mutate: (sp: URLSearchParams) => void) => {
@@ -72,11 +80,27 @@ export function PressTemplatesTab({ pressId }: { pressId: string }) {
   const onBack = () => {
     setSpecId(null);
     setTestView(false);
+    setLiveTestView(false);
     writeUrl((sp) => {
       sp.delete("template");
       sp.delete("test");
+      sp.delete("livetest");
     });
   };
+
+  const openLiveTest = () => {
+    setLiveTestView(true);
+    writeUrl((sp) => sp.set("livetest", "1"));
+  };
+
+  const exitLiveTest = () => {
+    setLiveTestView(false);
+    writeUrl((sp) => sp.delete("livetest"));
+  };
+
+  if (liveTestView) {
+    return <PressTemplateLiveTest pressId={pressId} canEdit={canEdit} onExit={exitLiveTest} />;
+  }
 
   if (specId && testView) {
     return (
@@ -102,7 +126,7 @@ export function PressTemplatesTab({ pressId }: { pressId: string }) {
     );
   }
 
-  return <PressTemplatesIndex pressId={pressId} onOpenSpec={openSpec} />;
+  return <PressTemplatesIndex pressId={pressId} onOpenSpec={openSpec} onOpenLiveTest={openLiveTest} />;
 }
 
 export default PressTemplatesTab;

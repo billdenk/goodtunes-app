@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique, check, primaryKey, index, doublePrecision } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, json, jsonb, boolean, uniqueIndex, unique, check, primaryKey, index, doublePrecision, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import type { SignedCertLadderRung } from "./signedCertLadder";
@@ -2891,6 +2891,41 @@ export const pressTemplateTestRuns = pgTable("press_template_test_runs", {
   certifiedAt: timestamp("certified_at"),
 });
 export type PressTemplateTestRun = typeof pressTemplateTestRuns.$inferSelect;
+
+// Press-templates live-test flow (handoff/press-template-live-test, Bill,
+// Aug 14 2026) — templates saved from the client-side pdf.js live test.
+// These are press-owned template files that may not (yet) be associated
+// with a built-in slot: the upload sheet lets a press upload with just an
+// optional name + component ("never block an upload on paperwork"). The
+// live test reads the PDF's GT layers in the browser and "Accept & Save"
+// lands the template here, with its test trail as child rows.
+export const pressLiveTemplates = pgTable("press_live_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pressId: varchar("press_id").notNull(),
+  name: text("name").notNull(),
+  component: text("component"), // optional pill from the upload sheet (Jacket | Sleeve | Labels | Booklet | Other)
+  fileUrl: text("file_url").notNull(),
+  fileName: text("file_name"),
+  previewImg: text("preview_img"), // page-1 render (data URL) — the tile's circular crop
+  wMm: real("w_mm"),
+  hMm: real("h_mm"),
+  layerCount: integer("layer_count").notNull().default(0),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+export type PressLiveTemplate = typeof pressLiveTemplates.$inferSelect;
+
+// Test trail for a live-tested template — one row per art file tested
+// ("Save result & test another" / the final art on "Accept & Save").
+export const pressLiveTemplateTests = pgTable("press_live_template_tests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  liveTemplateId: varchar("live_template_id").notNull(),
+  artName: text("art_name").notNull(),
+  verdict: text("verdict").notNull(), // Pass | Flagged | Visual only
+  testedAt: timestamp("tested_at").notNull().defaultNow(),
+});
+export type PressLiveTemplateTest = typeof pressLiveTemplateTests.$inferSelect;
 
 // Task #3065 — operator-defined template slots. The built-in slot vocabulary
 // (jacket/labels/inner_sleeve/…) is hardcoded in code; this table lets a press

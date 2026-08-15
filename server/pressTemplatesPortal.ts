@@ -467,9 +467,17 @@ export function registerPressTemplateFlowRoutes(
     const canEdit = await pressUserCanEdit(req.session.userId!, pressId);
     // Task #3065 — operator-defined slots render alongside the built-ins.
     const customSlots = await storage.listPressCustomTemplateSlots(pressId);
+    // Live-test templates (handoff, Aug 14 2026) — the saved shelf on the
+    // Templates page, each with its client-side test trail.
+    const liveRows = await storage.listPressLiveTemplates(pressId);
+    const liveTests = await storage.listPressLiveTemplateTests(liveRows.map((r) => r.id));
     res.json({
       canEdit,
       customSlots,
+      liveTemplates: liveRows.map((r) => ({
+        ...r,
+        tests: liveTests.filter((t) => t.liveTemplateId === r.id),
+      })),
       specs: specs.map((s) => ({
         ...s,
         revisions: revisions.filter((r) => r.specId === s.id),
@@ -477,6 +485,88 @@ export function registerPressTemplateFlowRoutes(
       })),
     });
   });
+
+  // ── Live-test templates (handoff/press-template-live-test, Aug 14 2026) ──
+  // "Accept & Save" on the Live test page. The client uploads the PDF first
+  // (uploadAdminDoc → /objects/...), reads GT layers with pdf.js, then posts
+  // the metadata + test trail here. Editor-gated like every other mutation.
+  const liveTestSchema = z.object({
+    artName: z.string().trim().min(1).max(512),
+    verdict: z.enum(["Pass", "Flagged", "Visual only"]),
+  });
+  const liveCreateSchema = z.object({
+    name: z.string().trim().min(1).max(200),
+    component: z.string().trim().max(64).nullable().optional(),
+    fileUrl: z.string().min(1).max(2048),
+    fileName: z.string().max(512).nullable().optional(),
+    previewImg: z.string().max(2_000_000).nullable().optional(), // page-1 data URL
+    wMm: z.number().finite().nullable().optional(),
+    hMm: z.number().finite().nullable().optional(),
+    layerCount: z.number().int().min(0).max(500).optional().default(0),
+    tests: z.array(liveTestSchema).max(50).optional().default([]),
+  });
+  app.post(
+    "/api/press/:id/templates/live",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const body = liveCreateSchema.safeParse(req.body);
+      if (!body.success) return res.status(400).json({ message: body.error.message });
+      const row = await storage.createPressLiveTemplate({
+        pressId,
+        name: body.data.name,
+        component: body.data.component ?? null,
+        fileUrl: body.data.fileUrl,
+        fileName: body.data.fileName ?? null,
+        previewImg: body.data.previewImg ?? null,
+        wMm: body.data.wMm ?? null,
+        hMm: body.data.hMm ?? null,
+        layerCount: body.data.layerCount,
+        createdByUserId: req.session.userId ?? null,
+      });
+      const tests = await storage.appendPressLiveTemplateTests(
+        row.id,
+        body.data.tests.map((t) => ({ artName: t.artName, verdict: t.verdict })),
+      );
+      res.status(201).json({ liveTemplate: { ...row, tests } });
+    },
+  );
+
+  // Re-saving an existing shelf template after another test session:
+  // append the new trail rows (and refresh name/metadata if they changed).
+  const livePatchSchema = z.object({
+    name: z.string().trim().min(1).max(200).optional(),
+    previewImg: z.string().max(2_000_000).nullable().optional(),
+    wMm: z.number().finite().nullable().optional(),
+    hMm: z.number().finite().nullable().optional(),
+    layerCount: z.number().int().min(0).max(500).optional(),
+    tests: z.array(liveTestSchema).max(50).optional().default([]),
+  });
+  app.patch(
+    "/api/press/:id/templates/live/:liveId",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const body = livePatchSchema.safeParse(req.body);
+      if (!body.success) return res.status(400).json({ message: body.error.message });
+      const existing = await storage.getPressLiveTemplateById(pressId, String(req.params.liveId));
+      if (!existing) return res.status(404).json({ message: "Saved template not found" });
+      const { tests: newTests, ...patch } = body.data;
+      const updated = Object.keys(patch).length
+        ? await storage.updatePressLiveTemplate(pressId, existing.id, patch)
+        : existing;
+      await storage.appendPressLiveTemplateTests(
+        existing.id,
+        newTests.map((t) => ({ artName: t.artName, verdict: t.verdict })),
+      );
+      const tests = await storage.listPressLiveTemplateTests([existing.id]);
+      res.json({ liveTemplate: { ...(updated ?? existing), tests } });
+    },
+  );
 
   // PUT /api/press/:id/templates/:specId/guides — Task #3101: hand-entered
   // fold/score positions + safety inset. Guides-only write (never touches
