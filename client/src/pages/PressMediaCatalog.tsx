@@ -195,7 +195,10 @@ function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print
   // Photographic jewel-case asset (CD_Mockup PSD, layer 1) with the booklet
   // window's semi-transparent white knocked down so art shows THROUGH the
   // clear lid. Natural aspect 1024×896; window rect measured off the crop.
-  const JH = S * (896 / 1024);
+  // Fit like the sleeve: the case fills the same S-tall footprint (top 0,
+  // same floor line); width follows the photo's natural aspect.
+  const JH = S;
+  const JW = S * (1024 / 896);
   const silk = print.name === 'Silkscreen';
   // Silkscreen inks band the white disc: first pick owns the disc, each
   // extra pick pushes the earlier ones out into rings (outermost = first).
@@ -252,15 +255,16 @@ function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print
 
       {jewel ? (
         // ─── JEWEL CASE — photographic clear hinged case. The booklet art
-        // (green waveform) sits BEHIND the case photo; the photo's cover
-        // window was knocked down to a light plastic sheen, so the art reads
-        // as a printed booklet under the clear lid, with the spine/hinge and
-        // tray edges from the photo over it.
+        // sits BEHIND the case photo; the photo's cover window was knocked
+        // down to a light plastic sheen, so the art reads as a printed
+        // booklet under the clear lid, with the spine/hinge and tray edges
+        // from the photo over it. Booklet cover matches the sleeve: press
+        // black with the press's own mark (waveform only as fallback).
         <div
           className="absolute left-0"
           style={{
-            top: S * 0.5 - JH / 2,
-            width: S,
+            top: 0,
+            width: JW,
             height: JH,
             filter: 'drop-shadow(0 16px 36px rgba(0,0,0,0.5))',
           }}
@@ -273,10 +277,19 @@ function CdRender({ caseName, print, spots, logoUrl }: { caseName: string; print
               top: '1.7%',
               width: '89.5%',
               height: '97.1%',
-              backgroundColor: COVER_GREEN,
+              backgroundColor: '#0b0b0c',
             }}
           >
-            <Waveform h={S * 0.42} bar={Math.round(S * 0.04)} />
+            {logoUrl ? (
+              <img
+                src={logoUrl}
+                alt=""
+                draggable={false}
+                style={{ width: '42%', height: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.92 }}
+              />
+            ) : (
+              <Waveform h={S * 0.3} bar={Math.round(S * 0.03)} color="rgba(255,255,255,0.9)" />
+            )}
           </div>
           {/* the case itself — clear lid, spine, hinge, tray edges */}
           <img
