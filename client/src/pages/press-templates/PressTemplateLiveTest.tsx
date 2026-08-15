@@ -993,6 +993,18 @@ export default function PressTemplateLiveTest({
                     <ThinProgress label="Reading art" t={t} testid="progress-reading-art" />
                   ) : (
                     <>
+                      {/* Cancel — quiet text, Apple-style: leaves without saving
+                          anything (nothing persists until Save). */}
+                      <button
+                        type="button"
+                        onClick={onExit}
+                        disabled={busy !== null}
+                        className="h-8 px-2 text-[12.5px] font-medium transition-opacity disabled:opacity-60"
+                        style={{ color: t.subink, background: 'transparent', border: 'none' }}
+                        data-testid="button-cancel-live-test"
+                      >
+                        Cancel
+                      </button>
                       {/* Once a test is underway, "Accept & Test" gives way to
                           "Save result & test another" — a trail staff can revisit (Bill, Aug 14 2026) */}
                       {art && (
@@ -1018,7 +1030,7 @@ export default function PressTemplateLiveTest({
                           data-testid="button-upload-art"
                         >
                           <ShieldCheck style={{ width: 14, height: 14, color: t.blue }} />
-                          Accept &amp; Test
+                          Test
                         </button>
                       )}
                       {canEdit && (
@@ -1030,7 +1042,7 @@ export default function PressTemplateLiveTest({
                           style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
                           data-testid="button-accept-save"
                         >
-                          Accept &amp; Save
+                          Save
                         </button>
                       )}
                     </>
