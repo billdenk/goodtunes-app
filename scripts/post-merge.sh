@@ -12204,3 +12204,21 @@ SQL
 }
 seed_californialand_email_branding_task_3120 dev  "${DATABASE_URL:-}"
 seed_californialand_email_branding_task_3120 prod "${PROD_DATABASE_URL:-}"
+
+# ── Templates rework (Ruby handoff, Aug 15 2026) — archive is history ─────
+# press_live_templates.archived_at: shelf tile archived off the Current view.
+# manufacturers.archived_template_slots: standard slots a press doesn't offer
+# ("Archived — not offered"), array of "format:componentKey:variantKey:disc".
+# Idempotent on both DBs (schema-drift guard).
+add_templates_archive_cols() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[templates-archive] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: templates archive DDL ok on $label" \
+    || echo "post-merge: WARNING — templates archive DDL failed on $label"
+ALTER TABLE press_live_templates ADD COLUMN IF NOT EXISTS archived_at timestamp;
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS archived_template_slots jsonb NOT NULL DEFAULT '[]'::jsonb;
+SQL
+}
+add_templates_archive_cols dev  "${DATABASE_URL:-}"
+add_templates_archive_cols prod "${PROD_DATABASE_URL:-}"

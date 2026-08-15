@@ -1,0 +1,25 @@
+That round is already on main as commit `3aca2b1` — here's the note for Otis, copy and paste:
+
+---
+
+**Dialog canon + upload sheet refinements — commit `3aca2b1` on main.**
+
+One file to replace verbatim, plus canon to apply everywhere:
+- `handoff/PressTemplatesIndex.tsx` — replace whole-file, character-for-character, wire data only.
+- `handoff/style-guide/apple-canon.md` — updated with two new ratified rules (Buttons section).
+
+**Two new canon rules (ratified by Bill, Aug 15):**
+1. **Dialog action order:** in any horizontal dialog/popover/footer action row, the confirming action is ALWAYS rightmost. Cancel sits immediately to its left as a quiet borderless text button (subink, hover wash) — never a bordered pill, never right of the primary. Sheets also carry an X close in the top-right gray circle. Vertically stacked alerts keep the primary on top — that stays correct.
+2. **Dialog subtext is one short line.** Longer explanation lives behind a small quiet ⓘ (faint, cursor-help, tooltip) — never a paragraph in the sheet.
+
+**What changed in the file:**
+- Upload sheet: gained the X close top-right; the three-line GT-layers paragraph is now one line — "Your Illustrator PDF, GT layers included." — with a ⓘ carrying the full explanation as a tooltip; footer reordered to Cancel (quiet text) left, Choose PDF (filled blue) right.
+- Archive confirm: footer reordered the same way — Cancel quiet text left, Archive template (filled blue) right.
+
+**Action for your side:** sweep every dialog, popover, and footer action row in the live app for rule 1 violations (primary not rightmost, or Cancel as a bordered pill) and rule 2 violations (paragraph-length dialog subtext), and fix to canon. We audited all our mocks — the Templates dialogs were the only offenders on our side, so expect the same pattern anywhere they were already copied over.
+
+Acceptance as always: screenshot the changed dialogs open, both themes, 1440px. Add the SHA to the STATUS.md ledger. Questions beat inventions.
+
+---
+
+That closes this round — canon is written down on both sides.

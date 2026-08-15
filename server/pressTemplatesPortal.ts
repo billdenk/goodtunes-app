@@ -499,6 +499,10 @@ export function registerPressTemplateFlowRoutes(
     const liveTests = await storage.listPressLiveTemplateTests(liveRows.map((r) => r.id));
     res.json({
       canEdit,
+      // Standard slots this press archived off the shelf ("not offered").
+      archivedSlots: Array.isArray((press as any).archivedTemplateSlots)
+        ? ((press as any).archivedTemplateSlots as string[])
+        : [],
       customSlots,
       liveTemplates: liveRows.map((r) => ({
         ...r,
@@ -1001,6 +1005,84 @@ export function registerPressTemplateFlowRoutes(
       res.json({ ok: true });
     },
   );
+
+  // POST /api/press/:id/templates/:specId/restore — put an archived
+  // template back on the shelf (Bill, Aug 15 2026: archive is history,
+  // never deletion). Reinstates the most recent archived revision's file
+  // onto the spec, re-measures, and flips that revision back to pending.
+  app.post(
+    "/api/press/:id/templates/:specId/restore",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+      if (!spec) return res.status(404).json({ message: "Template slot not found" });
+      if (spec.templateFileUrl) return res.status(409).json({ message: "This template is already live." });
+      const revs = await storage.listPressTemplateRevisions([spec.id]);
+      const archived = revs.find((r) => r.status === "archived" && r.fileUrl);
+      if (!archived) return res.status(404).json({ message: "No archived revision to restore." });
+      await storage.updatePressTemplateSpecFile(
+        pressId,
+        spec.id,
+        archived.fileUrl,
+        archived.fileName ?? null,
+        req.session.userId ?? null,
+      );
+      await clearTemplateSpecMeasurements(pressId, spec.id);
+      await measureTemplateSpecRow(pressId, spec.id);
+      await storage.setPressTemplateRevisionStatus(archived.id, "pending");
+      res.json({ ok: true });
+    },
+  );
+
+  // POST /api/press/:id/templates/slots/archive|restore — a standard slot
+  // this press doesn't offer ("Archived — not offered"). Pure per-press
+  // dismissal on the manufacturer row; nothing about the slot is deleted.
+  for (const action of ["archive", "restore"] as const) {
+    app.post(
+      `/api/press/:id/templates/slots/${action}`,
+      requireAdmin,
+      requirePressScope,
+      requirePressEditor,
+      async (req, res) => {
+        const pressId = String(req.params.id);
+        const slotKey = typeof req.body?.slotKey === "string" ? req.body.slotKey.trim() : "";
+        if (!slotKey) return res.status(400).json({ message: "slotKey is required" });
+        const press = await storage.getManufacturerById(pressId);
+        if (!press) return res.status(404).json({ message: "Press not found" });
+        const current = Array.isArray((press as any).archivedTemplateSlots)
+          ? ((press as any).archivedTemplateSlots as string[])
+          : [];
+        const next =
+          action === "archive"
+            ? Array.from(new Set([...current, slotKey]))
+            : current.filter((k) => k !== slotKey);
+        await storage.updateManufacturer(pressId, { archivedTemplateSlots: next } as any);
+        res.json({ ok: true, archivedSlots: next });
+      },
+    );
+  }
+
+  // POST /api/press/:id/templates/live/:liveId/archive|restore — saved
+  // shelf tiles archive the same way (history, never deletion).
+  for (const action of ["archive", "restore"] as const) {
+    app.post(
+      `/api/press/:id/templates/live/:liveId/${action}`,
+      requireAdmin,
+      requirePressScope,
+      requirePressEditor,
+      async (req, res) => {
+        const pressId = String(req.params.id);
+        const updated = await storage.updatePressLiveTemplate(pressId, String(req.params.liveId), {
+          archivedAt: action === "archive" ? new Date() : null,
+        });
+        if (!updated) return res.status(404).json({ message: "Saved template not found" });
+        res.json({ ok: true });
+      },
+    );
+  }
 
   // POST /api/press/:id/templates/:specId/test — run a finished test file
   // against this slot through the completed-template engine. Streams the

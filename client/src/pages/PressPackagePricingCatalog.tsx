@@ -27,7 +27,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { ALBUM_FORMAT_LABEL, type AlbumFormat } from "@shared/schema";
-import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Loader2, MinusCircle, MoreHorizontal, Plus, RotateCcw, Search, UploadCloud, X } from "lucide-react";
+import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Info, Loader2, MinusCircle, MoreHorizontal, Plus, RotateCcw, Search, UploadCloud, X } from "lucide-react";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT, postAdminImage } from "@/lib/adminUpload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -961,8 +961,9 @@ function BrandDialog({
           Square works best — shown on the cover and center label.
         </div>
 
-        {/* Hairline divider + footer: quiet Reset on the left; Cancel pill +
-            filled blue Save pill on the right. */}
+        {/* Hairline divider + footer: quiet Reset on the left; Cancel quiet
+            text + filled blue Save pill on the right (canon, Aug 15 2026:
+            primary rightmost, Cancel borderless text to its left). */}
         <div style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "14px -20px 0" }} />
         <div className="flex items-center justify-between" style={{ paddingTop: 14 }}>
           <button
@@ -981,10 +982,10 @@ function BrandDialog({
               type="button"
               onClick={onCancel}
               data-testid="button-brand-cancel"
-              className="rounded-full text-[13px] font-semibold transition-colors"
-              style={{ height: 32, padding: "0 14px", background: "rgba(255,255,255,0.08)", border: "none", color: "rgba(245,245,247,0.75)", cursor: "pointer" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.14)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+              className="rounded-full text-[13px] font-medium transition-colors"
+              style={{ height: 32, padding: "0 14px", background: "none", border: "none", color: "rgba(245,245,247,0.75)", cursor: "pointer" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
             >
               Cancel
             </button>
@@ -1747,11 +1748,18 @@ function GroupCard({
           >
             <AlertDialogHeader>
               <AlertDialogTitle>Archive {tier.name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This archives the type and{" "}
-                {tier.colors.length === 1 ? "the 1 color" : `all ${tier.colors.length} colors`} under
-                it. Artists won't see them for new projects — anything already in a project keeps
-                working. To restore it later, contact GoodTunes.
+              {/* One line, Apple-quiet; the detail lives behind the i (canon, Aug 15 2026) */}
+              <AlertDialogDescription className="inline-flex items-center gap-1.5 justify-center">
+                Archives the type and{" "}
+                {tier.colors.length === 1 ? "its 1 color" : `its ${tier.colors.length} colors`} for new projects.
+                <span
+                  className="inline-flex items-center justify-center cursor-help"
+                  title="Anything already in a project keeps working. To restore it later, contact GoodTunes."
+                  aria-label="About archiving"
+                  data-testid={`info-archive-type-${tier.id}`}
+                >
+                  <Info className="w-3.5 h-3.5" style={{ color: FAINT }} />
+                </span>
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

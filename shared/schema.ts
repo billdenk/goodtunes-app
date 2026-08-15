@@ -2911,6 +2911,8 @@ export const pressLiveTemplates = pgTable("press_live_templates", {
   hMm: real("h_mm"),
   layerCount: integer("layer_count").notNull().default(0),
   createdByUserId: varchar("created_by_user_id"),
+  // Archived off the shelf (Bill, Aug 15 2026) — history, never deletion.
+  archivedAt: timestamp("archived_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -4823,6 +4825,10 @@ export const manufacturers = pgTable("manufacturers", {
   // brand logo) so swapping the preview art doesn't touch the press's
   // profile logo and vice-versa.
   vinylPlaceholderUrl: text("vinyl_placeholder_url"),
+  // Templates page (Bill, Aug 15 2026) — standard slots this press doesn't
+  // offer, archived off the shelf ("Archived — not offered"). Array of slot
+  // keys "format:componentKey:variantKey:discCount"; restorable any time.
+  archivedTemplateSlots: jsonb("archived_template_slots").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   // Center-label branding for the press portal's vinyl color setup disc
   // preview. Each press supplies a label logo (SVG preferred — it must read
   // at tiny sizes) plus a label background color; e.g. Memphis presses a

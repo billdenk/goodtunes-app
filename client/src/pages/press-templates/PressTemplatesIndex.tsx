@@ -19,7 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   BadgeCheck, Clock3, XCircle, AlertTriangle, History, Upload, X,
-  MoreHorizontal, Archive, Loader2, AlertCircle, Plus, Layers, Pencil, Trash2,
+  MoreHorizontal, Archive, RotateCcw, Loader2, AlertCircle, Plus, Layers, Pencil, Trash2, Info,
 } from "lucide-react";
 // Live-test flow (handoff, Aug 14 2026): the upload sheet stashes the chosen
 // PDF in the transit store, then the tab routes to the Live test page.
@@ -505,6 +505,69 @@ function CustomSlotActions({
   );
 }
 
+// ─── Per-tile ••• overflow (handoff, Aug 15 2026) — appears on hover in the
+// tile's top-right corner. Archive lives here (with a confirm); archived
+// tiles get Restore instead. Handoff-verbatim styling; wired handlers.
+function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore }: {
+  tileKey: string; title: string; archived: boolean; t: Theme;
+  menuFor: string | null; setMenuFor: (k: string | null) => void;
+  onArchive: () => void; onRestore: () => void;
+}) {
+  const open = menuFor === tileKey;
+  return (
+    <div className="absolute top-2.5 right-2.5 z-10">
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setMenuFor(open ? null : tileKey); }}
+        className={cn("w-8 h-8 rounded-full flex items-center justify-center transition-opacity", open ? "opacity-100" : "opacity-0 group-hover:opacity-100", t.hoverWash)}
+        style={{ color: t.subink }}
+        aria-label={`More options for ${title}`}
+        aria-expanded={open}
+        data-testid={`button-tile-overflow-${tileKey}`}
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuFor(null); }} aria-hidden />
+          <div
+            className="absolute right-0 mt-1 z-20 rounded-xl overflow-hidden py-1 shadow-xl"
+            style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, minWidth: 190 }}
+            role="menu"
+            data-testid={`menu-tile-overflow-${tileKey}`}
+          >
+            {archived ? (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onRestore(); }}
+                className={cn("w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] font-medium text-left", t.hoverWash)}
+                style={{ color: t.ink }}
+                role="menuitem"
+                data-testid={`menuitem-restore-${tileKey}`}
+              >
+                <RotateCcw className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} />
+                Restore template
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setMenuFor(null); onArchive(); }}
+                className={cn("w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] font-medium text-left", t.hoverWash)}
+                style={{ color: t.ink }}
+                role="menuitem"
+                data-testid={`menuitem-archive-${tileKey}`}
+              >
+                <Archive className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} />
+                Archive template…
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── Tiles ──
 function FilledTile({
   t,
@@ -528,7 +591,7 @@ function FilledTile({
     <button
       type="button"
       onClick={onOpen}
-      className={cn("rounded-2xl px-6 pt-7 pb-5 flex flex-col items-center text-center transition-colors group", t.tileHover)}
+      className={cn("gt-tile rounded-2xl px-6 pt-7 pb-5 flex flex-col items-center text-center transition-colors group", t.tileHover)}
       style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}
       data-testid={`tile-template-${spec.id}`}
     >
@@ -538,12 +601,12 @@ function FilledTile({
         </span>
       </div>
       <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>{slot.title}</div>
-      <div className="mt-1 text-[12.5px] inline-flex items-center gap-1.5 justify-center" style={{ color: t.subink }} data-testid={`note-${spec.id}`}>
+      <div className="gt-detail mt-1 text-[12.5px] inline-flex items-center gap-1.5 justify-center" style={{ color: t.subink }} data-testid={`note-${spec.id}`}>
         {spec.variantOptions?.length ? <Layers className="w-3 h-3 flex-shrink-0" style={{ color: t.blue }} /> : null}
         {note}
       </div>
       {live && (
-        <div className="mt-0.5 text-[12.5px] tabular-nums" style={{ color: t.subink }} data-testid={`text-rev-${spec.id}`}>
+        <div className="gt-detail mt-0.5 text-[12.5px] tabular-nums" style={{ color: t.subink }} data-testid={`text-rev-${spec.id}`}>
           {live.revLabel}
         </div>
       )}
@@ -555,9 +618,9 @@ function FilledTile({
           </span>
         )}
       </div>
-      {/* Revision history — superseded / archived entries expand on hover */}
+      {/* Revision history — superseded / archived entries, quiet until hover */}
       {historyRevs.length > 0 && (
-        <div className="mt-2 max-h-0 overflow-hidden group-hover:max-h-40 transition-all duration-200 w-full" data-testid={`history-${spec.id}`}>
+        <div className="gt-detail mt-2 w-full" data-testid={`history-${spec.id}`}>
           {historyRevs.map((h) => (
             <div key={h.id} className="flex items-center justify-center gap-1.5 text-[11.5px]" style={{ color: t.faint, opacity: 0.85 }}>
               <History className="w-3 h-3 flex-shrink-0" />
@@ -575,49 +638,44 @@ function EmptyTile({
   t,
   slot,
   canEdit,
+  archived,
+  archivedNote,
   onAdd,
 }: {
   t: Theme;
   slot: Slot;
   canEdit: boolean;
+  archived?: boolean;
+  archivedNote?: string;
   onAdd: () => void;
 }) {
-  const disabled = !!slot.disabled;
+  const disabled = !!slot.disabled || !!archived;
   const testid = `tile-empty-${slot.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-  // Hover invite (gogoods, 2026-08-12): alongside the Attach pill, the tile's
-  // dashed border turns blue with the faintest glow — "a teeny bit if at all".
-  const [hover, setHover] = useState(false);
-  const invite = hover && !disabled && canEdit;
+  // Aug 15 2026: the "Click to add" / Attach overlay is gone — anything that
+  // opens simply shows the solid blue border on hover (gt-slot CSS).
   return (
     <button
       type="button"
       disabled={disabled || !canEdit}
       onClick={disabled || !canEdit ? undefined : onAdd}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      onFocus={() => setHover(true)}
-      onBlur={() => setHover(false)}
-      className="group relative rounded-2xl px-6 py-9 flex flex-col items-center justify-center text-center disabled:cursor-default transition-[border-color,box-shadow] duration-200"
+      className={cn("relative rounded-2xl px-6 py-9 flex flex-col items-center justify-center text-center disabled:cursor-default transition-[border-color,box-shadow] duration-200", !disabled && canEdit && "gt-slot")}
       style={{
-        border: `1.5px dashed ${invite ? t.blue : t.dashedBorder}`,
-        boxShadow: invite ? `0 0 0 1px ${t.blue}33, 0 0 14px ${t.blue}2e` : "none",
+        border: `1.5px dashed ${t.dashedBorder}`,
         opacity: disabled ? 0.5 : 1,
       }}
       data-testid={testid}
     >
-      <div className={cn("flex flex-col items-center transition-opacity", !disabled && canEdit && "group-hover:opacity-30")}>
-        <ComponentIcon kind={slot.kind} color={t.faint} fill={t.iconFill} />
+      <div className="flex flex-col items-center">
+        {archived ? (
+          <Archive className="w-10 h-10" style={{ color: t.faint }} />
+        ) : (
+          <ComponentIcon kind={slot.kind} color={t.faint} fill={t.iconFill} />
+        )}
         <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>{slot.title}</div>
-        <div className="mt-1 text-[12.5px]" style={{ color: t.faint }}>{slot.note || "Needed for packages"}</div>
-      </div>
-      {!disabled && canEdit && (
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <span className="h-9 px-5 rounded-full inline-flex items-center gap-2 text-[13px] font-semibold text-white" style={{ backgroundColor: t.blue }}>
-            <Upload className="w-4 h-4" />
-            Attach template
-          </span>
+        <div className="mt-1 text-[12.5px]" style={{ color: t.faint }}>
+          {archived ? archivedNote ?? "Archived — not offered" : slot.note || "Needed for packages"}
         </div>
-      )}
+      </div>
     </button>
   );
 }
@@ -645,23 +703,75 @@ export function PressTemplatesIndex({
   const [uploadName, setUploadName] = useState("");
   const [uploadComponent, setUploadComponent] = useState<string | null>(null);
   const openUpload = (slot: Slot | null) => { setUploadSlot(slot); setUploadName(""); setUploadComponent(null); setUploadOpen(true); };
-  // Archive the live file (slot returns to a dashed tile; revisions stay in
-  // history). Lived on the retired upload modal — kept reachable from the
-  // detail sheet.
+  // No detail popup (Bill, Aug 15 2026): clicking a template opens it live —
+  // the same view as before it was saved. Replace and re-test live there.
+  // Archive moved to a per-tile ••• with a confirm; a view pill filters
+  // All / Current / Archived. Archived is history, never deletion.
+  const [view, setView] = useState<"All" | "Current" | "Archived">("Current");
+  const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [confirmArchive, setConfirmArchive] = useState<{ kind: "spec" | "slot" | "live"; id: string; title: string } | null>(null);
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
+  const archiveErr = (e: any) => toast({ title: "Couldn't archive the template", description: e?.message, variant: "destructive" });
+  const restoreErr = (e: any) => toast({ title: "Couldn't restore the template", description: e?.message, variant: "destructive" });
+  // Attached template file: pull it off the slot (revisions stay in history).
   const archiveSpec = useMutation({
     mutationFn: async (specId: string) => {
       await apiRequest("POST", `/api/press/${pressId}/templates/${specId}/archive`);
     },
-    onSuccess: async () => {
-      setDetail(null);
-      await queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
-    },
-    onError: (e: any) => toast({ title: "Couldn't archive the template", description: e?.message, variant: "destructive" }),
+    onSuccess: invalidate,
+    onError: archiveErr,
   });
+  const restoreSpec = useMutation({
+    mutationFn: async (specId: string) => {
+      await apiRequest("POST", `/api/press/${pressId}/templates/${specId}/restore`);
+    },
+    onSuccess: invalidate,
+    onError: restoreErr,
+  });
+  // Standard slots a press doesn't offer archive too (Bill, Aug 15 2026) —
+  // per-press dismissal persisted on the manufacturer row.
+  const slotArchive = useMutation({
+    mutationFn: async (slotKey: string) => {
+      await apiRequest("POST", `/api/press/${pressId}/templates/slots/archive`, { slotKey });
+    },
+    onSuccess: invalidate,
+    onError: archiveErr,
+  });
+  const slotRestore = useMutation({
+    mutationFn: async (slotKey: string) => {
+      await apiRequest("POST", `/api/press/${pressId}/templates/slots/restore`, { slotKey });
+    },
+    onSuccess: invalidate,
+    onError: restoreErr,
+  });
+  // Saved shelf tiles (live-test templates).
+  const liveArchive = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/press/${pressId}/templates/live/${id}/archive`);
+    },
+    onSuccess: invalidate,
+    onError: archiveErr,
+  });
+  const liveRestore = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/press/${pressId}/templates/live/${id}/restore`);
+    },
+    onSuccess: invalidate,
+    onError: restoreErr,
+  });
+  const doArchive = (c: { kind: "spec" | "slot" | "live"; id: string }) => {
+    if (c.kind === "spec") archiveSpec.mutate(c.id);
+    else if (c.kind === "slot") slotArchive.mutate(c.id);
+    else liveArchive.mutate(c.id);
+    setConfirmArchive(null);
+  };
+  const doRestore = (c: { kind: "spec" | "slot" | "live"; id: string }) => {
+    if (c.kind === "spec") restoreSpec.mutate(c.id);
+    else if (c.kind === "slot") slotRestore.mutate(c.id);
+    else liveRestore.mutate(c.id);
+    setMenuFor(null);
+  };
   const [reopening, setReopening] = useState<string | null>(null); // shelf tile id being fetched
-  // Detail sheet — click a certified tile to view the template, then replace
-  // it from there if desired (Bill, Aug 14 2026).
-  const [detail, setDetail] = useState<{ slot: Slot; spec: TemplateSpecWithHistory } | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
   // Just-saved tile gets a one-time hairline pulse — blue, then back to gray.
   const [flashFresh, setFlashFresh] = useState(() => freshLiveSave.flag);
@@ -741,6 +851,8 @@ export function PressTemplatesIndex({
   const canEdit = data?.canEdit ?? false;
   const specs = data?.specs ?? [];
   const liveTemplates = data?.liveTemplates ?? [];
+  // Standard slots this press archived off the shelf ("not offered").
+  const archivedSlotKeys = new Set(data?.archivedSlots ?? []);
 
   // The DB format the current section maps to (custom slots + create flow).
   const sectionDbFormat =
@@ -789,19 +901,13 @@ export function PressTemplatesIndex({
               from your template PDFs. One certified revision is live per component.
             </p>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => openUpload(null)}
-              className="inline-flex items-center gap-2 h-9 px-4 rounded-full text-[13px] font-semibold flex-shrink-0"
-              style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
-              data-testid="button-upload-template"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Upload a template
-            </button>
-          )}
+        </div>
+
+        {/* Controls row — format family on the left; views · sizes · Create New
+            on the right. The bright header upload button and the "Vinyl ·
+            Templates" caption are gone (Bill, Aug 15 2026): the format chip
+            says it, and Create New is the quiet escape hatch. */}
+        <div className="mt-6 flex items-center justify-between gap-4">
           {/* Format switcher — Stickers disabled (no DB format yet) */}
           <div className="inline-flex items-center rounded-full flex-shrink-0" style={{ padding: 3, backgroundColor: t.cardSoft }} role="tablist" aria-label="Template format" data-testid="tabs-template-format">
             {(
@@ -840,14 +946,21 @@ export function PressTemplatesIndex({
               );
             })}
           </div>
-          </div>
-        </div>
-
-        {/* Task #3065 — the "VINYL · TEMPLATES" eyebrow is gone (the page
-            header + format tabs already say where you are); the size pills
-            keep the row. */}
-        <div className="mt-6 flex items-center justify-end gap-4">
           <div className="flex items-center gap-1.5">
+            {/* View pill — All / Current / Archived. Archive is history, not deletion. */}
+            {(["All", "Current", "Archived"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className="h-7 px-3 rounded-full text-[12px] font-semibold transition-colors"
+                style={v === view ? { backgroundColor: t.pillActive, color: t.ink, boxShadow: t.segShadow } : { color: t.faint, cursor: "pointer" }}
+                data-testid={`filter-view-${v.toLowerCase()}`}
+              >
+                {v}
+              </button>
+            ))}
+            {format === "Vinyl" && <span className="mx-1.5 self-stretch w-px" style={{ backgroundColor: t.hairline }} aria-hidden />}
             {format === "Vinyl" &&
               (["7″", "10″", "12″"] as const).map((sz) => {
                 const disabled = false;
@@ -871,6 +984,23 @@ export function PressTemplatesIndex({
                   </button>
                 );
               })}
+            {canEdit && (
+              <>
+                <span className="mx-1.5 self-stretch w-px" style={{ backgroundColor: t.hairline }} aria-hidden />
+                {/* "Create New" — quiet ghost pill, same weight as the filter pills
+                    beside it; it's the escape hatch, not the main road (Bill, Aug 15 2026) */}
+                <button
+                  type="button"
+                  onClick={() => openUpload(null)}
+                  className={cn("inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[12px] font-semibold flex-shrink-0 transition-colors", t.hoverWash)}
+                  style={{ color: t.subink }}
+                  data-testid="button-upload-template"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Create New
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -895,13 +1025,16 @@ export function PressTemplatesIndex({
               liveTemplates.map((sv) => {
                 const fresh = flashFresh;
                 const busy = reopening === sv.id;
+                const isArchived = !!sv.archivedAt;
+                if ((view === "Current" && isArchived) || (view === "Archived" && !isArchived)) return null;
+                const key = `live-${sv.id}`;
                 return (
+                  <div key={key} className="relative group" style={{ opacity: isArchived ? 0.7 : 1 }}>
                   <button
-                    key={`live-${sv.id}`}
                     type="button"
                     disabled={busy}
                     onClick={() => reopenSaved(sv)}
-                    className={cn("rounded-2xl px-6 py-7 flex flex-col items-center text-center transition-colors", t.tileHover)}
+                    className={cn("gt-tile w-full h-full rounded-2xl px-6 py-7 flex flex-col items-center text-center transition-colors", t.tileHover)}
                     style={{
                       backgroundColor: t.card,
                       border: `1px solid ${fresh ? t.blue : t.hairline}`,
@@ -926,25 +1059,54 @@ export function PressTemplatesIndex({
                     <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>
                       {sv.name}
                     </div>
-                    <div className="mt-1 text-[12.5px]" style={{ color: t.faint }}>
+                    <div className="gt-detail mt-1 text-[12.5px]" style={{ color: t.faint }}>
                       {sv.wMm && sv.hMm ? `${Math.round(sv.wMm)} × ${Math.round(sv.hMm)} mm · ` : ""}
                       {sv.layerCount} GT layer{sv.layerCount === 1 ? "" : "s"}
                     </div>
-                    <div className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: t.ready }}>
-                      {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BadgeCheck className="w-3.5 h-3.5" />}
-                      Saved · {new Date(sv.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                    <div className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: isArchived ? t.subink : t.ready }}>
+                      {isArchived ? (
+                        <><Archive className="w-3.5 h-3.5" /><span style={{ fontWeight: 600 }}>Archived</span></>
+                      ) : (
+                        <>
+                          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BadgeCheck className="w-3.5 h-3.5" />}
+                          Saved · {new Date(sv.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                        </>
+                      )}
                     </div>
                     {sv.tests.length > 0 && (
-                      <div className="mt-1 text-[12px]" style={{ color: t.faint }}>
+                      <div className="gt-detail mt-1 text-[12px]" style={{ color: t.faint }}>
                         {sv.tests.length} art file{sv.tests.length === 1 ? "" : "s"} tested
                       </div>
                     )}
                   </button>
+                  {canEdit && (
+                    <TileOverflow
+                      tileKey={key}
+                      title={sv.name}
+                      archived={isArchived}
+                      t={t}
+                      menuFor={menuFor}
+                      setMenuFor={setMenuFor}
+                      onArchive={() => setConfirmArchive({ kind: "live", id: sv.id, title: sv.name })}
+                      onRestore={() => doRestore({ kind: "live", id: sv.id })}
+                    />
+                  )}
+                  </div>
                 );
               })}
             {slots.map((slot) => {
               const spec = matchSpec(specs, slot);
-              const filled = spec && spec.templateFileUrl;
+              const filled = !!(spec && spec.templateFileUrl);
+              // A spec with no live file but archived revisions = an archived
+              // template (restorable); a slot key on the press's dismissal
+              // list = "Archived — not offered" (standard slot the press
+              // doesn't carry). Both live under the Archived view.
+              const specArchived = !!(spec && !spec.templateFileUrl && spec.revisions.some((r) => r.status === "archived"));
+              const slotKey = `${slot.dbFormat ?? ""}:${slot.componentKey ?? ""}:${slot.variantKey ?? ""}:${slot.discCount ?? ""}`;
+              const slotArchived = !filled && !specArchived && archivedSlotKeys.has(slotKey);
+              const isArchived = specArchived || slotArchived;
+              if (view === "Current" && isArchived) return null;
+              if (view === "Archived" && !isArchived) return null;
               const key = slot.customSlot ? `custom-${slot.customSlot.id}` : `${slot.title}-${slot.variantKey ?? ""}`;
               const tile = filled ? (
                 <FilledTile
@@ -952,7 +1114,7 @@ export function PressTemplatesIndex({
                   t={t}
                   slot={slot}
                   spec={spec!}
-                  onOpen={() => setDetail({ slot, spec: spec! })}
+                  onOpen={() => onOpenSpec(spec!.id)}
                 />
               ) : (
                 <EmptyTile
@@ -960,22 +1122,53 @@ export function PressTemplatesIndex({
                   t={t}
                   slot={slot}
                   canEdit={canEdit}
+                  archived={isArchived}
+                  archivedNote={specArchived ? "Archived" : "Archived — not offered"}
                   onAdd={() => openUpload(slot)}
                 />
               );
-              // Task #3066 — operator-created tiles get a ⋯ overlay with
-              // rename / remove (tiles are <button> roots — overlay sibling).
-              if (slot.customSlot && canEdit) {
+              // Per-tile ••• (archive / restore) + Task #3066 custom-slot
+              // rename / remove — overlay siblings (tiles are <button> roots).
+              const overflowKey = slot.customSlot ? `custom-${slot.customSlot.id}` : slotKey.replace(/[^a-z0-9_-]+/gi, "-");
+              const canArchiveHere = canEdit && !slot.disabled && (filled || spec || slot.dbFormat) && !slot.customSlot;
+              const showOverflow = canArchiveHere || isArchived;
+              if ((slot.customSlot && canEdit) || showOverflow) {
                 return (
-                  <div key={key} className="relative [&>button]:w-full [&>button]:h-full">
+                  <div key={key} className="relative group [&>button]:w-full [&>button]:h-full">
                     {tile}
-                    <CustomSlotActions
-                      t={t}
-                      slot={slot.customSlot}
-                      onRename={() => setEditSlot(slot.customSlot!)}
-                      onRemove={() => removeSlot.mutate(slot.customSlot!.id)}
-                      removing={removeSlot.isPending}
-                    />
+                    {showOverflow && (
+                      <TileOverflow
+                        tileKey={overflowKey}
+                        title={slot.title}
+                        archived={isArchived}
+                        t={t}
+                        menuFor={menuFor}
+                        setMenuFor={setMenuFor}
+                        onArchive={() =>
+                          setConfirmArchive(
+                            filled
+                              ? { kind: "spec", id: spec!.id, title: slot.title }
+                              : { kind: "slot", id: slotKey, title: slot.title },
+                          )
+                        }
+                        onRestore={() =>
+                          doRestore(
+                            specArchived
+                              ? { kind: "spec", id: spec!.id }
+                              : { kind: "slot", id: slotKey },
+                          )
+                        }
+                      />
+                    )}
+                    {slot.customSlot && canEdit && (
+                      <CustomSlotActions
+                        t={t}
+                        slot={slot.customSlot}
+                        onRename={() => setEditSlot(slot.customSlot!)}
+                        onRemove={() => removeSlot.mutate(slot.customSlot!.id)}
+                        removing={removeSlot.isPending}
+                      />
+                    )}
                   </div>
                 );
               }
@@ -1025,114 +1218,67 @@ export function PressTemplatesIndex({
           onCreated={() => setEditSlot(null)}
         />
       )}
-      {/* Template detail sheet — view it, then replace if desired (Bill, Aug 14 2026) */}
-      {detail && (() => {
-        const { slot, spec } = detail;
-        const status = slotStatus(spec);
-        const live = spec.revisions.find((r) => r.status === "certified" || r.status === "pending");
-        const historyRevs = spec.revisions.filter((r) => r.status === "superseded" || r.status === "archived");
-        const preview = spec.previewUrls?.[0] ?? null;
-        return (
+      {/* Archive confirm — are-you-sure before a tile leaves the live shelf
+          (Bill, Aug 15 2026). Archive is history, never deletion. */}
+      {confirmArchive && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-6"
+          style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+          onClick={() => setConfirmArchive(null)}
+          data-testid="modal-confirm-archive-backdrop"
+        >
           <div
-            className="fixed inset-0 z-[70] flex items-center justify-center p-6"
-            style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
-            onClick={() => setDetail(null)}
-            data-testid="sheet-template-detail-backdrop"
+            className="relative rounded-2xl overflow-hidden shadow-2xl w-full text-center px-8 py-9"
+            style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, maxWidth: 440 }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label={`Archive ${confirmArchive.title}`}
+            data-testid="modal-confirm-archive"
           >
-            <div
-              className="rounded-2xl overflow-hidden shadow-2xl w-full text-center px-8 py-9"
-              style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, maxWidth: 560 }}
-              onClick={(e) => e.stopPropagation()}
-              role="dialog"
-              aria-label={slot.title}
-              data-testid="sheet-template-detail"
+            <button
+              type="button"
+              onClick={() => setConfirmArchive(null)}
+              className={cn("absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-colors", t.hoverWash)}
+              style={{ color: t.subink }}
+              aria-label="Close"
+              data-testid="button-close-confirm-archive"
             >
-              <span className="mx-auto rounded-full overflow-hidden flex items-center justify-center" style={{ width: 168, height: 168, backgroundColor: "#fff", border: `1px solid ${t.hairline}` }}>
-                {preview ? (
-                  <img src={preview} alt={`${slot.title} — template preview`} className="w-full h-full object-cover" data-testid="img-detail-preview" />
-                ) : (
-                  <ComponentIcon kind={slot.kind} color={t.blue} fill={t.iconFill} size={84} />
-                )}
-              </span>
-              <div className="mt-5 text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>{slot.title}</div>
-              <div className="mt-1 text-[13px]" style={{ color: t.subink }}>
-                {spec.variantOptions?.length ? variantOptionsNote(spec.variantOptions) : slot.note}
-              </div>
-              {(spec.templateFileName || live) && (
-                <div className="mt-0.5 text-[13px] tabular-nums" style={{ color: t.subink }}>
-                  {spec.templateFileName}
-                  {spec.templateFileName && live ? <span style={{ color: t.faint }}> · </span> : null}
-                  {live?.revLabel}
-                </div>
-              )}
-              <div className="mt-3 flex items-center justify-center gap-2">
-                <StatusChip status={status} t={t} />
-                {status === "certified" && live?.certifiedAt && (
-                  <span className="text-[11.5px]" style={{ color: t.faint }}>
-                    {new Date(live.certifiedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                  </span>
-                )}
-              </div>
-              {historyRevs.map((h) => (
-                <div key={h.id} className="mt-3 flex items-center justify-center gap-1.5 text-[12px]" style={{ color: t.faint }}>
-                  <History className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="tabular-nums">{h.revLabel}</span>
-                  <span>· {h.note ?? "in history"}</span>
-                </div>
-              ))}
-              <div className="mt-7 flex items-center justify-center gap-2.5">
-                {canEdit && (
-                  <button
-                    type="button"
-                    onClick={() => { setDetail(null); openUpload(slot); }}
-                    className="h-9 px-5 rounded-full text-[13px] font-semibold text-white"
-                    style={{ backgroundColor: t.blue }}
-                    data-testid="button-replace-template"
-                  >
-                    Replace template
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => { setDetail(null); onOpenSpec(spec.id); }}
-                  className="h-9 px-5 rounded-full text-[13px] font-semibold"
-                  style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
-                  data-testid="button-open-live-test"
-                >
-                  Open live test
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDetail(null)}
-                  className="h-9 px-5 rounded-full text-[13px] font-semibold"
-                  style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
-                  data-testid="button-close-detail"
-                >
-                  Close
-                </button>
-              </div>
-              {canEdit && (
-                <p className="mt-4 text-[11.5px]" style={{ color: t.faint }}>
-                  Replacing uploads a new revision — the current one moves to history, it is never deleted.
-                  {" "}
-                  {/* Archive lived on the retired upload modal; kept reachable
-                      here (adaptation — flagged to Bill). */}
-                  <button
-                    type="button"
-                    disabled={archiveSpec.isPending}
-                    onClick={() => archiveSpec.mutate(spec.id)}
-                    className="underline underline-offset-2 disabled:opacity-60"
-                    style={{ color: t.faint }}
-                    data-testid="button-archive-template"
-                  >
-                    {archiveSpec.isPending ? "Archiving…" : "Or archive this file"}
-                  </button>
-                </p>
-              )}
+              <X className="w-4 h-4" />
+            </button>
+            <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
+              <Archive className="w-5 h-5" style={{ color: t.subink }} />
+            </div>
+            <div className="mt-4 text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>
+              Archive &ldquo;{confirmArchive.title}&rdquo;?
+            </div>
+            <p className="mt-1.5 text-[13px] mx-auto" style={{ color: t.subink, maxWidth: 340 }}>
+              It leaves the live shelf and stops measuring client files. It moves to Archived —
+              nothing is ever deleted, and you can restore it any time.
+            </p>
+            {/* Canon (Bill, Aug 15 2026): confirming action is always rightmost; Cancel is quiet text to its left. */}
+            <div className="mt-6 flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setConfirmArchive(null)}
+                className={cn('h-9 px-4 rounded-full text-[13px] font-medium transition-colors', t.hoverWash)}
+                style={{ color: t.subink }}
+                data-testid="button-cancel-archive"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => doArchive(confirmArchive)}
+                className="h-9 px-5 rounded-full text-[13px] font-semibold text-white"
+                style={{ backgroundColor: t.blue }}
+                data-testid="button-confirm-archive"
+              >
+                Archive template
+              </button>
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
 
       {/* Upload sheet — Apple-style: dimmed page, one decision (Bill, Aug 14 2026).
           Handoff-verbatim; slot mode shows "For: {slot}", header mode asks
@@ -1152,6 +1298,16 @@ export function PressTemplatesIndex({
             aria-label="Upload your template"
             data-testid="sheet-upload-template"
           >
+            <button
+              type="button"
+              onClick={() => setUploadOpen(false)}
+              className={cn('absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-colors', t.hoverWash)}
+              style={{ color: t.subink }}
+              aria-label="Close"
+              data-testid="button-close-upload"
+            >
+              <X className="w-4 h-4" />
+            </button>
             <div
               className="mx-auto w-12 h-12 rounded-full flex items-center justify-center"
               style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}
@@ -1159,9 +1315,17 @@ export function PressTemplatesIndex({
               <Upload className="w-5 h-5" style={{ color: t.subink }} />
             </div>
             <div className="mt-4 text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>Upload your template</div>
-            <p className="mt-1.5 text-[13px] mx-auto" style={{ color: t.subink, maxWidth: 400 }}>
-              This is your PDF saved from Illustrator with &ldquo;GT Layers&rdquo; in it: &ldquo;GT CUT LINE&rdquo;,
-              &ldquo;GT BLEED AREA&rdquo;, and so on. Each layer is read by name, exactly where you drew it.
+            {/* One line, Apple-quiet; the detail lives behind the i (Bill, Aug 15 2026) */}
+            <p className="mt-1.5 text-[13px] mx-auto inline-flex items-center gap-1.5" style={{ color: t.subink }}>
+              Your Illustrator PDF, GT layers included.
+              <span
+                className="inline-flex items-center justify-center cursor-help"
+                title={'Layers named "GT CUT LINE", "GT BLEED AREA", and so on are read by name, exactly where you drew them.'}
+                aria-label="About GT layers"
+                data-testid="info-gt-layers"
+              >
+                <Info className="w-3.5 h-3.5" style={{ color: t.faint }} />
+              </span>
             </p>
             {uploadSlot ? (
               <div className="mt-4 text-[12.5px] font-semibold" style={{ color: t.subink }} data-testid="text-upload-for">
@@ -1208,7 +1372,17 @@ export function PressTemplatesIndex({
                 </div>
               </div>
             )}
+            {/* Canon (Bill, Aug 15 2026): confirming action is always rightmost; Cancel is quiet text to its left. */}
             <div className="mt-6 flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setUploadOpen(false)}
+                className={cn('h-9 px-4 rounded-full text-[13px] font-medium transition-colors', t.hoverWash)}
+                style={{ color: t.subink }}
+                data-testid="button-cancel-upload"
+              >
+                Cancel
+              </button>
               <button
                 type="button"
                 onClick={() => uploadInput.current?.click()}
@@ -1218,20 +1392,18 @@ export function PressTemplatesIndex({
               >
                 Choose PDF
               </button>
-              <button
-                type="button"
-                onClick={() => setUploadOpen(false)}
-                className="h-9 px-5 rounded-full text-[13px] font-semibold"
-                style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
-                data-testid="button-cancel-upload"
-              >
-                Cancel
-              </button>
             </div>
           </div>
         </div>
       )}
       <input ref={uploadInput} type="file" accept="application/pdf,.pdf" className="hidden" onChange={onPickLiveTemplate} data-testid="input-upload-template" />
+      {/* Handoff CSS (Aug 15 2026): anything that opens gets the solid blue
+          border on hover; tiles rest quiet — fine print fades in on hover or
+          keyboard focus, with its space reserved so nothing jumps. */}
+      <style>{`.gt-slot:hover { border-color: #319ED8 !important; border-style: solid !important; }
+.gt-tile:hover { border-color: #319ED8 !important; }
+.gt-tile .gt-detail, .relative.group .gt-detail { opacity: 0; transition: opacity 150ms ease; }
+.gt-tile:hover .gt-detail, .gt-tile:focus-visible .gt-detail, .relative.group:hover .gt-detail, .relative.group:focus-within .gt-detail { opacity: 1; }`}</style>
     </div>
   );
 }

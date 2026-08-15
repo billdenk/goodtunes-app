@@ -128,6 +128,8 @@ export type LiveTemplate = {
   wMm: number | null;
   hMm: number | null;
   layerCount: number;
+  // Archived off the shelf (Bill, Aug 15 2026) — history, never deletion.
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
   tests: LiveTemplateTest[];
@@ -138,6 +140,9 @@ export type TemplatesPayload = {
   customSlots?: CustomTemplateSlot[];
   liveTemplates?: LiveTemplate[];
   specs: TemplateSpecWithHistory[];
+  // Standard slots this press archived off the shelf ("Archived — not
+  // offered"), keyed "format:componentKey:variantKey:discCount".
+  archivedSlots?: string[];
 };
 
 /** Human note for a multi-option template ("small / large hole" canon case). */

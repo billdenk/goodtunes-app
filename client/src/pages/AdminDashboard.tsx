@@ -40,6 +40,7 @@ import {
   ChevronDown,
   ChevronRight,
   ArrowRight,
+  Info,
 } from "lucide-react";
 import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -1373,12 +1374,19 @@ function ReferralPayoutsCard() {
         <AlertDialogContent data-testid="dialog-referral-payouts-confirm">
           <AlertDialogHeader>
             <AlertDialogTitle>Run referral payouts?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will send {fmtUsd(totalCents)} via Stripe Transfers to {payable} payee
-              {payable === 1 ? "" : "s"}.
-              {blocked > 0
-                ? ` ${blocked} payee${blocked === 1 ? " is" : "s are"} blocked (no connected Stripe account) and will be skipped.`
-                : ""}
+            {/* One line, Apple-quiet; the detail lives behind the i (canon, Aug 15 2026) */}
+            <AlertDialogDescription className="inline-flex items-center gap-1.5">
+              Sends {fmtUsd(totalCents)} to {payable} payee{payable === 1 ? "" : "s"} via Stripe.
+              {blocked > 0 && (
+                <span
+                  className="inline-flex items-center justify-center cursor-help"
+                  title={`${blocked} payee${blocked === 1 ? " is" : "s are"} blocked (no connected Stripe account) and will be skipped.`}
+                  aria-label="About skipped payees"
+                  data-testid="info-referral-payouts-blocked"
+                >
+                  <Info className="w-3.5 h-3.5 text-[var(--apple-faint)]" />
+                </span>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

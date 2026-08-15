@@ -68,8 +68,9 @@ for (const proto of [Map.prototype, WeakMap.prototype] as unknown as Array<Recor
   }
 }
 import {
-  CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Upload, RotateCcw, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown,
+  CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Upload, RotateCcw, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History,
 } from 'lucide-react';
+import { saveLiveTestDraft, loadLiveTestDraft, clearLiveTestDraft, type LiveTestDraft } from './draftStore';
 import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiRequest, authHeaders } from '@/lib/queryClient';
@@ -394,6 +395,14 @@ export default function PressTemplateLiveTest({
   const [art, setArt] = useState<ArtState | null>(null);
   const [busy, setBusy] = useState<'template' | 'art' | 'save' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Arrived from the Templates page with a file already in hand — nothing is
+  // being uploaded, so show "Opening template" instead of the upload step
+  // (Bill, Aug 15 2026).
+  const [arriving, setArriving] = useState(false);
+  // "Resume where you left off?" — offered when the page opens empty-handed
+  // but a browser-local draft exists (canon, Aug 15 2026: crash-safety =
+  // drafts, not auto-save). Holds the found draft while the sheet is up.
+  const [resumeOffer, setResumeOffer] = useState<LiveTestDraft | null>(null);
   const [activeZones, setActiveZones] = useState<Set<string>>(new Set());
   const [artOpacity, setArtOpacity] = useState(1);
   // Bill, Aug 14 2026: chip on the right to view overlays by Line or by Area.
@@ -454,6 +463,7 @@ export default function PressTemplateLiveTest({
       setArt(null);
     } catch (err) {
       setTemplate(null);
+      setArriving(false); // fall back to the upload step if the file couldn't be read
       setError(err instanceof Error ? err.message : 'Could not read that PDF.');
     } finally { setBusy(null); }
   };
@@ -466,7 +476,25 @@ export default function PressTemplateLiveTest({
     liveId.current = pendingTemplateFile.liveId ?? null;
     componentPill.current = pendingTemplateFile.component ?? null;
     slotTarget.current = pendingTemplateFile.slot ?? null;
-    if (f) { pendingTemplateFile.file = null; pendingTemplateFile.name = null; pendingTemplateFile.liveId = null; pendingTemplateFile.component = null; pendingTemplateFile.slot = null; void loadTemplate(f, nm ?? undefined); }
+    if (f) {
+      pendingTemplateFile.file = null; pendingTemplateFile.name = null; pendingTemplateFile.liveId = null; pendingTemplateFile.component = null; pendingTemplateFile.slot = null;
+      setArriving(true);
+      void loadTemplate(f, nm ?? undefined);
+      // Automatic browser-local draft (canon, Aug 15 2026) — a crash or
+      // closed tab never loses the session. Best-effort, never blocks.
+      void saveLiveTestDraft({
+        pressId,
+        blob: f,
+        fileName: f.name,
+        name: nm ?? null,
+        component: componentPill.current,
+        liveId: liveId.current,
+        slot: slotTarget.current
+          ? { format: slotTarget.current.format, componentKey: slotTarget.current.componentKey, variantKey: slotTarget.current.variantKey ?? null, discCount: slotTarget.current.discCount ?? null, title: (slotTarget.current as { title?: string }).title }
+          : null,
+        savedAt: Date.now(),
+      });
+    }
     // Deep link onto a saved canon template: download its stored PDF through
     // our same-origin file route (external template links would die on CORS
     // from the browser) and run it through the same live pipeline. Guarded
@@ -501,11 +529,43 @@ export default function PressTemplateLiveTest({
       })();
       return () => { cancelled = true; ctrl.abort(); };
     }
-    // Arrived with nothing in hand (refresh, deep link)? Templates is the start
-    // page — go there instead of showing a stranded upload step (Bill, Aug 14 2026).
-    else onExit();
+    // Arrived with nothing in hand (refresh, deep link)? If a browser-local
+    // draft exists, offer to resume it (canon, Aug 15 2026); otherwise
+    // Templates is the start page — go there as before.
+    else if (!specId) {
+      let cancelled = false;
+      void loadLiveTestDraft(pressId).then((d) => {
+        if (cancelled) return;
+        if (d) setResumeOffer(d);
+        else onExit();
+      });
+      return () => { cancelled = true; };
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [specId]);
+
+  // Resume = load the draft exactly where it stood; Discard = the draft is
+  // gone, back to Templates. X close leaves too, but keeps the draft.
+  // Neither creates a revision — Save remains the only act that does.
+  const resumeDraft = async (d: LiveTestDraft) => {
+    setResumeOffer(null);
+    liveId.current = d.liveId;
+    componentPill.current = d.component;
+    slotTarget.current = d.slot as typeof slotTarget.current;
+    setArriving(true);
+    try {
+      const file = new File([d.blob], d.fileName, { type: 'application/pdf' });
+      await loadTemplate(file, d.name ?? undefined);
+    } catch {
+      setArriving(false);
+      setError('Could not reopen the draft.');
+    }
+  };
+  const discardDraft = (d: LiveTestDraft) => {
+    setResumeOffer(null);
+    void clearLiveTestDraft(d.pressId);
+    onExit();
+  };
 
   const onPickArt = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -663,6 +723,7 @@ export default function PressTemplateLiveTest({
         });
       }
       freshLiveSave.flag = true;
+      void clearLiveTestDraft(pressId); // saved for real — the crash-safety draft has done its job
       await queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
       onExit();
     } catch (err) {
@@ -682,6 +743,7 @@ export default function PressTemplateLiveTest({
       }
       setDetected(null);
       freshLiveSave.flag = true;
+      void clearLiveTestDraft(pressId); // saved for real — the crash-safety draft has done its job
       await queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
       onExit();
     } catch (err) {
@@ -837,16 +899,100 @@ export default function PressTemplateLiveTest({
           <p className="mt-4 text-[12.5px]" style={{ color: t.crit }} data-testid="text-error">{error}</p>
         )}
 
+        {/* "Resume where you left off?" — empty-handed arrival with a draft
+            on this computer (canon, Aug 15 2026). Handoff-verbatim visuals;
+            X close keeps the draft, Discard deletes it, Resume reopens it. */}
+        {resumeOffer && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center p-6"
+            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+            data-testid="sheet-resume-draft-backdrop"
+          >
+            <div
+              className="relative rounded-2xl overflow-hidden shadow-2xl w-full text-center px-8 py-9"
+              style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, maxWidth: 440 }}
+              role="dialog"
+              aria-label="Resume where you left off?"
+              data-testid="sheet-resume-draft"
+            >
+              <button
+                type="button"
+                onClick={() => { setResumeOffer(null); onExit(); }}
+                className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:opacity-80"
+                style={{ backgroundColor: t.soft, color: t.subink }}
+                aria-label="Close"
+                data-testid="button-close-resume"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: t.soft, border: `1px solid ${t.hairline}` }}>
+                <History className="w-5 h-5" style={{ color: t.subink }} />
+              </div>
+              <div className="mt-4 text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>
+                Resume where you left off?
+              </div>
+              {/* One line, Apple-quiet (canon, Aug 15 2026). */}
+              <p className="mt-1.5 text-[13px] mx-auto inline-flex items-center gap-1.5" style={{ color: t.subink }}>
+                {resumeOffer.name ?? resumeOffer.slot?.title ?? resumeOffer.fileName} — kept as a draft on this computer.
+                <span
+                  className="inline-flex items-center justify-center cursor-help"
+                  title="Your in-progress session is kept automatically on this computer. Nothing is saved to Templates until you press Save."
+                  aria-label="About drafts"
+                  data-testid="info-draft"
+                >
+                  <Info className="w-3.5 h-3.5" style={{ color: t.faint }} />
+                </span>
+              </p>
+              {/* Canon (Bill, Aug 15 2026): confirming action rightmost; Cancel/dismiss quiet text to its left. */}
+              <div className="mt-6 flex items-center justify-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => discardDraft(resumeOffer)}
+                  className="h-9 px-4 rounded-full text-[13px] font-medium transition-colors hover:opacity-80"
+                  style={{ color: t.subink }}
+                  data-testid="button-discard-draft"
+                >
+                  Discard draft
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void resumeDraft(resumeOffer); }}
+                  className="h-9 px-5 rounded-full text-[13px] font-semibold text-white"
+                  style={{ backgroundColor: t.blue }}
+                  data-testid="button-resume-draft"
+                >
+                  Resume
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Arrived with a template in hand — plain opening state, no upload talk. */}
+        {step === 1 && arriving && (
+          <div className="mt-6 flex flex-col items-center justify-center px-8 py-24">
+            <ThinProgress label="Opening template" t={t} testid="progress-opening-template" />
+          </div>
+        )}
+
         {/* ── Step 1 · Upload the template ── */}
-        {step === 1 && (
+        {step === 1 && !arriving && (
           <div className="mt-6 rounded-2xl flex flex-col items-center justify-center text-center px-8 py-20" style={{ backgroundColor: t.card, border: `1.5px dashed ${t.hairline}` }}>
             <span className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: t.neutralWash }}>
               <FileText className="w-6 h-6" style={{ color: t.subink }} />
             </span>
             <div className="mt-4 text-[16px] font-semibold" style={{ color: t.ink }}>Upload your template</div>
-            <p className="mt-1.5 text-[13px]" style={{ color: t.subink, maxWidth: 460 }}>
-              This is your PDF saved from Illustrator with &ldquo;GT Layers&rdquo; in it: &ldquo;GT CUT LINE&rdquo;,
-              &ldquo;GT BLEED AREA&rdquo;, and so on. Each layer is read by name, exactly where you drew it.
+            {/* One line, Apple-quiet; the detail lives behind the i (Bill, Aug 15 2026) */}
+            <p className="mt-1.5 text-[13px] inline-flex items-center gap-1.5" style={{ color: t.subink }}>
+              Your Illustrator PDF, GT layers included.
+              <span
+                className="inline-flex items-center justify-center cursor-help"
+                title={'Layers named "GT CUT LINE", "GT BLEED AREA", and so on are read by name, exactly where you drew them.'}
+                aria-label="About GT layers"
+                data-testid="info-gt-layers"
+              >
+                <Info className="w-3.5 h-3.5" style={{ color: t.faint }} />
+              </span>
             </p>
             {busy === 'template' ? (
               <ThinProgress label="Reading layers" t={t} testid="progress-reading-layers" />
@@ -993,19 +1139,20 @@ export default function PressTemplateLiveTest({
                     <ThinProgress label="Reading art" t={t} testid="progress-reading-art" />
                   ) : (
                     <>
-                      {/* Cancel — quiet text, Apple-style: leaves without saving
-                          anything (nothing persists until Save). */}
+                      {/* Apple-way header (Otis + Bill, Aug 15 2026): nothing saves
+                          automatically — Cancel leaves quietly, Test runs an art file,
+                          Save is the only action that persists (the one filled blue). */}
                       <button
                         type="button"
                         onClick={onExit}
                         disabled={busy !== null}
-                        className="h-8 px-2 text-[12.5px] font-medium transition-opacity disabled:opacity-60"
-                        style={{ color: t.subink, background: 'transparent', border: 'none' }}
-                        data-testid="button-cancel-live-test"
+                        className={cn('h-8 px-2.5 rounded-full text-[12.5px] font-medium transition-colors disabled:opacity-60', t.hoverWash)}
+                        style={{ color: t.subink }}
+                        data-testid="button-cancel-template"
                       >
                         Cancel
                       </button>
-                      {/* Once a test is underway, "Accept & Test" gives way to
+                      {/* Once a test is underway, "Test" gives way to
                           "Save result & test another" — a trail staff can revisit (Bill, Aug 14 2026) */}
                       {art && (
                         <button
@@ -1038,8 +1185,8 @@ export default function PressTemplateLiveTest({
                           type="button"
                           onClick={() => setConfirmSave(true)}
                           disabled={busy !== null}
-                          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-opacity disabled:opacity-60"
-                          style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
+                          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold text-white transition-opacity disabled:opacity-60"
+                          style={{ backgroundColor: t.blue }}
                           data-testid="button-accept-save"
                         >
                           Save

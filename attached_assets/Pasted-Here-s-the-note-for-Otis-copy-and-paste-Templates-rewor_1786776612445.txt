@@ -1,0 +1,28 @@
+Here's the note for Otis — copy and paste:
+
+---
+
+**Templates rework handoff — commits `e01acd0` + `3f44ecb` on main.**
+
+Replace both files verbatim per the handoff law (delete-first, whole-file, wire data only):
+- `handoff/PressTemplatesIndex.tsx`
+- `handoff/PressTemplateLiveTest.tsx`
+- New asset: `handoff/assets/label-template-r091125.pdf` (the index imports it via `?url` — in production, the tile should open the slot's live revision PDF instead)
+
+What's in it — full details in the README's "Templates rework — Aug 15" section plus the addendum:
+1. The template detail popup is deleted. Clicking a tile opens the live template view directly — replace, re-test, and history all live there.
+2. Per-tile ••• (hover, top-right) holds Archive with an are-you-sure confirm; archived tiles get Restore. All / Current / Archived pills sit beside the size pills. Archive is history, never deletion. Standard slots can be archived too ("Archived — not offered").
+3. "Create New" is a quiet ghost pill at the far right of the size pills; the bright header upload button and the "Vinyl · Templates" caption are gone — the format segmented control sits in the caption's place.
+4. Hover language: anything that opens gets a solid blue border on hover. The dashed slots' "Click to add" overlay is deleted — clicking just opens.
+5. Arriving at the live test with a file in hand shows only the thin sweep with "Opening template" — never upload language. Your Cancel / Test / Save header is now in our source verbatim, so it's canon, not a deviation.
+6. Tiles rest quiet — fine print (`gt-detail` class) reveals on hover/focus, space reserved so the grid never jumps.
+
+Two rules now written down:
+- **Save model:** nothing saves automatically; Save is the only act that creates a revision. Crash-safety = automatic browser-local draft + "Resume where you left off" — a draft never becomes a revision by itself.
+- **Verdict rule (blessing your fix):** a test verdict belongs to the file it actually tested; replacing clears the chip, the old result stays in revision history.
+
+Acceptance is the states checklist in the README — screenshot each state, both themes, 1440px. Add the commit SHA to your STATUS.md ledger when it lands. Questions beat inventions — anything that doesn't fit, ask Bill before adapting.
+
+---
+
+That's everything from this round.

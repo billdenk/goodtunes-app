@@ -5791,7 +5791,7 @@ export class DbStorage implements IStorage {
   async updatePressLiveTemplate(
     pressId: string,
     id: string,
-    patch: { name?: string; previewImg?: string | null; wMm?: number | null; hMm?: number | null; layerCount?: number },
+    patch: { name?: string; previewImg?: string | null; wMm?: number | null; hMm?: number | null; layerCount?: number; archivedAt?: Date | null },
   ): Promise<PressLiveTemplate | null> {
     const [row] = await db
       .update(pressLiveTemplates)
