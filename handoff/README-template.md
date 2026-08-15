@@ -29,3 +29,30 @@ Copy this file into each new `handoff/<feature>/` folder, fill it in, and check 
 - No substituting responsive grids for fixed ones, no "equivalent" borders/shadows/text sizes.
 - No skipping states that exist in the handoff.
 - No design-system "corrections" — if design-lint complains, the baseline gets re-snapshotted instead.
+
+
+## Handoff law — how every handoff lands (standing rules, Aug 14 2026)
+
+These rules apply to EVERY folder in `handoff/`. They exist because drift has
+always had the same root cause: reconciling an existing page with the handoff
+instead of replacing it.
+
+1. **Delete-first rule.** The existing UI for this flow comes OUT before the
+   handoff goes in. Keep your data wiring, endpoints, and tests of behavior —
+   retire your components, layouts, and modals. Do not merge the two UIs, do
+   not keep "your version" of any piece the handoff covers. If a test only
+   exists to protect the old UI, retire the test with it.
+2. **States checklist is the acceptance bar.** Each handoff README enumerates
+   every reachable state (tabs, toggles, hover, empty, sheets, view-as, …).
+   Done = a screenshot diff per line, BOTH themes, at 1440px. A diff that only
+   covers the default state is not a diff.
+3. **Handoff ledger in STATUS.md.** For each page built from a handoff, record
+   the handoff commit SHA it currently matches. When a correction round lands
+   on main, that pointer is stale and the page owes a re-diff — no memory, no
+   guessing.
+4. **View-as is a pane of glass.** Admin "Viewing as <press>" renders the
+   press's exact components and states — never a separate implementation.
+5. **Questions beat inventions.** If the handoff conflicts with something real
+   you've built (data model, product need), STOP and flag it to Bill. Silent
+   adaptation — extra dropdowns, substituted art, simplified renders — is the
+   one unforgivable move.
