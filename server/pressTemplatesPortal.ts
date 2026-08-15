@@ -494,14 +494,30 @@ export function registerPressTemplateFlowRoutes(
     artName: z.string().trim().min(1).max(512),
     verdict: z.enum(["Pass", "Flagged", "Visual only"]),
   });
+  // Integrity bounds (review, Aug 14 2026): the PDF must live in OUR object
+  // store (uploadAdminDoc's path — no external/other-scheme URLs persisted),
+  // the preview must be a real image data URL small enough to ride the
+  // templates payload (client shrinks to ~480px JPEG), and dimensions must
+  // be plausible physical mm. A trail cap stops unbounded test appends.
+  const liveFileUrl = z
+    .string()
+    .min(1)
+    .max(2048)
+    .regex(/^\/objects\/[A-Za-z0-9._\-\/]+$/, "fileUrl must be an /objects/ path");
+  const livePreviewImg = z
+    .string()
+    .max(300_000)
+    .regex(/^data:image\/(png|jpeg|webp);base64,/, "previewImg must be an image data URL");
+  const liveMm = z.number().finite().positive().max(2000);
+  const LIVE_TRAIL_CAP = 200; // total persisted tests per template
   const liveCreateSchema = z.object({
     name: z.string().trim().min(1).max(200),
     component: z.string().trim().max(64).nullable().optional(),
-    fileUrl: z.string().min(1).max(2048),
+    fileUrl: liveFileUrl,
     fileName: z.string().max(512).nullable().optional(),
-    previewImg: z.string().max(2_000_000).nullable().optional(), // page-1 data URL
-    wMm: z.number().finite().nullable().optional(),
-    hMm: z.number().finite().nullable().optional(),
+    previewImg: livePreviewImg.nullable().optional(), // page-1 data URL
+    wMm: liveMm.nullable().optional(),
+    hMm: liveMm.nullable().optional(),
     layerCount: z.number().int().min(0).max(500).optional().default(0),
     tests: z.array(liveTestSchema).max(50).optional().default([]),
   });
@@ -538,9 +554,9 @@ export function registerPressTemplateFlowRoutes(
   // append the new trail rows (and refresh name/metadata if they changed).
   const livePatchSchema = z.object({
     name: z.string().trim().min(1).max(200).optional(),
-    previewImg: z.string().max(2_000_000).nullable().optional(),
-    wMm: z.number().finite().nullable().optional(),
-    hMm: z.number().finite().nullable().optional(),
+    previewImg: livePreviewImg.nullable().optional(),
+    wMm: liveMm.nullable().optional(),
+    hMm: liveMm.nullable().optional(),
     layerCount: z.number().int().min(0).max(500).optional(),
     tests: z.array(liveTestSchema).max(50).optional().default([]),
   });
@@ -559,9 +575,14 @@ export function registerPressTemplateFlowRoutes(
       const updated = Object.keys(patch).length
         ? await storage.updatePressLiveTemplate(pressId, existing.id, patch)
         : existing;
+      // Trail cap — a template's persisted test history is bounded so the
+      // shared templates GET can't grow without limit; extra rows past the
+      // cap are dropped (newest-first within this request).
+      const existingTests = await storage.listPressLiveTemplateTests([existing.id]);
+      const room = Math.max(0, LIVE_TRAIL_CAP - existingTests.length);
       await storage.appendPressLiveTemplateTests(
         existing.id,
-        newTests.map((t) => ({ artName: t.artName, verdict: t.verdict })),
+        newTests.slice(0, room).map((t) => ({ artName: t.artName, verdict: t.verdict })),
       );
       const tests = await storage.listPressLiveTemplateTests([existing.id]);
       res.json({ liveTemplate: { ...(updated ?? existing), tests } });
