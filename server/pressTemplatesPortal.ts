@@ -687,6 +687,32 @@ export function registerPressTemplateFlowRoutes(
     },
   );
 
+  // PATCH /api/press/:id/templates/:specId/display-name — press-given
+  // nickname for a slot's template (gogoods, Aug 15 2026). The slot keeps
+  // its canonical title; this is the quiet small-text line under it.
+  // Empty string clears the nickname.
+  app.patch(
+    "/api/press/:id/templates/:specId/display-name",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const parsed = z.object({ displayName: z.string().max(120) }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+      const row = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+      if (!row) return res.status(404).json({ message: "Template slot not found" });
+      const displayName = parsed.data.displayName.trim() || null;
+      await pool.query(
+        `UPDATE press_template_specs
+            SET display_name = $1, updated_by_user_id = $2, updated_at = now()
+          WHERE press_id = $3 AND id = $4`,
+        [displayName, req.session.userId ?? null, pressId, row.id],
+      );
+      res.json({ ok: true, displayName });
+    },
+  );
+
   // PUT /api/press/:id/templates — attach or replace the template file on a
   // slot (creating the spec row if the slot has never had one). Only the
   // file columns are written — operator-entered artboard/pages/rules stay

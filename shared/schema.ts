@@ -2759,6 +2759,11 @@ export const pressTemplateSpecs = pgTable(
     // Upload URLs are opaque `/objects/uploads/<id>` paths, so the tile
     // caption renders this field (middle-truncated), never the URL tail.
     templateFileName: text("template_file_name"),
+    // gogoods, Aug 15 2026 — press-given nickname for the slot's template.
+    // The slot keeps its canonical title ("Single jacket"); this renders as
+    // quiet small text under it and is editable via the tile's pencil or by
+    // renaming inside the live test. Null = no nickname.
+    displayName: text("display_name"),
     // Task #2705 — minimum placed-image resolution (PPI) the press requires
     // for this component; null = no check (never fabricated).
     minPpi: integer("min_ppi"),

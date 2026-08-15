@@ -312,6 +312,101 @@ function matchSpec(
 // ─── Task #3065 — "Create new template" dialog (custom slots) ──
 // Task #3066 — doubles as the rename dialog when `editSlot` is set (display
 // name / note only; the slot key + any attached spec stay put).
+// gogoods, Aug 15 2026 — small dialog behind the tile pencil: edits the
+// press-given nickname (press_template_specs.display_name). The canonical
+// slot title never changes; an empty save clears the nickname.
+function RenameNicknameDialog({
+  t,
+  pressId,
+  spec,
+  onClose,
+}: {
+  t: Theme;
+  pressId: string;
+  spec: TemplateSpecWithHistory;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [name, setName] = useState(spec.displayName ?? "");
+  const save = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PATCH", `/api/press/${pressId}/templates/${spec.id}/display-name`, {
+        displayName: name.trim(),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
+      onClose();
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Couldn't save the name",
+        description: e.message.replace(/^\d{3}:\s*/, ""),
+        variant: "destructive",
+      }),
+  });
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center p-6"
+      style={{ backgroundColor: t.modalScrim, backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
+      onClick={onClose}
+      data-testid="modal-rename-nickname-backdrop"
+    >
+      <div
+        className="rounded-2xl overflow-hidden w-full px-7 pt-6 pb-6"
+        style={{ maxWidth: 440, backgroundColor: t.card, border: `1px solid ${t.hairline}`, boxShadow: t.modalShadow }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label="Edit template name"
+        data-testid="modal-rename-nickname"
+      >
+        <h2 className="text-[19px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>
+          Template name
+        </h2>
+        <p className="mt-1 text-[12.5px]" style={{ color: t.subink }}>
+          Shows as small text under the slot's title. Leave it blank to clear.
+        </p>
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={120}
+          placeholder={spec.templateFileName ?? "Template name"}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !save.isPending) save.mutate();
+            if (e.key === "Escape") onClose();
+          }}
+          className="mt-4 w-full rounded-xl px-3.5 py-2.5 text-[14px] focus:outline-none"
+          style={{ color: t.ink, backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}
+          data-testid="input-nickname"
+        />
+        <div className="mt-5 flex items-center justify-end gap-2.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-9 px-4 rounded-full text-[13px] font-semibold transition-colors"
+            style={{ color: t.subink, border: `1px solid ${t.hairline}` }}
+            data-testid="button-nickname-cancel"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={save.isPending}
+            onClick={() => save.mutate()}
+            className="h-9 px-5 rounded-full text-[13px] font-semibold text-white transition-opacity disabled:opacity-60 inline-flex items-center gap-2"
+            style={{ backgroundColor: t.blue }}
+            data-testid="button-nickname-save"
+          >
+            {save.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CreateSlotModal({
   t,
   pressId,
@@ -596,11 +691,15 @@ function FilledTile({
   slot,
   spec,
   onOpen,
+  canEdit,
+  onRename,
 }: {
   t: Theme;
   slot: Slot;
   spec: TemplateSpecWithHistory;
   onOpen: () => void;
+  canEdit: boolean;
+  onRename: () => void;
 }) {
   const status = slotStatus(spec);
   const live = spec.revisions.find((r) => r.status === "certified" || r.status === "pending");
@@ -623,6 +722,27 @@ function FilledTile({
         </span>
       </div>
       <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>{slot.title}</div>
+      {/* Press-given nickname (gogoods, Aug 15 2026) — quiet small text under
+          the canonical title, revealed on hover; pencil edits it in place. */}
+      {(spec.displayName || canEdit) && (
+        <div className="gt-detail mt-0.5 text-[12px] inline-flex items-center gap-1 justify-center max-w-full" style={{ color: t.faint }} data-testid={`nickname-${spec.id}`}>
+          <span className="truncate">{spec.displayName ?? "Add a name"}</span>
+          {canEdit && (
+            <span
+              role="button"
+              tabIndex={0}
+              aria-label="Edit template name"
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRename(); }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onRename(); } }}
+              className="inline-flex items-center justify-center w-5 h-5 rounded-full transition-colors flex-shrink-0"
+              style={{ color: t.subink }}
+              data-testid={`button-rename-template-${spec.id}`}
+            >
+              <Pencil className="w-3 h-3" />
+            </span>
+          )}
+        </div>
+      )}
       <div className="gt-detail mt-1 text-[12.5px] inline-flex items-center gap-1.5 justify-center" style={{ color: t.subink }} data-testid={`note-${spec.id}`}>
         {spec.variantOptions?.length ? <Layers className="w-3 h-3 flex-shrink-0" style={{ color: t.blue }} /> : null}
         {note}
@@ -640,6 +760,13 @@ function FilledTile({
           </span>
         )}
       </div>
+      {/* Why Pending — quiet hover explainer (gogoods, Aug 15 2026): nobody
+          could tell what the yellow chip was waiting on. */}
+      {status === "pending" && (
+        <div className="gt-detail mt-1.5 text-[11.5px] max-w-[240px]" style={{ color: t.faint }} data-testid={`pending-why-${spec.id}`}>
+          Attached but not yet certified — it certifies when a finished print file passes a check against it.
+        </div>
+      )}
       {/* Revision history — superseded / archived entries, quiet until hover */}
       {historyRevs.length > 0 && (
         <div className="gt-detail mt-2 w-full" data-testid={`history-${spec.id}`}>
@@ -871,6 +998,9 @@ export function PressTemplatesIndex({
   };
   // Task #3066 — rename dialog for an operator-created slot.
   const [editSlot, setEditSlot] = useState<CustomTemplateSlot | null>(null);
+  // gogoods, Aug 15 2026 — pencil on a filled tile edits the press-given
+  // nickname (display_name) shown under the canonical slot title.
+  const [renameSpec, setRenameSpec] = useState<TemplateSpecWithHistory | null>(null);
   const { toast } = useToast();
 
   // Task #3066 — remove a custom slot made by mistake. The server refuses
@@ -1113,6 +1243,8 @@ export function PressTemplatesIndex({
                   slot={slot}
                   spec={spec!}
                   onOpen={() => onOpenSpec(spec!.id)}
+                  canEdit={canEdit}
+                  onRename={() => setRenameSpec(spec!)}
                 />
               ) : (
                 <EmptyTile
@@ -1293,6 +1425,16 @@ export function PressTemplatesIndex({
           editSlot={editSlot}
           onClose={() => setEditSlot(null)}
           onCreated={() => setEditSlot(null)}
+        />
+      )}
+      {/* gogoods, Aug 15 2026 — pencil on a filled tile: edit the press-given
+          nickname shown under the canonical slot title. Slot title stays. */}
+      {renameSpec && (
+        <RenameNicknameDialog
+          t={t}
+          pressId={pressId}
+          spec={renameSpec}
+          onClose={() => setRenameSpec(null)}
         />
       )}
       {/* Archive confirm — are-you-sure before a tile leaves the live shelf

@@ -53,6 +53,9 @@ export type TemplateSpecWithHistory = {
   discCount: number;
   templateFileUrl: string | null;
   templateFileName: string | null;
+  // Press-given nickname (gogoods, Aug 15 2026) — small text under the
+  // slot's canonical title; renaming in the live test writes it too.
+  displayName: string | null;
   artboardWInches: number | null;
   artboardHInches: number | null;
   expectedPages: number | null;

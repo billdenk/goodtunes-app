@@ -426,6 +426,13 @@ export default function PressTemplateLiveTest({
   const liveId = useRef<string | null>(null); // set when re-opening a saved shelf template
   const componentPill = useRef<string | null>(null); // optional component from the upload sheet
   const slotTarget = useRef<typeof pendingTemplateFile.slot>(null); // slot-mode: save mints a revision on this slot
+  // Spec-mode (opened from a filled slot tile, gogoods bug Aug 15 2026):
+  // the file already lives on the slot, so a plain Save must NOT re-attach
+  // it (no needless revision) and must NEVER create a shelf row — it only
+  // persists a rename via the display-name PATCH. A header Replace flips
+  // fileReplaced and rides the slot PUT (revision supersedes in place).
+  const specRef = useRef<string | null>(null);
+  const initialName = useRef<string | null>(null);
   const [panC, setPanC] = useState<{ x: number; y: number } | null>(null); // view center as fraction of template
   const dragRef = useRef<{ px: number; py: number; cx: number; cy: number; w: number; h: number } | null>(null);
   // Bill, Aug 14 2026: layer table pops open over the page (icon right of Line/Area).
@@ -480,6 +487,9 @@ export default function PressTemplateLiveTest({
     replacingName.current = null;
     if (!keepName) liveId.current = null; // a fresh file is a fresh shelf row
     if (liveId.current) fileReplaced.current = true; // PATCH must persist the new PDF
+    // Spec-mode Replace (gogoods, Aug 15 2026): the new PDF must ride the
+    // slot PUT on Save — a revision supersedes in place on the SAME slot.
+    if (specRef.current) fileReplaced.current = true;
     await loadTemplate(f, keepName ?? undefined);
     setDirty(true);
     // The draft snapshot must follow the replacement — keeping the saved row's
@@ -571,6 +581,20 @@ export default function PressTemplateLiveTest({
           if (cancelled) return;
           const spec = payload.specs.find((s) => s.id === specId);
           if (!spec?.templateFileUrl) { if (!cancelled) onExit(); return; }
+          // Spec-mode identity (gogoods bug, Aug 15 2026): opening a slot's
+          // template must save back to THAT slot — never mint a shelf row.
+          // slotTarget makes a header Replace supersede in place (PUT mints
+          // a revision on this same slot); specRef routes a plain Save
+          // (rename / test session) to the display-name PATCH instead.
+          specRef.current = spec.id;
+          initialName.current = spec.displayName ?? spec.templateFileName ?? null;
+          slotTarget.current = {
+            format: spec.format,
+            componentKey: spec.componentKey,
+            variantKey: spec.variantKey ?? "",
+            discCount: spec.discCount ?? 0,
+            title: spec.displayName ?? spec.templateFileName ?? "Template",
+          };
           // Bearer + cookie (cookie-only fetches 401 under #token-hash admin
           // logins — standing landmine on admin surfaces).
           const r = await fetch(`/api/press/${pressId}/templates/${specId}/file`, {
@@ -582,7 +606,7 @@ export default function PressTemplateLiveTest({
           const blob = await r.blob();
           if (cancelled) return;
           const file = new File([blob], spec.templateFileName ?? 'template.pdf', { type: 'application/pdf' });
-          await loadTemplate(file, spec.templateFileName ?? undefined);
+          await loadTemplate(file, spec.displayName ?? spec.templateFileName ?? undefined);
           setDirty(false); // opening a saved template arrives clean (Bill, Aug 15 2026)
         } catch (err) {
           if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
@@ -755,7 +779,17 @@ export default function PressTemplateLiveTest({
       const tests = art && !currentLogged ? [...testLog, { art: art.name, at: '', verdict: verdictWord }] : testLog;
       const testsPayload = tests.map((e) => ({ artName: e.art, verdict: e.verdict }));
       const previewImg = await shrinkDataUrl(template.img);
-      if (slotTarget.current) {
+      if (specRef.current && !fileReplaced.current) {
+        // Spec-mode plain Save (gogoods bug, Aug 15 2026): the file already
+        // lives on the slot — re-attaching would mint a needless revision,
+        // and the old code fell through to the shelf POST and minted a
+        // duplicate tile. Only the rename persists (display-name PATCH).
+        if (template.name !== (initialName.current ?? '')) {
+          await apiRequest('PATCH', `/api/press/${pressId}/templates/${specRef.current}/display-name`, {
+            displayName: template.name,
+          });
+        }
+      } else if (slotTarget.current) {
         // Slot-mode (dashed tile / Replace, Bill's handoff): Accept & Save
         // attaches the PDF to the canon slot — a NEW revision is minted, the
         // previous one moves to history, it is never deleted.
@@ -777,6 +811,12 @@ export default function PressTemplateLiveTest({
           setDetected({ specId: data.spec.id, options: data.detectedOptions });
           setBusy(null);
           return;
+        }
+        // Spec-mode Replace: a rename made in the same session rides along.
+        if (specRef.current && template.name !== (initialName.current ?? '')) {
+          await apiRequest('PATCH', `/api/press/${pressId}/templates/${specRef.current}/display-name`, {
+            displayName: template.name,
+          });
         }
       } else if (liveId.current) {
         // Replace (••• menu / Index tile): the swapped-in PDF must persist on
