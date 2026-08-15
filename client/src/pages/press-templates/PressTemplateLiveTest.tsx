@@ -23,7 +23,16 @@ export const pendingTemplateFile: {
   name?: string | null;
   liveId?: string | null;
   component?: string | null;
-} = { file: null, name: null, liveId: null, component: null };
+  /** Slot-mode upload (dashed tile / Replace, Bill's handoff): Accept & Save
+   *  attaches to THIS canon slot (new revision) instead of the saved shelf. */
+  slot?: {
+    format: string;
+    componentKey: string;
+    variantKey?: string;
+    discCount?: number;
+    title: string;
+  } | null;
+} = { file: null, name: null, liveId: null, component: null, slot: null };
 
 // Just-saved marker — the Index pulses the fresh shelf tile once (blue
 // hairline, then back to gray) when it sees this flag on mount.
@@ -400,11 +409,15 @@ export default function PressTemplateLiveTest({
   const currentFile = useRef<File | null>(null);
   const liveId = useRef<string | null>(null); // set when re-opening a saved shelf template
   const componentPill = useRef<string | null>(null); // optional component from the upload sheet
+  const slotTarget = useRef<typeof pendingTemplateFile.slot>(null); // slot-mode: save mints a revision on this slot
   const [panC, setPanC] = useState<{ x: number; y: number } | null>(null); // view center as fraction of template
   const dragRef = useRef<{ px: number; py: number; cx: number; cy: number; w: number; h: number } | null>(null);
   // Bill, Aug 14 2026: layer table pops open over the page (icon right of Line/Area).
   const [showLayers, setShowLayers] = useState(false);
   const [confirmSave, setConfirmSave] = useState(false);
+  // Task #3065 consent kept in slot mode: one file covering several options
+  // (e.g. both center-hole sizes) asks before stamping the note.
+  const [detected, setDetected] = useState<{ specId: string; options: Array<{ key: string; label: string }> } | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [uploadedAt, setUploadedAt] = useState<string | null>(null);
@@ -452,7 +465,8 @@ export default function PressTemplateLiveTest({
     const nm = pendingTemplateFile.name;
     liveId.current = pendingTemplateFile.liveId ?? null;
     componentPill.current = pendingTemplateFile.component ?? null;
-    if (f) { pendingTemplateFile.file = null; pendingTemplateFile.name = null; pendingTemplateFile.liveId = null; pendingTemplateFile.component = null; void loadTemplate(f, nm ?? undefined); }
+    slotTarget.current = pendingTemplateFile.slot ?? null;
+    if (f) { pendingTemplateFile.file = null; pendingTemplateFile.name = null; pendingTemplateFile.liveId = null; pendingTemplateFile.component = null; pendingTemplateFile.slot = null; void loadTemplate(f, nm ?? undefined); }
     // Deep link onto a saved canon template: download its stored PDF through
     // our same-origin file route (external template links would die on CORS
     // from the browser) and run it through the same live pipeline. Guarded
@@ -602,7 +616,30 @@ export default function PressTemplateLiveTest({
       const tests = art ? [...testLog, { art: art.name, at: '', verdict: verdictWord }] : testLog;
       const testsPayload = tests.map((e) => ({ artName: e.art, verdict: e.verdict }));
       const previewImg = await shrinkDataUrl(template.img);
-      if (liveId.current) {
+      if (slotTarget.current) {
+        // Slot-mode (dashed tile / Replace, Bill's handoff): Accept & Save
+        // attaches the PDF to the canon slot — a NEW revision is minted, the
+        // previous one moves to history, it is never deleted.
+        const s = slotTarget.current;
+        const fileUrl = await uploadAdminDoc(currentFile.current);
+        const r = await apiRequest('PUT', `/api/press/${pressId}/templates`, {
+          format: s.format,
+          componentKey: s.componentKey,
+          variantKey: s.variantKey,
+          discCount: s.discCount,
+          fileUrl,
+          fileName: originalName ?? currentFile.current.name,
+        });
+        const data = (await r.json()) as { spec: { id: string }; detectedOptions?: Array<{ key: string; label: string }> };
+        // One file covering several options (e.g. both center-hole sizes):
+        // stamp the note only with the operator's OK (Task #3065 consent kept)
+        // — swap the confirm sheet to the options question and stop here.
+        if (data.detectedOptions && data.detectedOptions.length >= 2) {
+          setDetected({ specId: data.spec.id, options: data.detectedOptions });
+          setBusy(null);
+          return;
+        }
+      } else if (liveId.current) {
         await apiRequest('PATCH', `/api/press/${pressId}/templates/live/${liveId.current}`, {
           name: template.name,
           previewImg,
@@ -631,6 +668,26 @@ export default function PressTemplateLiveTest({
     } catch (err) {
       setConfirmSave(false);
       setError(err instanceof Error ? err.message : 'Could not save the template.');
+    } finally { setBusy(null); }
+  };
+
+  // Answer to the detected-options question (slot mode): optionally stamp the
+  // note, then finish the save the same way the direct path does.
+  const resolveDetected = async (yes: boolean) => {
+    if (!detected) return;
+    setBusy('save');
+    try {
+      if (yes) {
+        await apiRequest('POST', `/api/press/${pressId}/templates/${detected.specId}/options`, { options: detected.options });
+      }
+      setDetected(null);
+      freshLiveSave.flag = true;
+      await queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
+      onExit();
+    } catch (err) {
+      // The file is already attached — keep the dialog so the operator can
+      // retry the note (re-attaching would mint a needless extra revision).
+      setError(err instanceof Error ? err.message : 'Could not save the options note.');
     } finally { setBusy(null); }
   };
 
@@ -1479,6 +1536,53 @@ export default function PressTemplateLiveTest({
                       data-testid="button-return-test"
                     >
                       {art ? 'Stay here' : 'Return & test'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Task #3065 consent, slot mode: the attach found a template that
+                mentions several options (e.g. both center-hole sizes). Nothing
+                is stamped unless the operator says yes. */}
+            {detected && (
+              <>
+                <div className="fixed inset-0 z-[70]" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} />
+                <div
+                  role="alertdialog"
+                  aria-modal="true"
+                  aria-labelledby="detected-options-title"
+                  className="fixed z-[71] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl px-6 pt-6 pb-5 text-center shadow-2xl"
+                  style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, width: 340 }}
+                  data-testid="dialog-detected-options"
+                >
+                  <div id="detected-options-title" className="text-[15px] font-semibold" style={{ color: t.ink }}>
+                    One template, {detected.options.length} options?
+                  </div>
+                  <p className="mt-1.5 text-[12.5px] leading-relaxed" style={{ color: t.subink }}>
+                    This template mentions {detected.options.map((o) => o.label).join(' and ')}. Note that this one
+                    file serves both? It stays a single file and a single tile.
+                  </p>
+                  <div className="mt-5 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void resolveDetected(true)}
+                      disabled={busy === 'save'}
+                      className="h-9 rounded-full text-[13px] font-semibold text-white disabled:opacity-60"
+                      style={{ backgroundColor: t.blue }}
+                      data-testid="button-options-yes"
+                    >
+                      {busy === 'save' ? 'Saving…' : 'Yes, it covers both'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void resolveDetected(false)}
+                      disabled={busy === 'save'}
+                      className="h-9 rounded-full text-[13px] font-semibold disabled:opacity-60"
+                      style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
+                      data-testid="button-options-no"
+                    >
+                      No, just this one
                     </button>
                   </div>
                 </div>

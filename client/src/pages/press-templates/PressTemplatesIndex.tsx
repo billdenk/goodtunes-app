@@ -18,7 +18,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
-  BadgeCheck, Clock3, XCircle, AlertTriangle, History, Upload, CloudUpload, X,
+  BadgeCheck, Clock3, XCircle, AlertTriangle, History, Upload, X,
   MoreHorizontal, Archive, Loader2, AlertCircle, Plus, Layers, Pencil, Trash2,
 } from "lucide-react";
 // Live-test flow (handoff, Aug 14 2026): the upload sheet stashes the chosen
@@ -301,393 +301,6 @@ function matchSpec(
   );
 }
 
-// ─── Upload / replace modal ──
-type ModalState = {
-  slot: Slot;
-  spec?: TemplateSpecWithHistory; // set when replacing an existing tile
-};
-
-function UploadModal({
-  t,
-  pressId,
-  state,
-  onClose,
-  onDone,
-}: {
-  t: Theme;
-  pressId: string;
-  state: ModalState;
-  onClose: () => void;
-  onDone: (specId: string) => void;
-}) {
-  const { toast } = useToast();
-  const { slot, spec } = state;
-  const [fileSource, setFileSource] = useState<"Upload file" | "Paste a URL">("Upload file");
-  const [fileUrl, setFileUrl] = useState<string | null>(spec?.templateFileUrl ?? null);
-  const [fileName, setFileName] = useState<string>(spec?.templateFileName ?? "");
-  const [urlDraft, setUrlDraft] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [fileMenuOpen, setFileMenuOpen] = useState(false);
-  // Task #3065 — the attach response can carry detected options (one file
-  // drawing e.g. both center-hole sizes). The modal swaps to a confirm step;
-  // nothing is stamped unless the operator says yes.
-  const [detected, setDetected] = useState<{ specId: string; options: Array<{ key: string; label: string }> } | null>(null);
-
-  const attach = useMutation({
-    mutationFn: async (body: {
-      format: string;
-      componentKey: string;
-      variantKey?: string;
-      discCount?: number;
-      fileUrl: string;
-      fileName?: string | null;
-    }) => {
-      const r = await apiRequest("PUT", `/api/press/${pressId}/templates`, body);
-      return (await r.json()) as {
-        spec: TemplateSpecWithHistory;
-        revision: unknown;
-        detectedOptions?: Array<{ key: string; label: string }>;
-      };
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
-      if (data.detectedOptions && data.detectedOptions.length >= 2) {
-        setDetected({ specId: data.spec.id, options: data.detectedOptions });
-        return;
-      }
-      onDone(data.spec.id);
-    },
-    onError: (e: Error) =>
-      toast({ title: "Couldn't attach the template", description: e.message, variant: "destructive" }),
-  });
-
-  const stampOptions = useMutation({
-    mutationFn: async (p: { specId: string; options: Array<{ key: string; label: string }> }) => {
-      await apiRequest("POST", `/api/press/${pressId}/templates/${p.specId}/options`, { options: p.options });
-      return p.specId;
-    },
-    onSuccess: (specId) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
-      onDone(specId);
-    },
-    onError: (e: Error) =>
-      toast({ title: "Couldn't save that", description: e.message, variant: "destructive" }),
-  });
-
-  const archive = useMutation({
-    mutationFn: async () => {
-      if (!spec) return;
-      await apiRequest("POST", `/api/press/${pressId}/templates/${spec.id}/archive`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
-      onClose();
-    },
-    onError: (e: Error) =>
-      toast({ title: "Couldn't archive the file", description: e.message, variant: "destructive" }),
-  });
-
-  const onPickFile = async (file: File) => {
-    setUploading(true);
-    try {
-      const url = await uploadAdminDoc(file);
-      setFileUrl(url);
-      if (!fileName) setFileName(file.name);
-    } catch (e: any) {
-      toast({ title: "Couldn't upload the file", description: e?.message, variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const submit = () => {
-    if (!slot.dbFormat || !slot.componentKey) return;
-    const url = fileSource === "Paste a URL" ? urlDraft.trim() : fileUrl;
-    if (!url) {
-      toast({ title: "Add a file first", description: "Upload the file or paste an https:// link.", variant: "destructive" });
-      return;
-    }
-    attach.mutate({
-      format: slot.dbFormat,
-      componentKey: slot.componentKey,
-      variantKey: slot.variantKey,
-      discCount: slot.discCount,
-      fileUrl: url,
-      fileName: fileName || null,
-    });
-  };
-
-  const scanning = attach.isPending;
-
-  return (
-    <div
-      className="fixed inset-0 z-40 flex items-center justify-center"
-      style={{ backgroundColor: t.modalScrim, backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
-      data-testid="modal-upload"
-    >
-      <div
-        className="rounded-2xl overflow-hidden"
-        style={{ width: 780, maxWidth: "92vw", backgroundColor: t.card, border: `1px solid ${t.hairline}`, boxShadow: t.modalShadow }}
-      >
-        <div className="flex items-start justify-between gap-4 px-7 pt-6">
-          <div>
-            <h2 className="text-[19px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }} data-testid="text-modal-title">
-              {slot.title}
-            </h2>
-            <p className="mt-1 text-[12.5px]" style={{ color: t.subink }}>
-              {detected ? "Template attached and measured." : spec ? "Replace the file — done." : "Drop the PDF — done."}
-            </p>
-          </div>
-          <button
-            type="button"
-            className={cn("w-8 h-8 -mr-2 rounded-full flex items-center justify-center transition-colors flex-shrink-0", t.hoverWash)}
-            style={{ color: t.subink }}
-            aria-label="Close"
-            onClick={onClose}
-            data-testid="button-close-upload"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Task #3065 — detection confirm step: one file, multiple options */}
-        {detected ? (
-          <div className="px-7 pt-5 pb-7" data-testid="panel-detected-options">
-            <div className="rounded-2xl px-5 py-5 flex items-start gap-3.5" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
-              <span className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}>
-                <Layers className="w-4.5 h-4.5" style={{ color: t.blue, width: 18, height: 18 }} />
-              </span>
-              <div className="min-w-0">
-                <div className="text-[14px] font-semibold" style={{ color: t.ink }} data-testid="text-detected-title">
-                  This template mentions {detected.options.length} options ({detected.options.map((o) => o.label).join(" / ")}).
-                </div>
-                <div className="mt-1 text-[12.5px]" style={{ color: t.subink }}>
-                  Note that this one template serves both? It stays a single file and a single tile — the
-                  note just tells everyone both options are covered here.
-                </div>
-              </div>
-            </div>
-            <div className="mt-5 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => onDone(detected.specId)}
-                disabled={stampOptions.isPending}
-                className={cn("h-9 px-4 rounded-full text-[13px] font-medium transition-colors", t.hoverWash)}
-                style={{ color: t.subink, border: `1px solid ${t.hairline}` }}
-                data-testid="button-decline-options"
-              >
-                No — leave as is
-              </button>
-              <button
-                type="button"
-                onClick={() => stampOptions.mutate(detected)}
-                disabled={stampOptions.isPending}
-                className="h-9 px-5 rounded-full inline-flex items-center gap-2 text-[13px] font-semibold text-white disabled:opacity-60"
-                style={{ backgroundColor: t.blue }}
-                data-testid="button-confirm-options"
-              >
-                {stampOptions.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                Yes — one template, both options
-              </button>
-            </div>
-          </div>
-        ) : (
-        <div className="px-7 pt-5 pb-7 grid gap-6" style={{ gridTemplateColumns: "250px 1fr" }}>
-          {/* Current file (only when replacing an existing tile) */}
-          <div>
-            <div className="h-7 flex items-center text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.faint }}>
-              {spec ? "Current file" : "New template"}
-            </div>
-            <div className="mt-2.5 aspect-square rounded-xl flex items-center justify-center relative" style={{ backgroundColor: t.cardSoft }} data-testid="preview-current-file">
-              {spec && (
-                <>
-                  <button
-                    type="button"
-                    aria-label="File actions"
-                    onClick={() => setFileMenuOpen((v) => !v)}
-                    className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full inline-flex items-center justify-center hover:opacity-80 z-10"
-                    style={{ backgroundColor: t.overlayBtn }}
-                    data-testid="button-file-menu"
-                  >
-                    <MoreHorizontal className="w-4 h-4" style={{ color: t.ink }} />
-                  </button>
-                  {fileMenuOpen && (
-                    <div
-                      className="absolute z-20 rounded-xl py-1.5 text-left"
-                      style={{ top: 44, right: 10, minWidth: 180, backgroundColor: t.card, boxShadow: t.popShadow, border: `1px solid ${t.hairline}` }}
-                      data-testid="menu-file-actions"
-                    >
-                      <button
-                        type="button"
-                        className={cn("w-full flex items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium", t.hoverWash)}
-                        style={{ color: t.ink }}
-                        onClick={() => {
-                          setFileMenuOpen(false);
-                          setFileSource("Upload file");
-                        }}
-                        data-testid="button-replace-file-menu"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        Replace file
-                      </button>
-                      <button
-                        type="button"
-                        className={cn("w-full flex items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium", t.hoverWash)}
-                        style={{ color: t.ink }}
-                        onClick={() => {
-                          setFileMenuOpen(false);
-                          if (window.confirm("Archive this file? The revision and any associations are kept — it can't be deleted.")) {
-                            archive.mutate();
-                          }
-                        }}
-                        data-testid="button-archive-file-menu"
-                      >
-                        <Archive className="w-3.5 h-3.5" />
-                        Archive file
-                      </button>
-                      <div className="px-3.5 pt-1.5 pb-1 text-[11px]" style={{ color: t.faint, borderTop: `1px solid ${t.hairline}`, marginTop: 4, maxWidth: 200 }} data-testid="text-archive-note">
-                        This file has been used — it can be archived, never deleted.
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-              <ComponentIcon kind={slot.kind} color={t.blue} fill={t.iconFill} size={64} />
-            </div>
-            <div className="mt-3 text-center">
-              {spec?.templateFileName && (
-                <div className="text-[12.5px] font-medium break-all" style={{ color: t.ink }}>{spec.templateFileName}</div>
-              )}
-              {spec?.measuredArtboardWInches != null && spec?.measuredArtboardHInches != null && (
-                <div className="mt-0.5 text-[11.5px] tabular-nums" style={{ color: t.faint }}>
-                  {spec.measuredArtboardWInches}″ × {spec.measuredArtboardHInches}″
-                  {spec.measuredPages != null ? ` · ${spec.measuredPages} pages` : ""}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Upload side */}
-          <div className="flex flex-col">
-            <div className="h-7 flex items-center justify-between gap-4">
-              <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.faint }}>New file</div>
-              <div className="inline-flex items-center rounded-full" style={{ padding: 3, backgroundColor: t.cardSoft }} role="tablist" aria-label="File source" data-testid="tabs-file-source">
-                {(["Upload file", "Paste a URL"] as const).map((label) => {
-                  const on = fileSource === label;
-                  return (
-                    <button
-                      key={label}
-                      type="button"
-                      role="tab"
-                      aria-selected={on}
-                      onClick={() => setFileSource(label)}
-                      className="rounded-full transition-colors"
-                      style={{
-                        padding: "4px 14px",
-                        fontSize: 12,
-                        fontWeight: on ? 600 : 500,
-                        color: on ? t.ink : t.faint,
-                        backgroundColor: on ? t.pillActive : "transparent",
-                        boxShadow: on ? t.pillShadow : "none",
-                        cursor: "pointer",
-                      }}
-                      data-testid={`tab-source-${label === "Upload file" ? "upload" : "url"}`}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {fileSource === "Upload file" ? (
-              <label
-                className={cn("mt-2.5 w-full flex-1 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-colors cursor-pointer", t.tileHover)}
-                style={{ border: `1.5px dashed ${t.dashedBorder}`, padding: "20px", minHeight: 180 }}
-                data-testid="button-upload-drop"
-              >
-                <input
-                  type="file"
-                  accept={DOC_UPLOAD_ACCEPT}
-                  className="hidden"
-                  disabled={uploading || scanning}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) onPickFile(f);
-                  }}
-                  data-testid="input-upload-file"
-                />
-                {uploading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" style={{ color: t.subink }} />
-                    <span className="text-[13.5px] font-medium" style={{ color: t.ink }}>Uploading…</span>
-                  </>
-                ) : fileUrl ? (
-                  <>
-                    <CloudUpload className="w-5 h-5" style={{ color: t.ready }} />
-                    <span className="text-[13.5px] font-medium break-all text-center" style={{ color: t.ink }}>{fileName || "File ready"}</span>
-                    <span className="text-[12px]" style={{ color: t.faint }}>Click to pick a different file</span>
-                  </>
-                ) : (
-                  <>
-                    <CloudUpload className="w-5 h-5" style={{ color: t.subink }} />
-                    <span className="text-[13.5px] font-medium" style={{ color: t.ink }}>Drag a file here, or click to pick</span>
-                    <span className="text-[12px]" style={{ color: t.faint }}>Press-ready PDF · validated automatically</span>
-                  </>
-                )}
-              </label>
-            ) : (
-              <div className="mt-2.5 w-full flex-1 rounded-2xl flex flex-col items-center justify-center gap-3" style={{ border: `1.5px dashed ${t.dashedBorder}`, padding: "20px 28px", minHeight: 180 }} data-testid="panel-paste-url">
-                <div className="w-full flex items-center gap-2.5" style={{ maxWidth: 420 }}>
-                  <input
-                    value={urlDraft}
-                    onChange={(e) => setUrlDraft(e.target.value)}
-                    placeholder="https://… Dropbox, Drive, WeTransfer"
-                    className={cn("flex-1 h-9 px-3.5 rounded-full text-[12.5px] focus:outline-none", t.searchPlaceholder)}
-                    style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}`, color: t.ink }}
-                    data-testid="input-paste-url"
-                  />
-                </div>
-                <span className="text-[12px]" style={{ color: t.faint }}>We fetch the PDF from the link · validated automatically</span>
-              </div>
-            )}
-
-            {/* Optional file name */}
-            <input
-              value={fileName}
-              onChange={(e) => setFileName(e.target.value)}
-              placeholder="File name (optional)"
-              className={cn("mt-3 w-full h-9 px-3.5 rounded-full text-[12.5px] focus:outline-none", t.searchPlaceholder)}
-              style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}`, color: t.ink }}
-              data-testid="input-file-name"
-            />
-
-            {/* Submit + scanning spinner */}
-            <div className="mt-4 flex items-center justify-end gap-3">
-              {scanning && (
-                <span className="inline-flex items-center gap-2 text-[12.5px]" style={{ color: t.subink }} data-testid="text-scanning">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Measuring the PDF… this can take ~30s
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={submit}
-                disabled={scanning || uploading}
-                className="h-9 px-5 rounded-full inline-flex items-center gap-2 text-[13px] font-semibold text-white disabled:opacity-60"
-                style={{ backgroundColor: t.blue }}
-                data-testid="button-submit-template"
-              >
-                {spec ? "Replace template" : "Attach template"}
-              </button>
-            </div>
-          </div>
-        </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 // ─── Task #3065 — "Create new template" dialog (custom slots) ──
 // Task #3066 — doubles as the rename dialog when `editSlot` is set (display
@@ -1022,13 +635,29 @@ export function PressTemplatesIndex({
   const t = THEMES[dark ? "dark" : "light"];
   const [format, setFormat] = useState<"Vinyl" | "CD" | "Cassette" | "Stickers">("Vinyl");
   const [size, setSize] = useState<"7″" | "10″" | "12″">("12″");
-  const [modal, setModal] = useState<ModalState | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   // Live-test upload sheet (handoff, Aug 14 2026): header "Upload a template"
   // opens it; pick the PDF here, then land on the live test with it.
   const [uploadOpen, setUploadOpen] = useState(false);
+  // Header upload = a template with no slot below: ask for a name + component.
+  // Slot/tile uploads already know what they are (Bill, Aug 14 2026).
+  const [uploadSlot, setUploadSlot] = useState<Slot | null>(null);
   const [uploadName, setUploadName] = useState("");
   const [uploadComponent, setUploadComponent] = useState<string | null>(null);
+  const openUpload = (slot: Slot | null) => { setUploadSlot(slot); setUploadName(""); setUploadComponent(null); setUploadOpen(true); };
+  // Archive the live file (slot returns to a dashed tile; revisions stay in
+  // history). Lived on the retired upload modal — kept reachable from the
+  // detail sheet.
+  const archiveSpec = useMutation({
+    mutationFn: async (specId: string) => {
+      await apiRequest("POST", `/api/press/${pressId}/templates/${specId}/archive`);
+    },
+    onSuccess: async () => {
+      setDetail(null);
+      await queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
+    },
+    onError: (e: any) => toast({ title: "Couldn't archive the template", description: e?.message, variant: "destructive" }),
+  });
   const [reopening, setReopening] = useState<string | null>(null); // shelf tile id being fetched
   // Detail sheet — click a certified tile to view the template, then replace
   // it from there if desired (Bill, Aug 14 2026).
@@ -1047,9 +676,21 @@ export function PressTemplatesIndex({
     e.target.value = "";
     if (!f) return;
     pendingTemplateFile.file = f;
-    pendingTemplateFile.name = uploadName.trim() || null;
+    pendingTemplateFile.name = uploadName.trim() || uploadSlot?.title || null;
     pendingTemplateFile.liveId = null;
     pendingTemplateFile.component = uploadComponent;
+    // Slot-mode upload (dashed tile / Replace): the live test saves back to
+    // THIS slot — Accept & Save mints a revision instead of a shelf row.
+    pendingTemplateFile.slot =
+      uploadSlot?.dbFormat && uploadSlot.componentKey
+        ? {
+            format: uploadSlot.dbFormat,
+            componentKey: uploadSlot.componentKey,
+            variantKey: uploadSlot.variantKey,
+            discCount: uploadSlot.discCount,
+            title: uploadSlot.title,
+          }
+        : null;
     setUploadOpen(false);
     onOpenLiveTest();
   };
@@ -1152,7 +793,7 @@ export function PressTemplatesIndex({
           {canEdit && (
             <button
               type="button"
-              onClick={() => { setUploadName(""); setUploadComponent(null); setUploadOpen(true); }}
+              onClick={() => openUpload(null)}
               className="inline-flex items-center gap-2 h-9 px-4 rounded-full text-[13px] font-semibold flex-shrink-0"
               style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
               data-testid="button-upload-template"
@@ -1319,7 +960,7 @@ export function PressTemplatesIndex({
                   t={t}
                   slot={slot}
                   canEdit={canEdit}
-                  onAdd={() => setModal({ slot, spec: spec ?? undefined })}
+                  onAdd={() => openUpload(slot)}
                 />
               );
               // Task #3066 — operator-created tiles get a ⋯ overlay with
@@ -1369,8 +1010,8 @@ export function PressTemplatesIndex({
           onClose={() => setCreateOpen(false)}
           onCreated={(created) => {
             setCreateOpen(false);
-            // Hand straight off to the normal upload flow for the new slot.
-            setModal({ slot: customSlotToSlot(created) });
+            // Hand straight off to the slot-mode upload sheet for the new slot.
+            openUpload(customSlotToSlot(created));
           }}
         />
       )}
@@ -1384,19 +1025,6 @@ export function PressTemplatesIndex({
           onCreated={() => setEditSlot(null)}
         />
       )}
-      {modal && (
-        <UploadModal
-          t={t}
-          pressId={pressId}
-          state={modal}
-          onClose={() => setModal(null)}
-          onDone={(specId) => {
-            setModal(null);
-            onOpenSpec(specId);
-          }}
-        />
-      )}
-
       {/* Template detail sheet — view it, then replace if desired (Bill, Aug 14 2026) */}
       {detail && (() => {
         const { slot, spec } = detail;
@@ -1456,7 +1084,7 @@ export function PressTemplatesIndex({
                 {canEdit && (
                   <button
                     type="button"
-                    onClick={() => { setDetail(null); setModal({ slot, spec }); }}
+                    onClick={() => { setDetail(null); openUpload(slot); }}
                     className="h-9 px-5 rounded-full text-[13px] font-semibold text-white"
                     style={{ backgroundColor: t.blue }}
                     data-testid="button-replace-template"
@@ -1486,6 +1114,19 @@ export function PressTemplatesIndex({
               {canEdit && (
                 <p className="mt-4 text-[11.5px]" style={{ color: t.faint }}>
                   Replacing uploads a new revision — the current one moves to history, it is never deleted.
+                  {" "}
+                  {/* Archive lived on the retired upload modal; kept reachable
+                      here (adaptation — flagged to Bill). */}
+                  <button
+                    type="button"
+                    disabled={archiveSpec.isPending}
+                    onClick={() => archiveSpec.mutate(spec.id)}
+                    className="underline underline-offset-2 disabled:opacity-60"
+                    style={{ color: t.faint }}
+                    data-testid="button-archive-template"
+                  >
+                    {archiveSpec.isPending ? "Archiving…" : "Or archive this file"}
+                  </button>
                 </p>
               )}
             </div>
@@ -1493,68 +1134,104 @@ export function PressTemplatesIndex({
         );
       })()}
 
-      {/* Live-test upload sheet (handoff): name + optional component, then
-          pick the PDF — the file rides the transit store to the live test. */}
+      {/* Upload sheet — Apple-style: dimmed page, one decision (Bill, Aug 14 2026).
+          Handoff-verbatim; slot mode shows "For: {slot}", header mode asks
+          name + component. The picked file rides the transit store. */}
       {uploadOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true">
-          <div className="absolute inset-0" style={{ backgroundColor: "rgba(0,0,0,0.45)" }} onClick={() => setUploadOpen(false)} />
-          <div className="relative w-full max-w-md rounded-2xl p-6" style={{ backgroundColor: t.card, boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }} data-testid="sheet-live-upload">
-            <button type="button" onClick={() => setUploadOpen(false)} className="absolute right-4 top-4" aria-label="Close" data-testid="button-close-live-upload">
-              <X className="w-4.5 h-4.5" style={{ color: t.faint }} />
-            </button>
-            <div className="text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>Upload a template</div>
-            <div className="mt-1 text-[13px]" style={{ color: t.subink }}>
-              Pick a PDF and we'll read its GT layers so you can test real art against it.
-            </div>
-            <label className="mt-5 block text-[12.5px] font-medium" style={{ color: t.subink }}>
-              Name <span style={{ color: t.faint }}>(optional — we'll use the file name)</span>
-            </label>
-            <input
-              value={uploadName}
-              onChange={(e) => setUploadName(e.target.value)}
-              placeholder="e.g. 12″ gatefold jacket"
-              className="mt-1.5 w-full h-10 rounded-xl px-3 text-[14px] outline-none"
-              style={{ backgroundColor: t.cardSoft, color: t.ink, border: `1px solid ${t.hairline}` }}
-              data-testid="input-live-template-name"
-            />
-            <label className="mt-4 block text-[12.5px] font-medium" style={{ color: t.subink }}>
-              Component <span style={{ color: t.faint }}>(optional)</span>
-            </label>
-            <div className="mt-1.5 flex flex-wrap gap-2">
-              {["Jacket", "Sleeve", "Labels", "Booklet", "Other"].map((c) => {
-                const on = uploadComponent === c;
-                return (
-                  <button
-                    key={c}
-                    type="button"
-                    onClick={() => setUploadComponent(on ? null : c)}
-                    className="h-8 px-3.5 rounded-full text-[12.5px] font-medium"
-                    style={{
-                      backgroundColor: on ? t.blue : t.cardSoft,
-                      color: on ? "#fff" : t.subink,
-                      border: `1px solid ${on ? t.blue : t.hairline}`,
-                    }}
-                    data-testid={`pill-live-component-${c.toLowerCase()}`}
-                  >
-                    {c}
-                  </button>
-                );
-              })}
-            </div>
-            <button
-              type="button"
-              onClick={() => uploadInput.current?.click()}
-              className="mt-6 w-full h-11 rounded-full inline-flex items-center justify-center gap-2 text-[14px] font-semibold"
-              style={{ backgroundColor: t.blue, color: "#fff" }}
-              data-testid="button-choose-live-pdf"
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center p-6"
+          style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+          onClick={() => setUploadOpen(false)}
+          data-testid="sheet-upload-backdrop"
+        >
+          <div
+            className="rounded-2xl overflow-hidden shadow-2xl w-full text-center px-8 py-9"
+            style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, maxWidth: 520 }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-label="Upload your template"
+            data-testid="sheet-upload-template"
+          >
+            <div
+              className="mx-auto w-12 h-12 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}
             >
-              <CloudUpload className="w-4 h-4" />
-              Choose PDF
-            </button>
-            <input ref={uploadInput} type="file" accept="application/pdf,.pdf" className="hidden" onChange={onPickLiveTemplate} data-testid="input-live-pdf-file" />
+              <Upload className="w-5 h-5" style={{ color: t.subink }} />
+            </div>
+            <div className="mt-4 text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>Upload your template</div>
+            <p className="mt-1.5 text-[13px] mx-auto" style={{ color: t.subink, maxWidth: 400 }}>
+              This is your PDF saved from Illustrator with &ldquo;GT Layers&rdquo; in it: &ldquo;GT CUT LINE&rdquo;,
+              &ldquo;GT BLEED AREA&rdquo;, and so on. Each layer is read by name, exactly where you drew it.
+            </p>
+            {uploadSlot ? (
+              <div className="mt-4 text-[12.5px] font-semibold" style={{ color: t.subink }} data-testid="text-upload-for">
+                For: <span style={{ color: t.ink }}>{uploadSlot.title}</span>
+              </div>
+            ) : (
+              <div className="mt-5 text-left mx-auto" style={{ maxWidth: 360 }}>
+                <label className="block text-[11px] font-semibold" style={{ color: t.subink }}>
+                  Name
+                  <input
+                    type="text"
+                    value={uploadName}
+                    onChange={(e) => setUploadName(e.target.value)}
+                    placeholder="Single jacket — Special"
+                    className="block w-full mt-1.5 h-9 px-3 rounded-lg text-[13px] font-medium outline-none"
+                    style={{ backgroundColor: t.cardSoft, color: t.ink, border: `1px solid ${t.hairline}` }}
+                    data-testid="input-template-name"
+                  />
+                </label>
+                <div className="mt-3 text-[11px] font-semibold" style={{ color: t.subink }}>Component</div>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {['Jacket', 'Sleeve', 'Labels', 'Booklet', 'Other'].map((c) => {
+                    const on = uploadComponent === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setUploadComponent(on ? null : c)}
+                        className="h-7 px-3 rounded-full text-[12px] font-semibold transition-colors"
+                        style={{
+                          border: `1px solid ${on ? t.subink : t.hairline}`,
+                          color: on ? t.ink : t.faint,
+                          backgroundColor: on ? t.cardSoft : 'transparent',
+                        }}
+                        data-testid={`pill-component-${c.toLowerCase()}`}
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-2 text-[11px]" style={{ color: t.faint }}>
+                  Both optional — name it later from the test page, associate the component any time.
+                </div>
+              </div>
+            )}
+            <div className="mt-6 flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => uploadInput.current?.click()}
+                className="h-9 px-5 rounded-full text-[13px] font-semibold text-white"
+                style={{ backgroundColor: t.blue }}
+                data-testid="button-choose-pdf"
+              >
+                Choose PDF
+              </button>
+              <button
+                type="button"
+                onClick={() => setUploadOpen(false)}
+                className="h-9 px-5 rounded-full text-[13px] font-semibold"
+                style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
+                data-testid="button-cancel-upload"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
+      <input ref={uploadInput} type="file" accept="application/pdf,.pdf" className="hidden" onChange={onPickLiveTemplate} data-testid="input-upload-template" />
     </div>
   );
 }
