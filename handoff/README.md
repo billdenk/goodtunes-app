@@ -28,3 +28,7 @@ A test verdict belongs to the file it actually tested. A tile shows "Failed" onl
 ### States checklist (screenshot each, both themes, 1440px)
 PressTemplatesIndex: Current (default) · All · Archived-empty · Archived with an archived template · Archived with an archived slot ("Archived — not offered") · filled-tile hover (blue ring) · dashed-slot hover (solid blue ring, no button) · ••• menu open (Archive / Restore variants) · archive confirm dialog · upload sheet from a slot (For: <slot>) · upload sheet from Create New (name + component fields) · fresh-save hairline pulse.
 PressTemplateLiveTest: "Opening template" arrival sweep · empty-handed redirect to Templates · template view header (Cancel text / Test pill / Save filled blue) · test underway ("Save result & test another") · save-confirm sheet · read-failure fallback to upload step.
+
+### Addendum — Aug 15 (hover-reveal fine print)
+Template tiles now rest with just the preview, title, and status chip. The fine print — component · variant, code · rev, the superseded/history line, and the saved-tile mm/layers line — carries class `gt-detail` and rests at opacity 0, revealed on tile hover (and :focus-visible). Space stays reserved so the grid never jumps. Same file, replace verbatim: `handoff/PressTemplatesIndex.tsx`.
+State added to the checklist: filled tile at rest (fine print hidden) vs hover (fine print + blue ring).

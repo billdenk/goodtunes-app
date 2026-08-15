@@ -646,7 +646,7 @@ export default function PressTemplatesIndex() {
                 <img src={sv.img} alt={`${sv.name} — saved from the live test`} className="w-full h-full object-cover" />
               </span>
               <div className="mt-4 text-[15px] font-semibold truncate w-full" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={sv.name}>{sv.name}</div>
-              <div className="mt-1 text-[12.5px] tabular-nums" style={{ color: t.subink }}>{sv.wMm.toFixed(1)} × {sv.hMm.toFixed(1)} mm · {sv.layerCount} GT layers</div>
+              <div className="gt-detail mt-1 text-[12.5px] tabular-nums" style={{ color: t.subink }}>{sv.wMm.toFixed(1)} × {sv.hMm.toFixed(1)} mm · {sv.layerCount} GT layers</div>
               <div className="mt-3 flex items-center gap-2 text-[11.5px]" style={{ color: t.faint }}>
                 {isArchived ? (
                   <><Archive className="w-3.5 h-3.5 flex-shrink-0" /><span style={{ fontWeight: 600 }}>Archived</span></>
@@ -677,8 +677,8 @@ export default function PressTemplatesIndex() {
                 </span>
               </div>
               <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{tpl.title}</div>
-              <div className="mt-1 text-[12.5px]" style={{ color: t.subink }}>{tpl.component} · {tpl.variant}</div>
-              <div className="mt-0.5 text-[12.5px] tabular-nums" style={{ color: t.subink }}>{tpl.code} <span style={{ color: t.faint }}>·</span> {tpl.rev}</div>
+              <div className="gt-detail mt-1 text-[12.5px]" style={{ color: t.subink }}>{tpl.component} · {tpl.variant}</div>
+              <div className="gt-detail mt-0.5 text-[12.5px] tabular-nums" style={{ color: t.subink }}>{tpl.code} <span style={{ color: t.faint }}>·</span> {tpl.rev}</div>
               <div className="mt-3 flex items-center gap-2">
                 {isArchived ? (
                   <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: t.faint }}>
@@ -691,7 +691,7 @@ export default function PressTemplatesIndex() {
                 {tpl.certified && <span className="text-[11.5px]" style={{ color: t.faint }}>{tpl.certified.replace('Certified ', '')}</span>}
               </div>
               {tpl.history?.map((h) => (
-                <div key={h.rev} className="mt-2 flex items-center justify-center gap-1.5 text-[11.5px]" style={{ color: t.faint, opacity: 0.85 }}>
+                <div key={h.rev} className="gt-detail mt-2 flex items-center justify-center gap-1.5 text-[11.5px]" style={{ color: t.faint }}>
                   <History className="w-3 h-3 flex-shrink-0" />
                   <span className="tabular-nums">{h.rev}</span>
                   <span>superseded · in history</span>
@@ -708,7 +708,10 @@ export default function PressTemplatesIndex() {
               blue border, no button — clicking just opens (Bill, Aug 15 2026).
               Slots a press doesn't offer archive from the •••, like templates. */}
           <style>{`.gt-slot:hover { border-color: #319ED8 !important; border-style: solid !important; }
-.gt-tile:hover { border-color: #319ED8 !important; }`}</style>
+.gt-tile:hover { border-color: #319ED8 !important; }
+/* Fine print rests hidden; hover reveals it. Space stays reserved so the grid never jumps (Bill, Aug 15 2026). */
+.gt-tile .gt-detail { opacity: 0; transition: opacity 150ms ease; }
+.gt-tile:hover .gt-detail, .gt-tile:focus-visible .gt-detail { opacity: 1; }`}</style>
           {(format === 'Vinyl' ? SLOT_SETS[size] : FORMAT_SLOTS[format]).map(({ kind, title, note }) => {
             const key = `slot:${title}`;
             const isArchived = archivedSlots.has(title);
