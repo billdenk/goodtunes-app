@@ -280,7 +280,7 @@ function CdRender({ caseName, print, spots }: { caseName: string; print: Print; 
     tint = `radial-gradient(circle, transparent 12%, ${bands[2]} 12.5% 56%, ${bands[1]} 56.5% 78%, ${bands[0]} 78.5% 95.5%, transparent 96%)`;
   }
   return (
-    <div className="relative cd-render" style={{ width: S * 1.42, height: S * 1.06 }}>
+    <div className="relative cd-render" style={{ width: S * (jewel ? 1.62 : 1.42), height: S * 1.06 }}>
       {/* floor shadow so the object sits on the page */}
       <div
         aria-hidden
@@ -299,7 +299,7 @@ function CdRender({ caseName, print, spots }: { caseName: string; print: Print; 
           Tucked mostly inside the case at rest; slides out on hover. */}
       <div
         className="absolute cd-peek"
-        style={{ left: S * 0.3, top: S * 0.01, width: S * 0.98, height: S * 0.98, transition: 'left 0.45s cubic-bezier(0.22, 1, 0.36, 1)' }}
+        style={{ top: S * 0.01, width: S * 0.98, height: S * 0.98, transition: 'left 0.45s cubic-bezier(0.22, 1, 0.36, 1)' }}
       >
         <img
           src={silk ? cdWhite : cdShiny}
@@ -315,7 +315,14 @@ function CdRender({ caseName, print, spots }: { caseName: string; print: Print; 
           />
         )}
       </div>
-      <style>{`.cd-render:hover .cd-peek { left: ${S * 0.56}px; }`}</style>
+      {/* Jewel case body is wider than the sleeve, so the disc travels farther
+          to clearly emerge. Just the slide — no shine (Bill, Aug 14 2026).
+          NOTE: rest position must live here too — an inline `left` would
+          override the :hover rule and freeze the disc. */}
+      <style>{`
+        .cd-render .cd-peek { left: ${S * 0.3}px; }
+        .cd-render:hover .cd-peek { left: ${S * (jewel ? 0.65 : 0.56)}px; }
+      `}</style>
 
       {jewel ? (
         // ─── JEWEL CASE — real product photo (layers from CD_Mockup.psd).

@@ -76,3 +76,35 @@ of each file are the contract:
   Cassette pills that route to these new pages.
 - Status indicators anywhere on these pages are dot + label, never color-only.
 - Copy is final — headings, captions, and helper lines ship exactly as written.
+
+
+## Correction round — Aug 14 2026 (evening)
+
+Bill reviewed the live dev build against the handoff. Fix these, then re-diff at
+1440px, BOTH themes, EVERY reachable state (jewel-case state included — the last
+diff clearly only covered the default sleeve state):
+
+1. **Jewel-case cover art is ghosted.** The art is rendering UNDER the case
+   photo's semi-transparent lid. The handoff layers it the other way: the
+   booklet-art div sits ABOVE the case image at the PSD Label-layer rect
+   (213,213 → 1507×1431 in the 1800² frame) with only
+   `inset 0 1px 4px rgba(0,0,0,0.18)` for depth. Match that layer order and
+   the cover reads ink-black.
+2. **Jewel-case geometry/art placeholder.** An earlier dev build showed a plain
+   soundwave square instead of the press's own label mark on the cover, sized
+   like the sleeve. The handoff renders the press logo mark and true jewel-case
+   proportions (hinge spine left, clear lip). Both files updated here are the
+   source.
+3. **Remove the "GoodTunes Packages" dropdown** next to the Catalog H1. Not in
+   the handoff: the heading names the page; the Vinyl/CD/Cassette pills are the
+   only navigation. If that dropdown was solving something real (e.g.
+   white-label package sets), STOP and ask Bill — don't invent chrome.
+4. **New in this update: the disc slides out of the case on hover** — plain
+   slide, no shine, same easing as the vinyl. Jewel travel stops with the disc
+   center at the case edge (spindle hole half-covered). Gotcha we hit: the
+   peek's REST position must live in the stylesheet, not an inline style —
+   inline `left` overrides the :hover rule and freezes the disc. Both .tsx
+   files here carry the fix; copy verbatim.
+
+If anything here conflicts with what's live, flag it to Bill — questions
+welcome, silent adaptation is not.
