@@ -442,6 +442,20 @@ export default function PressTemplateLiveTest({
     if (!f) return;
     liveId.current = null; // a fresh file is a fresh shelf row
     await loadTemplate(f);
+    // The draft snapshot must follow the replacement, or a crash would
+    // resume the file that was just swapped out (review, Aug 15 2026).
+    void saveLiveTestDraft({
+      pressId,
+      blob: f,
+      fileName: f.name,
+      name: null,
+      component: componentPill.current,
+      liveId: null,
+      slot: slotTarget.current
+        ? { format: slotTarget.current.format, componentKey: slotTarget.current.componentKey, variantKey: slotTarget.current.variantKey ?? null, discCount: slotTarget.current.discCount ?? null, title: (slotTarget.current as { title?: string }).title }
+        : null,
+      savedAt: Date.now(),
+    });
   };
 
   const loadTemplate = async (f: File, displayName?: string) => {
@@ -533,9 +547,14 @@ export default function PressTemplateLiveTest({
     // draft exists, offer to resume it (canon, Aug 15 2026); otherwise
     // Templates is the start page — go there as before.
     else if (!specId) {
+      // Idempotence guard (review, Aug 15 2026): on a Strict-Mode remount the
+      // pending file is already consumed, but the same component instance is
+      // mid-arrival — currentFile survives in the ref. Never exit or offer a
+      // resume sheet over a session that's already opening/opened a file.
+      if (currentFile.current) return;
       let cancelled = false;
       void loadLiveTestDraft(pressId).then((d) => {
-        if (cancelled) return;
+        if (cancelled || currentFile.current) return;
         if (d) setResumeOffer(d);
         else onExit();
       });
