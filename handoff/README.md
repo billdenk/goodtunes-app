@@ -39,3 +39,11 @@ Two rules ratified by gogoods, now in `handoff/style-guide/apple-canon.md` (upda
 2. **Dialog subtext is one short line;** longer explanation lives behind a small quiet ⓘ (faint, cursor-help, tooltip) — never a paragraph in the sheet.
 
 `handoff/PressTemplatesIndex.tsx` updated in this commit (replace verbatim as before): upload sheet gained the X close, its subtext is now one line + ⓘ, and both its footer and the archive-confirm footer are reordered to Cancel-text-left / primary-right. Sweep your side for any dialog that violates rule 1 — our other mocks were audited and already comply.
+
+### Addendum 3 — Aug 15 (Resume-draft sheet: the mock behind the README rule)
+You were right to flag it — the draft/resume rule had no code behind it. It does now. `handoff/PressTemplateLiveTest.tsx` updated in this commit (replace verbatim as always):
+- **"Resume where you left off?" sheet** — shown when the live-test page opens empty-handed but a draft exists. Dimmed backdrop, History icon, one-line subtext ("<template> — kept as a draft on this computer.") with a ⓘ tooltip, X close top-right, and per canon: "Discard draft" quiet text left, "Resume" filled blue right. Testids: sheet-resume-draft, button-resume-draft, button-discard-draft, button-close-resume, info-draft.
+- Resume reopens the draft exactly where it stood (mock loads the demo PDF via MOCK_DRAFT); Discard drops the draft and returns to Templates. Neither creates a revision.
+- Production wiring: offer the sheet only when a draft actually exists; with no draft, keep routing empty-handed arrivals to Templates as before. Draft = automatic browser-local snapshot of the in-progress session (template file + any test artifacts you can cheaply keep); X close and Discard both leave, but only Discard deletes the draft.
+- Same commit: the live-test upload step's paragraph is now one line + ⓘ, matching the dialog-subtext canon.
+States added to the checklist: resume sheet open (both themes) · resume → template view · discard → Templates index.

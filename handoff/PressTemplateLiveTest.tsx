@@ -38,10 +38,17 @@ for (const proto of [Map.prototype, WeakMap.prototype] as unknown as Array<Recor
 }
 import {
   LayoutDashboard, Users, Disc3, UserPlus, Library, Cog, Gift,
-  Search, Bell, MessageSquarePlus, CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Moon, Sun, Upload, RotateCcw, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown,
+  Search, Bell, MessageSquarePlus, CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Moon, Sun, Upload, RotateCcw, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate } from 'lucide-react';
+import labelTemplatePdfUrl from '../assets/label-template-r091125.pdf?url';
 import mrpLogo from '../assets/mrp-logo.svg';
+
+// Demo draft for the "Resume where you left off" sheet (canon rule, Aug 15 2026):
+// nothing saves automatically — Save is the one act that creates a revision — but
+// an in-progress session is kept as a browser-local draft so a crash or closed tab
+// never loses work. A draft never becomes a revision by itself.
+const MOCK_DRAFT = { title: 'Center labels', keptNote: 'kept as a draft on this computer' };
 import goodtunesLogo from '../assets/goodtunes-logo.png';
 import brandonPhoto from '../assets/brandon-seavers.png';
 
@@ -460,6 +467,9 @@ export default function PressTemplateLiveTest() {
   // being uploaded, so show "Opening template" instead of the upload step
   // (Bill, Aug 15 2026).
   const [arriving, setArriving] = useState(false);
+  // "Resume where you left off" — offered when the page opens empty-handed but a
+  // draft exists (mock: always offers MOCK_DRAFT on a deep link / refresh).
+  const [resumeOffer, setResumeOffer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeZones, setActiveZones] = useState<Set<string>>(new Set());
   const [artOpacity, setArtOpacity] = useState(1);
@@ -525,11 +535,28 @@ export default function PressTemplateLiveTest() {
     const f = pendingTemplateFile.file;
     const nm = pendingTemplateFile.name;
     if (f) { pendingTemplateFile.file = null; pendingTemplateFile.name = null; setArriving(true); void loadTemplate(f, nm ?? undefined); }
-    // Arrived with nothing in hand (refresh, deep link)? Templates is the start
-    // page — go there instead of showing a stranded upload step (Bill, Aug 14 2026).
-    else window.location.hash = '#/PressTemplatesIndex';
+    // Arrived with nothing in hand (refresh, deep link)? If a draft exists,
+    // offer to resume it (Aug 15 2026 canon: crash-safety = drafts, not
+    // auto-save). Production: only when a draft exists; otherwise route to
+    // the Templates page as before. Mock always offers the demo draft.
+    else setResumeOffer(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Resume = load the draft exactly where it stood; Discard = the draft is gone,
+  // back to Templates. Neither creates a revision.
+  const resumeDraft = async () => {
+    setResumeOffer(false);
+    setArriving(true);
+    try {
+      const blob = await (await fetch(labelTemplatePdfUrl)).blob();
+      await loadTemplate(new File([blob], 'label-template-r091125.pdf', { type: 'application/pdf' }), MOCK_DRAFT.title);
+    } catch {
+      setArriving(false);
+      setError('Could not reopen the draft.');
+    }
+  };
+  const discardDraft = () => { setResumeOffer(false); window.location.hash = '#/PressTemplatesIndex'; };
 
   const onPickArt = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -791,6 +818,73 @@ export default function PressTemplateLiveTest() {
           <p className="mt-4 text-[12.5px]" style={{ color: t.crit }} data-testid="text-error">{error}</p>
         )}
 
+        {/* "Resume where you left off" — dimmed sheet over the page (Aug 15 2026). */}
+        {resumeOffer && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center p-6"
+            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+            data-testid="sheet-resume-backdrop"
+          >
+            <div
+              className="relative rounded-2xl overflow-hidden shadow-2xl w-full text-center px-8 py-9"
+              style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, maxWidth: 440 }}
+              role="dialog"
+              aria-label="Resume where you left off?"
+              data-testid="sheet-resume-draft"
+            >
+              <button
+                type="button"
+                onClick={discardDraft}
+                className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:opacity-80"
+                style={{ backgroundColor: t.soft, color: t.subink }}
+                aria-label="Close"
+                data-testid="button-close-resume"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: t.soft, border: `1px solid ${t.hairline}` }}>
+                <History className="w-5 h-5" style={{ color: t.subink }} />
+              </div>
+              <div className="mt-4 text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>
+                Resume where you left off?
+              </div>
+              {/* One line, Apple-quiet (canon, Aug 15 2026). */}
+              <p className="mt-1.5 text-[13px] mx-auto inline-flex items-center gap-1.5" style={{ color: t.subink }}>
+                {MOCK_DRAFT.title} — {MOCK_DRAFT.keptNote}.
+                <span
+                  className="inline-flex items-center justify-center cursor-help"
+                  title="Your in-progress session is kept automatically on this computer. Nothing is saved to Templates until you press Save."
+                  aria-label="About drafts"
+                  data-testid="info-draft"
+                >
+                  <Info className="w-3.5 h-3.5" style={{ color: t.faint }} />
+                </span>
+              </p>
+              {/* Canon (Bill, Aug 15 2026): confirming action rightmost; Cancel/dismiss quiet text to its left. */}
+              <div className="mt-6 flex items-center justify-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={discardDraft}
+                  className="h-9 px-4 rounded-full text-[13px] font-medium transition-colors hover:opacity-80"
+                  style={{ color: t.subink }}
+                  data-testid="button-discard-draft"
+                >
+                  Discard draft
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void resumeDraft(); }}
+                  className="h-9 px-5 rounded-full text-[13px] font-semibold text-white"
+                  style={{ backgroundColor: t.blue }}
+                  data-testid="button-resume-draft"
+                >
+                  Resume
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Arrived with a template in hand — plain opening state, no upload talk. */}
         {step === 1 && arriving && (
           <div className="mt-6 flex flex-col items-center justify-center px-8 py-24">
@@ -805,9 +899,17 @@ export default function PressTemplateLiveTest() {
               <FileText className="w-6 h-6" style={{ color: t.subink }} />
             </span>
             <div className="mt-4 text-[16px] font-semibold" style={{ color: t.ink }}>Upload your template</div>
-            <p className="mt-1.5 text-[13px]" style={{ color: t.subink, maxWidth: 460 }}>
-              This is your PDF saved from Illustrator with &ldquo;GT Layers&rdquo; in it: &ldquo;GT CUT LINE&rdquo;,
-              &ldquo;GT BLEED AREA&rdquo;, and so on. Each layer is read by name, exactly where you drew it.
+            {/* One line, Apple-quiet; the detail lives behind the i (canon, Aug 15 2026). */}
+            <p className="mt-1.5 text-[13px] inline-flex items-center gap-1.5" style={{ color: t.subink }}>
+              Your Illustrator PDF, GT layers included.
+              <span
+                className="inline-flex items-center justify-center cursor-help"
+                title={'Layers named "GT CUT LINE", "GT BLEED AREA", and so on are read by name, exactly where you drew them.'}
+                aria-label="About GT layers"
+                data-testid="info-gt-layers"
+              >
+                <Info className="w-3.5 h-3.5" style={{ color: t.faint }} />
+              </span>
             </p>
             {busy === 'template' ? (
               <ThinProgress label="Reading layers" t={t} testid="progress-reading-layers" />
