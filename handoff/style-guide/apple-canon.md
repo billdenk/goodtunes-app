@@ -51,11 +51,28 @@ accents on ~14%-alpha translucent washes — see tokens).
 - Overflow actions on artwork/tiles: a single small frosted `···` circle
   (`rgba(255,255,255,0.88)` + backdrop-blur) revealed on hover, opening a
   small white rounded-xl menu. Never multiple labeled pills over artwork.
+- **Dialog action order (ratified 2026-08-15, Bill):** in any horizontal
+  dialog/popover/footer action row, the confirming action is ALWAYS the
+  rightmost element; Cancel sits immediately to its left as a **quiet
+  borderless text button** (subink, hover wash) — never a bordered pill,
+  never right of the primary. Sheets also carry an X close in the top-right
+  gray circle. Vertically stacked alerts put the primary ON TOP — that
+  remains correct.
+- **Dialog subtext is one short line.** Longer explanation lives behind a
+  small quiet `ⓘ` (faint, cursor-help, tooltip) — never a paragraph in the
+  sheet. (Ratified 2026-08-15, upload-template sheet.)
 
 ## Controls & chrome
 
-- Segmented control: gray pill track (`--apple-track`) with a raised white
-  active pill (`0 1px 3px rgba(0,0,0,0.08)` shadow).
+- Segmented control: a **fully-rounded pill track** (`rounded-full`,
+  `--apple-track`) holding a **raised, fully-rounded active thumb**
+  (`rounded-full`; white in light mode with `0 1px 3px rgba(0,0,0,0.08)`,
+  lighter charcoal `#3a3a3e` in dark with `0 1px 3px rgba(0,0,0,0.4)`).
+  Reference: the Catalog Vinyl/CD/Cassette switcher and the dashboard
+  Today/7d/30d range switcher. **Never squared chips** — a segmented control
+  with `rounded-md`/`rounded-lg` corners or box-shaped options is a canon
+  violation. (Ratified 2026-08-09; closes the squared segmented controls Bill
+  found in the live admin.)
 - Modal close: small gray circle (`--apple-chip`) with a dark ×. Notification
   bells use the same gray-circle treatment.
 - Header: sticky, translucent, blurred (`rgba(255,255,255,0.72)` +
@@ -75,19 +92,24 @@ accents on ~14%-alpha translucent washes — see tokens).
 - No per-page narrow caps (`max-w-3xl`, 720/920px wrappers, etc.). If a page
   looks sparse at full width, split it into columns inside the container
   (e.g. two-column form cards) instead of shrinking the container.
-- **GoodTunes Packages (PressPackagePricingCatalog) is ratified as-is (Bill,
-  Aug 11 2026).** It already uses this exact container — theme work (dark/light)
-  is welcome, but do NOT change its width, padding, or internal column layout
-  in any sweep.
 - Individual text blocks may still cap their measure for readability
   (~640px for paragraphs), but cards, tables, and forms span the container.
-    - **Containers fill the container (ratified Aug 11 2026).** Every card,
-    form section, table, and content block spans the FULL width of the page
-    container — never a narrower cap that leaves a dead gap on the right.
-    If a card's content doesn't need the width, lay the content out in
-    columns inside the full-width card; do not shrink the card. A page whose
-    cards stop short of the right gutter while the container keeps going is
-    a bug.
+- **Containers fill the container (ratified Aug 11 2026).** Every card,
+  form section, table, and content block spans the FULL width of the page
+  container — never a narrower cap that leaves a dead gap on the right.
+  If a card's content doesn't need the width, lay the content out in
+  columns inside the full-width card; do not shrink the card. A page whose
+  cards stop short of the right gutter while the container keeps going is
+  a bug.
+- **EXEMPT — build-experience pages (Bill, Aug 11 2026).** The editorial
+  "Build your GoodTunes packages" catalog page, the component chooser
+  screens (jackets, inner sleeves, center labels, inserts, stickers,
+  vinyl colors, pricing), and the quote builder keep their current
+  bespoke centered layout and widths EXACTLY as designed. Theme-aware
+  (light/dark) conversion applies to them; the full-width container rules
+  above do NOT. Do not widen, re-wrap, or re-cap anything on these pages.
+  The full-width rules govern operator/admin data pages (dashboards,
+  tables, forms, specs, settings).
 
 ## Content patterns
 
@@ -99,17 +121,59 @@ accents on ~14%-alpha translucent washes — see tokens).
 - **Ranked lists**: rank number in faint gray, thumb (projects = rounded-rect,
   presses = white circle logo), revenue right-aligned, thin blue progress bar
   aligned to the title column.
-- **Activity feeds**: people get photo circles; partner logos always sit on
-  WHITE circles, `object-contain`, small padding, never recolored or inverted
-  (light or dark). Impersonal events get gray rounded-square icon chips.
+- **Activity feeds**: people get photo circles; partner logos sit on WHITE
+  carrier circles, `object-contain`, small padding, never recolored or
+  inverted (see Logos — the white circle is the light surface). Impersonal
+  events get gray rounded-square icon chips.
 - Status dots (green/gray) + short phrase for item state ("Priced — ready to
   press", "Draft — no artwork yet").
+- **Breadcrumbs** (ratified Aug 2026): use the GDS `Breadcrumb` component
+  pattern — muted (FAINT) crumb links, `ChevronRight` (w-3.5) separators,
+  current page in INK, ~13px text, no uppercase, no `·` middot separators.
+  Ancestor crumbs are real links that land back exactly where the user left
+  (filters/scope preserved). Drop crumbs that duplicate the sidebar's active
+  item when depth allows; the page identity itself belongs in the H1 lead,
+  with the crumb trail carrying only the path back.
+  **Crumb → H1 spacing (ratified 2026-08-12): ~12px (`mt-3`) between the
+  crumb trail and the page H1** — the trail needs its own breathing room and
+  must never sit tight on the heading (`mt-1` is too tight; drift).
 
 ## Logos
 
-- Only dark GoodTunes logo assets exist; in dark mode render white via CSS
-  `filter: invert(1) brightness(2)`.
-- Partner/press logos: never recolored, never inverted, always on white.
+**Ratified 2026-08-09 — logo contrast follows surface luminance.** This
+replaces the earlier "partner logos always on white" rule, which produced
+invisible dark partner marks on dark chrome in the live admin.
+
+- **The rule:** logos are **white on dark surfaces** (dark album art, vinyl
+  center labels, dark admin chrome) and **dark on white/light surfaces**.
+  Pick the variant by the luminance of what the logo sits on, never by app
+  theme alone.
+- **GoodTunes wordmark** (single-color; only dark assets exist): on dark
+  surfaces render white via CSS `filter: invert(1) brightness(2)` — this
+  CSS-invert approach stays canon for the wordmark only.
+- **Multi-color partner/press marks:** on dark surfaces use a **white
+  monochrome/knockout variant of the mark — never CSS inversion** (inverting
+  a multi-color logo corrupts the partner's brand colors). If no knockout
+  variant exists, keep the logo on a white carrier (see below) rather than
+  placing the dark original directly on dark chrome.
+- **White carrier circles** (activity feeds, press avatars, ranked lists):
+  partner logos may sit on white circles (`object-contain`, small padding) in
+  both light and dark modes — the white circle IS the light surface, so the
+  original (dark/multi-color) mark is correct there. Never recolor or invert
+  a logo sitting on a white carrier.
+
+### Logo formats (ratified Aug 10 2026)
+
+- **Presses — product surfaces**: SVG is the ONLY accepted format wherever the
+  logo is printed on product — placeholder album covers (Vinyl/CD/Cassette)
+  and vinyl center labels. The configurator renders from this SVG.
+- **Presses — identity icon**: a press may optionally upload a SECOND asset
+  (PNG/JPG allowed) used purely for identification in the app — the avatar
+  circle next to their name above the search box, activity feeds, etc. If no
+  identity icon is uploaded, the SVG is used there too. The identity icon is
+  never applied to covers or center labels.
+- **Everyone else** (artists, NPOs, staff, any non-press account): PNG/JPG
+  icons are fully supported everywhere. No SVG requirement.
 
 ## Dark controls & surfaces
 
@@ -130,6 +194,14 @@ leave light-mode leftovers — a white input pill on a near-black card is a bug.
   family never appears on dark).
 - **Popovers**: dark frosted glass — same blur and structure as light mode's
   frosted panels, dark surface, deeper shadows (`0 20px 48px rgba(0,0,0,0.55)`).
+- **Disabled/inactive on dark (ratified 2026-08-09):** inactive or disabled
+  regions — table cells, tiers not yet unlocked, grayed rows, disabled
+  controls — **dim via reduced opacity on the dark surface** (e.g.
+  `opacity: 0.4–0.5` on the element, or white-alpha text at reduced alpha).
+  **Never light-gray fills** (`#e8e8ed`, `#f0f0f2`, slate-100/200) and never
+  any light-mode literal on a dark surface — a light-gray disabled box on
+  charcoal is a bug, not a state. (Closes the light-gray disabled boxes Bill
+  found in the live admin's GoodDeeds printing table.)
 
 Reference implementation: `PressPackagePricingTableRunsDark.tsx` (Playground
 sandbox), derived from `AdminDashboardAppleDark.tsx`.
@@ -184,7 +256,3 @@ Reference implementation: the dark Catalog mockup
 - **Acceptance gate:** before a screen is done, screenshot it in both
   themes (where both apply) at 1440 / 1024 / 768. Off-theme surfaces or
   horizontal overflow = failure.
-
-  **Crumb → H1 spacing (ratified 2026-08-12): ~12px (`mt-3`) between the
-  crumb trail and the page H1** — the trail needs its own breathing room and
-  must never sit tight on the heading (`mt-1` is too tight; drift).

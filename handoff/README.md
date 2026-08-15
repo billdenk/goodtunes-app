@@ -32,3 +32,10 @@ PressTemplateLiveTest: "Opening template" arrival sweep · empty-handed redirect
 ### Addendum — Aug 15 (hover-reveal fine print)
 Template tiles now rest with just the preview, title, and status chip. The fine print — component · variant, code · rev, the superseded/history line, and the saved-tile mm/layers line — carries class `gt-detail` and rests at opacity 0, revealed on tile hover (and :focus-visible). Space stays reserved so the grid never jumps. Same file, replace verbatim: `handoff/PressTemplatesIndex.tsx`.
 State added to the checklist: filled tile at rest (fine print hidden) vs hover (fine print + blue ring).
+
+### Addendum 2 — Aug 15 (dialog canon: action order, X close, one-line subtext)
+Two rules ratified by gogoods, now in `handoff/style-guide/apple-canon.md` (updated this commit):
+1. **Dialog action order:** in any horizontal dialog/popover/footer action row, the confirming action is ALWAYS rightmost; Cancel sits immediately to its left as a quiet borderless text button (subink, hover wash) — never a bordered pill, never right of the primary. Sheets also carry an X close in the top-right gray circle. Vertically stacked alerts keep the primary on top — that stays correct.
+2. **Dialog subtext is one short line;** longer explanation lives behind a small quiet ⓘ (faint, cursor-help, tooltip) — never a paragraph in the sheet.
+
+`handoff/PressTemplatesIndex.tsx` updated in this commit (replace verbatim as before): upload sheet gained the X close, its subtext is now one line + ⓘ, and both its footer and the archive-confirm footer are reordered to Cancel-text-left / primary-right. Sweep your side for any dialog that violates rule 1 — our other mocks were audited and already comply.
