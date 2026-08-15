@@ -11,12 +11,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearch } from "wouter";
 import type { TemplatesPayload } from "./types";
 import { PressTemplatesIndex } from "./PressTemplatesIndex";
-// Detail view is authored by another agent with EXACTLY these props —
-// { pressId, specId, canEdit, onBack: () => void }. Trust the contract.
-import { PressTemplateDetail } from "./PressTemplateDetail";
-// Task #3098 — dedicated Test page, deep-linked via `&test=1` on top of the
-// `?template=<specId>` scheme so refresh / back keep working.
-import { PressTemplateTest } from "./PressTemplateTest";
 // Live end-to-end GT-layer proof (handoff, Aug 14 2026) — reached from the
 // index's upload sheet via `&livetest=1`; the chosen file rides the transit
 // store, so a refresh on this URL bounces back to the index.
@@ -37,9 +31,6 @@ export function PressTemplatesTab({ pressId }: { pressId: string }) {
   const [specId, setSpecId] = useState<string | null>(
     () => new URLSearchParams(window.location.search).get("template"),
   );
-  const [testView, setTestView] = useState<boolean>(
-    () => new URLSearchParams(window.location.search).get("test") === "1",
-  );
   const [liveTestView, setLiveTestView] = useState<boolean>(
     () => new URLSearchParams(window.location.search).get("livetest") === "1",
   );
@@ -47,7 +38,6 @@ export function PressTemplatesTab({ pressId }: { pressId: string }) {
   useEffect(() => {
     const sp = new URLSearchParams(search);
     setSpecId(sp.get("template"));
-    setTestView(sp.get("test") === "1");
     setLiveTestView(sp.get("livetest") === "1");
   }, [search]);
 
@@ -60,26 +50,14 @@ export function PressTemplatesTab({ pressId }: { pressId: string }) {
 
   const openSpec = (id: string) => {
     setSpecId(id);
-    setTestView(false);
     writeUrl((sp) => {
       sp.set("template", id);
       sp.delete("test");
     });
   };
 
-  const openTest = () => {
-    setTestView(true);
-    writeUrl((sp) => sp.set("test", "1"));
-  };
-
-  const backToDetail = () => {
-    setTestView(false);
-    writeUrl((sp) => sp.delete("test"));
-  };
-
   const onBack = () => {
     setSpecId(null);
-    setTestView(false);
     setLiveTestView(false);
     writeUrl((sp) => {
       sp.delete("template");
@@ -102,28 +80,11 @@ export function PressTemplatesTab({ pressId }: { pressId: string }) {
     return <PressTemplateLiveTest pressId={pressId} canEdit={canEdit} onExit={exitLiveTest} />;
   }
 
-  if (specId && testView) {
-    return (
-      <PressTemplateTest
-        pressId={pressId}
-        specId={specId}
-        canEdit={canEdit}
-        onBack={backToDetail}
-        onBackToIndex={onBack}
-      />
-    );
-  }
-
+  // Opening a template (?template=<id>) lands on the live-test instrument
+  // reading the saved canon file — GT overlays + the Template → Art file →
+  // Results flow (Bill, Aug 14 2026: the static record page is retired).
   if (specId) {
-    return (
-      <PressTemplateDetail
-        pressId={pressId}
-        specId={specId}
-        canEdit={canEdit}
-        onBack={onBack}
-        onOpenTest={openTest}
-      />
-    );
+    return <PressTemplateLiveTest pressId={pressId} canEdit={canEdit} specId={specId} onExit={onBack} />;
   }
 
   return <PressTemplatesIndex pressId={pressId} onOpenSpec={openSpec} onOpenLiveTest={openLiveTest} />;

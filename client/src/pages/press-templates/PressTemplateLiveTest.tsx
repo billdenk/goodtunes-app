@@ -63,7 +63,7 @@ import {
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
+import { apiRequest, authHeaders } from '@/lib/queryClient';
 import { uploadAdminDoc } from '@/lib/adminUpload';
 import { useAdminDark } from '@/lib/adminAppearance';
 
@@ -366,10 +366,16 @@ type ArtState = {
 export default function PressTemplateLiveTest({
   pressId,
   canEdit,
+  specId,
   onExit,
 }: {
   pressId: string;
   canEdit: boolean;
+  /** Open the instrument on a saved canon template (?template=<id>) — its
+   *  stored PDF is fetched back into a File and read live, GT overlays and
+   *  all, exactly like a fresh upload (Bill, Aug 14 2026: the template page
+   *  is the working instrument, not a static record). */
+  specId?: string | null;
   onExit: () => void;
 }) {
   const dark = useAdminDark();
@@ -447,11 +453,45 @@ export default function PressTemplateLiveTest({
     liveId.current = pendingTemplateFile.liveId ?? null;
     componentPill.current = pendingTemplateFile.component ?? null;
     if (f) { pendingTemplateFile.file = null; pendingTemplateFile.name = null; pendingTemplateFile.liveId = null; pendingTemplateFile.component = null; void loadTemplate(f, nm ?? undefined); }
+    // Deep link onto a saved canon template: download its stored PDF through
+    // our same-origin file route (external template links would die on CORS
+    // from the browser) and run it through the same live pipeline. Guarded
+    // against Strict-Mode double-mounts / specId changes / unmount races.
+    else if (specId) {
+      let cancelled = false;
+      const ctrl = new AbortController();
+      void (async () => {
+        setBusy('template');
+        try {
+          const payload = await queryClient.fetchQuery<import('./types').TemplatesPayload>({ queryKey: [`/api/press/${pressId}/templates`] });
+          if (cancelled) return;
+          const spec = payload.specs.find((s) => s.id === specId);
+          if (!spec?.templateFileUrl) { if (!cancelled) onExit(); return; }
+          // Bearer + cookie (cookie-only fetches 401 under #token-hash admin
+          // logins — standing landmine on admin surfaces).
+          const r = await fetch(`/api/press/${pressId}/templates/${specId}/file`, {
+            headers: { ...authHeaders() },
+            credentials: 'include',
+            signal: ctrl.signal,
+          });
+          if (!r.ok) throw new Error(`Couldn't fetch the template file (${r.status})`);
+          const blob = await r.blob();
+          if (cancelled) return;
+          const file = new File([blob], spec.templateFileName ?? 'template.pdf', { type: 'application/pdf' });
+          await loadTemplate(file, spec.templateFileName ?? undefined);
+        } catch (err) {
+          if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
+          setBusy(null);
+          setError(err instanceof Error ? err.message : 'Could not load that template.');
+        }
+      })();
+      return () => { cancelled = true; ctrl.abort(); };
+    }
     // Arrived with nothing in hand (refresh, deep link)? Templates is the start
     // page — go there instead of showing a stranded upload step (Bill, Aug 14 2026).
     else onExit();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [specId]);
 
   const onPickArt = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];

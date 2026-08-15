@@ -486,6 +486,39 @@ export function registerPressTemplateFlowRoutes(
     });
   });
 
+  // GET /api/press/:id/templates/:specId/file — same-origin download of the
+  // slot's live template PDF for the live-test instrument (?template=<id>).
+  // Stored /objects/ files redirect (already same-origin); external https
+  // links (Dropbox/Drive paste flow) are proxied through the SSRF-guarded
+  // fetcher — a direct browser fetch would die on CORS.
+  app.get("/api/press/:id/templates/:specId/file", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+    if (!spec?.templateFileUrl) return res.status(404).json({ message: "No template file on this slot." });
+    const url = spec.templateFileUrl;
+    if (url.startsWith("/")) return res.redirect(url);
+    if (!/^https:\/\//i.test(url)) return res.status(409).json({ message: "This template's link can't be fetched." });
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const fs = await import("node:fs");
+    const { fetchAndScanPdf } = await import("./validators/completedTemplate");
+    const tmp = path.join(os.tmpdir(), `press-template-${spec.id}-${Date.now()}.pdf`);
+    try {
+      const fetched = await fetchAndScanPdf(url, { spoolTo: tmp });
+      if (!fetched.ok || fetched.spooled !== true) {
+        return res.status(502).json({ message: fetched.ok ? "Couldn't spool the template file." : fetched.error });
+      }
+      res.setHeader("Content-Type", "application/pdf");
+      const stream = fs.createReadStream(tmp);
+      stream.on("close", () => fs.unlink(tmp, () => {}));
+      stream.on("error", () => { fs.unlink(tmp, () => {}); if (!res.headersSent) res.status(500).end(); else res.end(); });
+      stream.pipe(res);
+    } catch (e: any) {
+      fs.unlink(tmp, () => {});
+      if (!res.headersSent) res.status(502).json({ message: e?.message ?? "Couldn't fetch the template file." });
+    }
+  });
+
   // ── Live-test templates (handoff/press-template-live-test, Aug 14 2026) ──
   // "Accept & Save" on the Live test page. The client uploads the PDF first
   // (uploadAdminDoc → /objects/...), reads GT layers with pdf.js, then posts

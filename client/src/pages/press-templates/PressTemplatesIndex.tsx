@@ -1030,6 +1030,9 @@ export function PressTemplatesIndex({
   const [uploadName, setUploadName] = useState("");
   const [uploadComponent, setUploadComponent] = useState<string | null>(null);
   const [reopening, setReopening] = useState<string | null>(null); // shelf tile id being fetched
+  // Detail sheet — click a certified tile to view the template, then replace
+  // it from there if desired (Bill, Aug 14 2026).
+  const [detail, setDetail] = useState<{ slot: Slot; spec: TemplateSpecWithHistory } | null>(null);
   const uploadInput = useRef<HTMLInputElement>(null);
   // Just-saved tile gets a one-time hairline pulse — blue, then back to gray.
   const [flashFresh, setFlashFresh] = useState(() => freshLiveSave.flag);
@@ -1308,7 +1311,7 @@ export function PressTemplatesIndex({
                   t={t}
                   slot={slot}
                   spec={spec!}
-                  onOpen={() => onOpenSpec(spec!.id)}
+                  onOpen={() => setDetail({ slot, spec: spec! })}
                 />
               ) : (
                 <EmptyTile
@@ -1393,6 +1396,102 @@ export function PressTemplatesIndex({
           }}
         />
       )}
+
+      {/* Template detail sheet — view it, then replace if desired (Bill, Aug 14 2026) */}
+      {detail && (() => {
+        const { slot, spec } = detail;
+        const status = slotStatus(spec);
+        const live = spec.revisions.find((r) => r.status === "certified" || r.status === "pending");
+        const historyRevs = spec.revisions.filter((r) => r.status === "superseded" || r.status === "archived");
+        const preview = spec.previewUrls?.[0] ?? null;
+        return (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center p-6"
+            style={{ backgroundColor: "rgba(0,0,0,0.45)" }}
+            onClick={() => setDetail(null)}
+            data-testid="sheet-template-detail-backdrop"
+          >
+            <div
+              className="rounded-2xl overflow-hidden shadow-2xl w-full text-center px-8 py-9"
+              style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, maxWidth: 560 }}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-label={slot.title}
+              data-testid="sheet-template-detail"
+            >
+              <span className="mx-auto rounded-full overflow-hidden flex items-center justify-center" style={{ width: 168, height: 168, backgroundColor: "#fff", border: `1px solid ${t.hairline}` }}>
+                {preview ? (
+                  <img src={preview} alt={`${slot.title} — template preview`} className="w-full h-full object-cover" data-testid="img-detail-preview" />
+                ) : (
+                  <ComponentIcon kind={slot.kind} color={t.blue} fill={t.iconFill} size={84} />
+                )}
+              </span>
+              <div className="mt-5 text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>{slot.title}</div>
+              <div className="mt-1 text-[13px]" style={{ color: t.subink }}>
+                {spec.variantOptions?.length ? variantOptionsNote(spec.variantOptions) : slot.note}
+              </div>
+              {(spec.templateFileName || live) && (
+                <div className="mt-0.5 text-[13px] tabular-nums" style={{ color: t.subink }}>
+                  {spec.templateFileName}
+                  {spec.templateFileName && live ? <span style={{ color: t.faint }}> · </span> : null}
+                  {live?.revLabel}
+                </div>
+              )}
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <StatusChip status={status} t={t} />
+                {status === "certified" && live?.certifiedAt && (
+                  <span className="text-[11.5px]" style={{ color: t.faint }}>
+                    {new Date(live.certifiedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                )}
+              </div>
+              {historyRevs.map((h) => (
+                <div key={h.id} className="mt-3 flex items-center justify-center gap-1.5 text-[12px]" style={{ color: t.faint }}>
+                  <History className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="tabular-nums">{h.revLabel}</span>
+                  <span>· {h.note ?? "in history"}</span>
+                </div>
+              ))}
+              <div className="mt-7 flex items-center justify-center gap-2.5">
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => { setDetail(null); setModal({ slot, spec }); }}
+                    className="h-9 px-5 rounded-full text-[13px] font-semibold text-white"
+                    style={{ backgroundColor: t.blue }}
+                    data-testid="button-replace-template"
+                  >
+                    Replace template
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setDetail(null); onOpenSpec(spec.id); }}
+                  className="h-9 px-5 rounded-full text-[13px] font-semibold"
+                  style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
+                  data-testid="button-open-live-test"
+                >
+                  Open live test
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetail(null)}
+                  className="h-9 px-5 rounded-full text-[13px] font-semibold"
+                  style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
+                  data-testid="button-close-detail"
+                >
+                  Close
+                </button>
+              </div>
+              {canEdit && (
+                <p className="mt-4 text-[11.5px]" style={{ color: t.faint }}>
+                  Replacing uploads a new revision — the current one moves to history, it is never deleted.
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Live-test upload sheet (handoff): name + optional component, then
           pick the PDF — the file rides the transit store to the live test. */}
