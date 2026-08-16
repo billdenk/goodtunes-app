@@ -90,7 +90,21 @@ current, not appended to: stale lines are overwritten when things change.
 ### Not started (proposed task queue)
 - ~20 proposed items awaiting go-ahead, including: fan pre-save card, Codemagic sync-failure alert, various test-coverage tasks, dock overlap fixes, Buy-sheet vinyl-fit warning.
 
-## 2. Super-admin press Catalog tab — current behavior
+## 2. Handoff ledger
+
+Per handoff law (`handoff/README-template.md` rule 3): each page built from a handoff records the handoff commit SHA it currently matches. When a newer correction round lands on main, that pointer is stale and the page owes a re-diff.
+
+- **Press Templates index** (`PressTemplatesIndex.tsx`) — matches `fa3a812` (Addendum 5). Chain absorbed: `e01acd0` (Templates rework — no detail popup, ••• archive, All/Current/Archived pills, Cancel/Test/Save header), `3f44ecb` (tiles rest quiet, fine print on hover), `4d078f4` (Addendum 4 — stable tile order, supersede-in-place).
+- **Press template live test** (`PressTemplateLiveTest.tsx`) — matches `fa3a812` (Addendum 5). Chain absorbed: `e01acd0` (opening-state arrival, header actions), `47f5785` (resume-draft sheet + upload-step subtext), `4d078f4` (Addendum 4 — quiet Save, Replace/History).
+- **Templates policy card** (press Settings → Profile, "Require a passing test…") — matches `fa3a812`.
+- **Dialog canon** (primary rightmost, Cancel as quiet text, one-line subtext, upload-sheet X close) — matches `3aca2b1`; applied across the templates pages' dialogs and sheets.
+- **CD catalog build page** — matches `e35a266` (correction round: jewel cover layer order, disc hover slide-out; item 3 dropdown removal held pending Bill) over `a7c4230` (theme-aware v1).
+- **Cassette catalog build page** — matches `ead5e71` (theme-aware v1).
+- **Press catalog** (`PressPackagePricingCatalog.tsx`) — matches `3fc5edb` (theme-aware round).
+- **Artist package builder** (`PressAlbumPackageBuilder.tsx`) — matches `4ddc047` (theme-aware round).
+- **Press specs pages** — match `df8f73a` / `3a780fc` (theme-aware round).
+
+## 3. Super-admin press Catalog tab — current behavior
 - Each press's detail page has six tabs: Dashboard, Overview, People, Albums, Catalog, Analytics.
 - The Catalog tab shows a "Catalog format" segmented control with three pills: Vinyl, CD, Cassette.
 - Vinyl is the only live format. It defaults to 12" LP (or the first offered size) and shows: vinyl size tabs, pressing types/tiers, run-size price ladders (140g/180g books), color swatches, print/audio spec templates, turnaround, branding (center-label logo + background), and reorder/hide controls. Saving is explicit ("Edited · Save catalog").
@@ -98,20 +112,20 @@ current, not appended to: stale lines are overwritten when things change.
 - CD and Cassette pills are live. Each opens its handoff build page (per-format header copy "On disc." / "On tape.", sticky product render on the left — jewel case/sleeve with the peeking disc, or shell photo with the printed piece — and the choice column on the right). Selections are live previews; the persisted parts are custom silkscreen spot inks (CD), the run price ladder, and the turnaround override. Staff see it read-only like vinyl.
 - The jacket stage renders a black printed jacket with the press's logo, sticky and top-anchored on desktop.
 
-## 3. Press-facing catalog & artist builder — current behavior
+## 4. Press-facing catalog & artist builder — current behavior
 - The press portal (Dashboard, Clients, Projects, Acquisition, Catalog, Settings, Referrals) renders the exact same Catalog component as super-admin, so press users see what operators see.
 - Press Owners/Admins can edit everything (formats, prices, colors, branding, templates, GoodDeed printing ladder); press Staff get a read-only view with a notice.
 - An "Add your vinyl" colors sub-view handles disc color swatch setup.
 - The artist-facing package builder ("Design your package. See what it earns.") pulls from the press's vinyl catalog — sticky jacket preview on the left, decisions and live earnings math on the right. If a press hasn't published a vinyl catalog, artists see a friendly empty state.
 - CD and cassette: the press-side catalog build pages are live (same component for press portal and super-admin). The artist-facing package builder still only offers vinyl — CD/cassette builder flow not designed yet.
 
-## 4. Changes made on the agent's own initiative
+## 5. Changes made on the agent's own initiative
 - Memphis default on press-less album tiles is display-only — no press assignment is written, so it doesn't affect MRP's portal scope, permissions, or pricing.
 - Server-side sanitization hardening on SVG logo uploads.
 - Design-lint baseline re-snapshots and dark-mode/theming consistency fixes discovered during the sweeps.
 - Small robustness fixes from code review (e.g., logo fallback when a press's label mark fails to load).
 
-## 5. Deferred items and why
+## 6. Deferred items and why
 - CD/cassette in the artist package builder — the press catalog pages are live, but artists can't yet build a CD or cassette package; needs its own design pass.
 - CD/cassette price editing — run prices show as fixed pills per the handoff (no edit affordance in the design); presses can't change them in the UI yet.
 - The "Print prep" attach row on the CD page is display-only per the handoff (no upload wired). Cassette got real template slots per Bill (2026-08-10) — see below; CD's slots pending Bill's call on which pieces.
