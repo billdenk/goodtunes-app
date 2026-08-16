@@ -1027,7 +1027,19 @@ export default function PressTemplateLiveTest({
     const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
     if (!isPdf) return;
     const url = await uploadAdminDoc(f);
-    const r = await apiRequest('POST', templateTestPath(pressId, specId), { url, fileName: f.name });
+    // Thread the template's OWN bleed line (read from its GT Bleed/Cut layer
+    // boxes) to the server test — templates that draw guides in GT layers
+    // (not a dieline separation) have no stored line, and without one the
+    // server run hard-failed Bleed against the art's meaningless PDF BleedBox
+    // (gogoods, Aug 16 2026: shelf said "Failed" after a clean live pass).
+    const templateBleedLineInches = (() => {
+      if (!bleedBox || !cutBox) return undefined;
+      const wIn = (bleedBox.wMm - cutBox.wMm) / 2 / 25.4;
+      const hIn = (bleedBox.hMm - cutBox.hMm) / 2 / 25.4;
+      const m = Math.min(wIn, hIn);
+      return m > 0.01 && m <= 2 ? Math.round(m * 1000) / 1000 : undefined;
+    })();
+    const r = await apiRequest('POST', templateTestPath(pressId, specId), { url, fileName: f.name, templateBleedLineInches });
     const { run } = (await r.json()) as { run?: { id: string; verdict: string } };
     if (run && (run.verdict === 'pass' || run.verdict === 'warn')) {
       await apiRequest('POST', certifyRunPath(pressId, specId, run.id), {});

@@ -1313,6 +1313,19 @@ export function templateTrimRectInches(opts: {
   const w = pageInches.w - 2 * b;
   const h = pageInches.h - 2 * b;
   if (w <= 0 || h <= 0) return null;
+  // Sheet-with-margins templates (gogoods, Aug 16 2026): vendor sheets like
+  // MRP's jacket artboard are several inches larger than finished + 2×bleed —
+  // the cut line sits deep inside the sheet, not one bleed-width from its
+  // edge. When the page is meaningfully larger than the finished area plus
+  // bleed, the trim rectangle is the finished rect centered on the sheet
+  // (matching how these templates draw their guides).
+  if (finishedInches && (w > finishedInches.w + 0.25 || h > finishedInches.h + 0.25)) {
+    const fw = Math.min(finishedInches.w, pageInches.w);
+    const fh = Math.min(finishedInches.h, pageInches.h);
+    if (fw > 0 && fh > 0) {
+      return { left: (pageInches.w - fw) / 2, top: (pageInches.h - fh) / 2, width: fw, height: fh };
+    }
+  }
   return { left: b, top: b, width: w, height: h };
 }
 
@@ -1884,7 +1897,13 @@ export function validateCompletedComponent(
       // the rendered-content measurement when the caller could render.
       const boxesTrusted = measured != null && hasTrustworthyBleedBoxes(scan);
       const contentBleed = opts?.contentBleed ?? null;
-      if (!boxesTrusted && contentBleed) {
+      // Rendered content also overrides boxes that FAIL the line (gogoods,
+      // Aug 16 2026): full-artboard exports routinely stamp TrimBox == BleedBox
+      // (declaring 0" bleed) while the drawn art physically covers the whole
+      // sheet — the boxes lie in exactly the case the check exists for. The
+      // content measurement is physical, so it wins in both directions.
+      const boxesFailLine = measured != null && measured + BLEED_TOL < line;
+      if ((!boxesTrusted || boxesFailLine) && contentBleed) {
         const cb = contentBleed;
         const contentSource = `Measured against ${lineWord} via rendered content — ${line}" bleed.`;
         const r3 = (v: number) => Math.round(v * 1000) / 1000;

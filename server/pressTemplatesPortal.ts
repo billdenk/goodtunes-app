@@ -138,6 +138,14 @@ const operatorGuidesSchema = z.object({
 const testSchema = z.object({
   url: z.string().min(1).max(2048),
   fileName: z.string().max(512).nullable().optional(),
+  // The template's own bleed line, read by the live-test client from the
+  // template PDF's GT Bleed/Cut layer boxes — templates that draw guides in
+  // GT layers (not a "does not print" dieline separation) never get a
+  // measured line server-side, and without one the Bleed check fell back to
+  // the ART file's meaningless PDF BleedBox and hard-failed (gogoods, Aug 16
+  // 2026). Used only when the spec has no stored line; persisted as the
+  // measured line so future runs and prepress agree.
+  templateBleedLineInches: z.number().positive().max(2).optional(),
 });
 
 /** Mint a display revision label: R-MMDDYY (+ -2, -3… on same-day re-uploads). */
@@ -1202,7 +1210,60 @@ export function registerPressTemplateFlowRoutes(
         }
         // Task #3069 — log every spot-usage fallback with its reason code.
         logSpotUsageFallback(scan, { fileName: null, source: runFileUrl });
-        const checks: CheckResult[] = validateCompletedComponent(scan, slotSpec);
+        // Bleed reference (gogoods, Aug 16 2026): stored line wins; else the
+        // client-read GT-layer line fills the gap and is persisted as the
+        // measured line so future runs, art-inspect, and prepress all agree.
+        const storedLine = spec.bleedLineInches ?? spec.measuredBleedLineInches ?? null;
+        const clientLine = body.data.templateBleedLineInches ?? null;
+        const effLine =
+          ((slotSpec as any).templateBleedLineInches as number | null | undefined) ??
+          (storedLine != null && storedLine > 0 ? storedLine : null) ??
+          (clientLine != null && clientLine > 0 ? clientLine : null);
+        const slotSpecEff =
+          effLine != null && (slotSpec as any).templateBleedLineInches == null
+            ? ({ ...slotSpec, templateBleedLineInches: effLine } as typeof slotSpec)
+            : slotSpec;
+        if (storedLine == null && clientLine != null && clientLine > 0) {
+          await storage.updatePressTemplateSpecMeasured(pressId, spec.id, {
+            measuredBleedLineInches: clientLine,
+          });
+        }
+        // Task #3072 parity with the album-side route: when a line exists but
+        // the art carries no trustworthy PDF boxes (print-ready exports strip
+        // them), measure bleed from RENDERED content — otherwise the check
+        // fails on boxes the file never had. Best-effort; null degrades to
+        // the explicit "could not be measured" verdict.
+        let contentBleed: import("./validators/completedTemplate").ContentBleedMeasurement | null = null;
+        if (
+          effLine != null &&
+          (slotSpecEff as any).templatePageInches != null &&
+          (!hasTrustworthyBleedBoxes(scan) ||
+            (measuredBleedInches(scan) ?? 0) + 0.005 < effLine) &&
+          runFileUrl.startsWith("/objects/")
+        ) {
+          const fsp = await import("node:fs/promises");
+          const os = await import("node:os");
+          const path = await import("node:path");
+          let tmpDir: string | null = null;
+          try {
+            const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+            const file = await new ObjectStorageService().getObjectEntityFile(runFileUrl);
+            const [meta] = await file.getMetadata();
+            const size = Number(meta?.size ?? 0);
+            if (Number.isFinite(size) && size > 0 && size <= 300 * 1024 * 1024) {
+              tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "press-test-bleed-"));
+              const pdfPath = path.join(tmpDir, "src.pdf");
+              await file.download({ destination: pdfPath });
+              const { contentBleedMeasurement } = await import("./validators/completedTemplate");
+              contentBleed = await contentBleedMeasurement(pdfPath, scan, slotSpecEff as any);
+            }
+          } catch {
+            contentBleed = null;
+          } finally {
+            if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+          }
+        }
+        const checks: CheckResult[] = validateCompletedComponent(scan, slotSpecEff, { contentBleed });
         const verdict = rollupStatus(checks);
 
         // Task #3090 — rasterize the test file's first page(s) so the client
