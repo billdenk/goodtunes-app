@@ -844,7 +844,7 @@ export default function PressTemplateLiveTest({
         }
         // XHR instead of fetch: fetch can't report UPLOAD progress, and
         // watching the measurement happen live is the point (gogoods).
-        const d = await new Promise<{ checks: CheckRow[] }>((resolve, reject) => {
+        const d = await new Promise<{ checks: CheckRow[]; previewDataUrl?: string }>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           myXhr = xhr;
           inkXhr.current = xhr;
@@ -861,7 +861,7 @@ export default function PressTemplateLiveTest({
           xhr.upload.onload = () => { if (artFile.current === f) setInkProgress(1); };
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-              try { resolve(JSON.parse(xhr.responseText) as { checks: CheckRow[] }); }
+              try { resolve(JSON.parse(xhr.responseText) as { checks: CheckRow[]; previewDataUrl?: string }); }
               catch { reject(new Error('bad response')); }
             } else reject(new Error(String(xhr.status)));
           };
@@ -872,6 +872,13 @@ export default function PressTemplateLiveTest({
           xhr.send(sendBody);
         });
         setInkChecks((prev) => (artFile.current === f ? d.checks : prev));
+        // CMYK JPEGs don't decode in the browser — the local <img> preview
+        // comes up blank exactly when the ink check passes. The server sends
+        // a resized sRGB preview; swap it in for raster art (gogoods, Aug 16
+        // 2026). PDFs keep their pdfjs render.
+        if (d.previewDataUrl && artFile.current === f) {
+          setArt((prev) => (prev && prev.wMm == null ? { ...prev, img: d.previewDataUrl! } : prev));
+        }
       } catch {
         setInkChecks((prev) => (artFile.current === f ? 'error' : prev));
       } finally {

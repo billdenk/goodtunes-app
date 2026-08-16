@@ -1452,7 +1452,23 @@ export function registerPressTemplateFlowRoutes(
           } else {
             rows.push({ param: "Artboard size", tone: "na", detail: `${wPx} × ${hPx} px — no PPI tag and no slot artboard to measure against. Verified at prepress.` });
           }
-          return res.json({ checks: rows });
+          // Browsers can't reliably decode CMYK JPEGs — the client's <img>
+          // preview came up blank for exactly the files that pass the ink
+          // check (gogoods, Aug 16 2026). Send back a resized sRGB preview
+          // so the overlay always renders, color-correct. Best-effort: a
+          // preview failure never blocks the measured rows.
+          let previewDataUrl: string | undefined;
+          try {
+            const pv = await sharp(buf, { limitInputPixels: 1_000_000_000 })
+              .resize({ width: 2000, withoutEnlargement: true })
+              .toColourspace("srgb")
+              .jpeg({ quality: 78 })
+              .toBuffer();
+            previewDataUrl = `data:image/jpeg;base64,${pv.toString("base64")}`;
+          } catch (e: any) {
+            console.warn("[art-inspect] preview render failed:", e?.message ?? e);
+          }
+          return res.json({ checks: rows, previewDataUrl });
         } catch (e: any) {
           console.error("[art-inspect] raster failed:", e?.message ?? e);
           return res.status(422).json({ message: "Couldn't inspect that image — ink + PPI will be verified at prepress." });
