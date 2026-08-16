@@ -33833,14 +33833,26 @@ export async function registerRoutes(
     // same pressName also labels Task #3011 measured-from-template wording.
     let pressPrintRules: ReturnType<typeof sanitizePrintRules> = null;
     let pressName: string | null = null;
+    // handoff/press-settings-templates-policy (Bill, Aug 15 2026) — per-press
+    // toggle: a Pending template may not measure client files until a
+    // finished file has passed a live test (certified revision).
+    let requireCertified = false;
+    let certifiedSpecIds: Set<string> | undefined;
     const pressId = await pressIdForVendor(vendorId);
     if (pressId) {
       const press = await storage.getManufacturerById(pressId);
       pressPrintRules = sanitizePrintRules(press?.printRules ?? null);
       pressName = press?.name ?? null;
+      requireCertified = press?.requireCertifiedTemplates === true;
       if (format) storeRows = await storage.listPressTemplateSpecs(pressId, format);
+      if (requireCertified && storeRows.length > 0) {
+        const revs = await storage.listPressTemplateRevisions(storeRows.map((r) => r.id));
+        certifiedSpecIds = new Set(
+          revs.filter((r) => r.status === "certified").map((r) => r.specId),
+        );
+      }
     }
-    return resolveFinishedComponents({ vendorId, config, storeRows, pressPrintRules, pressName });
+    return resolveFinishedComponents({ vendorId, config, storeRows, pressPrintRules, pressName, requireCertified, certifiedSpecIds });
   }
 
   // Task #2705 — scan a direct-uploaded print-ready PDF: shared
@@ -34257,6 +34269,17 @@ export async function registerRoutes(
     const required = await resolveRequired(vendorId, config);
     const spec = required.find((r) => r.id === body.data.componentId);
     if (!spec) return res.status(400).json({ message: "That component isn't required for this configuration." });
+
+    // handoff/press-settings-templates-policy (Bill, Aug 15 2026) — the press
+    // requires a passing test before a template goes live, and this slot's
+    // template is still Pending: the file waits (same "Pending" language as
+    // the Templates page) rather than being measured against an unproven
+    // template. 409 = nothing saved; re-check once the template certifies.
+    if (spec.templatePending) {
+      return res.status(409).json({
+        message: `${spec.pressName ?? "This press"} requires a passing test before a template goes live — the ${spec.label} template is still Pending. It certifies itself when a finished file passes a live test; run one from the press's Templates page, then check this file again.`,
+      });
+    }
 
     // Task #2705 — two intake paths: a direct upload already in OUR object
     // storage (scan the object stream, then rasterize a real first-page

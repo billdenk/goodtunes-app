@@ -597,6 +597,11 @@ export type FinishedComponentSpec = {
   /** Provenance of templateBleedLineInches: operator edit wins over the
    * value measured from the press's uploaded template. */
   bleedLineSource?: "operator" | "measured" | null;
+  /** handoff/press-settings-templates-policy (Bill, Aug 15 2026) — the press
+   * requires a passing test before templates go live, and this slot's
+   * matched template is still Pending. The completed-file check holds the
+   * file (same "Pending" language) instead of measuring against it. */
+  templatePending?: boolean;
 };
 
 // Measured flat artboard sizes (inches) keyed by
@@ -764,6 +769,10 @@ export function requiredFinishedComponents(
  * without importing the DB schema into this shared module.
  */
 export type PressTemplateSpecRow = {
+  /** DB row id — optional so hand-built test fixtures still type-check;
+   * real drizzle rows always carry it. Needed to match against the
+   * certified-revision set when a press requires a passing test. */
+  id?: string;
   format: string;
   /** 'jacket' | 'labels' | 'inner_sleeve'. */
   componentKey: string;
@@ -852,6 +861,15 @@ export function resolveFinishedComponents(args: {
    * Task #3011 for measured-from-template wording ("vs MRP template on
    * file"). */
   pressName?: string | null;
+  /** handoff/press-settings-templates-policy (Bill, Aug 15 2026) — when the
+   * press requires a passing test before a template goes live, slots whose
+   * matched template is still Pending (no certified revision) are flagged
+   * `templatePending` so the completed-file check holds the file instead of
+   * measuring against an unproven template. Absent/false = today's behavior. */
+  requireCertified?: boolean;
+  /** Spec-row ids (press_template_specs.id) that carry a certified revision.
+   * Only consulted when `requireCertified` is true. */
+  certifiedSpecIds?: Set<string>;
 }): FinishedComponentSpec[] {
   const rawBaseline = requiredFinishedComponents(args.vendorId, args.config);
   // Thread press-level print rules + name onto every slot (fallback-safe:
@@ -920,6 +938,11 @@ export function resolveFinishedComponents(args: {
       next.templateBleedLineInches = match.measuredBleedLineInches;
       next.bleedLineSource = "measured";
       next.measuredFromLabel = args.pressName ?? next.measuredFromLabel ?? null;
+    }
+    // handoff/press-settings-templates-policy — a Pending template can't
+    // measure client files when the press requires certification first.
+    if (args.requireCertified && match.templateFileUrl && !(match.id && args.certifiedSpecIds?.has(match.id))) {
+      next.templatePending = true;
     }
     if (match.color === "process-4c" || match.color === "cmyk-or-pms") next.color = match.color;
     if (match.minPpi != null && match.minPpi > 0) next.minPpi = match.minPpi;

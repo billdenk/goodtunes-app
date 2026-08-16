@@ -4863,6 +4863,12 @@ export const manufacturers = pgTable("manufacturers", {
   // Null = press entered nothing → completed-art checks keep today's
   // behavior exactly.
   printRules: jsonb("print_rules").$type<Record<string, unknown>>(),
+  // handoff/press-settings-templates-policy (Bill, Aug 15 2026) — per-press
+  // policy: whether a template must pass a live test before it can measure
+  // client files. Off (default) = usable on Save; certification is optional
+  // proof. On = a Pending template's slot holds client files as Pending
+  // until a finished file passes and certifies the template.
+  requireCertifiedTemplates: boolean("require_certified_templates").notNull().default(false),
   artSpecs: jsonb("art_specs").$type<PressArtSpecsData>(),
   // Stable per-press series color for cross-press charts (combined Press
   // Dashboard stacked trend, legends, leaderboard bars). Assigned ONCE when

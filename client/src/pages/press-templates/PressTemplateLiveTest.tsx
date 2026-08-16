@@ -82,6 +82,7 @@ import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiRequest, authHeaders } from '@/lib/queryClient';
 import { uploadAdminDoc } from '@/lib/adminUpload';
+import { templateTestPath, certifyRunPath } from './apiPaths';
 import { useAdminDark } from '@/lib/adminAppearance';
 
 // ─── Themes — dark = canon charcoal default; light = apple-canon ──
@@ -117,7 +118,8 @@ const THEMES: Record<'light' | 'dark', Theme> = {
 function ThinProgress({ label, t, testid }: { label: string; t: Theme; testid: string }) {
   return (
     <div className="mt-6 flex flex-col items-center" data-testid={testid} role="status" aria-label={label}>
-      <style>{`@keyframes gt-thin-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }`}</style>
+      <style>{`@keyframes gt-thin-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+@keyframes gt-certify-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(49,158,216,0); } 50% { box-shadow: 0 0 0 4px rgba(49,158,216,0.25); } }`}</style>
       <div className="rounded-full overflow-hidden" style={{ width: 220, height: 3, backgroundColor: t.soft }}>
         <div
           className="h-full rounded-full"
@@ -441,6 +443,10 @@ export default function PressTemplateLiveTest({
   // something actually changed (Bill, Aug 15 2026). Opening a saved template
   // arrives clean; replace / rename / new test results make it dirty.
   const [dirty, setDirty] = useState(true);
+  // Status carries over from the Templates tile (Bill, Aug 15 2026): a certified
+  // template says so here too; a fresh upload reads "Not tested" — usable, just
+  // not certified yet. Derived from the spec's real revisions/runs (never mocked).
+  const [savedMeta, setSavedMeta] = useState<{ certified: string; lastTest: string } | null>(null);
   // Header ••• under Save — view the saved tests, or replace the template
   // (replace = supersede: the old revision slides into history automatically,
   // per template canon; the new file loads here for testing) (Bill, Aug 15 2026).
@@ -467,6 +473,11 @@ export default function PressTemplateLiveTest({
   const [openGroup, setOpenGroup] = useState<'Front' | 'Back' | null>(null);
   const templateInput = useRef<HTMLInputElement>(null);
   const artInput = useRef<HTMLInputElement>(null);
+  // Raw art File from this session's test — spec/slot-mode Save submits it to
+  // the server test endpoint so a passing run certifies the revision for real
+  // (review, Aug 15 2026: the certify endpoints had no client caller, so a
+  // press with "require a passing test" On could never certify).
+  const artFile = useRef<File | null>(null);
   const replaceTemplate = () => {
     if (template) {
       replacingName.current = template.name;
@@ -492,6 +503,7 @@ export default function PressTemplateLiveTest({
     if (specRef.current) fileReplaced.current = true;
     await loadTemplate(f, keepName ?? undefined);
     setDirty(true);
+    setSavedMeta(null); // a replacing file is a new revision — certified status stays with the old one
     // The draft snapshot must follow the replacement — keeping the saved row's
     // identity (liveId + name), or a crash-resume would mint a SECOND tile
     // and lose the display name (review, Aug 15 2026).
@@ -526,6 +538,7 @@ export default function PressTemplateLiveTest({
       // All overlays start off — you turn on only what you want to see (Bill, Aug 14 2026).
       setActiveZones(new Set());
       setArt(null);
+      artFile.current = null;
     } catch (err) {
       setTemplate(null);
       setArriving(false); // fall back to the upload step if the file couldn't be read
@@ -588,6 +601,20 @@ export default function PressTemplateLiveTest({
           // (rename / test session) to the display-name PATCH instead.
           specRef.current = spec.id;
           initialName.current = spec.displayName ?? spec.templateFileName ?? null;
+          // Status carries over from the tile (Bill, Aug 15 2026): only a
+          // certified revision brings the badge; pending arrives "Not tested".
+          const certRev = spec.revisions.find((rv) => rv.status === 'certified' && rv.certifiedAt);
+          if (certRev?.certifiedAt) {
+            const fmt = (d: string) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+            const lastRun = spec.runs[0]; // newest-first from the server
+            const verdictWordFor = (v: string) => (v === 'pass' ? 'Pass' : v === 'unverified' ? 'Visual only' : 'Flagged');
+            setSavedMeta({
+              certified: fmt(certRev.certifiedAt),
+              lastTest: lastRun ? `${lastRun.fileName ?? 'Art file'} — ${verdictWordFor(lastRun.verdict)} · ${fmt(lastRun.createdAt)}` : '',
+            });
+          } else {
+            setSavedMeta(null);
+          }
           slotTarget.current = {
             format: spec.format,
             componentKey: spec.componentKey,
@@ -676,6 +703,7 @@ export default function PressTemplateLiveTest({
         const { layerNames } = await extractGtLayers(doc, 1);
         const gtNames = layerNames.filter((n) => n.trim().toUpperCase().startsWith('GT'));
         setArt({ name: f.name, img, wMm, hMm, pageCount: doc.numPages, gtLayerNames: gtNames });
+        artFile.current = f;
         setShowTemplate(false);
       } else {
         // Raster image — visual overlay only; no physical size in the file.
@@ -686,6 +714,7 @@ export default function PressTemplateLiveTest({
           reader.readAsDataURL(f);
         });
         setArt({ name: f.name, img, wMm: null, hMm: null, pageCount: null, gtLayerNames: [] });
+        artFile.current = null; // raster overlay only — the server test needs a PDF
         setShowTemplate(false);
       }
       setDirty(true); // a loaded art result is unsaved work — Save persists it
@@ -766,6 +795,25 @@ export default function PressTemplateLiveTest({
     artInput.current?.click();
   };
 
+  // Spec/slot-mode: submit this session's tested art PDF to the real server
+  // test endpoint so the run lands in the spec's trail — and certify the live
+  // revision when the server verdict passes. This is what "it certifies
+  // itself when a finished file passes" actually does; without it a press
+  // with "require a passing test before a template goes live" On could never
+  // certify (review, Aug 15 2026). Raster overlays never reach here (PDF only).
+  const submitServerTest = async (specId: string) => {
+    const f = artFile.current;
+    if (!f) return;
+    const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) return;
+    const url = await uploadAdminDoc(f);
+    const r = await apiRequest('POST', templateTestPath(pressId, specId), { url, fileName: f.name });
+    const { run } = (await r.json()) as { run?: { id: string; verdict: string } };
+    if (run && (run.verdict === 'pass' || run.verdict === 'warn')) {
+      await apiRequest('POST', certifyRunPath(pressId, specId, run.id), {});
+    }
+  };
+
   // Accept & Save — persist the template + its test trail on the server,
   // then return to the Templates page (which refetches the shelf).
   const saveAndExit = async () => {
@@ -789,6 +837,7 @@ export default function PressTemplateLiveTest({
             displayName: template.name,
           });
         }
+        await submitServerTest(specRef.current);
       } else if (slotTarget.current) {
         // Slot-mode (dashed tile / Replace, Bill's handoff): Accept & Save
         // attaches the PDF to the canon slot — a NEW revision is minted, the
@@ -818,6 +867,7 @@ export default function PressTemplateLiveTest({
             displayName: template.name,
           });
         }
+        await submitServerTest(data.spec.id);
       } else if (liveId.current) {
         // Replace (••• menu / Index tile): the swapped-in PDF must persist on
         // the same row, or reopening the tile would serve the OLD file.
@@ -865,6 +915,9 @@ export default function PressTemplateLiveTest({
       if (yes) {
         await apiRequest('POST', `/api/press/${pressId}/templates/${detected.specId}/options`, { options: detected.options });
       }
+      // The detected-options early-return skipped the direct path's server
+      // test — run it here so the session's passing art still certifies.
+      await submitServerTest(detected.specId);
       setDetected(null);
       freshLiveSave.flag = true;
       void clearLiveTestDraft(pressId); // saved for real — the crash-safety draft has done its job
@@ -967,15 +1020,20 @@ export default function PressTemplateLiveTest({
           <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
             <li className="inline-flex items-center"><button type="button" onClick={onExit} className={cn('transition-colors', t.hoverInk)}>Templates</button></li>
             <li role="presentation" aria-hidden="true"><ChevronRight className="w-3.5 h-3.5" /></li>
-            <li className="inline-flex items-center"><span aria-current="page" style={{ color: t.ink }}>Live test</span></li>
+            {/* Crumb = where you are: the template's own name once one is open
+                (Bill, Aug 15 2026); "Live test" only before a file arrives. */}
+            <li className="inline-flex items-center"><span aria-current="page" style={{ color: t.ink }}>{template?.name ?? 'Live test'}</span></li>
           </ol>
         </nav>
 
         <div className="mt-3 flex items-end justify-between gap-6 flex-wrap">
           <div>
             <h1 style={{ fontSize: 30, letterSpacing: '-0.02em', fontWeight: 600, lineHeight: 1.12 }}>
+              {/* Heading tells the job (Bill, Aug 15 2026): an uncertified template
+                  still needs certifying, so the third word appears only then. */}
               <span style={{ color: t.ink }}>Template. </span>
               <span style={{ color: t.subink, fontWeight: 500 }}>Test.</span>
+              {!savedMeta && <span style={{ color: t.subink, fontWeight: 500 }}> Certify.</span>}
             </h1>
             <p className="mt-1.5 text-[13.5px]" style={{ color: t.subink, maxWidth: 720 }}>
               Upload a press template with GT layers, then an art file. The overlays below are read
@@ -1046,16 +1104,13 @@ export default function PressTemplateLiveTest({
                 Resume where you left off?
               </div>
               {/* One line, Apple-quiet (canon, Aug 15 2026). */}
-              <p className="mt-1.5 text-[13px] mx-auto inline-flex items-center gap-1.5" style={{ color: t.subink }}>
+              {/* The ⓘ tooltip read as a dead button (Bill, Aug 15 2026) — the
+                  explanation just says itself now, one quiet line. */}
+              <p className="mt-1.5 text-[13px] mx-auto" style={{ color: t.subink }}>
                 {resumeOffer.name ?? resumeOffer.slot?.title ?? resumeOffer.fileName} — kept as a draft on this computer.
-                <span
-                  className="inline-flex items-center justify-center cursor-help"
-                  title="Your in-progress session is kept automatically on this computer. Nothing is saved to Templates until you press Save."
-                  aria-label="About drafts"
-                  data-testid="info-draft"
-                >
-                  <Info className="w-3.5 h-3.5" style={{ color: t.faint }} />
-                </span>
+              </p>
+              <p className="mt-1 text-[12px] mx-auto" style={{ color: t.faint, maxWidth: 330 }} data-testid="text-draft-note">
+                You opened this without pressing Save. Nothing lands in Templates until you do.
               </p>
               {/* Canon (Bill, Aug 15 2026): confirming action rightmost; Cancel/dismiss quiet text to its left. */}
               <div className="mt-6 flex items-center justify-center gap-2.5">
@@ -1153,7 +1208,21 @@ export default function PressTemplateLiveTest({
                     />
                   ) : (
                     <div className="group flex items-center gap-1.5 min-w-0">
-                      <div className="text-[16px] font-semibold truncate" style={{ color: t.ink }} title={template.name}>{template.name}</div>
+                      <div className="text-[18px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={template.name}>{template.name}</div>
+                      {/* Status rides with the name — same truth as the tile on
+                          the previous screen (Bill, Aug 15 2026) */}
+                      {savedMeta ? (
+                        <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-semibold ml-1.5" style={{ color: t.ready }} data-testid="chip-template-status">
+                          <BadgeCheck style={{ width: 14, height: 14 }} />
+                          Certified
+                          <span className="font-normal" style={{ color: t.faint }}>{savedMeta.certified}</span>
+                        </span>
+                      ) : (
+                        <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-medium ml-1.5" style={{ color: t.faint }} data-testid="chip-template-status">
+                          <History style={{ width: 13, height: 13 }} />
+                          Not tested
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => { setNameDraft(template.name); setEditingName(true); }}
@@ -1179,6 +1248,13 @@ export default function PressTemplateLiveTest({
                   {testLog.length > 0 && (
                     <div className="text-[11px] mt-0.5 truncate" style={{ color: t.faint }} data-testid="text-test-trail">
                       Saved results: {testLog.map((e) => `${e.art} — ${e.verdict} · ${e.at}`).join('  ·  ')}
+                    </div>
+                  )}
+                  {/* Where the previous test stood — so a returning operator knows
+                      without opening the ••• trail (Bill, Aug 15 2026) */}
+                  {savedMeta && savedMeta.lastTest && testLog.length === 0 && (
+                    <div className="text-[11px] mt-0.5 truncate" style={{ color: t.faint }} data-testid="text-last-test">
+                      Last test: {savedMeta.lastTest} — full trail under •••
                     </div>
                   )}
                 </div>
@@ -1282,28 +1358,39 @@ export default function PressTemplateLiveTest({
                         </button>
                       )}
                       {!art && (
+                        // Not yet certified? The button is the next move — it says so
+                        // ("Test & certify") and breathes a gentle blue ring to draw
+                        // the eye without shouting (Bill, Aug 15 2026).
                         <button
                           type="button"
                           onClick={() => artInput.current?.click()}
                           disabled={busy !== null}
                           className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-opacity disabled:opacity-60"
-                          style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
+                          style={{
+                            backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}`,
+                            animation: !savedMeta && busy === null ? 'gt-certify-glow 2.4s ease-in-out infinite' : undefined,
+                          }}
                           data-testid="button-upload-art"
                         >
                           <ShieldCheck style={{ width: 14, height: 14, color: t.blue }} />
-                          Test
+                          {savedMeta ? 'Test' : 'Test & certify'}
                         </button>
                       )}
                       {/* Save stays quiet until something changed — opening a saved
                           template arrives clean (Bill, Aug 15 2026). */}
+                      {/* Save tells the truth (Bill, Aug 15 2026): filled blue only
+                          when there's something to save; otherwise a quiet outline —
+                          background showing through, never a grayed-out blue. */}
                       {canEdit && (
                         <button
                           type="button"
                           onClick={() => void saveAndExit()}
                           disabled={busy !== null || !dirty}
-                          title={dirty ? undefined : 'No changes to save'}
-                          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold text-white transition-opacity disabled:opacity-40"
-                          style={{ backgroundColor: t.blue }}
+                          title={dirty ? undefined : 'Nothing to save — replace the file, rename, or run a new test'}
+                          className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors"
+                          style={dirty
+                            ? { backgroundColor: t.blue, color: '#fff', opacity: busy !== null ? 0.6 : 1 }
+                            : { backgroundColor: 'transparent', color: t.subink, border: `1px solid ${t.hairline}` }}
                           data-testid="button-accept-save"
                         >
                           {busy === 'save' ? 'Saving…' : 'Save'}

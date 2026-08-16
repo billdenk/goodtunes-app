@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 // The Templates page's upload sheet stashes the chosen file here, then routes
 // to this page, which picks it up on mount (Bill, Aug 14 2026).
-export const pendingTemplateFile: { file: File | null; name?: string | null } = { file: null, name: null };
+export const pendingTemplateFile: { file: File | null; name?: string | null; fromSaved?: boolean; status?: 'certified' | 'pending' } = { file: null, name: null, fromSaved: false };
 
 // Demo shelf (Bill, Aug 14 2026): Accept & Save puts the tested template here;
 // the Templates page shows it and tapping it re-opens the live test with the
@@ -38,10 +38,17 @@ for (const proto of [Map.prototype, WeakMap.prototype] as unknown as Array<Recor
 }
 import {
   LayoutDashboard, Users, Disc3, UserPlus, Library, Cog, Gift,
-  Search, Bell, MessageSquarePlus, CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Moon, Sun, Upload, RotateCcw, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown,
+  Search, Bell, MessageSquarePlus, CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Moon, Sun, Upload, RotateCcw, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate } from 'lucide-react';
+import labelTemplatePdfUrl from '../assets/label-template-r091125.pdf?url';
 import mrpLogo from '../assets/mrp-logo.svg';
+
+// Demo draft for the "Resume where you left off" sheet (canon rule, Aug 15 2026):
+// nothing saves automatically — Save is the one act that creates a revision — but
+// an in-progress session is kept as a browser-local draft so a crash or closed tab
+// never loses work. A draft never becomes a revision by itself.
+const MOCK_DRAFT = { title: 'Center labels', keptNote: 'kept as a draft on this computer' };
 import goodtunesLogo from '../assets/goodtunes-logo.png';
 import brandonPhoto from '../assets/brandon-seavers.png';
 
@@ -78,7 +85,8 @@ const THEMES: Record<'light' | 'dark', Theme> = {
 function ThinProgress({ label, t, testid }: { label: string; t: Theme; testid: string }) {
   return (
     <div className="mt-6 flex flex-col items-center" data-testid={testid} role="status" aria-label={label}>
-      <style>{`@keyframes gt-thin-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }`}</style>
+      <style>{`@keyframes gt-thin-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+@keyframes gt-certify-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(49,158,216,0); } 50% { box-shadow: 0 0 0 4px rgba(49,158,216,0.25); } }`}</style>
       <div className="rounded-full overflow-hidden" style={{ width: 220, height: 3, backgroundColor: t.soft }}>
         <div
           className="h-full rounded-full"
@@ -456,6 +464,13 @@ export default function PressTemplateLiveTest() {
   const [template, setTemplate] = useState<TemplateState | null>(null);
   const [art, setArt] = useState<ArtState | null>(null);
   const [busy, setBusy] = useState<'template' | 'art' | null>(null);
+  // Arrived from the Templates page with a file already in hand — nothing is
+  // being uploaded, so show "Opening template" instead of the upload step
+  // (Bill, Aug 15 2026).
+  const [arriving, setArriving] = useState(false);
+  // "Resume where you left off" — offered when the page opens empty-handed but a
+  // draft exists (mock: always offers MOCK_DRAFT on a deep link / refresh).
+  const [resumeOffer, setResumeOffer] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeZones, setActiveZones] = useState<Set<string>>(new Set());
   const [artOpacity, setArtOpacity] = useState(1);
@@ -474,7 +489,6 @@ export default function PressTemplateLiveTest() {
   const dragRef = useRef<{ px: number; py: number; cx: number; cy: number; w: number; h: number } | null>(null);
   // Bill, Aug 14 2026: layer table pops open over the page (icon right of Line/Area).
   const [showLayers, setShowLayers] = useState(false);
-  const [confirmSave, setConfirmSave] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [uploadedAt, setUploadedAt] = useState<string | null>(null);
@@ -483,12 +497,41 @@ export default function PressTemplateLiveTest() {
   const [openGroup, setOpenGroup] = useState<'Front' | 'Back' | null>(null);
   const templateInput = useRef<HTMLInputElement>(null);
   const artInput = useRef<HTMLInputElement>(null);
+  // Save is the only act that creates a revision — so it stays quiet until
+  // something actually changed (Bill, Aug 15 2026). Opening a saved template
+  // arrives clean; replace / rename / new test results make it dirty.
+  const [dirty, setDirty] = useState(true);
+  // Status carries over from the Templates tile (Bill, Aug 15 2026): a certified
+  // template says so here too; a fresh upload reads "Not tested" — usable, just
+  // not certified yet. Mock: reopening the saved template = the certified one.
+  const [savedMeta, setSavedMeta] = useState<{ certified: string; lastTest: string } | null>(null);
+  // Header ••• under Save — view the saved tests, or replace the template
+  // (replace = supersede: the old revision slides into history automatically,
+  // per template canon; the new file loads here for testing) (Bill, Aug 15 2026).
+  const [headerMenu, setHeaderMenu] = useState(false);
+  const [showTests, setShowTests] = useState(false);
+  const replacingName = useRef<string | null>(null);
+  // One tile per template, forever (Bill, Aug 15 2026): replacing supersedes —
+  // the old revision moves into history *inside the same block*, tests attached.
+  const [revisions, setRevisions] = useState<Array<{ name: string; wMm: number; hMm: number; at: string; tests: SavedTest[] }>>([]);
+  const replaceTemplate = () => {
+    if (template) {
+      replacingName.current = template.name;
+      setRevisions((r) => [{ name: template.name, wMm: template.wMm, hMm: template.hMm, at: uploadedAt ?? '', tests: testLog }, ...r]);
+    }
+    setHeaderMenu(false);
+    templateInput.current?.click();
+  };
 
   const onPickTemplate = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    await loadTemplate(f);
+    const keepName = replacingName.current;
+    replacingName.current = null;
+    await loadTemplate(f, keepName ?? undefined);
+    setDirty(true);
+    setSavedMeta(null); // a replacing file is a new revision — certified status stays with the old one
   };
 
   const loadTemplate = async (f: File, displayName?: string) => {
@@ -510,6 +553,7 @@ export default function PressTemplateLiveTest() {
       setArt(null);
     } catch (err) {
       setTemplate(null);
+      setArriving(false); // fall back to the upload step if the file couldn't be read
       setError(err instanceof Error ? err.message : 'Could not read that PDF.');
     } finally { setBusy(null); }
   };
@@ -519,12 +563,37 @@ export default function PressTemplateLiveTest() {
   useEffect(() => {
     const f = pendingTemplateFile.file;
     const nm = pendingTemplateFile.name;
-    if (f) { pendingTemplateFile.file = null; pendingTemplateFile.name = null; void loadTemplate(f, nm ?? undefined); }
-    // Arrived with nothing in hand (refresh, deep link)? Templates is the start
-    // page — go there instead of showing a stranded upload step (Bill, Aug 14 2026).
-    else window.location.hash = '#/PressTemplatesIndex';
+    if (f) {
+      const fromSaved = pendingTemplateFile.fromSaved === true;
+      const status = pendingTemplateFile.status;
+      pendingTemplateFile.file = null; pendingTemplateFile.name = null; pendingTemplateFile.fromSaved = false; pendingTemplateFile.status = undefined;
+      setDirty(!fromSaved); // reopening a saved template = clean; fresh upload = unsaved work
+      // Only a certified tile carries the badge over; pending arrives as "Not tested".
+      setSavedMeta(fromSaved && status !== 'pending' ? { certified: 'Sep 14, 2026', lastTest: 'CALIFORNIALAND labels — Pass · Sep 14, 2026' } : null);
+      setArriving(true); void loadTemplate(f, nm ?? undefined);
+    }
+    // Arrived with nothing in hand (refresh, deep link)? If a draft exists,
+    // offer to resume it (Aug 15 2026 canon: crash-safety = drafts, not
+    // auto-save). Production: only when a draft exists; otherwise route to
+    // the Templates page as before. Mock always offers the demo draft.
+    else setResumeOffer(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Resume = load the draft exactly where it stood; Discard = the draft is gone,
+  // back to Templates. Neither creates a revision.
+  const resumeDraft = async () => {
+    setResumeOffer(false);
+    setArriving(true);
+    try {
+      const blob = await (await fetch(labelTemplatePdfUrl)).blob();
+      await loadTemplate(new File([blob], 'label-template-r091125.pdf', { type: 'application/pdf' }), MOCK_DRAFT.title);
+    } catch {
+      setArriving(false);
+      setError('Could not reopen the draft.');
+    }
+  };
+  const discardDraft = () => { setResumeOffer(false); window.location.hash = '#/PressTemplatesIndex'; };
 
   const onPickArt = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -622,6 +691,7 @@ export default function PressTemplateLiveTest() {
     if (art) {
       const at = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       setTestLog((log) => [...log, { art: art.name, at, verdict: verdictWord }]);
+      setDirty(true); // new results are unsaved work until Save
     }
     artInput.current?.click();
   };
@@ -730,33 +800,28 @@ export default function PressTemplateLiveTest() {
           <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
             <li className="inline-flex items-center"><button type="button" className={cn('transition-colors', t.hoverInk)}>Templates</button></li>
             <li role="presentation" aria-hidden="true"><ChevronRight className="w-3.5 h-3.5" /></li>
-            <li className="inline-flex items-center"><span aria-current="page" style={{ color: t.ink }}>Live test</span></li>
+            {/* Crumb = where you are: the template's own name once one is open
+                (Bill, Aug 15 2026); "Live test" only before a file arrives. */}
+            <li className="inline-flex items-center"><span aria-current="page" style={{ color: t.ink }}>{template?.name ?? 'Live test'}</span></li>
           </ol>
         </nav>
 
         <div className="mt-3 flex items-end justify-between gap-6 flex-wrap">
           <div>
+            {/* Heading tells the job (Bill, Aug 15 2026): an uncertified template
+                still needs certifying, so the third word appears only then. */}
             <h1 style={{ fontSize: 30, letterSpacing: '-0.02em', fontWeight: 600, lineHeight: 1.12 }}>
               <span style={{ color: t.ink }}>Template. </span>
               <span style={{ color: t.subink, fontWeight: 500 }}>Test.</span>
+              {!savedMeta && <span style={{ color: t.subink, fontWeight: 500 }}> Certify.</span>}
             </h1>
             <p className="mt-1.5 text-[13.5px]" style={{ color: t.subink, maxWidth: 720 }}>
               Upload a press template with GT layers, then an art file. The overlays below are read
               straight from the template&rsquo;s own Illustrator layers — exact to the hundredth of a millimeter.
             </p>
           </div>
-          {(template || art) && (
-            <button
-              type="button"
-              onClick={() => { setTemplate(null); setArt(null); setError(null); }}
-              className={cn('inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-medium flex-shrink-0 transition-colors', t.hoverWash)}
-              style={{ color: t.subink, border: `1px solid ${t.hairline}` }}
-              data-testid="button-start-over"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Start over
-            </button>
-          )}
+          {/* "Start over" removed (Bill, Aug 15 2026) — it was playground chrome.
+              Cancel leaves; Replace template… (header •••) swaps the file. */}
         </div>
 
         {/* Step rail — quiet Apple-style text steps, no pills (Bill, Aug 14 2026) */}
@@ -786,16 +851,95 @@ export default function PressTemplateLiveTest() {
           <p className="mt-4 text-[12.5px]" style={{ color: t.crit }} data-testid="text-error">{error}</p>
         )}
 
+        {/* "Resume where you left off" — dimmed sheet over the page (Aug 15 2026). */}
+        {resumeOffer && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center p-6"
+            style={{ backgroundColor: 'rgba(0,0,0,0.45)' }}
+            data-testid="sheet-resume-backdrop"
+          >
+            <div
+              className="relative rounded-2xl overflow-hidden shadow-2xl w-full text-center px-8 py-9"
+              style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, maxWidth: 440 }}
+              role="dialog"
+              aria-label="Resume where you left off?"
+              data-testid="sheet-resume-draft"
+            >
+              <button
+                type="button"
+                onClick={discardDraft}
+                className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:opacity-80"
+                style={{ backgroundColor: t.soft, color: t.subink }}
+                aria-label="Close"
+                data-testid="button-close-resume"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <div className="mx-auto w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: t.soft, border: `1px solid ${t.hairline}` }}>
+                <History className="w-5 h-5" style={{ color: t.subink }} />
+              </div>
+              <div className="mt-4 text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>
+                Resume where you left off?
+              </div>
+              {/* One line, Apple-quiet (canon, Aug 15 2026). */}
+              {/* The ⓘ tooltip read as a dead button (Bill, Aug 15 2026) — the
+                  explanation just says itself now, one quiet line. */}
+              <p className="mt-1.5 text-[13px] mx-auto" style={{ color: t.subink }}>
+                {MOCK_DRAFT.title} — {MOCK_DRAFT.keptNote}.
+              </p>
+              <p className="mt-1 text-[12px] mx-auto" style={{ color: t.faint, maxWidth: 330 }} data-testid="text-draft-note">
+                You opened this without pressing Save. Nothing lands in Templates until you do.
+              </p>
+              {/* Canon (Bill, Aug 15 2026): confirming action rightmost; Cancel/dismiss quiet text to its left. */}
+              <div className="mt-6 flex items-center justify-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={discardDraft}
+                  className="h-9 px-4 rounded-full text-[13px] font-medium transition-colors hover:opacity-80"
+                  style={{ color: t.subink }}
+                  data-testid="button-discard-draft"
+                >
+                  Discard draft
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { void resumeDraft(); }}
+                  className="h-9 px-5 rounded-full text-[13px] font-semibold text-white"
+                  style={{ backgroundColor: t.blue }}
+                  data-testid="button-resume-draft"
+                >
+                  Resume
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Arrived with a template in hand — plain opening state, no upload talk. */}
+        {step === 1 && arriving && (
+          <div className="mt-6 flex flex-col items-center justify-center px-8 py-24">
+            <ThinProgress label="Opening template" t={t} testid="progress-opening-template" />
+          </div>
+        )}
+
         {/* ── Step 1 · Upload the template ── */}
-        {step === 1 && (
+        {step === 1 && !arriving && (
           <div className="mt-6 rounded-2xl flex flex-col items-center justify-center text-center px-8 py-20" style={{ backgroundColor: t.card, border: `1.5px dashed ${t.hairline}` }}>
             <span className="w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: t.neutralWash }}>
               <FileText className="w-6 h-6" style={{ color: t.subink }} />
             </span>
             <div className="mt-4 text-[16px] font-semibold" style={{ color: t.ink }}>Upload your template</div>
-            <p className="mt-1.5 text-[13px]" style={{ color: t.subink, maxWidth: 460 }}>
-              This is your PDF saved from Illustrator with &ldquo;GT Layers&rdquo; in it: &ldquo;GT CUT LINE&rdquo;,
-              &ldquo;GT BLEED AREA&rdquo;, and so on. Each layer is read by name, exactly where you drew it.
+            {/* One line, Apple-quiet; the detail lives behind the i (canon, Aug 15 2026). */}
+            <p className="mt-1.5 text-[13px] inline-flex items-center gap-1.5" style={{ color: t.subink }}>
+              Your Illustrator PDF, GT layers included.
+              <span
+                className="inline-flex items-center justify-center cursor-help"
+                title={'Layers named "GT CUT LINE", "GT BLEED AREA", and so on are read by name, exactly where you drew them.'}
+                aria-label="About GT layers"
+                data-testid="info-gt-layers"
+              >
+                <Info className="w-3.5 h-3.5" style={{ color: t.faint }} />
+              </span>
             </p>
             {busy === 'template' ? (
               <ThinProgress label="Reading layers" t={t} testid="progress-reading-layers" />
@@ -829,7 +973,7 @@ export default function PressTemplateLiveTest() {
                       onChange={(e) => setNameDraft(e.target.value)}
                       onBlur={() => {
                         const v = nameDraft.trim();
-                        if (v) setTemplate((prev) => (prev ? { ...prev, name: v } : prev));
+                        if (v && v !== template.name) { setTemplate((prev) => (prev ? { ...prev, name: v } : prev)); setDirty(true); }
                         setEditingName(false);
                       }}
                       onKeyDown={(e) => {
@@ -842,7 +986,21 @@ export default function PressTemplateLiveTest() {
                     />
                   ) : (
                     <div className="group flex items-center gap-1.5 min-w-0">
-                      <div className="text-[16px] font-semibold truncate" style={{ color: t.ink }} title={template.name}>{template.name}</div>
+                      <div className="text-[18px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={template.name}>{template.name}</div>
+                      {/* Status rides with the name — same truth as the tile on
+                          the previous screen (Bill, Aug 15 2026) */}
+                      {savedMeta ? (
+                        <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-semibold ml-1.5" style={{ color: t.ready }} data-testid="chip-template-status">
+                          <BadgeCheck style={{ width: 14, height: 14 }} />
+                          Certified
+                          <span className="font-normal" style={{ color: t.faint }}>{savedMeta.certified}</span>
+                        </span>
+                      ) : (
+                        <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-medium ml-1.5" style={{ color: t.faint }} data-testid="chip-template-status">
+                          <History style={{ width: 13, height: 13 }} />
+                          Not tested
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => { setNameDraft(template.name); setEditingName(true); }}
@@ -868,6 +1026,13 @@ export default function PressTemplateLiveTest() {
                   {testLog.length > 0 && (
                     <div className="text-[11px] mt-0.5 truncate" style={{ color: t.faint }} data-testid="text-test-trail">
                       Saved results: {testLog.map((e) => `${e.art} — ${e.verdict} · ${e.at}`).join('  ·  ')}
+                    </div>
+                  )}
+                  {/* Where the previous test stood — so a returning operator knows
+                      without opening the ••• trail (Bill, Aug 15 2026) */}
+                  {savedMeta && testLog.length === 0 && (
+                    <div className="text-[11px] mt-0.5 truncate" style={{ color: t.faint }} data-testid="text-last-test">
+                      Last test: {savedMeta.lastTest} — full trail under •••
                     </div>
                   )}
                 </div>
@@ -942,7 +1107,20 @@ export default function PressTemplateLiveTest() {
                     <ThinProgress label="Reading art" t={t} testid="progress-reading-art" />
                   ) : (
                     <>
-                      {/* Once a test is underway, "Accept & Test" gives way to
+                      {/* Apple-way header (Otis + Bill, Aug 15 2026): nothing saves
+                          automatically — Cancel leaves quietly, Test runs an art file,
+                          Save is the only action that persists (the one filled blue). */}
+                      <button
+                        type="button"
+                        onClick={() => { window.location.hash = '#/PressTemplatesIndex'; }}
+                        disabled={busy !== null}
+                        className={cn('h-8 px-2.5 rounded-full text-[12.5px] font-medium transition-colors disabled:opacity-60', t.hoverWash)}
+                        style={{ color: t.subink }}
+                        data-testid="button-cancel-template"
+                      >
+                        Cancel
+                      </button>
+                      {/* Once a test is underway, "Test" gives way to
                           "Save result & test another" — a trail staff can revisit (Bill, Aug 14 2026) */}
                       {art && (
                         <button
@@ -958,28 +1136,138 @@ export default function PressTemplateLiveTest() {
                         </button>
                       )}
                       {!art && (
+                        // Not yet certified? The button is the next move — it says so
+                        // ("Test & certify") and breathes a gentle blue ring to draw
+                        // the eye without shouting (Bill, Aug 15 2026).
                         <button
                           type="button"
                           onClick={() => artInput.current?.click()}
                           disabled={busy !== null}
                           className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-opacity disabled:opacity-60"
-                          style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
+                          style={{
+                            backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}`,
+                            animation: !savedMeta && busy === null ? 'gt-certify-glow 2.4s ease-in-out infinite' : undefined,
+                          }}
                           data-testid="button-upload-art"
                         >
                           <ShieldCheck style={{ width: 14, height: 14, color: t.blue }} />
-                          Accept &amp; Test
+                          {savedMeta ? 'Test' : 'Test & certify'}
                         </button>
                       )}
+                      {/* Save tells the truth (Bill, Aug 15 2026): filled blue only
+                          when there's something to save; otherwise a quiet outline —
+                          background showing through, never a grayed-out blue. */}
                       <button
                         type="button"
-                        onClick={() => setConfirmSave(true)}
-                        disabled={busy !== null}
-                        className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-opacity disabled:opacity-60"
-                        style={{ backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}` }}
+                        onClick={saveAndExit}
+                        disabled={busy !== null || !dirty}
+                        title={dirty ? undefined : 'Nothing to save — replace the file, rename, or run a new test'}
+                        className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors"
+                        style={dirty
+                          ? { backgroundColor: t.blue, color: '#fff', opacity: busy !== null ? 0.6 : 1 }
+                          : { backgroundColor: 'transparent', color: t.subink, border: `1px solid ${t.hairline}` }}
                         data-testid="button-accept-save"
                       >
-                        Accept &amp; Save
+                        Save
                       </button>
+                      {/* ••• under Save — history & tests live here; Replace supersedes
+                          in place so the template keeps one tile forever (Bill, Aug 15 2026). */}
+                      <div className="relative flex-shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setHeaderMenu((v) => !v)}
+                          aria-label="More actions"
+                          aria-expanded={headerMenu}
+                          className="w-8 h-8 rounded-full inline-flex items-center justify-center transition-colors"
+                          style={{ border: `1px solid ${t.hairline}`, color: t.subink }}
+                          data-testid="button-template-overflow"
+                        >
+                          <span aria-hidden="true" style={{ letterSpacing: 1, fontWeight: 700, fontSize: 13, lineHeight: 1 }}>•••</span>
+                        </button>
+                        {headerMenu && (
+                          <>
+                            <div className="fixed inset-0 z-[70]" onClick={() => setHeaderMenu(false)} />
+                            <div
+                              className="absolute z-[71] rounded-xl overflow-hidden shadow-2xl py-1"
+                              style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, top: 'calc(100% + 6px)', right: 0, minWidth: 220 }}
+                              role="menu"
+                              data-testid="menu-template-overflow"
+                            >
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={() => { setHeaderMenu(false); setShowTests(true); }}
+                                className={cn('w-full text-left px-4 py-2 text-[13px] font-medium transition-colors flex items-center gap-2.5', t.hoverWash)}
+                                style={{ color: t.ink }}
+                                data-testid="menuitem-history-tests"
+                              >
+                                <History style={{ width: 14, height: 14, color: t.subink }} />
+                                History &amp; tests
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={replaceTemplate}
+                                className={cn('w-full text-left px-4 py-2 text-[13px] font-medium transition-colors flex items-center gap-2.5', t.hoverWash)}
+                                style={{ color: t.ink }}
+                                data-testid="menuitem-replace-template"
+                              >
+                                <Upload style={{ width: 14, height: 14, color: t.subink }} />
+                                Replace template&hellip;
+                              </button>
+                              <div className="px-4 pb-2 pt-1 text-[11px] leading-snug" style={{ color: t.faint, maxWidth: 230 }}>
+                                Replacing supersedes this revision — it moves into history with its tests. One tile, always.
+                              </div>
+                            </div>
+                          </>
+                        )}
+                        {showTests && (
+                          <>
+                            <div className="fixed inset-0 z-[70]" onClick={() => setShowTests(false)} />
+                            <div
+                              className="absolute z-[71] rounded-2xl overflow-hidden shadow-2xl"
+                              style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, top: 'calc(100% + 6px)', right: 0, width: 380 }}
+                              role="dialog"
+                              aria-label="History and tests"
+                              data-testid="panel-history-tests"
+                            >
+                              <div className="flex items-start justify-between gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${t.hairline}` }}>
+                                <div>
+                                  <div className="text-[13.5px] font-semibold" style={{ color: t.ink }}>History &amp; tests</div>
+                                  <div className="text-[12px] mt-0.5" style={{ color: t.subink }}>Every revision of this template, tests attached</div>
+                                </div>
+                                <button type="button" onClick={() => setShowTests(false)} aria-label="Close" className="w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${t.hairline}`, color: t.subink }} data-testid="button-close-history">
+                                  <X style={{ width: 14, height: 14 }} />
+                                </button>
+                              </div>
+                              <div className="px-5 py-3 max-h-[420px] overflow-y-auto">
+                                {[{ name: template.name, wMm: template.wMm, hMm: template.hMm, at: uploadedAt ?? '', tests: testLog, current: true }, ...revisions.map((r) => ({ ...r, current: false }))].map((rev, ri) => (
+                                  <div key={ri} className="py-3" style={{ borderBottom: `1px solid ${t.hairline}` }}>
+                                    <div className="flex items-baseline justify-between gap-3">
+                                      <span className="text-[12.5px] font-semibold truncate" style={{ color: t.ink }} title={rev.name}>{rev.name}</span>
+                                      <span className="text-[11px] font-semibold flex-shrink-0 inline-flex items-center gap-1" style={{ color: rev.current ? t.ready : t.faint }}>
+                                        {rev.current ? <><BadgeCheck style={{ width: 12, height: 12 }} /> Current</> : <><History style={{ width: 12, height: 12 }} /> Superseded</>}
+                                      </span>
+                                    </div>
+                                    <div className="text-[11.5px] mt-0.5 tabular-nums" style={{ color: t.subink }}>
+                                      {rev.wMm.toFixed(1)} × {rev.hMm.toFixed(1)} mm{rev.at ? ` · uploaded ${rev.at}` : ''}
+                                    </div>
+                                    {rev.tests.length === 0 ? (
+                                      <div className="text-[11.5px] mt-1.5" style={{ color: t.faint }}>No art files tested</div>
+                                    ) : rev.tests.map((e, ei) => (
+                                      <div key={ei} className="mt-1.5 flex items-center gap-1.5 text-[11.5px]" style={{ color: t.subink }}>
+                                        {e.verdict === 'Pass' ? <CheckCircle2 style={{ width: 12, height: 12, color: t.ready, flexShrink: 0 }} /> : e.verdict === 'Fail' ? <XCircle style={{ width: 12, height: 12, color: '#E5484D', flexShrink: 0 }} /> : <MinusCircle style={{ width: 12, height: 12, color: t.faint, flexShrink: 0 }} />}
+                                        <span className="truncate" title={e.art}>{e.art}</span>
+                                        <span className="flex-shrink-0" style={{ color: t.faint }}>— {e.verdict} · {e.at}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </>
                   )}
                 </div>
@@ -1441,51 +1729,8 @@ export default function PressTemplateLiveTest() {
               </div>
             )}
 
-            {/* Pop-over: layers read from the file */}
-            {/* Save confirm — Apple-style alert (Bill, Aug 14 2026) */}
-            {confirmSave && (
-              <>
-                <div className="fixed inset-0 z-[70]" style={{ backgroundColor: 'rgba(0,0,0,0.45)' }} onClick={() => setConfirmSave(false)} />
-                <div
-                  role="alertdialog"
-                  aria-modal="true"
-                  aria-labelledby="confirm-save-title"
-                  className="fixed z-[71] left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-2xl px-6 pt-6 pb-5 text-center shadow-2xl"
-                  style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, width: 340 }}
-                  data-testid="dialog-confirm-save"
-                >
-                  {/* Copy knows where you are: mid-test = congrats, untested = a gentle nudge (Bill, Aug 14 2026) */}
-                  <div id="confirm-save-title" className="text-[15px] font-semibold" style={{ color: t.ink }}>
-                    {art ? 'Test saved' : 'Save this template?'}
-                  </div>
-                  <p className="mt-1.5 text-[12.5px] leading-relaxed" style={{ color: t.subink }}>
-                    {art
-                      ? 'Congrats — your test has been saved, and you can compare these results at any time. Your template is ready to go.'
-                      : 'The GT layers are read and look good. Save it to your Templates page now, or go back and run an art test first.'}
-                  </p>
-                  <div className="mt-5 flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={saveAndExit}
-                      className="h-9 rounded-full text-[13px] font-semibold text-white"
-                      style={{ backgroundColor: t.blue }}
-                      data-testid="button-save-exit"
-                    >
-                      {art ? 'Back to Templates' : 'Save & exit'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmSave(false)}
-                      className="h-9 rounded-full text-[13px] font-semibold"
-                      style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
-                      data-testid="button-return-test"
-                    >
-                      {art ? 'Stay here' : 'Return & test'}
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
+            {/* No save-confirm dialog (Bill, Aug 15 2026): Save in the header
+                saves and returns to Templates — one act, no congrats sheet. */}
 
           </div>
         )}

@@ -312,101 +312,6 @@ function matchSpec(
 // ─── Task #3065 — "Create new template" dialog (custom slots) ──
 // Task #3066 — doubles as the rename dialog when `editSlot` is set (display
 // name / note only; the slot key + any attached spec stay put).
-// gogoods, Aug 15 2026 — small dialog behind the tile pencil: edits the
-// press-given nickname (press_template_specs.display_name). The canonical
-// slot title never changes; an empty save clears the nickname.
-function RenameNicknameDialog({
-  t,
-  pressId,
-  spec,
-  onClose,
-}: {
-  t: Theme;
-  pressId: string;
-  spec: TemplateSpecWithHistory;
-  onClose: () => void;
-}) {
-  const { toast } = useToast();
-  const [name, setName] = useState(spec.displayName ?? "");
-  const save = useMutation({
-    mutationFn: async () => {
-      await apiRequest("PATCH", `/api/press/${pressId}/templates/${spec.id}/display-name`, {
-        displayName: name.trim(),
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
-      onClose();
-    },
-    onError: (e: Error) =>
-      toast({
-        title: "Couldn't save the name",
-        description: e.message.replace(/^\d{3}:\s*/, ""),
-        variant: "destructive",
-      }),
-  });
-  return (
-    <div
-      className="fixed inset-0 z-[70] flex items-center justify-center p-6"
-      style={{ backgroundColor: t.modalScrim, backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }}
-      onClick={onClose}
-      data-testid="modal-rename-nickname-backdrop"
-    >
-      <div
-        className="rounded-2xl overflow-hidden w-full px-7 pt-6 pb-6"
-        style={{ maxWidth: 440, backgroundColor: t.card, border: `1px solid ${t.hairline}`, boxShadow: t.modalShadow }}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label="Edit template name"
-        data-testid="modal-rename-nickname"
-      >
-        <h2 className="text-[19px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>
-          Template name
-        </h2>
-        <p className="mt-1 text-[12.5px]" style={{ color: t.subink }}>
-          Shows as small text under the slot's title. Leave it blank to clear.
-        </p>
-        <input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          maxLength={120}
-          placeholder={spec.templateFileName ?? "Template name"}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !save.isPending) save.mutate();
-            if (e.key === "Escape") onClose();
-          }}
-          className="mt-4 w-full rounded-xl px-3.5 py-2.5 text-[14px] focus:outline-none"
-          style={{ color: t.ink, backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}
-          data-testid="input-nickname"
-        />
-        <div className="mt-5 flex items-center justify-end gap-2.5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-9 px-4 rounded-full text-[13px] font-semibold transition-colors"
-            style={{ color: t.subink, border: `1px solid ${t.hairline}` }}
-            data-testid="button-nickname-cancel"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={save.isPending}
-            onClick={() => save.mutate()}
-            className="h-9 px-5 rounded-full text-[13px] font-semibold text-white transition-opacity disabled:opacity-60 inline-flex items-center gap-2"
-            style={{ backgroundColor: t.blue }}
-            data-testid="button-nickname-save"
-          >
-            {save.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-            Save
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function CreateSlotModal({
   t,
   pressId,
@@ -610,14 +515,15 @@ function CustomSlotActions({
 // ─── Per-tile ••• overflow (handoff, Aug 15 2026) — appears on hover in the
 // tile's top-right corner. Archive lives here (with a confirm); archived
 // tiles get Restore instead. Handoff-verbatim styling; wired handlers.
-function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore, onReplace }: {
+function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore, onReplace, pos }: {
   tileKey: string; title: string; archived: boolean; t: Theme;
   menuFor: string | null; setMenuFor: (k: string | null) => void;
   onArchive: () => void; onRestore: () => void; onReplace?: () => void;
+  pos?: string; // position classes — default hugs the tile's top-right corner
 }) {
   const open = menuFor === tileKey;
   return (
-    <div className="absolute top-2.5 right-2.5 z-10">
+    <div className={cn("absolute z-10", pos ?? "top-2.5 right-2.5")}>
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setMenuFor(open ? null : tileKey); }}
@@ -686,99 +592,140 @@ function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArch
 }
 
 // ─── Tiles ──
+// GoodStudio-card treatment (handoff Addendum 5, Bill Aug 15 2026): the
+// template's own rendered page bleeds edge-to-edge across the tile's top;
+// small quiet text block flush-left below — name + status at rest, file
+// identity (nickname · code · rev · history) as hover fine print. Pending's
+// why + action live behind a click ⓘ beside the chip, not on the tile face.
 function FilledTile({
   t,
   slot,
   spec,
   onOpen,
-  canEdit,
-  onRename,
 }: {
   t: Theme;
   slot: Slot;
   spec: TemplateSpecWithHistory;
   onOpen: () => void;
-  canEdit: boolean;
-  onRename: () => void;
 }) {
   const status = slotStatus(spec);
   const live = spec.revisions.find((r) => r.status === "certified" || r.status === "pending");
   const historyRevs = spec.revisions.filter((r) => r.status === "superseded" || r.status === "archived");
-  const code = spec.templateFileName ?? slot.title;
   // Task #3065 — one file covering multiple options gets the confirmed
   // "serves both" note in place of the generic slot note.
   const note = spec.variantOptions?.length ? variantOptionsNote(spec.variantOptions) : slot.note;
+  // Real render of the template's own page 1 (Task #3099). No render yet →
+  // honest icon panel, never a fabricated stock image.
+  const preview = spec.previewUrls?.[0] ?? null;
+  // Which pending ⓘ popover is open — anchored by viewport coords; the tile
+  // clips overflow, so the popover floats fixed (Bill, Aug 16 2026).
+  const [pendingInfo, setPendingInfo] = useState<{ x: number; y: number } | null>(null);
+  const togglePendingInfo = (el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    setPendingInfo((v) => (v ? null : { x: r.left, y: r.bottom }));
+  };
   return (
     <button
       type="button"
       onClick={onOpen}
-      className={cn("gt-tile rounded-2xl px-6 pt-7 pb-5 flex flex-col items-center text-center transition-colors group", t.tileHover)}
+      className={cn("gt-tile rounded-2xl overflow-hidden flex flex-col text-left transition-colors group", t.tileHover)}
       style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}
       data-testid={`tile-template-${spec.id}`}
     >
-      <div className="relative">
-        <span className="rounded-full flex items-center justify-center" style={{ width: 104, height: 104, backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
-          <ComponentIcon kind={slot.kind} color={t.blue} fill={t.iconFill} size={54} />
-        </span>
-      </div>
-      <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>{slot.title}</div>
-      {/* Press-given nickname (gogoods, Aug 15 2026) — quiet small text under
-          the canonical title, revealed on hover; pencil edits it in place. */}
-      {(spec.displayName || canEdit) && (
-        <div className="gt-detail mt-0.5 text-[12px] inline-flex items-center gap-1 justify-center max-w-full" style={{ color: t.faint }} data-testid={`nickname-${spec.id}`}>
-          <span className="truncate">{spec.displayName ?? "Add a name"}</span>
-          {canEdit && (
-            <span
-              role="button"
-              tabIndex={0}
-              aria-label="Edit template name"
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRename(); }}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onRename(); } }}
-              className="inline-flex items-center justify-center w-5 h-5 rounded-full transition-colors flex-shrink-0"
-              style={{ color: t.subink }}
-              data-testid={`button-rename-template-${spec.id}`}
-            >
-              <Pencil className="w-3 h-3" />
+      {/* GoodStudio proportions: big preview, small quiet text block. */}
+      <span className="block w-full flex-shrink-0" style={{ height: 200, backgroundColor: "#fff", borderBottom: `1px solid ${t.hairline}` }}>
+        {preview ? (
+          <img src={preview} alt={`${slot.title} — the template page itself`} className="w-full h-full object-cover object-top" data-testid={`img-tile-preview-${spec.id}`} />
+        ) : (
+          <span className="w-full h-full flex items-center justify-center" style={{ backgroundColor: t.cardSoft }}>
+            <ComponentIcon kind={slot.kind} color={t.blue} fill={t.iconFill} size={54} />
+          </span>
+        )}
+      </span>
+      <div className="w-full px-5 pt-3.5 pb-4">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[16px] font-semibold truncate" style={{ color: t.ink, letterSpacing: "-0.01em" }}>{slot.title}</div>
+          {/* Icon docks across from the name; yields to the ••• on hover */}
+          <span className="flex-shrink-0 transition-opacity group-hover:opacity-0" aria-hidden>
+            <ComponentIcon kind={slot.kind} color={t.blue} fill={t.iconFill} size={20} />
+          </span>
+        </div>
+        <div className="mt-1 flex items-center gap-2">
+          <StatusChip status={status} t={t} />
+          {status === "certified" && live?.certifiedAt && (
+            <span className="text-[11.5px]" style={{ color: t.faint }}>
+              {new Date(live.certifiedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+            </span>
+          )}
+          {/* Pending's why + action behind a click ⓘ — a real popover, not a
+              hover tooltip (Bill, Aug 16 2026). */}
+          {status === "pending" && (
+            <span className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
+              <span
+                role="button"
+                tabIndex={0}
+                aria-label="Why is this pending?"
+                onClick={(e) => togglePendingInfo(e.currentTarget as HTMLElement)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    togglePendingInfo(e.currentTarget as HTMLElement);
+                  }
+                }}
+                className="inline-flex items-center justify-center cursor-pointer"
+                style={{ color: t.faint }}
+                data-testid={`info-pending-${spec.id}`}
+              >
+                <Info className="w-3.5 h-3.5" />
+              </span>
+              {pendingInfo && (
+                <>
+                  <span className="fixed inset-0 z-[70]" onClick={() => setPendingInfo(null)} />
+                  <span
+                    className="fixed z-[71] block rounded-xl px-4 py-3 text-[12px] leading-relaxed shadow-2xl"
+                    style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.subink, width: 260, top: pendingInfo.y + 8, left: Math.max(12, pendingInfo.x - 8) }}
+                    data-testid={`text-pending-why-${spec.id}`}
+                  >
+                    Attached, not yet certified — it certifies itself when a finished file passes. Open to test.
+                  </span>
+                </>
+              )}
             </span>
           )}
         </div>
-      )}
-      <div className="gt-detail mt-1 text-[12.5px] inline-flex items-center gap-1.5 justify-center" style={{ color: t.subink }} data-testid={`note-${spec.id}`}>
-        {spec.variantOptions?.length ? <Layers className="w-3 h-3 flex-shrink-0" style={{ color: t.blue }} /> : null}
-        {note}
-      </div>
-      {live && (
-        <div className="gt-detail mt-0.5 text-[12.5px] tabular-nums" style={{ color: t.subink }} data-testid={`text-rev-${spec.id}`}>
-          {live.revLabel}
+        {/* Hover fine print: nickname, note, code · rev, supersede history. */}
+        {spec.displayName && (
+          <div className="gt-detail mt-1.5 text-[12px] truncate" style={{ color: t.subink }} title={spec.displayName} data-testid={`nickname-${spec.id}`}>
+            {spec.displayName}
+          </div>
+        )}
+        <div className="gt-detail mt-1 text-[12px] inline-flex items-center gap-1.5 max-w-full" style={{ color: t.subink }} data-testid={`note-${spec.id}`}>
+          {spec.variantOptions?.length ? <Layers className="w-3 h-3 flex-shrink-0" style={{ color: t.blue }} /> : null}
+          <span className="truncate">{note}</span>
         </div>
-      )}
-      <div className="mt-3 flex items-center gap-2">
-        <StatusChip status={status} t={t} />
-        {status === "certified" && live?.certifiedAt && (
-          <span className="text-[11.5px]" style={{ color: t.faint }}>
-            {new Date(live.certifiedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-          </span>
+        {(spec.templateFileName || live) && (
+          <div className="gt-detail mt-1 text-[12px] tabular-nums truncate" style={{ color: t.subink }} data-testid={`text-rev-${spec.id}`}>
+            {spec.templateFileName ?? slot.title}
+            {live && (
+              <>
+                {" "}
+                <span style={{ color: t.faint }}>·</span> {live.revLabel}
+              </>
+            )}
+          </div>
+        )}
+        {historyRevs.length > 0 && (
+          <div className="gt-detail mt-1 w-full" data-testid={`history-${spec.id}`}>
+            {historyRevs.map((h) => (
+              <div key={h.id} className="flex items-center gap-1.5 text-[11.5px]" style={{ color: t.faint }}>
+                <History className="w-3 h-3 flex-shrink-0" />
+                <span className="tabular-nums">{h.revLabel}</span>
+                <span className="truncate">{h.note ?? "superseded · in history"}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
-      {/* Why Pending — quiet hover explainer (gogoods, Aug 15 2026): nobody
-          could tell what the yellow chip was waiting on. */}
-      {status === "pending" && (
-        <div className="gt-detail mt-1.5 text-[11.5px] max-w-[240px]" style={{ color: t.faint }} data-testid={`pending-why-${spec.id}`}>
-          Attached but not yet certified — it certifies when a finished print file passes a check against it.
-        </div>
-      )}
-      {/* Revision history — superseded / archived entries, quiet until hover */}
-      {historyRevs.length > 0 && (
-        <div className="gt-detail mt-2 w-full" data-testid={`history-${spec.id}`}>
-          {historyRevs.map((h) => (
-            <div key={h.id} className="flex items-center justify-center gap-1.5 text-[11.5px]" style={{ color: t.faint, opacity: 0.85 }}>
-              <History className="w-3 h-3 flex-shrink-0" />
-              <span className="tabular-nums">{h.revLabel}</span>
-              <span>{h.note ?? "in history"}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </button>
   );
 }
@@ -998,9 +945,6 @@ export function PressTemplatesIndex({
   };
   // Task #3066 — rename dialog for an operator-created slot.
   const [editSlot, setEditSlot] = useState<CustomTemplateSlot | null>(null);
-  // gogoods, Aug 15 2026 — pencil on a filled tile edits the press-given
-  // nickname (display_name) shown under the canonical slot title.
-  const [renameSpec, setRenameSpec] = useState<TemplateSpecWithHistory | null>(null);
   const { toast } = useToast();
 
   // Task #3066 — remove a custom slot made by mistake. The server refuses
@@ -1243,8 +1187,6 @@ export function PressTemplatesIndex({
                   slot={slot}
                   spec={spec!}
                   onOpen={() => onOpenSpec(spec!.id)}
-                  canEdit={canEdit}
-                  onRename={() => setRenameSpec(spec!)}
                 />
               ) : (
                 <EmptyTile
@@ -1272,6 +1214,7 @@ export function PressTemplatesIndex({
                         title={slot.title}
                         archived={isArchived}
                         t={t}
+                        pos={filled ? "top-[206px] right-3" : undefined}
                         menuFor={menuFor}
                         setMenuFor={setMenuFor}
                         onArchive={() =>
@@ -1322,7 +1265,7 @@ export function PressTemplatesIndex({
                     type="button"
                     disabled={busy}
                     onClick={() => reopenSaved(sv)}
-                    className={cn("gt-tile w-full h-full rounded-2xl px-6 py-7 flex flex-col items-center text-center transition-colors", t.tileHover)}
+                    className={cn("gt-tile w-full h-full rounded-2xl overflow-hidden flex flex-col text-left transition-colors", t.tileHover)}
                     style={{
                       backgroundColor: t.card,
                       border: `1px solid ${fresh ? t.blue : t.hairline}`,
@@ -1332,40 +1275,39 @@ export function PressTemplatesIndex({
                     }}
                     data-testid={`tile-live-template-${sv.id}`}
                   >
-                    {sv.previewImg ? (
-                      <img
-                        src={sv.previewImg}
-                        alt=""
-                        className="w-20 h-20 rounded-full object-cover"
-                        style={{ border: `1px solid ${t.hairline}` }}
-                      />
-                    ) : (
-                      <span className="w-20 h-20 rounded-full flex items-center justify-center" style={{ border: `1px solid ${t.hairline}` }}>
-                        <Layers className="w-6 h-6" style={{ color: t.faint }} />
-                      </span>
-                    )}
-                    <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: "-0.01em" }}>
-                      {sv.name}
-                    </div>
-                    <div className="gt-detail mt-1 text-[12.5px]" style={{ color: t.faint }}>
-                      {sv.wMm && sv.hMm ? `${Math.round(sv.wMm)} × ${Math.round(sv.hMm)} mm · ` : ""}
-                      {sv.layerCount} GT layer{sv.layerCount === 1 ? "" : "s"}
-                    </div>
-                    <div className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: isArchived ? t.subink : t.ready }}>
-                      {isArchived ? (
-                        <><Archive className="w-3.5 h-3.5" /><span style={{ fontWeight: 600 }}>Archived</span></>
+                    {/* Same flat-top treatment as the canon tiles (Addendum 5):
+                        page-1 preview bleeds across the top; honest placeholder
+                        when the save predates preview capture. */}
+                    <span className="block w-full flex-shrink-0" style={{ height: 200, backgroundColor: "#fff", borderBottom: `1px solid ${t.hairline}` }}>
+                      {sv.previewImg ? (
+                        <img src={sv.previewImg} alt="" className="w-full h-full object-cover object-top" />
                       ) : (
-                        <>
-                          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <BadgeCheck className="w-3.5 h-3.5" />}
-                          Saved · {new Date(sv.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                        </>
+                        <span className="w-full h-full flex items-center justify-center" style={{ backgroundColor: t.cardSoft }}>
+                          <Layers className="w-6 h-6" style={{ color: t.faint }} />
+                        </span>
                       )}
-                    </div>
-                    {sv.tests.length > 0 && (
-                      <div className="gt-detail mt-1 text-[12px]" style={{ color: t.faint }}>
-                        {sv.tests.length} art file{sv.tests.length === 1 ? "" : "s"} tested
+                    </span>
+                    <div className="w-full px-5 pt-3.5 pb-4">
+                      <div className="text-[16px] font-semibold truncate w-full" style={{ color: t.ink, letterSpacing: "-0.01em" }} title={sv.name}>
+                        {sv.name}
                       </div>
-                    )}
+                      <div className="mt-1 flex items-center gap-2 text-[11.5px]" style={{ color: t.faint }}>
+                        {isArchived ? (
+                          <><Archive className="w-3.5 h-3.5 flex-shrink-0" /><span style={{ fontWeight: 600 }}>Archived</span></>
+                        ) : (
+                          <>
+                            {busy ? <Loader2 className="w-3.5 h-3.5 flex-shrink-0 animate-spin" style={{ color: t.ready }} /> : <BadgeCheck className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.ready }} />}
+                            <span style={{ color: t.ready, fontWeight: 600 }}>Saved</span>
+                            <span>{new Date(sv.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                          </>
+                        )}
+                        {sv.tests.length > 0 && <span>· {sv.tests.length} art file{sv.tests.length === 1 ? "" : "s"} tested</span>}
+                      </div>
+                      <div className="gt-detail mt-1.5 text-[12px] tabular-nums" style={{ color: t.subink }}>
+                        {sv.wMm && sv.hMm ? `${Math.round(sv.wMm)} × ${Math.round(sv.hMm)} mm · ` : ""}
+                        {sv.layerCount} GT layer{sv.layerCount === 1 ? "" : "s"}
+                      </div>
+                    </div>
                   </button>
                   {canEdit && (
                     <TileOverflow
@@ -1373,6 +1315,7 @@ export function PressTemplatesIndex({
                       title={sv.name}
                       archived={isArchived}
                       t={t}
+                      pos="top-[206px] right-3"
                       menuFor={menuFor}
                       setMenuFor={setMenuFor}
                       onArchive={() => setConfirmArchive({ kind: "live", id: sv.id, title: sv.name })}
@@ -1425,16 +1368,6 @@ export function PressTemplatesIndex({
           editSlot={editSlot}
           onClose={() => setEditSlot(null)}
           onCreated={() => setEditSlot(null)}
-        />
-      )}
-      {/* gogoods, Aug 15 2026 — pencil on a filled tile: edit the press-given
-          nickname shown under the canonical slot title. Slot title stays. */}
-      {renameSpec && (
-        <RenameNicknameDialog
-          t={t}
-          pressId={pressId}
-          spec={renameSpec}
-          onClose={() => setRenameSpec(null)}
         />
       )}
       {/* Archive confirm — are-you-sure before a tile leaves the live shelf

@@ -922,6 +922,8 @@ ALTER TABLE IF EXISTS press_template_specs
   ADD COLUMN IF NOT EXISTS template_file_name text;
 ALTER TABLE IF EXISTS press_template_specs
   ADD COLUMN IF NOT EXISTS display_name text;
+ALTER TABLE IF EXISTS manufacturers
+  ADD COLUMN IF NOT EXISTS require_certified_templates boolean NOT NULL DEFAULT false;
 SQL
   then
     echo "post-merge: press catalog item28 migration ok on $label"

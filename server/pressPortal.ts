@@ -694,6 +694,9 @@ export function registerPressPortalRoutes(
       contactPhone: (press as any).contactPhone ?? null,
       location: (press as any).location ?? null,
       bio: (press as any).bio ?? null,
+      // handoff/press-settings-templates-policy (Bill, Aug 15 2026) —
+      // Settings › Profile Templates policy toggle round-trips off /me.
+      requireCertifiedTemplates: (press as any).requireCertifiedTemplates === true,
       // Task #2129 — capability flags so the portal's own Capabilities card
       // can render + self-toggle (Vinyl / GoodDeeds / Fulfillment). Default
       // mirrors the schema column defaults.
@@ -2420,6 +2423,9 @@ export function registerPressPortalRoutes(
     contactPhone: z.string().max(40).nullable().optional(),
     location: z.string().max(500).nullable().optional(),
     bio: z.string().max(2000).nullable().optional(),
+    // handoff/press-settings-templates-policy (Bill, Aug 15 2026) — per-press
+    // "require a passing test before a template goes live" policy toggle.
+    requireCertifiedTemplates: z.boolean().optional(),
     // Task #2129 — partners self-toggle their own services from the portal.
     doesVinyl: z.boolean().optional(),
     doesGoodDeed: z.boolean().optional(),
@@ -2444,6 +2450,7 @@ export function registerPressPortalRoutes(
     if (parsed.data.contactPhone !== undefined) set.contactPhone = norm(parsed.data.contactPhone);
     if (parsed.data.location !== undefined) set.location = norm(parsed.data.location);
     if (parsed.data.bio !== undefined) set.bio = norm(parsed.data.bio);
+    if (parsed.data.requireCertifiedTemplates !== undefined) set.requireCertifiedTemplates = parsed.data.requireCertifiedTemplates;
     // Task #2129 — capability flags. Merge the incoming toggle over the
     // current row, then enforce the same at-least-one guard the DB CHECK
     // does, returning a friendly message instead of a constraint 500.

@@ -75,3 +75,46 @@ floating pill, MOCK_ tiles for other components, Comment pill.
 Light + dark ALWAYS (Bill's binding rule). Both files carry THEMES token sets; dark
 charcoal is the press-portal default. Statuses are word + icon, never color alone
 (Bill is colorblind). One filled blue (#319ED8) action per screen.
+
+
+## Addendum 5 — Aug 16 2026 (certification visibility + pending UX; supersedes Addendum 4 where they touch)
+
+Both .tsx files updated — replace verbatim as always. New assets in assets/:
+gt-preview-template-flat.jpg, gt-preview-jacket-flat.jpg, plus the two source
+PDFs the mocks fetch at runtime (label-template-r091125.pdf,
+jacket-template-r072226.pdf).
+
+What changed:
+1. **Tile redesign (GoodStudio proportions):** preview edge-to-edge on top
+   (height 200, object-top, white bg, hairline bottom border); name 16px with
+   the component icon docked flush-right (icon fades on hover, ••• takes its
+   spot); status word + icon + date always visible under the name. Hover-only
+   fine print: press nickname, code · rev, supersede history.
+2. **Pending on tiles:** an ⓘ beside the Pending chip opens a CLICK popover
+   (fixed-position so the card's rounded corners can't clip it): "Attached,
+   not yet certified — it certifies itself when a finished file passes. Open
+   to test." Why + action, never color alone.
+3. **Nickname home (your plumbing):** quiet first hover line on the tile;
+   canonical slot title stays fixed at rest. Renaming should reuse the live
+   test page's existing rename — one way to rename, not two; skip the
+   tile-level pencil/dialog from your stub.
+4. **Live test page:** status carries over from the tile (Certified · date
+   beside the name; uncertified reads "Not tested"); reopened templates show
+   "Last test: … — full trail under •••"; breadcrumb = the template's own
+   name; Save is a quiet outline when clean and filled blue only when dirty
+   (rename / replace / new test result) — never a grayed-out blue; on an
+   uncertified template the heading becomes "Template. Test. Certify." and
+   the Test button reads "Test & certify" with a gentle blue glow
+   (gt-certify-glow keyframes, 2.4s).
+5. **Resume-draft dialog:** the dead ⓘ tooltip is gone; the explanation is a
+   plain second line ("You opened this without pressing Save…").
+6. **New, separate handoff:** handoff/press-settings-templates-policy/ — a
+   per-press Settings toggle "Require a passing test before a template goes
+   live" (default Off). See its README for wiring + enforcement.
+
+States checklist (acceptance, both themes, 1440px):
+- Shelf: certified tile at rest + hover; pending tile at rest + hover +
+  popover open; archived; empty dashed slots; saved-from-live-test tile.
+- Live test: certified open (badge + last-test line, quiet Save, plain Test);
+  uncertified open (Not tested, "Certify." heading, glowing "Test & certify",
+  quiet Save); dirty Save after rename/replace/test; resume-draft dialog.

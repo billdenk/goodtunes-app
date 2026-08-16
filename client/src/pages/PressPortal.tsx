@@ -119,6 +119,9 @@ interface PressMe {
   doesVinyl?: boolean;
   doesGoodDeed?: boolean;
   doesFulfillment?: boolean;
+  // handoff/press-settings-templates-policy (Bill, Aug 15 2026) — whether a
+  // template must pass a live test before it measures client files.
+  requireCertifiedTemplates?: boolean;
   // Jacket placeholder image for the catalog's VinylPreview.
   vinylPlaceholderUrl?: string | null;
   // Center-label branding for the vinyl color setup disc preview.
@@ -3582,6 +3585,68 @@ function ProfileSubTab({ pressId }: { pressId: string }) {
         )}
       </div>
       </DashboardPanel>
+      {/* handoff/press-settings-templates-policy (Bill, Aug 15 2026) — the
+          per-press Templates policy card, ported verbatim from the handoff
+          with the mock's inline dark tokens mapped to the settings page's
+          theme vars (both themes). Saves through the same /profile PATCH. */}
+      <TemplatesPolicyCard
+        requireTest={me?.requireCertifiedTemplates === true}
+        canEdit={canEdit}
+        saving={save.isPending}
+        onToggle={(next) => save.mutate({ requireCertifiedTemplates: next })}
+      />
+    </div>
+  );
+}
+
+// handoff/press-settings-templates-policy — per-press policy toggle for the
+// press Settings page, below the "Press profile" card. Presentation ported
+// from the handoff mock; dark-token consts mapped to --apple-* theme vars.
+// Policy (Bill, Aug 15 2026): whether a template must pass a live test before
+// it can measure client files is a per-press call, made here — not a platform
+// rule. Off = usable on Save; certification is optional proof (it happens
+// automatically when a finished file passes a test).
+function TemplatesPolicyCard({ requireTest, canEdit, saving, onToggle }: {
+  requireTest: boolean;
+  canEdit: boolean;
+  saving: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  return (
+    <div className="rounded-xl overflow-hidden bg-[color:var(--apple-card)] border border-[color:var(--apple-hairline)]">
+      <div className="px-6 pt-5 pb-6">
+        <h3 className="text-[15px] font-semibold text-[color:var(--apple-ink)]">Templates</h3>
+        <p className="text-[12.5px] mt-0.5 text-[color:var(--apple-subink)]">
+          How new press templates go live for measuring client files.
+        </p>
+        <div className="mt-5 flex items-start justify-between gap-6">
+          <div className="min-w-0">
+            <div className="text-[13.5px] font-medium text-[color:var(--apple-ink)]">Require a passing test before a template goes live</div>
+            <p className="text-[12.5px] mt-1 max-w-[560px] text-[color:var(--apple-faint)]">
+              {requireTest
+                ? 'On — a saved template stays Pending until a finished file passes a live test against it. Client files are only measured by certified templates.'
+                : 'Off — a template is usable the moment you save it. Certification is optional proof: it happens automatically when a finished file passes a test.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={requireTest}
+            disabled={!canEdit || saving}
+            onClick={() => canEdit && !saving && onToggle(!requireTest)}
+            className={`flex-shrink-0 inline-flex items-center gap-2 ${!canEdit ? "cursor-default opacity-60" : ""}`}
+            data-testid="toggle-require-test"
+          >
+            <span className={`text-[12px] font-semibold ${requireTest ? "text-[color:var(--apple-ink)]" : "text-[color:var(--apple-faint)]"}`}>{requireTest ? 'On' : 'Off'}</span>
+            <span
+              className="relative inline-flex items-center rounded-full transition-colors border border-[color:var(--apple-hairline)]"
+              style={{ width: 44, height: 26, backgroundColor: requireTest ? 'var(--brand-blue)' : 'var(--apple-tile)' }}
+            >
+              <span className="absolute rounded-full bg-white transition-all" style={{ width: 20, height: 20, top: 2, left: requireTest ? 21 : 2, boxShadow: '0 1px 2px rgba(0,0,0,0.4)' }} />
+            </span>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
