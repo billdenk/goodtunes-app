@@ -954,7 +954,9 @@ export default function PressTemplateLiveTest({
     rows.push(art.gtLayerNames.length === 0
       ? { param: 'File hygiene', tone: 'pass', detail: art.wMm === null ? 'Raster image — flat pixels can’t carry template layers, so the file is clean by definition' : 'No GT template layers left inside the art file' }
       : { param: 'File hygiene', tone: 'fail', detail: `Template layers still present in the art file: ${art.gtLayerNames.join(', ')} — delete them before handoff` });
-    rows.push({ param: 'Safety', tone: 'na', detail: 'Visual — toggle the Safety overlays and look' });
+    // No "Safety — Not measured" filler row (gogoods, Aug 16 2026): safety is
+    // a human eyeball check, and it lives in the overlay toggles below — the
+    // checklist holds only what the system actually measures.
     // Ink + PPI — measured live by the server scanner (gogoods, Aug 15 2026).
     // Rasters (JPEG/PNG) get measured too since Aug 16: pixel dims + PPI tag
     // + color space against the slot's artboard.
