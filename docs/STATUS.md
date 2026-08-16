@@ -1,6 +1,6 @@
 # GoodTunes — Living Status
 
-Last updated: 2026-08-15
+Last updated: 2026-08-16
 
 This file is the current-state summary for the design studio. It is kept
 current, not appended to: stale lines are overwritten when things change.
@@ -92,6 +92,9 @@ current, not appended to: stale lines are overwritten when things change.
 - Early-access 404 fix on prepping albums.
 
 - Playground handoff doc for the Project/Structure flows: `docs/playground-flows.md` (2026-08-10). Names the seven flows (Project flow first — Artist > New Project > Formats > Variants; Evergreen second, needed this week for Raynes), lists what's already built for Playground to pull from vs. greenfield, and voids the 08-09 brief's design advice — the existing apple-canon light + dark variants are the only design authority. Reaches GitHub via the normal mirror sync on the next merge.
+
+### Awaiting design (briefs sent to Ruby)
+- **Art Blocks builder** (Bill, 2026-08-16): brief published at `handoff/art-blocks/README.md`. Artist-facing drag-and-drop art upload surface inside the album Physical → Art tab — one drop zone per component (jacket front/back/spine, center labels A+B, inner sleeve, gatefold spread, etc.), instant pass/warn/fail checks (format, dimensions, PPI, CMYK vs RGB), bleed/trim preview toggle with guide overlays, and a "Looks good" confirm that hands art to the press template stitching pipeline. Spec tables, check semantics, 9 per-block states, and a block-map companion table are all in the brief. Build task follows once mocks land.
 
 ### In progress
 - (none right now)

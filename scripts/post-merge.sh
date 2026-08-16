@@ -17,6 +17,53 @@ set -e
 # explicit admin approval. Dev DB drift is fixed manually with additive SQL.
 npm install
 
+# ── Full-run fingerprint skip (merge-bounce fix, Aug 2026) ─────────────────
+# The migration suite below is ~240 idempotent psql round-trips against BOTH
+# DBs. Every section is a no-op once applied, but the connection overhead
+# alone ran ~2+ minutes per merge and repeatedly pushed post-merge past the
+# platform timeout, silently bouncing task merges back to "Ready for review".
+#
+# Fix: after a FULL successful run, we stamp `pm_fullrun_<sha16-of-this-file>`
+# into one_shot_markers on each DB. On later merges, if this file is byte-
+# identical AND both DBs carry the stamp, we skip the entire migration suite
+# and only run npm install + the GitHub mirror sync. Any edit to this script
+# (i.e. any new migration section) changes the fingerprint, forcing exactly
+# one full pass, which then re-stamps.
+#
+# Escape hatch: FORCE_FULL_POST_MERGE=1 forces a full pass without editing the
+# script (needed only for the rare deferred backfill that intentionally left
+# its own marker unset to re-check for data on a later merge).
+PM_FP=$(sha256sum "${BASH_SOURCE[0]}" | cut -c1-16)
+pm_fp_stamped() {
+  local url="$1"
+  [ -n "$url" ] || return 1
+  [ "$(psql "$url" -tAc "SELECT 1 FROM one_shot_markers WHERE name = 'pm_fullrun_${PM_FP}'" 2>/dev/null)" = "1" ]
+}
+pm_stamp_fp() {
+  local label="$1" url="$2"
+  [ -n "$url" ] || return 0
+  if psql "$url" -v ON_ERROR_STOP=1 >/dev/null 2>&1 <<SQL
+CREATE TABLE IF NOT EXISTS one_shot_markers (name text PRIMARY KEY, created_at timestamptz DEFAULT now());
+DELETE FROM one_shot_markers WHERE name LIKE 'pm_fullrun_%' AND name <> 'pm_fullrun_${PM_FP}';
+INSERT INTO one_shot_markers (name) VALUES ('pm_fullrun_${PM_FP}') ON CONFLICT (name) DO NOTHING;
+SQL
+  then
+    echo "post-merge: full-run fingerprint pm_fullrun_${PM_FP} stamped on $label"
+  else
+    echo "post-merge: WARNING — could not stamp full-run fingerprint on $label (next merge does a full pass)"
+  fi
+}
+PM_SKIP=0
+if [ "${FORCE_FULL_POST_MERGE:-0}" != "1" ] \
+   && pm_fp_stamped "${DATABASE_URL:-}" \
+   && pm_fp_stamped "${PROD_DATABASE_URL:-}"; then
+  PM_SKIP=1
+  echo "post-merge: script unchanged since last full run on BOTH DBs (pm_fullrun_${PM_FP}) — skipping migration suite (set FORCE_FULL_POST_MERGE=1 to override)"
+fi
+
+if [ "$PM_SKIP" != "1" ]; then
+# ── migration suite part 1 (skipped when fingerprint matches) ──────────────
+
 # Task #265 — Migrate auth_tokens to per-side id columns and move the
 # signup-verify ticket out of auth_tokens entirely. This supersedes the
 # Task #264 FK-sweep: with the old `user_id` column gone, the leftover
@@ -7453,6 +7500,8 @@ backfill_task_2057_restrip_apple_bio prod "${PROD_DATABASE_URL:-}"
 # fails the merge. STEP 1 fetches the remote tip first so a diverged history
 # can't balloon the push into a multi-GB pack that GitHub 500s on; steady-state
 # pushes are then a handful of commits that finish in seconds.
+fi # ── end migration suite part 1 (mirror-sync helpers below stay global) ──
+
 GITHUB_MIRROR_URL="git@github.com:billdenk/goodtunes-app.git"
 
 # GitHub's published SSH host public keys (source: https://api.github.com/meta
@@ -7580,7 +7629,10 @@ sync_github_build_mirror() {
   # Clamp the deadline to PLATFORM_TIMEOUT minus a safety margin so the mirror
   # ALWAYS self-skips (WARN + return 0) before the kill, degrading to "Codemagic
   # catches up next merge" instead of failing the merge.
-  local PLATFORM_TIMEOUT=300 MIRROR_SAFETY_MARGIN=25
+  # PLATFORM_TIMEOUT must track the configured post-merge timeout in .replit
+  # (raised 300 -> 900s, Aug 2026; the fingerprint skip at the top of this
+  # script now makes typical merges take seconds, so 900s is pure headroom).
+  local PLATFORM_TIMEOUT=900 MIRROR_SAFETY_MARGIN=25
   local mirror_hard_cap=$((PLATFORM_TIMEOUT - MIRROR_SAFETY_MARGIN))
   if [ "$mirror_deadline" -gt "$mirror_hard_cap" ]; then
     mirror_deadline=$mirror_hard_cap
@@ -7662,6 +7714,9 @@ sync_github_build_mirror() {
     printf '%s\n' "$out" | tail -8 | sed 's/^/post-merge:   mirror> /'
   fi
 }
+
+if [ "$PM_SKIP" != "1" ]; then
+# ── migration suite part 2 (skipped when fingerprint matches) ──────────────
 
 # Task #1873 — ensure Nightbirde's manager_id link is set on every DB clone
 # (prod already carried this link; dev clones may not).  Idempotent +
@@ -8683,7 +8738,8 @@ SQL
 migrate_manufacturers_nav_logo_url dev  "${DATABASE_URL:-}"
 migrate_manufacturers_nav_logo_url prod "${PROD_DATABASE_URL:-}"
 
-sync_github_build_mirror
+# (GitHub mirror sync moved to the very end of the script — its own time-budget
+# comments record a mid-script overrun once dropping every migration below it.)
 
 # Task #2194 — per-press GoodDeed printing price ladder column.
 # manufacturers gains gooddeed_printing_json (jsonb, nullable) so a press
@@ -12226,3 +12282,15 @@ SQL
 }
 add_templates_archive_cols dev  "${DATABASE_URL:-}"
 add_templates_archive_cols prod "${PROD_DATABASE_URL:-}"
+
+# ── Stamp the full-run fingerprint (see the skip block at the top) ─────────
+# Reached only on a full pass that survived to here; from now on, merges that
+# don't touch this script skip straight to the mirror sync below.
+pm_stamp_fp dev  "${DATABASE_URL:-}"
+pm_stamp_fp prod "${PROD_DATABASE_URL:-}"
+
+fi # ── end migration suite part 2 ──
+
+# Mirror sync ALWAYS runs (Ruby's handoff surface + Codemagic build source),
+# and runs LAST so an over-budget sync can never drop migrations.
+sync_github_build_mirror
