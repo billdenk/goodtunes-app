@@ -1436,7 +1436,15 @@ export function registerPressTemplateFlowRoutes(
                   : { param: "Bleed", tone: "fail", detail: `Frame doesn't cover the artboard, so the ${r3(bleedLine)}" bleed can't be present. Re-export at the full artboard size with art to the edges.` });
               }
             } else {
-              rows.push({ param: "Artboard size", tone: "na", detail: `No PPI tag in the file — ${wPx} × ${hPx} px is ≈${effPpi} PPI if exported at the ${r3(aw)}" × ${r3(ah)}" artboard.` });
+              // No PPI tag — physical size is unknowable, but the frame's
+              // PROPORTIONS are still a real measurement against the artboard
+              // (gogoods, Aug 16 2026: "artboard size wasn't measured").
+              // Orientation-best, 1% ratio tolerance.
+              const ratioOk = (a: number, b: number) => Math.abs(a / b - aw! / ah!) / (aw! / ah!) <= 0.01;
+              const propOk = ratioOk(wPx, hPx) || ratioOk(hPx, wPx);
+              rows.push(propOk
+                ? { param: "Artboard size", tone: "pass", detail: `${wPx} × ${hPx} px matches the slot's ${r3(aw)}" × ${r3(ah)}" artboard proportions — that's the full artboard at ≈${effPpi} PPI. (No PPI tag in the file to confirm the export scale.)` }
+                : { param: "Artboard size", tone: "fail", detail: `${wPx} × ${hPx} px doesn't match the slot's ${r3(aw)}" × ${r3(ah)}" artboard proportions. Re-export at the full artboard size (finished + bleed).` });
               rows.push(effPpi >= ppiFloor
                 ? { param: `Image resolution (min ${ppiFloor} PPI)`, tone: "pass", detail: `${wPx} × ${hPx} px ≈ ${effPpi} PPI at the artboard size — meets the ${ppiFloor} PPI minimum.` }
                 : { param: `Image resolution (min ${ppiFloor} PPI)`, tone: "fail", detail: `${wPx} × ${hPx} px ≈ ${effPpi} PPI at the artboard size — below the ${ppiFloor} PPI minimum.` });
@@ -1468,7 +1476,9 @@ export function registerPressTemplateFlowRoutes(
           } catch (e: any) {
             console.warn("[art-inspect] preview render failed:", e?.message ?? e);
           }
-          return res.json({ checks: rows, previewDataUrl });
+          // Pixel dims ride along so the client can keep the raster's own
+          // aspect ratio in the overlay (it was stretch-filling the anchor).
+          return res.json({ checks: rows, previewDataUrl, pxW: wPx, pxH: hPx });
         } catch (e: any) {
           console.error("[art-inspect] raster failed:", e?.message ?? e);
           return res.status(422).json({ message: "Couldn't inspect that image — ink + PPI will be verified at prepress." });

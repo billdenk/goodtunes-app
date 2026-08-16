@@ -379,6 +379,7 @@ type ArtState = {
   wMm: number | null; hMm: number | null; // null = raster image, no physical size
   pageCount: number | null;
   gtLayerNames: string[]; // GT layers left inside the art file (hygiene)
+  pxAspect?: number; // raster only — pixel w/h from the server scan, keeps the overlay unsquished
 };
 
 export default function PressTemplateLiveTest({
@@ -844,7 +845,7 @@ export default function PressTemplateLiveTest({
         }
         // XHR instead of fetch: fetch can't report UPLOAD progress, and
         // watching the measurement happen live is the point (gogoods).
-        const d = await new Promise<{ checks: CheckRow[]; previewDataUrl?: string }>((resolve, reject) => {
+        const d = await new Promise<{ checks: CheckRow[]; previewDataUrl?: string; pxW?: number; pxH?: number }>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           myXhr = xhr;
           inkXhr.current = xhr;
@@ -861,7 +862,7 @@ export default function PressTemplateLiveTest({
           xhr.upload.onload = () => { if (artFile.current === f) setInkProgress(1); };
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
-              try { resolve(JSON.parse(xhr.responseText) as { checks: CheckRow[]; previewDataUrl?: string }); }
+              try { resolve(JSON.parse(xhr.responseText) as { checks: CheckRow[]; previewDataUrl?: string; pxW?: number; pxH?: number }); }
               catch { reject(new Error('bad response')); }
             } else reject(new Error(String(xhr.status)));
           };
@@ -877,7 +878,9 @@ export default function PressTemplateLiveTest({
         // a resized sRGB preview; swap it in for raster art (gogoods, Aug 16
         // 2026). PDFs keep their pdfjs render.
         if (d.previewDataUrl && artFile.current === f) {
-          setArt((prev) => (prev && prev.wMm == null ? { ...prev, img: d.previewDataUrl! } : prev));
+          setArt((prev) => (prev && prev.wMm == null
+            ? { ...prev, img: d.previewDataUrl!, pxAspect: d.pxW && d.pxH ? d.pxW / d.pxH : undefined }
+            : prev));
         }
       } catch {
         setInkChecks((prev) => (artFile.current === f ? 'error' : prev));
@@ -913,7 +916,7 @@ export default function PressTemplateLiveTest({
     if (!template || !art) return [];
     const rows: CheckRow[] = [];
     if (art.wMm === null || art.hMm === null) {
-      rows.push({ param: 'Physical size', tone: 'na', detail: 'Raster image — the overlay below is visual only. Size, ink and resolution are measured by the server check (see Color & resolution rows).' });
+      rows.push({ param: 'Physical size', tone: 'na', detail: 'Raster image — a JPG/PNG carries pixels, not physical mm; the Artboard size and Image resolution rows below measure it against the slot instead.' });
     } else {
       const near = (a: number, b: number, tol = 1) => Math.abs(a - b) <= tol;
       const dims = `${art.wMm.toFixed(1)} × ${art.hMm.toFixed(1)} mm`;
@@ -1132,7 +1135,16 @@ export default function PressTemplateLiveTest({
     // No GT Bleed/Cut box in the template (layerless PDF): never go blank —
     // anchor to the full page instead so you can still look (Bill, Aug 16 2026).
     const anchor2 = anchor ?? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm };
-    if (art.wMm === null || art.hMm === null) return anchor2; // raster: fit to anchor
+    if (art.wMm === null || art.hMm === null) {
+      // Raster: contain-fit inside the anchor at the image's own aspect —
+      // stretch-filling squished the JPG (gogoods, Aug 16 2026). Before the
+      // server scan reports pixel dims, fill the anchor as before.
+      if (!art.pxAspect) return anchor2;
+      const anchorAspect = anchor2.wMm / anchor2.hMm;
+      let w = anchor2.wMm, h = anchor2.hMm;
+      if (art.pxAspect > anchorAspect) h = w / art.pxAspect; else w = h * art.pxAspect;
+      return { xMm: anchor2.xMm + (anchor2.wMm - w) / 2, yMm: anchor2.yMm + (anchor2.hMm - h) / 2, wMm: w, hMm: h };
+    }
     // Orientation-aware: if rotated match, still center on anchor with real dims.
     const cx = anchor2.xMm + anchor2.wMm / 2;
     const cy = anchor2.yMm + anchor2.hMm / 2;
