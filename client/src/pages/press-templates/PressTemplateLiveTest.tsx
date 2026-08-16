@@ -415,6 +415,11 @@ export default function PressTemplateLiveTest({
   // progress bar in the verdict banner (gogoods, Aug 16 2026: "we could all
   // wait for it to process and see it happen").
   const [inkProgress, setInkProgress] = useState<number | null>(null);
+  // The in-flight inspect request — aborted the moment a new art file is
+  // picked (or the page unmounts) so a superseded scan can never write
+  // progress or results over the new selection (review, Aug 16 2026).
+  const inkXhr = useRef<XMLHttpRequest | null>(null);
+  useEffect(() => () => { inkXhr.current?.abort(); }, []);
   const [busy, setBusy] = useState<'template' | 'art' | 'save' | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Arrived from the Templates page with a file already in hand — nothing is
@@ -709,6 +714,14 @@ export default function PressTemplateLiveTest({
     e.target.value = '';
     if (!f) return;
     setBusy('art'); setError(null);
+    // Supersede any in-flight ink scan IMMEDIATELY — before the new file even
+    // parses — so the old request can't keep painting progress/results while
+    // the new one loads (and the raster/parse-failure paths start clean too).
+    inkXhr.current?.abort();
+    inkXhr.current = null;
+    artFile.current = null;
+    setInkChecks(null);
+    setInkProgress(null);
     try {
       if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
         const doc = await (await loadPdfjs()).getDocument({ data: await f.arrayBuffer() }).promise;
@@ -728,6 +741,7 @@ export default function PressTemplateLiveTest({
             // watching the measurement happen live is the point (gogoods).
             const d = await new Promise<{ checks: CheckRow[] }>((resolve, reject) => {
               const xhr = new XMLHttpRequest();
+              inkXhr.current = xhr;
               xhr.open('POST', `/api/press/${pressId}/templates/art-inspect`);
               xhr.setRequestHeader('Content-Type', 'application/pdf');
               for (const [k, v] of Object.entries(authHeaders() as Record<string, string>)) xhr.setRequestHeader(k, v);
@@ -744,13 +758,19 @@ export default function PressTemplateLiveTest({
                 } else reject(new Error(String(xhr.status)));
               };
               xhr.onerror = () => reject(new Error('network'));
+              xhr.onabort = () => reject(new Error('superseded'));
+              xhr.timeout = 6 * 60_000; // hair past the server's 5-minute cap
+              xhr.ontimeout = () => reject(new Error('timeout'));
               xhr.send(f);
             });
             setInkChecks((prev) => (artFile.current === f ? d.checks : prev));
           } catch {
             setInkChecks((prev) => (artFile.current === f ? 'error' : prev));
           } finally {
-            if (artFile.current === f) setInkProgress(null);
+            if (artFile.current === f) {
+              setInkProgress(null);
+              inkXhr.current = null;
+            }
           }
         })();
       } else {
@@ -926,9 +946,16 @@ export default function PressTemplateLiveTest({
         // with (saved display name, else the file's own name).
         const nameBaseline = initialName.current ?? originalName ?? currentFile.current.name;
         if (template.name && template.name !== nameBaseline) {
-          await apiRequest('PATCH', `/api/press/${pressId}/templates/${data.spec.id}/display-name`, {
-            displayName: template.name,
-          });
+          // Best-effort: the PDF is already attached above — a failed rename
+          // must not fail the whole Save (a retry would re-PUT and mint a
+          // duplicate revision). The operator can redo the rename any time.
+          try {
+            await apiRequest('PATCH', `/api/press/${pressId}/templates/${data.spec.id}/display-name`, {
+              displayName: template.name,
+            });
+          } catch (e) {
+            console.warn('[live-test] rename did not persist:', e);
+          }
         }
         // One file covering several options (e.g. both center-hole sizes):
         // stamp the note only with the operator's OK (Task #3065 consent kept)
