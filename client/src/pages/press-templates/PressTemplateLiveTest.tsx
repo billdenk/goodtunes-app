@@ -1149,10 +1149,18 @@ export default function PressTemplateLiveTest({
       // stretch-filling squished the JPG (gogoods, Aug 16 2026). Before the
       // server scan reports pixel dims, fill the anchor as before.
       if (!art.pxAspect) return anchor2;
-      const anchorAspect = anchor2.wMm / anchor2.hMm;
-      let w = anchor2.wMm, h = anchor2.hMm;
-      if (art.pxAspect > anchorAspect) h = w / art.pxAspect; else w = h * art.pxAspect;
-      return { xMm: anchor2.xMm + (anchor2.wMm - w) / 2, yMm: anchor2.yMm + (anchor2.hMm - h) / 2, wMm: w, hMm: h };
+      // A raster whose proportions match the FULL template sheet is a
+      // full-artboard export — place it edge-to-edge over the template, not
+      // inside the bleed box (gogoods, Aug 16 2026: the full-artboard JPG
+      // rendered shrunken inside the bleed frame).
+      const pageAspect = template.wMm / template.hMm;
+      const box = Math.abs(art.pxAspect / pageAspect - 1) <= 0.02
+        ? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm }
+        : anchor2;
+      const boxAspect = box.wMm / box.hMm;
+      let w = box.wMm, h = box.hMm;
+      if (art.pxAspect > boxAspect) h = w / art.pxAspect; else w = h * art.pxAspect;
+      return { xMm: box.xMm + (box.wMm - w) / 2, yMm: box.yMm + (box.hMm - h) / 2, wMm: w, hMm: h };
     }
     // Orientation-aware: if rotated match, still center on anchor with real dims.
     const cx = anchor2.xMm + anchor2.wMm / 2;
