@@ -771,7 +771,9 @@ export default function PressTemplateLiveTest({
             const d = await new Promise<{ checks: CheckRow[] }>((resolve, reject) => {
               const xhr = new XMLHttpRequest();
               inkXhr.current = xhr;
-              xhr.open('POST', `/api/press/${pressId}/templates/art-inspect`);
+              // specId (when this session is on a known slot) lets the server
+              // check bleed against the slot's certified template line too.
+              xhr.open('POST', `/api/press/${pressId}/templates/art-inspect${specRef.current ? `?specId=${encodeURIComponent(specRef.current)}` : ''}`);
               xhr.setRequestHeader('Content-Type', 'application/pdf');
               for (const [k, v] of Object.entries(authHeaders() as Record<string, string>)) xhr.setRequestHeader(k, v);
               xhr.withCredentials = true;

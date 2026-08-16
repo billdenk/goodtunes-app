@@ -23,7 +23,7 @@ import {
   type JacketKind,
 } from "@shared/vendorSpecs";
 import { rollupStatus, type CheckResult } from "@shared/uploadValidation";
-import { validateCompletedComponent, logSpotUsageFallback } from "./validators/completedTemplate";
+import { validateCompletedComponent, logSpotUsageFallback, measuredBleedInches, hasTrustworthyBleedBoxes } from "./validators/completedTemplate";
 import {
   measureTemplateSpecRow,
   clearTemplateSpecMeasurements,
@@ -1338,6 +1338,36 @@ export function registerPressTemplateFlowRoutes(
               ? { param: "1-bit image resolution (min 800 PPI)", tone: "pass", detail: `Largest 1-bit image ≈${best} PPI at full-artboard placement — meets the 800 PPI minimum` }
               : { param: "1-bit image resolution (min 800 PPI)", tone: "fail", detail: `Largest 1-bit image ≈${best} PPI at full-artboard placement — below the 800 PPI minimum for line art.` },
           );
+        }
+        // Bleed — live, same canon as the full test (gogoods, Aug 16 2026:
+        // the banner said "3 of 3 passed" while the server test failed on
+        // bleed — the live check must measure it too so they can't diverge).
+        // Reference line = the slot's certified/measured template bleed line,
+        // threaded via ?specId= when the client knows its slot. Check gated
+        // on a reference being present (press-print-rules canon: no rule, no
+        // verdict); the file's own boxes alone report informationally.
+        {
+          const specIdQ = typeof req.query.specId === "string" ? req.query.specId : null;
+          let bleedLine: number | null = null;
+          if (specIdQ) {
+            const specRow = await storage.getPressTemplateSpecById(String(req.params.id), specIdQ);
+            const line = specRow?.bleedLineInches ?? specRow?.measuredBleedLineInches ?? null;
+            if (line != null && line > 0) bleedLine = line;
+          }
+          const measured = hasTrustworthyBleedBoxes(scan) ? measuredBleedInches(scan) : null;
+          const r3 = (v: number) => Math.round(v * 1000) / 1000;
+          const BLEED_TOL = 0.005;
+          if (bleedLine != null) {
+            if (measured == null) {
+              rows.push({ param: "Bleed", tone: "na", detail: `This file carries no usable trim/bleed boxes — bleed is checked against the template's ${r3(bleedLine)}" line at prepress.` });
+            } else if (measured + BLEED_TOL >= bleedLine) {
+              rows.push({ param: "Bleed", tone: "pass", detail: `Measured ≈${r3(measured)}" bleed — meets the template's ${r3(bleedLine)}" bleed line.` });
+            } else {
+              rows.push({ param: "Bleed", tone: "fail", detail: `Measured ≈${r3(measured)}" bleed — below the template's ${r3(bleedLine)}" bleed line. Re-export with bleed included.` });
+            }
+          } else if (measured != null) {
+            rows.push({ param: "Bleed", tone: "na", detail: `Measured ≈${r3(measured)}" bleed from the file's own boxes — no certified template bleed line on this slot to compare against.` });
+          }
         }
         res.json({ checks: rows });
       } catch (e: any) {
