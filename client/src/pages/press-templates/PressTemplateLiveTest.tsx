@@ -410,6 +410,11 @@ export default function PressTemplateLiveTest({
   // 'checking' while the scan streams; rows replace the Color & resolution
   // line; 'error' degrades to the old prepress note.
   const [inkChecks, setInkChecks] = useState<'checking' | 'error' | CheckRow[] | null>(null);
+  // Upload progress for the server ink/PPI scan (0..1 while the file streams
+  // up, 1 = uploaded & server measuring, null = idle). Drives the thin
+  // progress bar in the verdict banner (gogoods, Aug 16 2026: "we could all
+  // wait for it to process and see it happen").
+  const [inkProgress, setInkProgress] = useState<number | null>(null);
   const [busy, setBusy] = useState<'template' | 'art' | 'save' | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Arrived from the Templates page with a file already in hand — nothing is
@@ -716,19 +721,36 @@ export default function PressTemplateLiveTest({
         // Ink + PPI live on the server scanner — stream the file up in the
         // background; the row shows "Measuring…" until it lands.
         setInkChecks('checking');
+        setInkProgress(0);
         void (async () => {
           try {
-            const r = await fetch(`/api/press/${pressId}/templates/art-inspect`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/pdf', ...authHeaders() },
-              credentials: 'include',
-              body: f,
+            // XHR instead of fetch: fetch can't report UPLOAD progress, and
+            // watching the measurement happen live is the point (gogoods).
+            const d = await new Promise<{ checks: CheckRow[] }>((resolve, reject) => {
+              const xhr = new XMLHttpRequest();
+              xhr.open('POST', `/api/press/${pressId}/templates/art-inspect`);
+              xhr.setRequestHeader('Content-Type', 'application/pdf');
+              for (const [k, v] of Object.entries(authHeaders() as Record<string, string>)) xhr.setRequestHeader(k, v);
+              xhr.withCredentials = true;
+              xhr.upload.onprogress = (ev) => {
+                if (ev.lengthComputable && artFile.current === f) setInkProgress(Math.min(ev.loaded / ev.total, 1));
+              };
+              // Upload done — the server is now measuring; the bar goes indeterminate.
+              xhr.upload.onload = () => { if (artFile.current === f) setInkProgress(1); };
+              xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                  try { resolve(JSON.parse(xhr.responseText) as { checks: CheckRow[] }); }
+                  catch { reject(new Error('bad response')); }
+                } else reject(new Error(String(xhr.status)));
+              };
+              xhr.onerror = () => reject(new Error('network'));
+              xhr.send(f);
             });
-            if (!r.ok) throw new Error(String(r.status));
-            const d = (await r.json()) as { checks: CheckRow[] };
             setInkChecks((prev) => (artFile.current === f ? d.checks : prev));
           } catch {
             setInkChecks((prev) => (artFile.current === f ? 'error' : prev));
+          } finally {
+            if (artFile.current === f) setInkProgress(null);
           }
         })();
       } else {
@@ -895,6 +917,19 @@ export default function PressTemplateLiveTest({
           fileName: originalName ?? currentFile.current.name,
         });
         const data = (await r.json()) as { spec: { id: string }; detectedOptions?: Array<{ key: string; label: string }> };
+        // A rename made in this session rides along — for FIRST attaches too,
+        // not just Replace (gogoods bug, Aug 16 2026: renaming during the
+        // initial slot attach was silently dropped because the PATCH was
+        // gated on the pre-existing spec ref, which is null on first attach).
+        // Runs BEFORE the detected-options early return so that path keeps
+        // the rename as well. Baseline = whatever name the session started
+        // with (saved display name, else the file's own name).
+        const nameBaseline = initialName.current ?? originalName ?? currentFile.current.name;
+        if (template.name && template.name !== nameBaseline) {
+          await apiRequest('PATCH', `/api/press/${pressId}/templates/${data.spec.id}/display-name`, {
+            displayName: template.name,
+          });
+        }
         // One file covering several options (e.g. both center-hole sizes):
         // stamp the note only with the operator's OK (Task #3065 consent kept)
         // — swap the confirm sheet to the options question and stop here.
@@ -902,12 +937,6 @@ export default function PressTemplateLiveTest({
           setDetected({ specId: data.spec.id, options: data.detectedOptions });
           setBusy(null);
           return;
-        }
-        // Spec-mode Replace: a rename made in the same session rides along.
-        if (specRef.current && template.name !== (initialName.current ?? '')) {
-          await apiRequest('PATCH', `/api/press/${pressId}/templates/${specRef.current}/display-name`, {
-            displayName: template.name,
-          });
         }
         await submitServerTest(data.spec.id);
       } else if (liveId.current) {
@@ -1069,7 +1098,8 @@ export default function PressTemplateLiveTest({
 @keyframes gt-verdict-arrive { 0% { opacity: 0; transform: translateY(-6px); } 100% { opacity: 1; transform: translateY(0); } }
 @keyframes gt-verdict-ring { 0% { box-shadow: 0 0 0 0 var(--gt-verdict-glow); } 45% { box-shadow: 0 0 0 6px var(--gt-verdict-glow); } 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
 @keyframes gt-orbit-spin { from { transform: translate(-50%,-50%) rotate(0deg); } to { transform: translate(-50%,-50%) rotate(360deg); } }
-@keyframes gt-pending-fill { 0%, 100% { background-color: rgba(245,158,11,0); box-shadow: 0 0 0 0 rgba(245,158,11,0); } 50% { background-color: rgba(245,158,11,0.16); box-shadow: 0 0 0 3px rgba(245,158,11,0.16); } }`}</style>
+@keyframes gt-pending-fill { 0%, 100% { background-color: rgba(245,158,11,0); box-shadow: 0 0 0 0 rgba(245,158,11,0); } 50% { background-color: rgba(245,158,11,0.16); box-shadow: 0 0 0 3px rgba(245,158,11,0.16); } }
+@keyframes gt-ink-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }`}</style>
         <nav aria-label="breadcrumb" data-testid="breadcrumb-livetest">
           <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
             <li className="inline-flex items-center"><button type="button" onClick={onExit} className={cn('transition-colors', t.hoverInk)}>Templates</button></li>
@@ -1331,12 +1361,32 @@ export default function PressTemplateLiveTest({
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="text-[13.5px] font-semibold" style={{ color: t.ink }} data-testid="text-verdict">
-                        {inkPending ? 'Measuring ink & resolution…' : allPass ? 'Pass! All measured checks passed' : measured.some((c) => c.tone === 'fail') ? 'Fail! Measured checks flag issues' : 'Visual only — nothing to measure'}
+                        {inkPending
+                          ? (inkProgress !== null && inkProgress < 1
+                              ? `Uploading art for ink & resolution check… ${Math.round(inkProgress * 100)}%`
+                              : 'Measuring ink & resolution…')
+                          : allPass ? 'Pass! All measured checks passed' : measured.some((c) => c.tone === 'fail') ? 'Fail! Measured checks flag issues' : 'Visual only — nothing to measure'}
                         <span className="ml-2 font-normal" style={{ color: t.subink }}>
                           {!inkPending && measured.length > 0 ? `${measured.filter((c) => c.tone === 'pass').length} of ${measured.length} passed` : ''}
                         </span>
                       </div>
                       <div className="text-[12px] mt-0.5 truncate" style={{ color: t.subink }}>{art.name}</div>
+                      {/* Thin live progress: definite width while the art file
+                          streams up, gentle pulse once the server is measuring
+                          (gogoods, Aug 16 2026 — the room waits and watches). */}
+                      {inkPending && (
+                        <div className="mt-2 h-[3px] w-full max-w-[420px] rounded-full overflow-hidden" style={{ backgroundColor: t.neutralWash }} data-testid="bar-ink-progress">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.round((inkProgress ?? 1) * 100)}%`,
+                              backgroundColor: t.blue,
+                              transition: 'width 0.3s ease',
+                              ...(inkProgress === null || inkProgress >= 1 ? { animation: 'gt-ink-pulse 1.2s ease-in-out infinite' } : {}),
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                     <ChevronDown
                       className="w-4 h-4 flex-shrink-0 transition-transform"
