@@ -621,11 +621,11 @@ export default function PressTemplateLiveTest({
           initialName.current = spec.displayName ?? spec.templateFileName ?? null;
           // Status carries over from the tile (Bill, Aug 15 2026): only a
           // certified revision brings the badge; pending arrives "Not tested".
+          const fmt = (d: string) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+          const verdictWordFor = (v: string) => (v === 'pass' ? 'Pass' : v === 'unverified' ? 'Visual only' : 'Flagged');
           const certRev = spec.revisions.find((rv) => rv.status === 'certified' && rv.certifiedAt);
           if (certRev?.certifiedAt) {
-            const fmt = (d: string) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
             const lastRun = spec.runs[0]; // newest-first from the server
-            const verdictWordFor = (v: string) => (v === 'pass' ? 'Pass' : v === 'unverified' ? 'Visual only' : 'Flagged');
             setSavedMeta({
               certified: fmt(certRev.certifiedAt),
               lastTest: lastRun ? `${lastRun.fileName ?? 'Art file'} — ${verdictWordFor(lastRun.verdict)} · ${fmt(lastRun.createdAt)}` : '',
@@ -633,6 +633,35 @@ export default function PressTemplateLiveTest({
           } else {
             setSavedMeta(null);
           }
+          // History & tests must show the SERVER-logged runs too (gogoods
+          // bug, Aug 16 2026: real recorded tests showed as "No art files
+          // tested" because the sheet only listed this session's local log).
+          const runToTest = (run: (typeof spec.runs)[number]) => ({
+            art: run.fileName ?? 'Art file',
+            at: fmt(run.createdAt),
+            verdict: verdictWordFor(run.verdict),
+          });
+          const currentRevIds = new Set(
+            spec.revisions.filter((rv) => rv.status !== 'superseded' && rv.status !== 'archived').map((rv) => rv.id),
+          );
+          setPriorTests(
+            spec.runs
+              .filter((run) => run.revisionId === null || currentRevIds.has(run.revisionId))
+              .slice()
+              .reverse() // server is newest-first; the sheet reads oldest→newest
+              .map(runToTest),
+          );
+          setRevisions(
+            spec.revisions
+              .filter((rv) => rv.status === 'superseded' || rv.status === 'archived')
+              .map((rv) => ({
+                name: rv.fileName ?? rv.revLabel,
+                wMm: 0, // unknown for stored revisions — the sheet hides 0-size
+                hMm: 0,
+                at: fmt(rv.createdAt),
+                tests: spec.runs.filter((run) => run.revisionId === rv.id).slice().reverse().map(runToTest),
+              })),
+          );
           slotTarget.current = {
             format: spec.format,
             componentKey: spec.componentKey,
@@ -1774,7 +1803,7 @@ export default function PressTemplateLiveTest({
                                       </span>
                                     </div>
                                     <div className="text-[11.5px] mt-0.5 tabular-nums" style={{ color: t.subink }}>
-                                      {rev.wMm.toFixed(1)} × {rev.hMm.toFixed(1)} mm{rev.at ? ` · uploaded ${rev.at}` : ''}
+                                      {rev.wMm > 0 ? `${rev.wMm.toFixed(1)} × ${rev.hMm.toFixed(1)} mm` : ''}{rev.at ? `${rev.wMm > 0 ? ' · ' : ''}uploaded ${rev.at}` : ''}
                                     </div>
                                     {rev.tests.length === 0 ? (
                                       <div className="text-[11.5px] mt-1.5" style={{ color: t.faint }}>No art files tested</div>
