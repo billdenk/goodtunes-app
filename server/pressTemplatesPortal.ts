@@ -1561,16 +1561,21 @@ export function registerPressTemplateFlowRoutes(
           const best = Math.round(bestPpi(scan.imageDimsPx));
           rows.push(
             best >= 300
-              ? { param: "Image resolution (min 300 PPI)", tone: "pass", detail: `Largest embedded image ≈${best} PPI at full-artboard placement — meets the 300 PPI minimum (estimate; placement not measured)` }
-              : { param: "Image resolution (min 300 PPI)", tone: "fail", detail: `Largest embedded image ≈${best} PPI at full-artboard placement — below the 300 PPI minimum. Re-export with higher-resolution images.` },
+              ? { param: "Image resolution (min 300 PPI)", tone: "pass", detail: `Largest embedded image ≈${best} PPI even if it spans the full artboard (worst case) — meets the 300 PPI minimum.` }
+              // Worst-case estimate only — placement isn't measured, and an
+              // image covering just the bleed area has proportionally higher
+              // true PPI (gogoods' jacket PDF read ≈282 worst-case but ≈345
+              // at its actual bleed-size placement, Aug 16 2026). A sub-300
+              // estimate is "can't confirm", not a fail.
+              : { param: "Image resolution (min 300 PPI)", tone: "na", detail: `Largest embedded image ≈${best} PPI if it spans the full artboard — placement isn't measured, so an image covering just the bleed area is proportionally higher. Confirmed exactly at prepress.` },
           );
         }
         if (scan.bitmapImageDimsPx.length > 0 && page) {
           const best = Math.round(bestPpi(scan.bitmapImageDimsPx));
           rows.push(
             best >= 800
-              ? { param: "1-bit image resolution (min 800 PPI)", tone: "pass", detail: `Largest 1-bit image ≈${best} PPI at full-artboard placement — meets the 800 PPI minimum` }
-              : { param: "1-bit image resolution (min 800 PPI)", tone: "fail", detail: `Largest 1-bit image ≈${best} PPI at full-artboard placement — below the 800 PPI minimum for line art.` },
+              ? { param: "1-bit image resolution (min 800 PPI)", tone: "pass", detail: `Largest 1-bit image ≈${best} PPI even if it spans the full artboard (worst case) — meets the 800 PPI minimum.` }
+              : { param: "1-bit image resolution (min 800 PPI)", tone: "na", detail: `Largest 1-bit image ≈${best} PPI if it spans the full artboard — placement isn't measured, so a smaller placement is proportionally higher. Confirmed exactly at prepress.` },
           );
         }
         // Bleed — live, same canon as the full test (gogoods, Aug 16 2026:
