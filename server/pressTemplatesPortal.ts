@@ -1253,6 +1253,112 @@ export function registerPressTemplateFlowRoutes(
       if (declared > ART_INSPECT_MAX_BYTES) {
         return res.status(413).json({ message: "That file is too large to inspect (300 MB max)." });
       }
+      // Raster art (JPEG/PNG) — measurable too (gogoods, Aug 16 2026: MRP
+      // wants art-only files at the proper artboard size, no template — so a
+      // correct JPG is a legitimate final; "Visual only" was wrong for it).
+      // What a raster carries: pixel dims + a density (PPI) tag + its color
+      // space. What it can't carry: trim/bleed boxes — so bleed is judged by
+      // the frame covering the slot's full artboard (finished + bleed).
+      const ctype = String(req.headers["content-type"] ?? "").toLowerCase();
+      const rasterKind = ctype.startsWith("image/jpeg") ? "jpeg" : ctype.startsWith("image/png") ? "png" : null;
+      if (rasterKind) {
+        try {
+          const buf = await new Promise<Buffer | null>((resolve) => {
+            const chunks: Buffer[] = [];
+            let n = 0;
+            let done = false;
+            const finish = (v: Buffer | null) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
+            const timer = setTimeout(() => { finish(null); req.destroy(); }, 300_000);
+            req.on("data", (c: Buffer) => {
+              n += c.length;
+              if (n > ART_INSPECT_MAX_BYTES) { finish(null); req.destroy(); return; }
+              chunks.push(c);
+            });
+            req.on("end", () => finish(Buffer.concat(chunks)));
+            req.on("error", () => finish(null));
+          });
+          if (!buf || buf.length === 0) {
+            return res.status(422).json({ message: "Couldn't read that image — ink + PPI will be verified at prepress." });
+          }
+          const sharp = (await import("sharp")).default;
+          const meta = await sharp(buf, { limitInputPixels: 1_000_000_000 }).metadata();
+          const wPx = meta.width ?? 0;
+          const hPx = meta.height ?? 0;
+          if (!wPx || !hPx) {
+            return res.status(422).json({ message: "Couldn't read that image — ink + PPI will be verified at prepress." });
+          }
+          // Slot geometry — the spec's artboard already includes bleed.
+          const specIdQ = typeof req.query.specId === "string" ? req.query.specId : null;
+          let aw: number | null = null, ah: number | null = null, bleedLine: number | null = null, ppiFloor = 300;
+          if (specIdQ) {
+            const specRow = await storage.getPressTemplateSpecById(String(req.params.id), specIdQ);
+            aw = specRow?.artboardWInches ?? specRow?.measuredArtboardWInches ?? null;
+            ah = specRow?.artboardHInches ?? specRow?.measuredArtboardHInches ?? null;
+            const line = specRow?.bleedLineInches ?? specRow?.measuredBleedLineInches ?? null;
+            if (line != null && line > 0) bleedLine = line;
+            if (specRow?.minPpi != null && specRow.minPpi > 0) ppiFloor = specRow.minPpi;
+          }
+          const rows: Array<{ param: string; tone: "pass" | "fail" | "na"; detail: string }> = [];
+          // Color — PNG cannot carry CMYK at all; JPEG can (Adobe CMYK JPEGs).
+          const space = String(meta.space ?? "").toLowerCase();
+          if (rasterKind === "png") {
+            rows.push({ param: "Color", tone: "fail", detail: "PNG is an RGB format — it can't carry CMYK ink. Export a CMYK JPEG or a PDF instead." });
+          } else if (space === "cmyk") {
+            rows.push({ param: "Color", tone: "pass", detail: "CMYK JPEG — ink is print-ready." });
+          } else if (space === "b-w" || space === "grey" || space === "gray" || meta.channels === 1) {
+            rows.push({ param: "Color", tone: "pass", detail: "Grayscale — acceptable ink for print." });
+          } else if (space) {
+            rows.push({ param: "Color", tone: "fail", detail: "RGB image — print art must be CMYK. Re-export from your design app as a CMYK JPEG (or PDF); we never convert color for you." });
+          } else {
+            rows.push({ param: "Color", tone: "na", detail: "Couldn't determine the color space — confirm CMYK on export." });
+          }
+          const density = meta.density && meta.density > 1 ? meta.density : null;
+          const r3 = (v: number) => Math.round(v * 1000) / 1000;
+          const SIZE_TOL = 0.05; // inches — same tolerance as validateArt
+          if (aw != null && ah != null && aw > 0 && ah > 0) {
+            // Effective PPI if this frame IS the artboard (orientation-best).
+            const effPpi = Math.round(Math.max(Math.min(wPx / aw, hPx / ah), Math.min(wPx / ah, hPx / aw)));
+            if (density) {
+              const wIn = wPx / density, hIn = hPx / density;
+              const fits = (a: number, b: number) => Math.abs(a - aw!) <= SIZE_TOL && Math.abs(b - ah!) <= SIZE_TOL;
+              const covers = (a: number, b: number) => a >= aw! - SIZE_TOL && b >= ah! - SIZE_TOL;
+              const sizeOk = fits(wIn, hIn) || fits(hIn, wIn) || covers(wIn, hIn) || covers(hIn, wIn);
+              rows.push(sizeOk
+                ? { param: "Artboard size", tone: "pass", detail: `${r3(wIn)}" × ${r3(hIn)}" at ${density} PPI — covers the slot's ${r3(aw)}" × ${r3(ah)}" artboard (finished + bleed).` }
+                : { param: "Artboard size", tone: "fail", detail: `${r3(wIn)}" × ${r3(hIn)}" at ${density} PPI — the slot's artboard is ${r3(aw)}" × ${r3(ah)}" (finished + bleed). Re-export at the full artboard size.` });
+              rows.push(density >= ppiFloor
+                ? { param: `Image resolution (min ${ppiFloor} PPI)`, tone: "pass", detail: `${density} PPI at the exported size — meets the ${ppiFloor} PPI minimum.` }
+                : { param: `Image resolution (min ${ppiFloor} PPI)`, tone: "fail", detail: `${density} PPI at the exported size — below the ${ppiFloor} PPI minimum. Re-export at a higher resolution.` });
+              // Bleed — no trim box in a raster; the artboard already includes
+              // the bleed, so a frame that covers it carries its bleed.
+              if (bleedLine != null) {
+                rows.push(sizeOk
+                  ? { param: "Bleed", tone: "pass", detail: `Frame covers the full artboard — the outer ${r3(bleedLine)}" is your bleed. Keep art extending to the very edges.` }
+                  : { param: "Bleed", tone: "fail", detail: `Frame doesn't cover the artboard, so the ${r3(bleedLine)}" bleed can't be present. Re-export at the full artboard size with art to the edges.` });
+              }
+            } else {
+              rows.push({ param: "Artboard size", tone: "na", detail: `No PPI tag in the file — ${wPx} × ${hPx} px is ≈${effPpi} PPI if exported at the ${r3(aw)}" × ${r3(ah)}" artboard.` });
+              rows.push(effPpi >= ppiFloor
+                ? { param: `Image resolution (min ${ppiFloor} PPI)`, tone: "pass", detail: `${wPx} × ${hPx} px ≈ ${effPpi} PPI at the artboard size — meets the ${ppiFloor} PPI minimum.` }
+                : { param: `Image resolution (min ${ppiFloor} PPI)`, tone: "fail", detail: `${wPx} × ${hPx} px ≈ ${effPpi} PPI at the artboard size — below the ${ppiFloor} PPI minimum.` });
+              if (bleedLine != null) {
+                rows.push({ param: "Bleed", tone: "na", detail: `No PPI tag to confirm physical size — if the frame is the full artboard, the outer ${r3(bleedLine)}" is your bleed. Confirmed at prepress.` });
+              }
+            }
+          } else if (density) {
+            rows.push({ param: "Artboard size", tone: "na", detail: `Measures ${r3(wPx / density)}" × ${r3(hPx / density)}" at ${density} PPI — no artboard on this slot to compare against.` });
+            rows.push(density >= ppiFloor
+              ? { param: `Image resolution (min ${ppiFloor} PPI)`, tone: "pass", detail: `${density} PPI at the exported size — meets the ${ppiFloor} PPI minimum.` }
+              : { param: `Image resolution (min ${ppiFloor} PPI)`, tone: "fail", detail: `${density} PPI at the exported size — below the ${ppiFloor} PPI minimum.` });
+          } else {
+            rows.push({ param: "Artboard size", tone: "na", detail: `${wPx} × ${hPx} px — no PPI tag and no slot artboard to measure against. Verified at prepress.` });
+          }
+          return res.json({ checks: rows });
+        } catch (e: any) {
+          console.error("[art-inspect] raster failed:", e?.message ?? e);
+          return res.status(422).json({ message: "Couldn't inspect that image — ink + PPI will be verified at prepress." });
+        }
+      }
       try {
         // 5-minute cap, not 60s — the timer covers the UPLOAD too, and a
         // jacket-spread art PDF over a home uplink easily outlives a minute
@@ -1269,7 +1375,7 @@ export function registerPressTemplateFlowRoutes(
           return res.status(422).json({ message: "Couldn't inspect that file — ink + PPI will be verified at prepress." });
         }
         if (!scan.isPdf) {
-          return res.status(422).json({ message: "That file isn't a PDF — export a PDF for ink and resolution checks." });
+          return res.status(422).json({ message: "That file isn't a PDF or JPEG/PNG — export one of those for ink and resolution checks." });
         }
         if (scan.truncated) {
           // A partial scan must not report measured rows as authoritative.

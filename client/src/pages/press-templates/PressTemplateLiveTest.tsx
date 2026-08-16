@@ -760,52 +760,13 @@ export default function PressTemplateLiveTest({
         setArt({ name: f.name, img, wMm, hMm, pageCount: doc.numPages, gtLayerNames: gtNames });
         artFile.current = f;
         setShowTemplate(false);
-        // Ink + PPI live on the server scanner — stream the file up in the
-        // background; the row shows "Measuring…" until it lands.
-        setInkChecks('checking');
-        setInkProgress(0);
-        void (async () => {
-          try {
-            // XHR instead of fetch: fetch can't report UPLOAD progress, and
-            // watching the measurement happen live is the point (gogoods).
-            const d = await new Promise<{ checks: CheckRow[] }>((resolve, reject) => {
-              const xhr = new XMLHttpRequest();
-              inkXhr.current = xhr;
-              // specId (when this session is on a known slot) lets the server
-              // check bleed against the slot's certified template line too.
-              xhr.open('POST', `/api/press/${pressId}/templates/art-inspect${specRef.current ? `?specId=${encodeURIComponent(specRef.current)}` : ''}`);
-              xhr.setRequestHeader('Content-Type', 'application/pdf');
-              for (const [k, v] of Object.entries(authHeaders() as Record<string, string>)) xhr.setRequestHeader(k, v);
-              xhr.withCredentials = true;
-              xhr.upload.onprogress = (ev) => {
-                if (ev.lengthComputable && artFile.current === f) setInkProgress(Math.min(ev.loaded / ev.total, 1));
-              };
-              // Upload done — the server is now measuring; the bar goes indeterminate.
-              xhr.upload.onload = () => { if (artFile.current === f) setInkProgress(1); };
-              xhr.onload = () => {
-                if (xhr.status >= 200 && xhr.status < 300) {
-                  try { resolve(JSON.parse(xhr.responseText) as { checks: CheckRow[] }); }
-                  catch { reject(new Error('bad response')); }
-                } else reject(new Error(String(xhr.status)));
-              };
-              xhr.onerror = () => reject(new Error('network'));
-              xhr.onabort = () => reject(new Error('superseded'));
-              xhr.timeout = 6 * 60_000; // hair past the server's 5-minute cap
-              xhr.ontimeout = () => reject(new Error('timeout'));
-              xhr.send(f);
-            });
-            setInkChecks((prev) => (artFile.current === f ? d.checks : prev));
-          } catch {
-            setInkChecks((prev) => (artFile.current === f ? 'error' : prev));
-          } finally {
-            if (artFile.current === f) {
-              setInkProgress(null);
-              inkXhr.current = null;
-            }
-          }
-        })();
+        runInkInspect(f, 'application/pdf');
       } else {
-        // Raster image — visual overlay only; no physical size in the file.
+        // Raster image (JPEG/PNG) — measurable too (gogoods, Aug 16 2026: MRP
+        // wants art-only files at the proper artboard size, so a correct JPG
+        // is a legitimate final). The overlay preview stays visual (no
+        // physical size client-side), but the server check measures pixel
+        // dims + PPI tag + color space against the slot's artboard.
         const img = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result));
@@ -813,15 +774,63 @@ export default function PressTemplateLiveTest({
           reader.readAsDataURL(f);
         });
         setArt({ name: f.name, img, wMm: null, hMm: null, pageCount: null, gtLayerNames: [] });
-        artFile.current = null; // raster overlay only — the server test needs a PDF
-        setInkChecks(null);
+        artFile.current = f; // server test submission still requires a PDF and skips rasters
         setShowTemplate(false);
+        runInkInspect(f, f.type || 'image/jpeg');
       }
       setDirty(true); // a loaded art result is unsaved work — Save persists it
     } catch (err) {
       setArt(null);
       setError(err instanceof Error ? err.message : 'Could not read that file.');
     } finally { setBusy(null); }
+  };
+
+  // Ink + PPI (and, for rasters, size/color) live on the server scanner —
+  // stream the file up in the background; the row shows "Measuring…" until
+  // it lands.
+  const runInkInspect = (f: File, contentType: string) => {
+    setInkChecks('checking');
+    setInkProgress(0);
+    void (async () => {
+      try {
+        // XHR instead of fetch: fetch can't report UPLOAD progress, and
+        // watching the measurement happen live is the point (gogoods).
+        const d = await new Promise<{ checks: CheckRow[] }>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          inkXhr.current = xhr;
+          // specId (when this session is on a known slot) lets the server
+          // check bleed/artboard against the slot's certified template line.
+          xhr.open('POST', `/api/press/${pressId}/templates/art-inspect${specRef.current ? `?specId=${encodeURIComponent(specRef.current)}` : ''}`);
+          xhr.setRequestHeader('Content-Type', contentType);
+          for (const [k, v] of Object.entries(authHeaders() as Record<string, string>)) xhr.setRequestHeader(k, v);
+          xhr.withCredentials = true;
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable && artFile.current === f) setInkProgress(Math.min(ev.loaded / ev.total, 1));
+          };
+          // Upload done — the server is now measuring; the bar goes indeterminate.
+          xhr.upload.onload = () => { if (artFile.current === f) setInkProgress(1); };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              try { resolve(JSON.parse(xhr.responseText) as { checks: CheckRow[] }); }
+              catch { reject(new Error('bad response')); }
+            } else reject(new Error(String(xhr.status)));
+          };
+          xhr.onerror = () => reject(new Error('network'));
+          xhr.onabort = () => reject(new Error('superseded'));
+          xhr.timeout = 6 * 60_000; // hair past the server's 5-minute cap
+          xhr.ontimeout = () => reject(new Error('timeout'));
+          xhr.send(f);
+        });
+        setInkChecks((prev) => (artFile.current === f ? d.checks : prev));
+      } catch {
+        setInkChecks((prev) => (artFile.current === f ? 'error' : prev));
+      } finally {
+        if (artFile.current === f) {
+          setInkProgress(null);
+          inkXhr.current = null;
+        }
+      }
+    })();
   };
 
   // Zones present in the template, grouped LINE + AREA.
@@ -847,7 +856,7 @@ export default function PressTemplateLiveTest({
     if (!template || !art) return [];
     const rows: CheckRow[] = [];
     if (art.wMm === null || art.hMm === null) {
-      rows.push({ param: 'Physical size', tone: 'na', detail: 'Raster image — no physical size in the file. Export a PDF for measured checks; overlay below is visual only.' });
+      rows.push({ param: 'Physical size', tone: 'na', detail: 'Raster image — the overlay below is visual only. Size, ink and resolution are measured by the server check (see Color & resolution rows).' });
     } else {
       const near = (a: number, b: number, tol = 1) => Math.abs(a - b) <= tol;
       const dims = `${art.wMm.toFixed(1)} × ${art.hMm.toFixed(1)} mm`;
@@ -878,9 +887,9 @@ export default function PressTemplateLiveTest({
       : { param: 'File hygiene', tone: 'fail', detail: `Template layers still present in the art file: ${art.gtLayerNames.join(', ')} — delete them before handoff` });
     rows.push({ param: 'Safety', tone: 'na', detail: 'Visual — toggle the Safety overlays and look' });
     // Ink + PPI — measured live by the server scanner (gogoods, Aug 15 2026).
-    if (art.wMm === null) {
-      rows.push({ param: 'Color & resolution', tone: 'na', detail: 'Ink + ppi checks need a PDF' });
-    } else if (inkChecks === 'checking') {
+    // Rasters (JPEG/PNG) get measured too since Aug 16: pixel dims + PPI tag
+    // + color space against the slot's artboard.
+    if (inkChecks === 'checking') {
       rows.push({ param: 'Color & resolution', tone: 'na', detail: 'Measuring ink and image resolution…' });
     } else if (Array.isArray(inkChecks)) {
       rows.push(...inkChecks);
