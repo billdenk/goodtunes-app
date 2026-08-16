@@ -940,7 +940,7 @@ export default function PressTemplateLiveTest({
         : { param: 'Pages', tone: 'fail', detail: `${art.pageCount} pages — a jacket spread is 1 page` });
     }
     rows.push(art.gtLayerNames.length === 0
-      ? { param: 'File hygiene', tone: art.wMm === null ? 'na' : 'pass', detail: art.wMm === null ? 'Layer check needs a PDF' : 'No GT template layers left inside the art file' }
+      ? { param: 'File hygiene', tone: 'pass', detail: art.wMm === null ? 'Raster image — flat pixels can’t carry template layers, so the file is clean by definition' : 'No GT template layers left inside the art file' }
       : { param: 'File hygiene', tone: 'fail', detail: `Template layers still present in the art file: ${art.gtLayerNames.join(', ')} — delete them before handoff` });
     rows.push({ param: 'Safety', tone: 'na', detail: 'Visual — toggle the Safety overlays and look' });
     // Ink + PPI — measured live by the server scanner (gogoods, Aug 15 2026).
