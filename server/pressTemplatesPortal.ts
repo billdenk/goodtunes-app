@@ -585,6 +585,26 @@ export function registerPressTemplateFlowRoutes(
     }
   });
 
+  // GET /api/press/:id/templates/:specId/runs/:runId/file — same-origin
+  // download of a saved test run's art file, so opening a certified template
+  // can re-hydrate the proof view (gogoods, Aug 16 2026: "if I come back to
+  // the template and want to view the Current… load tests so I can check
+  // bleeds, template, etc."). Run files always live in OUR object store
+  // (uploads land there; pasted links are mirrored at test time), so this is
+  // a scope-checked redirect — view access, not editor.
+  app.get("/api/press/:id/templates/:specId/runs/:runId/file", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+    if (!spec) return res.status(404).json({ message: "Template slot not found" });
+    const runs = await storage.listPressTemplateTestRuns([spec.id]);
+    const run = runs.find((r) => r.id === String(req.params.runId));
+    if (!run?.fileUrl) return res.status(404).json({ message: "No art file on this test run." });
+    if (!run.fileUrl.startsWith("/objects/")) {
+      return res.status(409).json({ message: "This run's art file isn't stored — re-run the test to view it." });
+    }
+    return res.redirect(run.fileUrl);
+  });
+
   // ── Live-test templates (handoff/press-template-live-test, Aug 14 2026) ──
   // "Accept & Save" on the Live test page. The client uploads the PDF first
   // (uploadAdminDoc → /objects/...), reads GT layers with pdf.js, then posts

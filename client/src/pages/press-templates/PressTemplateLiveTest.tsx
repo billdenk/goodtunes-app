@@ -687,6 +687,38 @@ export default function PressTemplateLiveTest({
           const file = new File([blob], spec.templateFileName ?? 'template.pdf', { type: 'application/pdf' });
           await loadTemplate(file, spec.displayName ?? spec.templateFileName ?? undefined);
           setDirty(false); // opening a saved template arrives clean (Bill, Aug 15 2026)
+          // View mode (gogoods, Aug 16 2026): opening a CERTIFIED template
+          // re-hydrates the certifying test run's art so anyone (CEO check-in)
+          // can inspect bleeds/overlays without uploading. Pure viewing —
+          // dirty stays false, Close changes nothing, "Try another file"
+          // still works exactly as before.
+          if (certRev) {
+            const viewRun =
+              spec.runs.find((run) => run.certifiedAt) ??
+              spec.runs.find(
+                (run) => run.revisionId === certRev.id && (run.verdict === 'pass' || run.verdict === 'warn'),
+              );
+            if (viewRun?.fileUrl?.startsWith('/objects/')) {
+              try {
+                const ar = await fetch(`/api/press/${pressId}/templates/${specId}/runs/${viewRun.id}/file`, {
+                  headers: { ...authHeaders() },
+                  credentials: 'include',
+                  signal: ctrl.signal,
+                });
+                if (ar.ok && !cancelled) {
+                  const artBlob = await ar.blob();
+                  const artName = viewRun.fileName ?? 'Saved art file';
+                  const isPdf = /\.pdf$/i.test(viewRun.fileUrl) || artBlob.type === 'application/pdf';
+                  const artFileObj = new File([artBlob], artName, {
+                    type: isPdf ? 'application/pdf' : artBlob.type || 'image/jpeg',
+                  });
+                  if (!cancelled) await loadArtFromFile(artFileObj, { markDirty: false });
+                }
+              } catch {
+                // Best-effort — the template alone is still a useful view.
+              }
+            }
+          }
         } catch (err) {
           if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return;
           setBusy(null);
@@ -747,6 +779,14 @@ export default function PressTemplateLiveTest({
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
+    await loadArtFromFile(f);
+  };
+
+  // Shared art loader — the picker and the saved-run rehydrate (view mode)
+  // both run the same parse + overlay + ink-inspect pipeline. markDirty=false
+  // means "just viewing a saved result": nothing to save, Close changes nothing.
+  const loadArtFromFile = async (f: File, opts?: { markDirty?: boolean }) => {
+    const markDirty = opts?.markDirty !== false;
     const myPick = ++pickSeq.current;
     setBusy('art'); setError(null);
     // Supersede any in-flight ink scan IMMEDIATELY — before the new file even
@@ -787,7 +827,7 @@ export default function PressTemplateLiveTest({
         runInkInspect(f, f.type || 'image/jpeg');
       }
       if (pickSeq.current !== myPick) return;
-      setDirty(true); // a loaded art result is unsaved work — Save persists it
+      if (markDirty) setDirty(true); // a loaded art result is unsaved work — Save persists it
     } catch (err) {
       if (pickSeq.current !== myPick) return; // stale failure — don't clobber the newer pick
       setArt(null);
