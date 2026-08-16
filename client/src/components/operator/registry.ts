@@ -55,6 +55,7 @@ import {
   Store,
   type LucideIcon,
   FileText,
+  LayoutTemplate,
   Square,
   CircleDot,
   StickyNote,
@@ -86,11 +87,14 @@ export type PartnerVerb =
 /** Collapsible rail groups. Only "catalog" exists today — mirrors the
  * super-admin's Catalog section (People/Roster + Albums nested under a
  * chevron header directly under Dashboard). */
-export type OperatorSectionId = "catalog" | "components";
+export type OperatorSectionId = "catalog" | "productSpecs" | "components";
 
 /** Header labels for each collapsible section. */
 export const SECTION_LABELS: Record<OperatorSectionId, string> = {
   catalog: "Catalog",
+  // Press rail canon (Ruby handoff f9adddf, Bill Aug 16 2026): the press
+  // portal's group is "Product Specs"; other portals keep "Catalog".
+  productSpecs: "Product Specs",
   components: "Components",
 };
 
@@ -107,6 +111,10 @@ export interface OperatorModuleDef {
    * not clickable, excluded from phone tabs and routing. Per the
    * press-specs handoff rail (Bill, Aug 11 2026). */
   soon?: boolean;
+  /** Partner-facing pill text for a `soon` row (e.g. White Label's
+   * "Request"); super-admin god view always shows "Soon" instead
+   * (press rail canon, Bill Aug 16 2026). */
+  soonLabel?: string;
   slot?: "main" | "aside";
   roles: readonly OperatorRole[];
   requires?: readonly PartnerVerb[];
@@ -203,18 +211,18 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "people",     label: "Clients",          icon: Users,            roles: ["press"] },
   { id: "albums",     label: "Projects",         icon: Disc3,            roles: ["press"] },
   { id: "acquisition", label: "Acquisition",    icon: UserPlus,         roles: ["press"] },
-  // Catalog is a collapsible SECTION per the re-ratified press-specs
-  // handoff rail (Bill, Aug 11 2026 — supersedes the flat rail of Task
-  // #2838). Children in handoff order: GoodTunes Packages (the vinyl
-  // product catalog), White Label (decorative Soon), GoodDeed
-  // Certificates (was "GoodDeed pricing"), Specs.
-  { id: "catalog",    label: "GoodTunes Packages",    icon: Package,    section: "catalog", roles: ["press"] },
-  { id: "whitelabel", label: "White Label",           icon: Layers,     section: "catalog", soon: true, roles: ["press"] },
-  { id: "pricing",    label: "GoodDeed Certificates", icon: Award,      section: "catalog", roles: ["press"] },
-  { id: "specs",      label: "Specs",                 icon: AudioLines, section: "catalog", roles: ["press"] },
+  // "Product Specs" is a collapsible SECTION per the press rail canon
+  // (Ruby handoff f9adddf, Bill Aug 16 2026 — renamed from "Catalog",
+  // supersedes the Aug 11 rail). Children in canon order: GoodTunes
+  // Packages, GoodDeed Certificates, Specs, Templates. White Label moved
+  // to top-level above Settings.
+  { id: "catalog",    label: "GoodTunes Packages",    icon: Package,    section: "productSpecs", roles: ["press"] },
+  { id: "pricing",    label: "GoodDeed Certificates", icon: Award,      section: "productSpecs", roles: ["press"] },
+  { id: "specs",      label: "Specs",                 icon: AudioLines, section: "productSpecs", roles: ["press"] },
   // Press-templates flow (Ruby handoff, Aug 2026): template ingestion +
-  // finished-file certification, under the Catalog section beside Specs.
-  { id: "templates",  label: "Templates",             icon: FileText,   section: "catalog", roles: ["press"] },
+  // finished-file certification. LayoutTemplate glyph per Bill (canon
+  // round, Aug 16 2026).
+  { id: "templates",  label: "Templates",             icon: LayoutTemplate, section: "productSpecs", roles: ["press"] },
   // Components section (Ruby handoff, handoff/press-components/, Aug 12
   // 2026): the per-press component setup surfaces. Rail order matches the
   // mock's COMPONENTS_CHILDREN.
@@ -225,6 +233,10 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "comp-inserts",  label: "Inserts",       icon: StickyNote, section: "components", roles: ["press"] },
   { id: "comp-stickers", label: "Stickers",      icon: Sticker,    section: "components", roles: ["press"] },
   { id: "comp-pricing",  label: "Pricing",       icon: Receipt,    section: "components", roles: ["press"] },
+  // White Label promoted to top-level above Settings (press rail canon,
+  // Bill Aug 16 2026); press-facing pill says "Request", super-admin god
+  // view shows "Soon".
+  { id: "whitelabel", label: "White Label",      icon: Layers, soon: true, soonLabel: "Request", roles: ["press"] },
   { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },
   { id: "referrals",  label: "Referrals",        icon: Gift,             roles: ["press"] },
 

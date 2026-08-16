@@ -1050,7 +1050,7 @@ export function PressTemplatesIndex({
       <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "8px 0 96px" }}>
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div>
-            <div className="text-[12px] font-medium" style={{ color: t.faint }}>Catalog · Templates</div>
+            <div className="text-[12px] font-medium" style={{ color: t.faint }}>Product Specs · Templates</div>
             <h1 className="mt-1" style={{ fontSize: 30, letterSpacing: "-0.02em", fontWeight: 600, lineHeight: 1.12 }}>
               <span style={{ color: t.ink }}>Templates. </span>
               <span style={{ color: t.subink, fontWeight: 500 }}>Your standards, set.</span>

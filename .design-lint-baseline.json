@@ -24637,7 +24637,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
-    "snippet": "<div className=\"text-[12px] font-medium\" style={{ color: t.faint }}>Catalog · Templates</div>"
+    "snippet": "<div className=\"text-[12px] font-medium\" style={{ color: t.faint }}>Product Specs · Templates</div>"
   },
   {
     "rule": "hardcoded-font-size",

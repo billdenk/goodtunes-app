@@ -157,3 +157,23 @@ Both .tsx files above are superseded character-for-character by this commit. Cha
 States to screenshot (both themes, 1440/1024/768): pending-no-test (amber orbit ring +
 pulsing button), results-pass, results-fail, visual-only, certified-reopened (no
 Pending banner, no pulse), dirty vs clean header buttons.
+
+## Addendum — Aug 16 2026, canon press rail applied (supersedes both .tsx again)
+
+Both screens now carry the canonical press rail (from Playground's PressRailCanon):
+- Group renamed "Catalog" → **"Product Specs"** (GoodTunes Packages, GoodDeed
+  Certificates, Specs, Templates). Breadcrumb follows: "Product Specs · Templates".
+- NEW collapsible **Components** group (Vinyl, Jackets, Inner Sleeves, Center Labels,
+  Inserts, Stickers, Pricing).
+- **White Label promoted to top-level**, above Settings, with the press-facing
+  "Request" pill (super-admin surfaces say "Soon" instead).
+- Groups are collapsible with a rotating chevron; the group holding the active page
+  starts open, others start closed.
+- Templates keeps OUR LayoutTemplate icon (Bill prefers it; Otis should adopt it).
+
+Reminder of the standing rails rule: in Otis, the rail is YOUR component — this
+addendum describes the canon structure your rail should match, while everything from
+the breadcrumb down remains verbatim handoff.
+- Controls-row fix (same round): the hairline divider before the 7″/10″/12″ size pills
+  now renders only with them (Vinyl format) — on CD/Cassette/Stickers the two dividers
+  no longer sit adjacent between "Archived" and "+ Create New".

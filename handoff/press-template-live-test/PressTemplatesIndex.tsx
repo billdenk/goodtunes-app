@@ -16,7 +16,7 @@ import {
   Search, Bell, MessageSquarePlus, BadgeCheck, Clock3, XCircle, History, Upload, FileQuestion,
   Moon, Sun, MoreHorizontal, Archive, X, RotateCcw, Plus, Info,
 } from 'lucide-react';
-import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate } from 'lucide-react';
+import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Boxes, Disc as NavVinyl, Square as NavJacket, CircleDot as NavLabel, FileText as NavInsert, Sticker as NavSticker, ReceiptText as NavPricing } from 'lucide-react';
 import mrpLogo from '../assets/mrp-logo.svg';
 import gtPreviewTemplate from '../assets/gt-preview-template-flat.jpg';
 import gtPreviewJacket from '../assets/gt-preview-jacket-flat.jpg';
@@ -112,27 +112,49 @@ const THEMES: Record<'light' | 'dark', Theme> = {
   },
 };
 
-const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean }> }> = [
+// Canon rail tree — copied from PressRailCanon.PRESS_NAV_CANON (Bill, Aug 16 2026).
+// When the canon changes, change PressRailCanon first, then re-copy here.
+const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean }> }> = [
   { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Clients', icon: Users },
   { label: 'Projects', icon: Disc3 },
   { label: 'Acquisition', icon: UserPlus },
   {
-    label: 'Catalog',
-    icon: Library,
+    label: 'Product Specs', icon: Library,
     children: [
       { label: 'GoodTunes Packages', icon: NavPackage },
-      { label: 'White Label', icon: NavLayers, soon: true },
       { label: 'GoodDeed Certificates', icon: NavAward },
-      { label: 'Specs', icon: NavWave, soon: true },
-      { label: 'Templates', icon: NavTemplate, soon: true },
+      { label: 'Specs', icon: NavWave },
+      { label: 'Templates', icon: NavTemplate },
     ],
   },
+  {
+    label: 'Components', icon: Boxes,
+    children: [
+      { label: 'Vinyl', icon: NavVinyl },
+      { label: 'Jackets', icon: NavJacket },
+      { label: 'Inner Sleeves', icon: NavLayers },
+      { label: 'Center Labels', icon: NavLabel },
+      { label: 'Inserts', icon: NavInsert },
+      { label: 'Stickers', icon: NavSticker },
+      { label: 'Pricing', icon: NavPricing },
+    ],
+  },
+  { label: 'White Label', icon: NavLayers, soon: true },
   { label: 'Settings', icon: Cog },
   { label: 'Referrals', icon: Gift },
 ];
 
 function PressShell({ active, t, children }: { active: string; t: Theme; children: React.ReactNode }) {
+  // Canon collapse behavior: the group holding the active page starts open,
+  // the others start closed (PressRailCanon, Bill Aug 16 2026).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const o: Record<string, boolean> = {};
+    for (const item of PRESS_NAV) {
+      if (item.children) o[item.label] = item.label === active || item.children.some((c) => c.label === active);
+    }
+    return o;
+  });
   return (
     <div className="h-screen flex flex-col font-sans" style={{ fontFamily: 'Inter, system-ui, sans-serif', backgroundColor: t.canvas, color: t.ink }}>
       <header
@@ -190,11 +212,14 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
           <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
             {PRESS_NAV.map((item) => {
               if (item.children) {
+                const isOpen = openGroups[item.label];
                 const groupActive = item.label === active;
                 return (
                   <div key={item.label}>
                     <button
                       type="button"
+                      onClick={() => setOpenGroups((o) => ({ ...o, [item.label]: !o[item.label] }))}
+                      aria-expanded={isOpen}
                       className={cn('w-full flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !groupActive && t.hoverWash)}
                       style={{
                         fontWeight: groupActive ? 600 : 500,
@@ -202,10 +227,12 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                         backgroundColor: groupActive ? t.card : undefined,
                         boxShadow: groupActive ? t.pillShadow : undefined,
                       }}
+                      data-testid={`nav-group-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                     >
-                      <NavChevron className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
+                      <NavChevron className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: t.faint, transform: isOpen ? 'none' : 'rotate(-90deg)' }} />
                       <span className="truncate flex-1 text-left">{item.label}</span>
                     </button>
+                    {isOpen && (
                     <div className="space-y-0.5">
                       {item.children.map(({ label, icon: Icon, soon }) => {
                         const isActive = label === active;
@@ -233,10 +260,11 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                         );
                       })}
                     </div>
+                    )}
                   </div>
                 );
               }
-              const { label, icon: Icon } = item;
+              const { label, icon: Icon, soon } = item;
               const isActive = label === active;
               return (
                 <a
@@ -253,6 +281,11 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" style={{ color: isActive ? t.ink : t.faint }} />
                   <span className="truncate flex-1">{label}</span>
+                  {soon && (
+                    <span className="text-[10px] font-semibold px-2 h-[18px] inline-flex items-center rounded-full flex-shrink-0" style={{ backgroundColor: t.cardSoft, color: t.subink }}>
+                      Request
+                    </span>
+                  )}
                 </a>
               );
             })}
@@ -586,7 +619,7 @@ export default function PressTemplatesIndex() {
       <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div>
-            <div className="text-[12px] font-medium" style={{ color: t.faint }}>Catalog · Templates</div>
+            <div className="text-[12px] font-medium" style={{ color: t.faint }}>Product Specs · Templates</div>
             <h1 className="mt-1" style={{ fontSize: 30, letterSpacing: '-0.02em', fontWeight: 600, lineHeight: 1.12 }}>
               <span style={{ color: t.ink }}>Templates. </span>
               <span style={{ color: t.subink, fontWeight: 500 }}>Your standards, set.</span>
@@ -642,19 +675,26 @@ export default function PressTemplatesIndex() {
                 {v}
               </button>
             ))}
-            <span className="mx-1.5 self-stretch w-px" style={{ backgroundColor: t.hairline }} aria-hidden />
-            {format === 'Vinyl' && (['7″', '10″', '12″'] as const).map((sz) => (
-              <button
-                key={sz}
-                type="button"
-                onClick={() => setSize(sz)}
-                className="h-7 px-3 rounded-full text-[12px] font-semibold tabular-nums transition-colors"
-                style={sz === size ? { backgroundColor: t.pillActive, color: t.ink, boxShadow: t.segShadow } : { color: t.faint, cursor: 'pointer' }}
-                data-testid={`filter-size-${sz.replace('″', '')}`}
-              >
-                {sz}
-              </button>
-            ))}
+            {/* Size pills + their leading divider render together — on non-vinyl
+                formats both disappear, so two dividers never sit adjacent
+                (Bill, Aug 16 2026). */}
+            {format === 'Vinyl' && (
+              <>
+                <span className="mx-1.5 self-stretch w-px" style={{ backgroundColor: t.hairline }} aria-hidden />
+                {(['7″', '10″', '12″'] as const).map((sz) => (
+                  <button
+                    key={sz}
+                    type="button"
+                    onClick={() => setSize(sz)}
+                    className="h-7 px-3 rounded-full text-[12px] font-semibold tabular-nums transition-colors"
+                    style={sz === size ? { backgroundColor: t.pillActive, color: t.ink, boxShadow: t.segShadow } : { color: t.faint, cursor: 'pointer' }}
+                    data-testid={`filter-size-${sz.replace('″', '')}`}
+                  >
+                    {sz}
+                  </button>
+                ))}
+              </>
+            )}
             {/* Overflow menu hidden for now — "Duplicate a template" (reuse a file for
                 another size) is parked for a future pass per Bill, Aug 12 2026. */}
             <span className="mx-1.5 self-stretch w-px" style={{ backgroundColor: t.hairline }} aria-hidden />

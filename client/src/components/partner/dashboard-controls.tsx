@@ -91,6 +91,10 @@ export type TabDef<T extends string> = {
    * inert, trailing Soon pill. Callers filter these out of the mobile
    * DashboardTabs bar. */
   soon?: boolean;
+  /** Partner-facing pill text for a `soon` row (e.g. White Label's
+   * "Request"); super-admin god view shows "Soon" instead (press rail
+   * canon, Bill Aug 16 2026). */
+  soonLabel?: string;
 };
 
 export function DashboardTabs<T extends string>({

@@ -40,7 +40,7 @@ import {
   LayoutDashboard, Users, Disc3, UserPlus, Library, Cog, Gift,
   Search, Bell, MessageSquarePlus, CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Moon, Sun, Upload, RotateCcw, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck,
 } from 'lucide-react';
-import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate } from 'lucide-react';
+import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Boxes, Disc as NavVinyl, Square as NavJacket, CircleDot as NavLabel, FileText as NavInsert, Sticker as NavSticker, ReceiptText as NavPricing } from 'lucide-react';
 import labelTemplatePdfUrl from '../assets/label-template-r091125.pdf?url';
 import mrpLogo from '../assets/mrp-logo.svg';
 
@@ -102,27 +102,49 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 }
 
 // ─── Apple-canon press shell (duplicated verbatim across all press mocks — no drift) ───
-const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean }> }> = [
+// Canon rail tree — copied from PressRailCanon.PRESS_NAV_CANON (Bill, Aug 16 2026).
+// When the canon changes, change PressRailCanon first, then re-copy here.
+const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean }> }> = [
   { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Clients', icon: Users },
   { label: 'Projects', icon: Disc3 },
   { label: 'Acquisition', icon: UserPlus },
   {
-    label: 'Catalog',
-    icon: Library,
+    label: 'Product Specs', icon: Library,
     children: [
       { label: 'GoodTunes Packages', icon: NavPackage },
-      { label: 'White Label', icon: NavLayers, soon: true },
       { label: 'GoodDeed Certificates', icon: NavAward },
-      { label: 'Specs', icon: NavWave, soon: true },
-      { label: 'Templates', icon: NavTemplate, soon: true },
+      { label: 'Specs', icon: NavWave },
+      { label: 'Templates', icon: NavTemplate },
     ],
   },
+  {
+    label: 'Components', icon: Boxes,
+    children: [
+      { label: 'Vinyl', icon: NavVinyl },
+      { label: 'Jackets', icon: NavJacket },
+      { label: 'Inner Sleeves', icon: NavLayers },
+      { label: 'Center Labels', icon: NavLabel },
+      { label: 'Inserts', icon: NavInsert },
+      { label: 'Stickers', icon: NavSticker },
+      { label: 'Pricing', icon: NavPricing },
+    ],
+  },
+  { label: 'White Label', icon: NavLayers, soon: true },
   { label: 'Settings', icon: Cog },
   { label: 'Referrals', icon: Gift },
 ];
 
 function PressShell({ active, t, children }: { active: string; t: Theme; children: React.ReactNode }) {
+  // Canon collapse behavior: the group holding the active page starts open,
+  // the others start closed (PressRailCanon, Bill Aug 16 2026).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const o: Record<string, boolean> = {};
+    for (const item of PRESS_NAV) {
+      if (item.children) o[item.label] = item.label === active || item.children.some((c) => c.label === active);
+    }
+    return o;
+  });
   return (
     <div className="h-screen flex flex-col font-sans" style={{ fontFamily: 'Inter, system-ui, sans-serif', backgroundColor: t.canvas, color: t.ink }}>
       <header
@@ -168,17 +190,22 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
           <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
             {PRESS_NAV.map((item) => {
               if (item.children) {
+                const isOpen = openGroups[item.label];
                 const groupActive = item.label === active;
                 return (
                   <div key={item.label}>
                     <button
                       type="button"
+                      onClick={() => setOpenGroups((o) => ({ ...o, [item.label]: !o[item.label] }))}
+                      aria-expanded={isOpen}
                       className={cn('w-full flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !groupActive && t.hoverWash)}
                       style={{ fontWeight: groupActive ? 600 : 500, color: groupActive ? t.ink : t.subink, backgroundColor: groupActive ? t.card : undefined, boxShadow: groupActive ? t.navShadow : undefined }}
+                      data-testid={`nav-group-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                     >
-                      <NavChevron className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
+                      <NavChevron className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: t.faint, transform: isOpen ? 'none' : 'rotate(-90deg)' }} />
                       <span className="truncate flex-1 text-left">{item.label}</span>
                     </button>
+                    {isOpen && (
                     <div className="space-y-0.5">
                       {item.children.map(({ label, icon: Icon, soon }) => {
                         const isActive = label === active;
@@ -201,10 +228,11 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                         );
                       })}
                     </div>
+                    )}
                   </div>
                 );
               }
-              const { label, icon: Icon } = item;
+              const { label, icon: Icon, soon } = item;
               const isActive = label === active;
               return (
                 <a
@@ -216,6 +244,11 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" style={{ color: isActive ? t.ink : t.faint }} />
                   <span className="truncate flex-1">{label}</span>
+                  {soon && (
+                    <span className="text-[10px] font-semibold px-2 h-[18px] inline-flex items-center rounded-full flex-shrink-0" style={{ backgroundColor: t.soft, color: t.subink }}>
+                      Request
+                    </span>
+                  )}
                 </a>
               );
             })}
