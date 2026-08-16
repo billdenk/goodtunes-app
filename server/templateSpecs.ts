@@ -198,6 +198,92 @@ async function signGcsUrl(
   return signed_url;
 }
 
+// Rule (gogoods, Aug 15 2026): never depend on an external host for a
+// template we've measured — "just like audio, we should always download
+// those files so we have them." A pasted Dropbox/https link is fetched ONCE
+// through the same SSRF-guarded scanner the measure path uses, verified to
+// be a real PDF, and the bytes land in OUR object storage; the caller stores
+// the `/objects/uploads/<id>.pdf` path instead of the external link. That
+// way previews/measurement can always self-heal even if the external link
+// dies. Non-PDF links (zips etc.) fail here with the scanner's honest error
+// — nothing external is ever persisted as a template source.
+export async function mirrorExternalTemplatePdf(
+  url: string,
+): Promise<
+  | { ok: true; objectPath: string; scan: CompletedPdfScan }
+  | { ok: false; error: string }
+> {
+  const fsp = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { randomUUID } = await import("node:crypto");
+  const { createReadStream } = await import("node:fs");
+  let tmpDir: string | null = null;
+  let uploadedPath: string | null = null;
+  try {
+    tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "template-mirror-"));
+    const spoolPath = path.join(tmpDir, "src.pdf");
+    const { scan, error, spooled } = await scanTemplateUrl(url, { spoolTo: spoolPath });
+    if (!scan) return { ok: false, error: error ?? "Couldn't read that file." };
+    if (!spooled) {
+      return { ok: false, error: "Couldn't download that file completely — try again or upload it directly." };
+    }
+    const stat = await fsp.stat(spoolPath);
+    const id = `${randomUUID()}.pdf`;
+    const { bucketName, objectName } = uploadDestination(id);
+    const putUrl = await signGcsUrl(bucketName, objectName, "PUT", 900);
+    const putRes = await fetch(putUrl, {
+      method: "PUT",
+      headers: { "Content-Type": "application/pdf", "Content-Length": String(stat.size) },
+      body: createReadStream(spoolPath) as unknown as BodyInit,
+      // Node 20 fetch requires half-duplex for streamed request bodies.
+      duplex: "half",
+    } as RequestInit);
+    if (!putRes.ok) {
+      return { ok: false, error: "Couldn't store that file — try again or upload it directly." };
+    }
+    const finalPath = `/objects/uploads/${id}`;
+    uploadedPath = finalPath;
+    const { setObjectAclPolicy } = await import("./replit_integrations/object_storage/objectAcl");
+    const stored = await objectStorage.getObjectEntityFile(finalPath);
+    try {
+      await stored.setMetadata({ contentType: "application/pdf" });
+    } catch {
+      /* non-fatal */
+    }
+    await setObjectAclPolicy(stored, { owner: "admin", visibility: "public" });
+    uploadedPath = null; // success — the caller owns the object now
+    return { ok: true, objectPath: finalPath, scan };
+  } catch (e: any) {
+    console.error("[template-mirror] failed:", e?.message ?? e);
+    // Compensate: a failure AFTER the bytes landed (e.g. the ACL write)
+    // must not strand an orphaned public object.
+    await deleteMirroredTemplateObject(uploadedPath);
+    return { ok: false, error: "Couldn't download that file — try again or upload it directly." };
+  } finally {
+    if (tmpDir) {
+      try {
+        await (await import("node:fs/promises")).rm(tmpDir, { recursive: true, force: true });
+      } catch {
+        /* non-fatal */
+      }
+    }
+  }
+}
+
+/** Best-effort removal of a mirrored object — used when the DB write that
+ *  would have referenced it fails, so no orphaned objects accumulate.
+ *  Never throws. */
+export async function deleteMirroredTemplateObject(objectPath: string | null | undefined): Promise<void> {
+  if (!objectPath?.startsWith("/objects/uploads/")) return;
+  try {
+    const file = await objectStorage.getObjectEntityFile(objectPath);
+    await file.delete();
+  } catch (e: any) {
+    console.warn("[template-mirror] orphan cleanup failed:", e?.message ?? e);
+  }
+}
+
 function uploadDestination(id: string): { bucketName: string; objectName: string } {
   const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
   const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;

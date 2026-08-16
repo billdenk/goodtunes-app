@@ -27,10 +27,11 @@ import { validateCompletedComponent, logSpotUsageFallback } from "./validators/c
 import {
   measureTemplateSpecRow,
   clearTemplateSpecMeasurements,
+  deleteMirroredTemplateObject,
+  mirrorExternalTemplatePdf,
   scanTemplateUrl,
   detectTemplateOptionsForUrl,
   renderTestRunPreviews,
-  renderLocalPdfPreviews,
   renderTemplateSpecPreviews,
   renderUrlPreviewPages,
 } from "./templateSpecs";
@@ -745,6 +746,18 @@ export function registerPressTemplateFlowRoutes(
           .status(400)
           .json({ message: "Upload the file or paste an https:// link." });
       }
+      // Rule (gogoods, Aug 15 2026): a pasted external link is downloaded
+      // into OUR object storage before it becomes a template source — same
+      // policy as audio masters. The spec row and revision store the
+      // /objects path, so measurement and preview renders never depend on
+      // the external host staying alive.
+      let mirroredAttachPath: string | null = null;
+      if (/^https:\/\//i.test(d.fileUrl)) {
+        const mirrored = await mirrorExternalTemplatePdf(d.fileUrl);
+        if (!mirrored.ok) return res.status(422).json({ message: mirrored.error });
+        d.fileUrl = mirrored.objectPath;
+        mirroredAttachPath = mirrored.objectPath;
+      }
       // Non-jacket components carry no variant (mirrors the admin route).
       const variantKey = d.componentKey === "jacket" ? d.variantKey : "";
       // Slot check + spec write as ONE critical section. Task #3066 — for a
@@ -799,6 +812,9 @@ export function registerPressTemplateFlowRoutes(
         ? await withCustomSlotLock(pressId, d.componentKey, attach)
         : await attach();
       if ("status" in attached) {
+        // The attach never happened (unknown custom slot etc.) — don't
+        // strand the just-mirrored object.
+        await deleteMirroredTemplateObject(mirroredAttachPath);
         return res.status(attached.status).json({ message: attached.message });
       }
       const { spec, existing } = attached;
@@ -1157,33 +1173,34 @@ export function registerPressTemplateFlowRoutes(
             "Certification test runs aren't available for this slot yet — the finished-file checker doesn't have a baseline for this format.",
         });
       }
-      // Task #3090 — proof view needs a local PDF to rasterize. Own-object
-      // uploads download on render; EXTERNAL urls (Dropbox etc.) tee the
-      // SSRF-guarded scan stream into a temp file (only the small preview
-      // PNG is kept — the original file is still never stored).
-      const isOwnObject = body.data.url.startsWith("/objects/uploads/");
-      const fsp = await import("node:fs/promises");
-      const os = await import("node:os");
-      const path = await import("node:path");
-      let spoolDir: string | null = null;
-      let spoolPath: string | null = null;
-      if (!isOwnObject) {
-        try {
-          spoolDir = await fsp.mkdtemp(path.join(os.tmpdir(), "template-test-spool-"));
-          spoolPath = path.join(spoolDir, "src.pdf");
-        } catch {
-          spoolPath = null; // best-effort: scan proceeds without a preview
-        }
+      // Rule (gogoods, Aug 15 2026): a pasted external test file is
+      // downloaded into OUR object storage first — the run row stores the
+      // /objects path so its proof previews can always self-heal, even if
+      // the external link dies. Same policy as the template attach path.
+      let runFileUrl = body.data.url;
+      if (!runFileUrl.startsWith("/objects/uploads/") && !/^https:\/\//i.test(runFileUrl)) {
+        return res
+          .status(400)
+          .json({ message: "Upload the file or paste an https:// link." });
       }
+      let mirroredRunPath: string | null = null;
+      if (/^https:\/\//i.test(runFileUrl)) {
+        const mirrored = await mirrorExternalTemplatePdf(runFileUrl);
+        if (!mirrored.ok) return res.status(422).json({ message: mirrored.error });
+        runFileUrl = mirrored.objectPath;
+        mirroredRunPath = mirrored.objectPath;
+      }
+      // Every run file is now an own-object path (uploads land there
+      // directly; pasted links were just mirrored) — the old external
+      // spool-for-preview branch is gone with the mirror rule.
       try {
-        const { scan, error, spooled } = await scanTemplateUrl(body.data.url, {
-          spoolTo: spoolPath ?? undefined,
-        });
+        const { scan, error } = await scanTemplateUrl(runFileUrl);
         if (!scan) {
+          await deleteMirroredTemplateObject(mirroredRunPath);
           return res.status(422).json({ message: error ?? "Couldn't read that file." });
         }
         // Task #3069 — log every spot-usage fallback with its reason code.
-        logSpotUsageFallback(scan, { fileName: null, source: body.data.url });
+        logSpotUsageFallback(scan, { fileName: null, source: runFileUrl });
         const checks: CheckResult[] = validateCompletedComponent(scan, slotSpec);
         const verdict = rollupStatus(checks);
 
@@ -1192,11 +1209,7 @@ export function registerPressTemplateFlowRoutes(
         // never blocks; no renderable image → the run row degrades to the
         // checks list.
         const pages = spec.componentKey === "labels" ? Math.min(scan.pageCount, 2) : 1;
-        const previews = isOwnObject
-          ? await renderTestRunPreviews(body.data.url, { pages })
-          : spooled && spoolPath
-            ? await renderLocalPdfPreviews(spoolPath, { pages })
-            : { previewUrl: null, previewUrl2: null };
+        const previews = await renderTestRunPreviews(runFileUrl, { pages });
 
         // Pin the run to the revision that is live right now.
         const revs = await storage.listPressTemplateRevisions([spec.id]);
@@ -1204,7 +1217,7 @@ export function registerPressTemplateFlowRoutes(
         const run = await storage.createPressTemplateTestRun({
           specId: spec.id,
           revisionId: live?.id ?? null,
-          fileUrl: body.data.url,
+          fileUrl: runFileUrl,
           fileName: body.data.fileName ?? null,
           checks,
           verdict,
@@ -1213,9 +1226,10 @@ export function registerPressTemplateFlowRoutes(
           createdByUserId: req.session.userId ?? null,
         });
         res.json({ run });
-      } finally {
-        // The spooled original PDF is never kept — only the preview PNGs.
-        if (spoolDir) fsp.rm(spoolDir, { recursive: true, force: true }).catch(() => {});
+      } catch (e) {
+        // The run row never landed — don't strand the mirrored object.
+        await deleteMirroredTemplateObject(mirroredRunPath);
+        throw e;
       }
     },
   );

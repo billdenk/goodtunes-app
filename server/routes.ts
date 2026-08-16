@@ -116,7 +116,7 @@ import {
   type CompletedTemplateVerdict,
 } from "@shared/uploadValidation";
 import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches, hasTrustworthyBleedBoxes, contentBleedMeasurement, type ContentBleedMeasurement, logSpotUsageFallback } from "./validators/completedTemplate";
-import { scanObjectPdf, measureTemplateSpecRow, clearTemplateSpecMeasurements } from "./templateSpecs";
+import { scanObjectPdf, measureTemplateSpecRow, clearTemplateSpecMeasurements, mirrorExternalTemplatePdf } from "./templateSpecs";
 
 const scryptAsync = promisify(scrypt);
 
@@ -34639,6 +34639,16 @@ export async function registerRoutes(
     if (!press) return res.status(404).json({ message: "Press not found" });
     const body = templateSpecBodySchema.safeParse(req.body);
     if (!body.success) return res.status(400).json({ message: body.error.message });
+    // Rule (gogoods, Aug 15 2026): a pasted external template link is
+    // downloaded into OUR object storage before it becomes a source of
+    // truth — same policy as audio masters, and same behavior as the press
+    // portal's attach route. Measurement/previews never depend on the
+    // external host staying alive.
+    if (body.data.templateFileUrl && /^https?:\/\//i.test(body.data.templateFileUrl)) {
+      const mirrored = await mirrorExternalTemplatePdf(body.data.templateFileUrl);
+      if (!mirrored.ok) return res.status(422).json({ message: mirrored.error });
+      body.data.templateFileUrl = mirrored.objectPath;
+    }
     // Jacket rows may be variant-specific (a JacketKind) or variant-less
     // ("" = applies to any jacket); labels / inner sleeves are always
     // variant-less so the unique key + resolver lookup agree.
