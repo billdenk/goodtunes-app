@@ -325,8 +325,8 @@ description = "Design brief for the press spec-entry cards and upgraded artwork 
 id = "bsdBMZo5tOaiD7xnhRVBD"
 uri = "file://handoff/art-blocks/README.md"
 type = "text"
-title = "Art Blocks builder — design brief (as sent to Ruby)"
-description = "The full Art Blocks spec: flow, block map per format, check semantics, states, non-goals, and implementation notes."
+title = "Art Blocks brief — amended per Bill's memo (ready for Ruby)"
+description = "Updated brief: Release/format-tab IA, no format picker, Draft vs Converted states, press-assignment precedence, thresholds-vs-geometry spec model, dual-theme ruling."
 
 [[outputs]]
 id = "i2OxPLDtpkBppya4dxkQu"

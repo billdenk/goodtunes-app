@@ -1,0 +1,82 @@
+# Art Blocks brief. Amendments before Ruby draws
+
+**To:** Otis (share with Ruby once updated)
+**From:** Bill
+**Date:** August 16, 2026
+**Type:** Corrections to the Art Blocks builder brief plus one standing ruling on theming. Items 1 through 5 are brief updates, make them before Ruby starts her pass. Item 6 contains real work: two doc amendments and a sweep.
+
+---
+
+## 1. Rename and relocate: the brief is written against the old IA
+
+The brief says "Album" and locates the surface at "Album, Physical tab, Art tab." Both are stale.
+
+- "Album" becomes "Release" in every artist-facing string and in the brief itself. "SKUs" becomes "Variants."
+- There is no single "Physical" tab. The locked structure inside a Release is: Dashboard, Overview, Music, one tab per physical format (Vinyl, CD), Sales. Package, Art, Prep, and Payments nest inside each format tab.
+- The Art Blocks surface lives at: Release, format tab, Art section. Ruby's CALIFORNIALAND mock (Vinyl tab, Art segment) already has this right. The brief should match her mock, not the other way around.
+
+## 2. Delete the format picker from the Art Blocks surface
+
+The brief's step 1 is a format picker inside the Art surface. Cut it. Format is chosen once, at draft creation (Ruby's "Name your release" screen: name, format for this draft, done). By the time an artist reaches the Art section they are standing inside a format tab, and the block map derives from the draft's format and press spec. There is never a second format question.
+
+The constraint the picker was protecting (one format's blocks at a time) is satisfied by the tabs for free. The non-goals section stays correct: an album with vinyl and CD shows one set of blocks at a time, because each format tab shows only its own.
+
+## 3. Make the surface state-aware: Draft vs converted
+
+The brief assumes an assigned press throughout ("your press requires CMYK," "Looks good, send to press," block map pulls from the press assignment). That is only true after Convert to Project. Art upload must also work in Draft state, and in Draft there is no press. Add this to the brief:
+
+**Draft state:**
+- No press name appears anywhere on the surface. This is the standing visibility rule.
+- Blocks check against the generic baseline geometry and the strictest thresholds in the press pool (see item 5).
+- Copy uses the generic form: "Presses require CMYK," not "your press requires CMYK."
+- The confirm CTA is "Save artwork" (or similar). There is no send-to-press verb in Draft.
+- The existing Unverified status and the "guide geometry estimated, not from a certified press template" note are exactly the Draft-state behavior. The brief already built the machinery, it just never names the state.
+
+**Converted (press assigned):**
+- Everything re-verifies against the assigned press's certified template specs. Nothing is re-done, everything is re-verified.
+- Press name appears, copy switches to "your press," and the CTA becomes "Looks good, send to press."
+
+Ruby needs both states in her mocks, and the transition should be quiet: most art that passed in Draft passes again at conversion with no artist action.
+
+## 4. Press assignment: the precedence chain
+
+Implement assignment in this order, and write it into the brief so the block map's spec source is unambiguous:
+
+1. **Referral origin locks the press.** An artist who arrived through a press's referral link or white-label funnel is assigned that press automatically. No chooser shown.
+2. **Otherwise MRP is the default** per our agreement.
+3. **Super admin can assign or reassign at any time**, before or after the artist is in the system.
+4. **Blind comparison is a future layer** on top of this chain, not a change to it. When we build it, artists and labels compare anonymized press options against criteria we surface. Do not build now, do not structure anything that prevents it.
+
+Standing rule unchanged: no press ever sees another press's terms, pricing, or deal shape anywhere in this flow.
+
+## 5. Spec model: thresholds vs geometry
+
+Press specs split into two kinds, and the portability promise works differently for each. Write this into the brief and the spec tables:
+
+**Thresholds** (PPI floor, color mode requirements, bleed depth): check every upload against the strictest value across the press pool, not the assigned press's value. Art that clears the highest bar clears every press. Result: threshold checks are done once and the asset is portable forever. A press switch or a future repress never triggers a re-check of thresholds.
+
+**Geometry** (artboard dimensions, label diameters, fold positions): these are not stricter or looser between presses, they are just different. Viryl's 12 inch label is 4.25 inch artboard against MRP's 4.125. Geometry re-verifies automatically at assignment and at any press switch. Most switches pass silently. A genuine mismatch surfaces as a specific ask naming only the affected blocks: "Viryl's center labels are slightly larger. Re-export just the labels."
+
+The artist-facing promise this produces: verify once at the highest bar, switch presses freely, and only ever re-touch a file when the physical dimensions actually differ.
+
+One small related ruling for Ruby's empty states: the cover-art placeholder is a neutral icon on the quiet surface, matching the template pattern. Never a blurred version of the artist's image. Empty must look unmistakably empty.
+
+## 6. Theming ruling: the docs are stale, not your dark screens
+
+The Apple canon and the design system doc both still say partner portals are light-only, and the design doc instructs hardcoding slate classes for them. That canon is retired. The ruling:
+
+- **All operator and partner surfaces (artist, press, label, NPO, manager, vendor, publisher) are theme-aware with both light and dark modes.** The dark mode is the charcoal admin dark, never navy.
+- **Ruby defaults to dark in her mocks.** Both token sets ship with every handoff per the existing theming rules.
+- **The fan player's navy shell is a separate world** and is untouched by this ruling.
+
+Three work items:
+
+1. **Amend both docs.** Rewrite the "Invited-partner and operator portals are LIGHT-ONLY" sections (Apple canon "Theming & breakpoints" reference, design system "light-only" section) to the dual-theme ruling above. The Art Blocks brief's "Theme: light admin slate" line updates to "theme-aware, both modes, dark default in mocks."
+2. **Replace the hardcoded-slate mechanism.** Portal surfaces move onto the token-based theming the docs already define for theme-aware screens. No component hardcodes surface, ink, or hairline values.
+3. **Sweep every existing portal screen** against the acceptance gate already in canon: screenshot in both themes at 1440, 1024, 768. Off-theme surfaces or overflow fail. Fix failures. Your previously pushed dark screens stop being violations and become reference implementations where they pass the gate.
+
+---
+
+## Unchanged and confirmed
+
+Everything else in the Art Blocks brief survives review as written: the four-status vocabulary with icon plus word (colorblind rule), rollup precedence, RGB hard-fail with no silent conversion, circles not squares for center labels with the hole indicator, the spine-width caveat, advisory rows, the bleed toggle states, and reusing the operator check panel with permission-removed affordances only.
