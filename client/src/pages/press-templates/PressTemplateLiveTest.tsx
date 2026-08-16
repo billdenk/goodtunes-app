@@ -983,7 +983,17 @@ export default function PressTemplateLiveTest({
   const inkFailed = inkChecks === 'error';
   const allPass = !inkPending && !inkFailed && measured.length > 0 && measured.every((c) => c.tone === 'pass');
   // New result → banner folds itself on a clean pass, opens on anything else.
-  useEffect(() => { if (art) setChecksOpen(!allPass); }, [art?.name, allPass]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A new file opens the detail rows; a finished measurement KEEPS them open —
+  // the auto-fold on a clean pass yanked the list away mid-read (gogoods,
+  // Aug 16 2026). Completion instead replays the settle + ring animation as a
+  // gentle "it's done" — the viewer closes the banner when they choose.
+  useEffect(() => { if (art) setChecksOpen(true); }, [art?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [donePulse, setDonePulse] = useState(0);
+  const wasPending = useRef(false);
+  useEffect(() => {
+    if (wasPending.current && !inkPending && inkChecks !== null) setDonePulse((p) => p + 1);
+    wasPending.current = inkPending;
+  }, [inkPending, inkChecks]);
   const verdictWord = inkPending ? 'Checking…' : inkFailed ? 'Incomplete' : allPass ? 'Pass' : measured.some((c) => c.tone === 'fail') ? 'Flagged' : 'Visual only';
 
   // Re-run the server measurement on the SAME file — a network hiccup must
@@ -1508,6 +1518,10 @@ export default function PressTemplateLiveTest({
                 {/* Arrival = settle + one soft ring pulse in the verdict color —
                     draws the eye once, then goes quiet (Bill, Aug 16 2026). */}
                 <div
+                  // Remount on completion replays settle + ring in the verdict
+                  // color — the gentle Apple-like "it's done" cue that replaced
+                  // the auto-fold (gogoods, Aug 16 2026).
+                  key={donePulse}
                   className="rounded-2xl overflow-hidden"
                   style={{
                     backgroundColor: t.card,
