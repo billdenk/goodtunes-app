@@ -693,8 +693,10 @@ export default function PressTemplateLiveTest({
           // dirty stays false, Close changes nothing, "Try another file"
           // still works exactly as before.
           if (certRev) {
+            // Pin to THIS certified revision (review): a certified run from a
+            // superseded revision must never masquerade as the current proof.
             const viewRun =
-              spec.runs.find((run) => run.certifiedAt) ??
+              spec.runs.find((run) => run.certifiedAt && run.revisionId === certRev.id) ??
               spec.runs.find(
                 (run) => run.revisionId === certRev.id && (run.verdict === 'pass' || run.verdict === 'warn'),
               );
@@ -712,7 +714,13 @@ export default function PressTemplateLiveTest({
                   const artFileObj = new File([artBlob], artName, {
                     type: isPdf ? 'application/pdf' : artBlob.type || 'image/jpeg',
                   });
-                  if (!cancelled) await loadArtFromFile(artFileObj, { markDirty: false });
+                  if (!cancelled) {
+                    await loadArtFromFile(artFileObj, { markDirty: false });
+                    // Viewed-only art must never be re-submitted/re-certified
+                    // by an unrelated Save (e.g. a rename) — only a fresh
+                    // deliberate pick clears this flag (review).
+                    artIsViewedRun.current = true;
+                  }
                 }
               } catch {
                 // Best-effort — the template alone is still a useful view.
@@ -725,7 +733,16 @@ export default function PressTemplateLiveTest({
           setError(err instanceof Error ? err.message : 'Could not load that template.');
         }
       })();
-      return () => { cancelled = true; ctrl.abort(); };
+      return () => {
+        cancelled = true;
+        ctrl.abort();
+        // Invalidate any in-flight art parse/ink-inspect from the saved-run
+        // hydration too — pickSeq is the loader's staleness token (review:
+        // the fetch abort alone didn't cover the parse/inspect stages).
+        pickSeq.current++;
+        inkXhr.current?.abort();
+        inkXhr.current = null;
+      };
     }
     // Arrived with nothing in hand (refresh, deep link)? If a browser-local
     // draft exists, offer to resume it (canon, Aug 15 2026); otherwise
@@ -779,8 +796,13 @@ export default function PressTemplateLiveTest({
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
+    artIsViewedRun.current = false; // a deliberate fresh pick is submittable again
     await loadArtFromFile(f);
   };
+
+  // True while `art`/`artFile` hold a SAVED run's art re-hydrated for viewing
+  // a certified template — Save must not re-upload/re-test/re-certify it.
+  const artIsViewedRun = useRef(false);
 
   // Shared art loader — the picker and the saved-run rehydrate (view mode)
   // both run the same parse + overlay + ink-inspect pipeline. markDirty=false
@@ -1065,6 +1087,7 @@ export default function PressTemplateLiveTest({
   const submitServerTest = async (specId: string) => {
     const f = artFile.current;
     if (!f) return;
+    if (artIsViewedRun.current) return; // viewing a saved run — nothing new to test
     const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
     if (!isPdf) return;
     const url = await uploadAdminDoc(f);
