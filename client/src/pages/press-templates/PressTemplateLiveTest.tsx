@@ -1039,7 +1039,14 @@ export default function PressTemplateLiveTest({
       const m = Math.min(wIn, hIn);
       return m > 0.01 && m <= 2 ? Math.round(m * 1000) / 1000 : undefined;
     })();
-    const r = await apiRequest('POST', templateTestPath(pressId, specId), { url, fileName: f.name, templateBleedLineInches });
+    // The cut rectangle itself (template coords, inches) — sheet-with-margins
+    // templates put the cut line deep inside the artboard, so the server's
+    // rendered-content bleed measurement needs the real geometry.
+    const r3 = (v: number) => Math.round((v / 25.4) * 1000) / 1000;
+    const templateCutRect = cutBox
+      ? { leftIn: r3(cutBox.xMm), topIn: r3(cutBox.yMm), widthIn: r3(cutBox.wMm), heightIn: r3(cutBox.hMm) }
+      : undefined;
+    const r = await apiRequest('POST', templateTestPath(pressId, specId), { url, fileName: f.name, templateBleedLineInches, templateCutRect });
     const { run } = (await r.json()) as { run?: { id: string; verdict: string } };
     if (run && (run.verdict === 'pass' || run.verdict === 'warn')) {
       await apiRequest('POST', certifyRunPath(pressId, specId, run.id), {});

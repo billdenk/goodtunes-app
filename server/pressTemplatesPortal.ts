@@ -146,6 +146,19 @@ const testSchema = z.object({
   // 2026). Used only when the spec has no stored line; persisted as the
   // measured line so future runs and prepress agree.
   templateBleedLineInches: z.number().positive().max(2).optional(),
+  // The template's cut rectangle (template coordinates, inches, top-left
+  // origin), read from the same GT layers. Sheet-with-margins templates
+  // (MRP jackets) place the cut line deep inside the artboard, so the
+  // rendered-content bleed measurement needs the real cut geometry — the
+  // validator refuses to infer it and stays "unmeasured" otherwise.
+  templateCutRect: z
+    .object({
+      leftIn: z.number().min(0).max(60),
+      topIn: z.number().min(0).max(60),
+      widthIn: z.number().positive().max(60),
+      heightIn: z.number().positive().max(60),
+    })
+    .optional(),
 });
 
 /** Mint a display revision label: R-MMDDYY (+ -2, -3… on same-day re-uploads). */
@@ -1255,7 +1268,12 @@ export function registerPressTemplateFlowRoutes(
               const pdfPath = path.join(tmpDir, "src.pdf");
               await file.download({ destination: pdfPath });
               const { contentBleedMeasurement } = await import("./validators/completedTemplate");
-              contentBleed = await contentBleedMeasurement(pdfPath, scan, slotSpecEff as any);
+              const cut = body.data.templateCutRect ?? null;
+              contentBleed = await contentBleedMeasurement(pdfPath, scan, slotSpecEff as any, {
+                trimRectOverrideInches: cut
+                  ? { left: cut.leftIn, top: cut.topIn, width: cut.widthIn, height: cut.heightIn }
+                  : null,
+              });
             }
           } catch {
             contentBleed = null;

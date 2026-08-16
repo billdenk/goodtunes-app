@@ -1316,15 +1316,11 @@ export function templateTrimRectInches(opts: {
   // Sheet-with-margins templates (gogoods, Aug 16 2026): vendor sheets like
   // MRP's jacket artboard are several inches larger than finished + 2×bleed —
   // the cut line sits deep inside the sheet, not one bleed-width from its
-  // edge. When the page is meaningfully larger than the finished area plus
-  // bleed, the trim rectangle is the finished rect centered on the sheet
-  // (matching how these templates draw their guides).
+  // edge, so "page inset by bleed" would be nonsense geometry. Without a
+  // verified cut rectangle (callers can supply one measured from the
+  // template's own layers) the honest answer is UNMEASURED, never inferred.
   if (finishedInches && (w > finishedInches.w + 0.25 || h > finishedInches.h + 0.25)) {
-    const fw = Math.min(finishedInches.w, pageInches.w);
-    const fh = Math.min(finishedInches.h, pageInches.h);
-    if (fw > 0 && fh > 0) {
-      return { left: (pageInches.w - fw) / 2, top: (pageInches.h - fh) / 2, width: fw, height: fh };
-    }
+    return null;
   }
   return { left: b, top: b, width: w, height: h };
 }
@@ -1346,6 +1342,13 @@ export function contentBleedFromRaster(opts: {
   pageInches: BoxInches;
   trimRectInches: RectInches;
   inkThreshold?: number;
+  /** When set, each side must ALSO show ≥50% ink coverage in the bleed band
+   * (the ring of this thickness just outside the trim edge). Kills the
+   * crop-mark false pass: an isolated tick reaching each page edge makes the
+   * global bounding box span everything while the actual bleed band stays
+   * white — coverage catches that, real imagery covers its band ~100%. A
+   * side that fails coverage reports 0 overhang (short), never a pass. */
+  bleedBandInches?: number;
 }): SideInches | null {
   const { data, width, height, channels, pageInches, trimRectInches } = opts;
   if (width <= 0 || height <= 0 || pageInches.w <= 0 || pageInches.h <= 0) return null;
@@ -1369,12 +1372,46 @@ export function contentBleedFromRaster(opts: {
   const trimRightPx = (trimRectInches.left + trimRectInches.width) * ppiX;
   const trimTopPx = trimRectInches.top * ppiY;
   const trimBottomPx = (trimRectInches.top + trimRectInches.height) * ppiY;
-  return {
+  const sides: SideInches = {
     left: (trimLeftPx - minX) / ppiX,
     right: (maxX + 1 - trimRightPx) / ppiX,
     top: (trimTopPx - minY) / ppiY,
     bottom: (maxY + 1 - trimBottomPx) / ppiY,
   };
+  const band = opts.bleedBandInches ?? 0;
+  if (band > 0) {
+    const clampX = (v: number) => Math.max(0, Math.min(width, Math.round(v)));
+    const clampY = (v: number) => Math.max(0, Math.min(height, Math.round(v)));
+    // Coverage of a pixel rect: fraction of pixels darker than the same ink
+    // threshold used for the bounding box.
+    const coverage = (x0: number, x1: number, y0: number, y1: number): number => {
+      const xa = clampX(x0), xb = clampX(x1), ya = clampY(y0), yb = clampY(y1);
+      if (xb <= xa || yb <= ya) return 0;
+      let ink = 0, total = 0;
+      for (let y = ya; y < yb; y++) {
+        const rowBase = y * width * channels;
+        for (let x = xa; x < xb; x++) {
+          total++;
+          if (data[rowBase + x * channels] < th) ink++;
+        }
+      }
+      return total > 0 ? ink / total : 0;
+    };
+    const bandX = band * ppiX;
+    const bandY = band * ppiY;
+    const cov = {
+      left: coverage(trimLeftPx - bandX, trimLeftPx, trimTopPx, trimBottomPx),
+      right: coverage(trimRightPx, trimRightPx + bandX, trimTopPx, trimBottomPx),
+      top: coverage(trimLeftPx, trimRightPx, trimTopPx - bandY, trimTopPx),
+      bottom: coverage(trimLeftPx, trimRightPx, trimBottomPx, trimBottomPx + bandY),
+    };
+    const MIN_COVERAGE = 0.5;
+    if (cov.left < MIN_COVERAGE) sides.left = Math.min(sides.left, 0);
+    if (cov.right < MIN_COVERAGE) sides.right = Math.min(sides.right, 0);
+    if (cov.top < MIN_COVERAGE) sides.top = Math.min(sides.top, 0);
+    if (cov.bottom < MIN_COVERAGE) sides.bottom = Math.min(sides.bottom, 0);
+  }
+  return sides;
 }
 
 // 72 DPI: 0.125" = 9px, so ±1px of raster rounding is ≈0.014" — well inside
@@ -1400,6 +1437,14 @@ export async function contentBleedMeasurement(
     templatePageInches?: { w: number; h: number } | null;
     templateBleedLineInches?: number | null;
     finishedInches: { w: number; h: number };
+  },
+  measureOpts?: {
+    /** Cut rectangle measured from the template's OWN layers (template
+     * coordinates, inches, top-left origin). Used only when the rendered
+     * page matches the template artboard directly (no orientation swap) —
+     * this is the verified geometry for sheet-with-margins templates where
+     * templateTrimRectInches honestly returns null. */
+    trimRectOverrideInches?: RectInches | null;
   },
 ): Promise<ContentBleedMeasurement | null> {
   try {
@@ -1433,14 +1478,28 @@ export async function contentBleedMeasurement(
           .raw()
           .toBuffer({ resolveWithObject: true });
         const pageInches = { w: info.width / CONTENT_BLEED_DPI, h: info.height / CONTENT_BLEED_DPI };
-        const trimRect = templateTrimRectInches({
-          componentId: spec.id,
-          pageInches,
-          templatePageInches: tmpl,
-          bleedLineInches: line,
-          finishedInches: spec.finishedInches,
-        });
-        if (!trimRect) continue; // artboard mismatch — size check owns it
+        const override = measureOpts?.trimRectOverrideInches ?? null;
+        const tol = 0.05;
+        const overrideUsable =
+          override != null &&
+          Math.abs(pageInches.w - tmpl.w) <= tol &&
+          Math.abs(pageInches.h - tmpl.h) <= tol &&
+          override.left >= 0 &&
+          override.top >= 0 &&
+          override.width > 0 &&
+          override.height > 0 &&
+          override.left + override.width <= pageInches.w + tol &&
+          override.top + override.height <= pageInches.h + tol;
+        const trimRect = overrideUsable
+          ? override
+          : templateTrimRectInches({
+              componentId: spec.id,
+              pageInches,
+              templatePageInches: tmpl,
+              bleedLineInches: line,
+              finishedInches: spec.finishedInches,
+            });
+        if (!trimRect) continue; // artboard mismatch / unverified geometry — stays unmeasured
         const sides = contentBleedFromRaster({
           data,
           width: info.width,
@@ -1448,6 +1507,7 @@ export async function contentBleedMeasurement(
           channels: info.channels || 1,
           pageInches,
           trimRectInches: trimRect,
+          bleedBandInches: line,
         });
         if (!sides) continue; // blank page
         measured++;

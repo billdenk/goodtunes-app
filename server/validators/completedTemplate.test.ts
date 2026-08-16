@@ -1273,6 +1273,51 @@ describe("Task #3072 — content-based bleed measurement", () => {
     for (const v of Object.values(sides)) assert.ok(Math.abs(v - 0.05) < 0.02, String(v));
   });
 
+  test("contentBleedFromRaster: crop marks alone can't fake bleed — band coverage clamps the side to 0", () => {
+    const W = 128;
+    const page = { w: 12.8, h: 12.8 };
+    const trim = { left: 0.25, top: 0.25, width: 12.3, height: 12.3 };
+    const data = Buffer.alloc(W * W, 255);
+    // Solid ink over the trim area only (stops AT the trim line)…
+    for (let y = 3; y < W - 3; y++) for (let x = 3; x < W - 3; x++) data[y * W + x] = 0;
+    // …plus isolated crop-mark ticks touching every page edge/corner.
+    for (let i = 0; i < 4; i++) {
+      data[0 * W + i] = 0; data[(W - 1) * W + (W - 1 - i)] = 0;
+      data[i * W + 0] = 0; data[(W - 1 - i) * W + (W - 1)] = 0;
+    }
+    // Without the band gate the global bbox spans the whole page → false pass.
+    const loose = contentBleedFromRaster({
+      data, width: W, height: W, channels: 1, pageInches: page, trimRectInches: trim,
+    })!;
+    assert.ok(Math.min(...Object.values(loose)) > 0.2);
+    // With the gate, every side's bleed band is white → clamped to 0 (short).
+    const gated = contentBleedFromRaster({
+      data, width: W, height: W, channels: 1, pageInches: page, trimRectInches: trim,
+      bleedBandInches: 0.25,
+    })!;
+    for (const v of Object.values(gated)) assert.ok(v <= 0, String(v));
+    // Real full-bleed ink still passes with the gate on.
+    const inked = Buffer.alloc(W * W, 0);
+    const full = contentBleedFromRaster({
+      data: inked, width: W, height: W, channels: 1, pageInches: page, trimRectInches: trim,
+      bleedBandInches: 0.25,
+    })!;
+    for (const v of Object.values(full)) assert.ok(Math.abs(v - 0.25) < 0.02, String(v));
+  });
+
+  test("templateTrimRectInches: sheet-with-margins template (page ≫ finished) → null, never inferred geometry", () => {
+    assert.equal(
+      templateTrimRectInches({
+        componentId: "jacket",
+        pageInches: { w: 30.686, h: 21.233 },
+        templatePageInches: { w: 30.686, h: 21.233 },
+        bleedLineInches: 0.129,
+        finishedInches: { w: 24.801, h: 12.581 },
+      }),
+      null,
+    );
+  });
+
   test("no-box file + content filling to the bleed edge PASSES via rendered content", () => {
     const scan = scanBuffer(bleedPdf({ wIn: 12.75, hIn: 12.75, noTrim: true }));
     const c = find(validateCompletedComponent(scan, CB_SPEC, { contentBleed: fullBleed }), "tmpl.bleed");
