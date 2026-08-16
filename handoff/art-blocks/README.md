@@ -1,14 +1,14 @@
 # Art Blocks builder — design brief for Ruby
 
 **Brief status:** Awaiting Ruby's design pass. Build task follows once mocks land.
-**Brief date:** 2026-08-16
+**Brief date:** 2026-08-16 (amended same day per Bill's corrections memo — IA rename, format picker removed, Draft/Converted states, press-assignment precedence, thresholds-vs-geometry spec model, dual-theme ruling)
 **Point of contact:** Bill / gogoods
 
 ---
 
 ## Context
 
-Artists who press vinyl, CD, or cassette through GoodTunes must supply print-ready artwork for every physical component of their release — jacket front, back, spine, center labels A+B, inner sleeve, CD booklet, etc. Today that means navigating PDFs of dieline templates, reading press spec sheets, and exporting files to exact artboard dimensions. Most artists don't know what a bleed is.
+Artists who press vinyl, CD, or cassette through GoodTunes must supply print-ready artwork for every physical component of the release — jacket front, back, spine, center labels A+B, inner sleeve, CD booklet, etc. Today that means navigating PDFs of dieline templates, reading press spec sheets, and exporting files to exact artboard dimensions. Most artists don't know what a bleed is.
 
 The Art Blocks builder hides all of that. The artist sees a map of named blocks ("Cover front", "Cover back", "Center label — Side A", …), drops an image on each one, and gets instant pass/warn/fail feedback. When all blocks pass, the system stitches the accepted art into the press's real template downstream — the artist never sees the dieline.
 
@@ -19,37 +19,81 @@ This brief covers the **interface the artist interacts with**. It does NOT cover
 ## Concept and flow
 
 ```
-Album Physical tab (artist portal, embedded AdminAlbum)
-  └── Art tab → "Upload your artwork" section
+Release → format tab (Vinyl, CD, …) → Art section (artist portal, embedded AdminAlbum)
         ↓
-  [1] Format picker — which pressing format is this for?
-        • Pulls from the album's SKUs / invited press assignment
-        • E.g. "12″ LP (single jacket)" or "12″ 2×LP (gatefold)"
-        • Only the album's configured formats appear
-        ↓
-  [2] Block map — one tile per required component
-        • Tiles are named, shaped, and sized for the chosen format
+  [1] Block map — one tile per required component
+        • Format is already known: it was chosen once at draft creation
+          ("Name your release": name + format), and the artist is standing
+          inside that format's tab. There is NO format picker here — ever.
+        • The map derives from the draft's format and its spec source
+          (see "Draft vs Converted" and "Spec model" below)
+        • Tiles are named, shaped, and sized for the format
         • Each tile starts in "Empty" state with an outlined drop zone
         ↓
-  [3] Drop / pick image on each block
+  [2] Drop / pick image on each block
         • Accepts JPEG or PNG (primary path — compositor stitches these directly)
         • PDF, TIFF, PSD accepted with an advisory note (see Check semantics)
         ↓
-  [4] Per-block check panel opens inline
+  [3] Per-block check panel opens inline
         • Pass / warn / fail rows per check (format, dimensions, resolution, color)
         • Rollup badge on the tile: ✓ Pass / ⚠ Warning / ✗ Fail / … Checking
         ↓
-  [5] Bleed toggle (per-block, in the check panel)
+  [4] Bleed toggle (per-block, in the check panel)
         • Switches the block's preview between trimmed view and full-bleed view
         • Guide overlays: cut line, bleed boundary, safety zone
         ↓
-  [6] All-blocks-complete summary
-        • Rollup across all blocks for the chosen format
-        • "Looks good — send to press" confirm CTA when all blocks pass/warn
+  [5] All-blocks-complete summary
+        • Rollup across all blocks for the format
+        • Draft: "Save artwork" confirm CTA when all blocks pass/warn
+        • Converted (press assigned): "Looks good — send to press" CTA
         • Blocked by any failing block
         ↓
-  [7] System stitches art into press template (not visible to artist)
+  [6] System stitches art into press template (not visible to artist;
+      Converted state only)
 ```
+
+---
+
+## Draft vs Converted — the surface is state-aware
+
+Art upload works in **both** release states. Ruby must mock both; the transition between them is quiet — most art that passed in Draft passes again at conversion with no artist action.
+
+**Draft state (no press assigned):**
+- **No press name appears anywhere on the surface.** This is the standing visibility rule.
+- Blocks check against the **generic baseline geometry** and the **strictest thresholds across the press pool** (see "Spec model" below).
+- Copy uses the generic form: **"Presses require CMYK"** — never "your press requires CMYK."
+- The confirm CTA is **"Save artwork"** (or similar). There is no send-to-press verb in Draft.
+- The **Unverified** status and the "guide geometry estimated — not from a certified press template" note are exactly the Draft-state behavior; Draft is the state that machinery serves.
+
+**Converted (press assigned):**
+- Everything **re-verifies** against the assigned press's certified template specs. Nothing is re-done, everything is re-verified.
+- The press name appears, copy switches to **"your press,"** and the CTA becomes **"Looks good — send to press."**
+
+---
+
+## Press assignment — the precedence chain
+
+The block map's spec source is unambiguous because assignment follows this order:
+
+1. **Referral origin locks the press.** An artist who arrived through a press's referral link or white-label funnel is assigned that press automatically. No chooser shown.
+2. **Otherwise MRP is the default** (per standing agreement).
+3. **Super admin can assign or reassign at any time**, before or after the artist is in the system.
+4. **Blind comparison is a future layer** on top of this chain, not a change to it (artists/labels compare anonymized press options against surfaced criteria). Do not build or design it now; do not structure anything that prevents it.
+
+Standing rule unchanged: **no press ever sees another press's terms, pricing, or deal shape** anywhere in this flow.
+
+---
+
+## Spec model — thresholds vs geometry
+
+Press specs split into two kinds, and the portability promise works differently for each:
+
+- **Thresholds** (PPI floor, color-mode requirements, bleed depth): every upload is checked against the **strictest value across the press pool**, not the assigned press's value. Art that clears the highest bar clears every press — threshold checks are done **once** and the asset is portable forever. A press switch or a future repress never re-checks thresholds.
+- **Geometry** (artboard dimensions, label diameters, fold positions): not stricter or looser between presses — just **different** (e.g. Viryl's 12″ label artboard is 4.25″ vs MRP's 4.125″). Geometry **re-verifies automatically** at press assignment and at any press switch. Most switches pass silently; a genuine mismatch surfaces as a specific ask naming only the affected blocks: *"Viryl's center labels are slightly larger. Re-export just the labels."*
+
+The artist-facing promise: **verify once at the highest bar, switch presses freely, and only re-touch a file when the physical dimensions actually differ.**
+
+Empty-state ruling: the cover-art placeholder is a **neutral icon on the quiet surface**, matching the template pattern — **never a blurred version of the artist's image**. Empty must look unmistakably empty.
 
 ---
 
@@ -57,7 +101,7 @@ Album Physical tab (artist portal, embedded AdminAlbum)
 
 ### What the block map contains
 
-The block map is **derived from the format + press assignment**. A 12″ single-LP needs different blocks than a gatefold 2×LP. The artist picks the format first (from their album's configured SKUs) and the map regenerates. Blocks are grouped visually by the physical component they represent.
+The block map is **derived from the draft's format and its spec source** — the generic baseline + strictest pool thresholds in Draft, the assigned press's certified specs once Converted. A 12″ single-LP needs different blocks than a gatefold 2×LP. There is no format question on this surface: format was set at draft creation, and the artist reaches the Art section standing inside a format tab (a release with vinyl and CD shows one set of blocks per tab, never two maps at once). Blocks are grouped visually by the physical component they represent.
 
 ### Required blocks per format
 
@@ -86,13 +130,13 @@ The block map is **derived from the format + press assignment**. A 12″ single-
 | | Back panel / spine | Rect | press-specific | press-specific | per press |
 | **CD (booklet)** | Booklet pages | Rect | press-specific | press-specific | per press |
 
-> **Spine-width caveat.** For single-jacket formats the spine is part of the jacket artboard. Its width depends on the disc count and paper stock — it is calculated by the press at order time and is NOT a fixed number. For the art-blocks builder, the spine is shown as a block with a placeholder width and a note: "Spine width is confirmed by your press once the order is placed — your art should extend across the full gatefold spread."
+> **Spine-width caveat.** For single-jacket formats the spine is part of the jacket artboard. Its width depends on the disc count and paper stock — it is calculated at order time and is NOT a fixed number. For the art-blocks builder, the spine is shown as a block with a placeholder width and a note: "Spine width is confirmed by your press once the order is placed — your art should extend across the full gatefold spread."
 
 > **Center labels are circles, not squares.** The finished area is a disc (circle) with a center spindle hole. Art must fill the circular bleed boundary; the center hole area (approximately 1½″ diameter on 12″ labels; larger on 7″ 45 RPM) is a no-content zone. Ruby should represent labels as circles with a hole indicator, not as squares.
 
-> **Viryl Technologies labels are slightly wider.** Viryl's 12″ center label is 4.0″ finished / 4.25″ artboard (vs the 3.875″ / 4.125″ used by MRP, Hellbender, and the generic baseline). The block map pulls from the album's assigned press spec, so this resolves automatically — just design the label block as a generic circle and note that the artboard dimensions come from the press.
+> **Viryl Technologies labels are slightly wider.** Viryl's 12″ center label is 4.0″ finished / 4.25″ artboard (vs the 3.875″ / 4.125″ used by MRP, Hellbender, and the generic baseline). This is a **geometry** difference, not a threshold (see "Spec model"): in Draft the block uses the generic baseline; at press assignment or a press switch the geometry re-verifies automatically, and a genuine mismatch surfaces as a specific per-block ask ("Re-export just the labels"). Design the label block as a generic circle and note that the artboard dimensions come from the spec source.
 
-> **CD specs are press-specific.** There is no generic-baseline artboard for CD components analogous to the vinyl specs above — each press issues its own CD template. The block map for CD formats will show "Artboard dimensions confirmed by your press" and display the press's template dimensions once the album has an assigned press with CD specs on file. Design the CD blocks so they gracefully handle this "pending spec" state.
+> **CD specs are press-specific.** There is no generic-baseline artboard for CD components analogous to the vinyl specs above — each press issues its own CD template. The block map for CD formats will show "Artboard dimensions confirmed by your press" and display the press's template dimensions once the release is Converted with a press that has CD specs on file. Design the CD blocks so they gracefully handle this "pending spec" state (which is also the Draft state for CD).
 
 ---
 
@@ -138,7 +182,7 @@ Art must match the block's artboard size (finished + bleed on all sides) within 
 
 **3. Resolution / PPI**
 
-Default floor is **300 PPI** at the block's finished+bleed size. A per-press override (set by operators, sourced from `press_template_specs.min_ppi`) wins over the default.
+Default floor is **300 PPI** at the block's finished+bleed size. PPI is a **threshold** (see "Spec model"): uploads check against the **strictest floor across the press pool** (per-press values sourced from `press_template_specs.min_ppi`, null = 300), so a pass is portable across any press switch and never re-checks.
 
 | Outcome | Result |
 |---|---|
@@ -157,8 +201,8 @@ All press plants require **CMYK, PMS (spot), or Grayscale**. RGB is auto-flagged
 | CMYK | Pass |
 | PMS / spot | Pass |
 | Grayscale | Pass |
-| RGB | **Fail** — "RGB detected. Your press requires CMYK. Re-export from your design app as CMYK — do not convert in GoodTunes." |
-| Unknown (non-PDF, or PDF without readable color tokens) | Warn — "Couldn't verify color mode. Your press requires CMYK. Check in your design app before submitting." |
+| RGB | **Fail** — "RGB detected. Presses require CMYK. Re-export from your design app as CMYK — do not convert in GoodTunes." *(Converted: "Your press requires CMYK…")* |
+| Unknown (non-PDF, or PDF without readable color tokens) | Warn — "Couldn't verify color mode. Presses require CMYK. Check in your design app before submitting." *(Converted: "Your press requires CMYK…")* |
 
 **State to note:** RGB uploads do **not** get silently converted. The design should make this unmissable — the artist needs to go back to their design app. This is the most common blocker in real prepress.
 
@@ -233,9 +277,9 @@ This framing lives as a quiet subheading or intro line above the block map, not 
 
 ## Where it lives
 
-- **Surface:** Artist portal → Album → Physical tab → Art tab
+- **Surface:** Artist portal → Release → format tab (Vinyl, CD, …) → Art section. The locked structure inside a Release is: Dashboard, Overview, Music, one tab per physical format (Vinyl, CD), Sales — Package, Art, Prep, and Payments nest inside each format tab. Ruby's CALIFORNIALAND mock (Vinyl tab, Art segment) already has this right; this brief matches her mock. Artist-facing strings say **"Release"** (never "Album") and **"Variants"** (never "SKUs").
 - **Embedded mode:** `AdminAlbum` in `embedded` mode (no /admin chrome) inside `OperatorShell`
-- **Theme:** **Light admin slate theme** — partner portals (artist, label, manager) always use the light theme; the dark charcoal admin theme is super-admin/press-portal only. See `handoff/style-guide/apple-canon.md` "Theming & breakpoints."
+- **Theme:** **Theme-aware, both modes — dark default in mocks.** All operator and partner surfaces are theme-aware with light and dark modes (dark = the charcoal admin dark, never navy); both token sets ship with every handoff per the theming rules. See `handoff/style-guide/apple-canon.md` "Theming & breakpoints."
 - **Reuse rule:** partner portals reuse super-admin components with permission-removed affordances only. The block check panel is a lighter version of the existing prepress review dialog (`handoff/press-specs/ArtworkCheckUpgraded.tsx`) — same check-row layout, same verdict banner structure, same status vocabulary — just artist-facing copy and no override affordance.
 - **Colorblind rule (founder, applies everywhere):** every status = icon + word, never color alone. Never use color as the only indicator of pass/fail/warn.
 
@@ -271,7 +315,7 @@ All bleed values: **0.125″ per side** (standard for all plants on file — MRP
 - **No Canva integration.** A future escape hatch (separate task) may add "Open in Canva" as a block action. Do not design it for this round — mention it at most as a greyed-out future tile.
 - **No operator preflight redesign.** The existing prepress review dialog (`ArtworkCheckUpgraded.tsx`) used by operators and team members is unchanged. This is an additive artist-facing surface only.
 - **No stitching UI.** The compositor runs server-side after the artist confirms. The artist sees "Sent to press" — no progress bar, no compositor controls.
-- **No multi-format upload.** The format picker selects one format at a time. An album with both vinyl and CD formats shows a format picker and one set of blocks — not two simultaneous block maps.
+- **No format picker, no multi-format upload.** Format is chosen once, at draft creation; the format tabs enforce one-format-at-a-time for free. A release with both vinyl and CD shows one set of blocks per format tab — never two simultaneous block maps, and never a second format question.
 
 ---
 
@@ -284,4 +328,5 @@ These are for the engineer who builds from Ruby's mocks. Included here so contex
 - Guide geometry lives in `press_template_specs.measured_guides` (shape: `shared/templateGuides.ts MeasuredTemplateGuides`) and in the operator-entered `fold_x_inches` / `fold_y_inches` / `safety_inset_inches` columns; operator values win.
 - Rollup logic is in `shared/uploadValidation.ts rollupStatus()`.
 - Per-press PPI override is in `press_template_specs.min_ppi` (null = 300 PPI default).
-- The block map is derived from the album's format/press assignment using `shared/vendorSpecs.ts` templates and the operator-entered `press_template_specs` catalog rows.
+- The block map is derived from the draft's format + spec source using `shared/vendorSpecs.ts` templates and the operator-entered `press_template_specs` catalog rows. In Draft: generic baseline geometry + strictest thresholds across the press pool. Converted: the assigned press's certified specs; geometry re-verifies at assignment/switch, thresholds never re-check.
+- Press assignment precedence: referral origin locks the press → otherwise MRP default → super admin can (re)assign any time. Blind comparison is a future layer on top; structure nothing that prevents it. No press ever sees another press's terms, pricing, or deal shape.

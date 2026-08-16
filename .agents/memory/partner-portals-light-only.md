@@ -1,15 +1,15 @@
 ---
-name: Partner/operator portals are light-only (admin slate)
-description: Invited-partner & operator portals follow the light admin theme, not the dark fan navy; canonical order-status pill colors and the alpha-on-var trap.
+name: Partner/operator portal theming (dual-theme ruling; never fan navy)
+description: Partner/operator portals are theme-aware (light admin slate + charcoal dark, NEVER fan navy) per Bill's Aug 16 2026 ruling; canonical order-status pill colors and the alpha-on-var trap.
 ---
 
-# Invited-partner / operator portals are LIGHT-ONLY (admin slate)
+# Partner / operator portals: theme-aware (light + charcoal dark), NEVER fan navy
 
-Every invited-partner / operator portal — Press, Vendor (Maker/Reseller), Artist, Label, Non-Profit, Manager, Publisher — plus their invite panels render in the **light admin (Stripe slate) theme**, NOT the dark fan navy `#00062B`. They are operator surfaces, light-only (not dual-theme). Mechanism: `OperatorShell` adds `body.gt-admin` for these paths, `client/src/main.tsx` first-paints `gt-admin` for the exact portal/`/invite` paths, and `scripts/design-lint.ts` `isInvitedPortal` exempts them from the fan-only text-tone rule. Full token vocabulary is in `docs/design-system.md` → "Invited-partner & operator portals are LIGHT-ONLY".
+**Ruling (Bill, 2026-08-16, supersedes the earlier light-only canon):** every invited-partner / operator portal — Press, Vendor (Maker/Reseller), Artist, Label, Non-Profit, Manager, Publisher — is **theme-aware with both light and dark modes**. Light = the admin (Stripe slate) theme; dark = the **charcoal admin dark (`gt-admin-dark` ladder), never navy**. The fan player's navy `#00062B` shell is a separate world. Ruby defaults to dark in mocks; both token sets ship with every handoff. Amended sections live in `docs/design-system.md` and `handoff/style-guide/apple-canon.md` "Theming & breakpoints".
 
-**Why:** Bill wants every partner portal to "look just like our admin." The portals were originally dark navy (copied from the fan player).
+**Why:** Bill's Art Blocks amendments memo ruled the light-only docs stale — Ruby's dark screens become reference implementations where they pass the acceptance gate (both themes at 1440/1024/768, no off-theme surfaces or overflow).
 
-**How to apply:** New/edited partner-portal code uses slate tokens (page `bg-slate-50`, cards `bg-white ring-slate-200`, slate text scale), never `bg-[color:var(--brand-bg)]`/`text-white/NN`/`bg-white/NN` dark chrome.
+**How to apply:** Portal surfaces move onto token-based theming — no component hardcodes surface/ink/hairline values (the old "hardcode slate classes" instruction is retired). Still never fan-navy chrome (`bg-[color:var(--brand-bg)]`/`text-white/NN` washes) on portals. Outstanding as of the ruling: migrate hardcoded-slate screens to tokens + sweep every portal screen in both themes (not yet done — check STATUS.md before assuming).
 
 ## Canonical order-status pill = AdminCustomerDetail map (duplicated, keep in sync)
 

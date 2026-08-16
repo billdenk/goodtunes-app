@@ -247,9 +247,15 @@ Reference implementation: the dark Catalog mockup
 - **No mixed surfaces.** Every surface on a page inherits the page's active
   theme. A dark card on a light page (or vice versa) is a bug, even if it
   matches a mock drawn for the other theme.
-- **Which theme where:** artist-facing contexts = light; the charcoal
-  admin/operator shell = dark. Screens serving both are theme-aware from
-  day one, never forked.
+- **Which theme where (ruled Aug 16 2026, supersedes any "light-only"
+  language):** ALL operator and partner surfaces — artist, press, label,
+  NPO, manager, vendor, publisher — are theme-aware with BOTH light and
+  dark modes. Dark is the charcoal admin dark, never navy. Ruby defaults
+  to dark in her mocks; both token sets ship with every handoff. The fan
+  player's navy shell is a separate world, untouched by this ruling.
+  Existing portal screens sweep against the acceptance gate below;
+  previously pushed dark screens become reference implementations where
+  they pass.
 - **Breakpoints:** no fixed pixel widths that overflow the viewport. Grids
   collapse gracefully at 1024 and 768 (prefer auto-fit/minmax grids and
   flex-wrap over breakpoint classes).
