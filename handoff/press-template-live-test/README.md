@@ -118,3 +118,42 @@ States checklist (acceptance, both themes, 1440px):
 - Live test: certified open (badge + last-test line, quiet Save, plain Test);
   uncertified open (Not tested, "Certify." heading, glowing "Test & certify",
   quiet Save); dirty Save after rename/replace/test; resume-draft dialog.
+
+
+## Correction round — Aug 16 2026 (verbatim, replaces prior copies)
+
+Both .tsx files above are superseded character-for-character by this commit. Changes:
+
+**PressTemplateLiveTest**
+- Verdict wording leads with the word: "Pass! All measured checks passed" /
+  "Fail! Measured checks flag issues" / "Visual only — nothing to measure".
+- Results banner moved up: sits directly under the heading, above the preview card.
+  Step rail ("Template › Art file › Results") removed.
+- Results arrival animation: banner settles in (0.45s translate+fade), then ONE ring
+  pulse in the verdict color (green pass / red fail / gray visual-only), keyed per art
+  file. Then quiet.
+- NEW Pending banner: same module/slot as Pass/Fail, shown when template has no test
+  and isn't certified. "Pending — not certified yet" + instruction line; expanding
+  shows "No art files tested yet" + "Choose an art file". The top slot is the page's
+  one status voice: Pending → Pass!/Fail!.
+- Pending attention cues: soft amber ring around the Pending banner with a white point
+  of light orbiting the border (3.6s/lap, transform-rotation — no @property), and
+  Test & Certify pulses a gradated amber fill on the same 3.6s rhythm. Blue stays
+  reserved for the one filled action.
+- Layers popover text bumped for legibility (title 15px, rows 14px semibold, mm 13.5px).
+- Header buttons: Cancel only renders when dirty; Save shows quiet "Close" when clean /
+  filled-blue "Save" when dirty. Layers + Test & Certify + ••• moved to the right end
+  of the view-chips row.
+- Template fine-print line (mm · layers · uploaded) capped at 520px + ellipsis, full
+  text on hover.
+- Breadcrumb "Templates" wired back to the Templates index.
+- GOTCHA (root cause of "no animations"): all keyframes must live in an
+  always-mounted <style> at page root — NOT inside a conditionally rendered child.
+
+**PressTemplatesIndex**
+- Pending/caution accent now matches the live-test Pending amber hue family:
+  dark #f59e0b, light #b45309 (was #e8b34b / #c98a00).
+
+States to screenshot (both themes, 1440/1024/768): pending-no-test (amber orbit ring +
+pulsing button), results-pass, results-fail, visual-only, certified-reopened (no
+Pending banner, no pulse), dirty vs clean header buttons.

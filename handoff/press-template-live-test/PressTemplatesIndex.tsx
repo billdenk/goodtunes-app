@@ -81,7 +81,7 @@ const THEMES: Record<'light' | 'dark', Theme> = {
     dashedBorder: 'rgba(0,0,0,0.18)',
     ready: '#1c8a5b',
     crit: '#e0245e',
-    warn: '#c98a00',
+    warn: '#b45309',  // pending amber, darkened for light-bg legibility — same hue family as the live-test Pending ring
     iconFill: '#ffffff',
     logoFilter: undefined,
   },
@@ -106,7 +106,7 @@ const THEMES: Record<'light' | 'dark', Theme> = {
     dashedBorder: 'rgba(255,255,255,0.22)',
     ready: '#34c98e', // brightened ready accent on dark
     crit: '#ff5d8f',  // brightened critical accent on dark
-    warn: '#e8b34b',  // brightened warning accent on dark
+    warn: '#f59e0b',  // pending amber — same hue as the live-test screen's Pending ring (Bill, Aug 16 2026)
     iconFill: '#1e1e20',
     logoFilter: 'invert(1) brightness(1.8)',
   },
@@ -436,6 +436,14 @@ const MOCK_TEMPLATES: Array<{
     component: '12" single jacket', variant: '3 mm spine · 1 pocket', code: '12-JKTSG3D-100', rev: 'R-072226',
     status: 'pending', nickname: 'MRP_Jacket12in_3.5mmSpine', img: gtPreviewJacket,
   },
+  // Failed demo (Bill, Aug 16 2026): the ⓘ tells you WHAT happened without
+  // leaving the shelf — same click popover as Pending, different story.
+  {
+    icon: 'jacket', title: 'Gatefold jacket',
+    component: '12" gatefold jacket', variant: 'Opens flat · 3 mm spine', code: '12-JKTGF3D-100', rev: 'R-081426',
+    status: 'failed', nickname: 'MRP_Gatefold12in', img: gtPreviewJacket,
+    note: 'Last test failed Aug 15, 2026 — the art came up 4 mm short of the GT Bleed on the long edge. Open to test a fixed file.',
+  },
 ];
 
 // Known-needed slots per vinyl size — straight from MRP's template catalog.
@@ -703,12 +711,12 @@ export default function PressTemplatesIndex() {
                   {/* Pending's why + action live behind an ⓘ beside the chip (Bill,
                       Aug 16 2026) — keeps the tile's bottom half GoodStudio-short.
                       Click to open; it's a real popover, not a hover tooltip. */}
-                  {tpl.status === 'pending' && !isArchived && (
+                  {(tpl.status === 'pending' || tpl.status === 'failed') && !isArchived && (
                     <span className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
                       <span
                         role="button"
                         tabIndex={0}
-                        aria-label="Why is this pending?"
+                        aria-label={tpl.status === 'failed' ? 'What happened?' : 'Why is this pending?'}
                         onClick={(e) => {
                           const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                           setPendingInfoFor((v) => (v?.code === tpl.code ? null : { code: tpl.code, x: r.left, y: r.bottom }));
@@ -734,7 +742,7 @@ export default function PressTemplatesIndex() {
                             style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.subink, width: 260, top: pendingInfoFor.y + 8, left: Math.max(12, pendingInfoFor.x - 8) }}
                             data-testid={`text-pending-why-${tpl.code}`}
                           >
-                            Attached, not yet certified — it certifies itself when a finished file passes. Open to test.
+                            {tpl.note ?? 'Attached, not yet certified — it certifies itself when a finished file passes. Open to test.'}
                           </span>
                         </>
                       )}

@@ -88,7 +88,7 @@ const THEMES: Record<"light" | "dark", Theme> = {
     dashedBorder: "rgba(0,0,0,0.18)",
     ready: "#1c8a5b",
     crit: "#e0245e",
-    warn: "#c98a00",
+    warn: "#b45309", // pending amber, darkened for light-bg legibility — same hue family as the live-test Pending ring
     iconFill: "#ffffff",
     hoverWash: "hover:bg-black/5",
     searchPlaceholder: "placeholder:text-black/30",
@@ -114,7 +114,7 @@ const THEMES: Record<"light" | "dark", Theme> = {
     dashedBorder: "rgba(255,255,255,0.22)",
     ready: "#34c98e",
     crit: "#ff5d8f",
-    warn: "#e8b34b",
+    warn: "#f59e0b", // pending amber — same hue as the live-test screen's Pending ring (Bill, Aug 16 2026)
     iconFill: "#1e1e20",
     hoverWash: "hover:bg-white/5",
     searchPlaceholder: "placeholder:text-white/30",
@@ -666,12 +666,12 @@ function FilledTile({
               hover tooltip (Bill, Aug 16 2026). A legacy import we couldn't
               confidently match presents as Pending too; its ⓘ carries the
               review-specific why (Ruby delta 5, Aug 15 2026). */}
-          {(status === "pending" || status === "review") && (
+          {(status === "pending" || status === "review" || status === "failed") && (
             <span className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
               <span
                 role="button"
                 tabIndex={0}
-                aria-label="Why is this pending?"
+                aria-label={status === "failed" ? "What happened?" : "Why is this pending?"}
                 onClick={(e) => togglePendingInfo(e.currentTarget as HTMLElement)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -695,7 +695,9 @@ function FilledTile({
                   >
                     {status === "review"
                       ? "Imported from your earlier uploads — we couldn't confirm it matches this slot. Open to confirm it, or archive it."
-                      : "Attached, not yet certified — it certifies itself when a finished file passes. Open to test."}
+                      : status === "failed"
+                        ? "Last test failed — the art didn't pass the measured checks. Open to test a fixed file."
+                        : "Attached, not yet certified — it certifies itself when a finished file passes. Open to test."}
                   </span>
                 </>
               )}

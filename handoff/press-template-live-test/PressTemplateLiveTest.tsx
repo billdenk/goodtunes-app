@@ -85,8 +85,7 @@ const THEMES: Record<'light' | 'dark', Theme> = {
 function ThinProgress({ label, t, testid }: { label: string; t: Theme; testid: string }) {
   return (
     <div className="mt-6 flex flex-col items-center" data-testid={testid} role="status" aria-label={label}>
-      <style>{`@keyframes gt-thin-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
-@keyframes gt-certify-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(49,158,216,0); } 50% { box-shadow: 0 0 0 4px rgba(49,158,216,0.25); } }`}</style>
+      <style>{`@keyframes gt-thin-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }`}</style>
       <div className="rounded-full overflow-hidden" style={{ width: 220, height: 3, backgroundColor: t.soft }}>
         <div
           className="h-full rounded-full"
@@ -464,6 +463,10 @@ export default function PressTemplateLiveTest() {
   const [template, setTemplate] = useState<TemplateState | null>(null);
   const [art, setArt] = useState<ArtState | null>(null);
   const [busy, setBusy] = useState<'template' | 'art' | null>(null);
+  // Results banner: collapsed when everything passed (a pass doesn't need your
+  // attention), auto-open when something failed or nothing was measured.
+  const [checksOpen, setChecksOpen] = useState(true);
+  const [pendingOpen, setPendingOpen] = useState(false);
   // Arrived from the Templates page with a file already in hand — nothing is
   // being uploaded, so show "Opening template" instead of the upload step
   // (Bill, Aug 15 2026).
@@ -684,6 +687,8 @@ export default function PressTemplateLiveTest() {
 
   const measured = checks.filter((c) => c.tone !== 'na');
   const allPass = measured.length > 0 && measured.every((c) => c.tone === 'pass');
+  // New result → banner folds itself on a clean pass, opens on anything else.
+  useEffect(() => { if (art) setChecksOpen(!allPass); }, [art?.name, allPass]); // eslint-disable-line react-hooks/exhaustive-deps
   const verdictWord = allPass ? 'Pass' : measured.some((c) => c.tone === 'fail') ? 'Flagged' : 'Visual only';
 
   // Save the current art's result into the trail, then invite the next file.
@@ -712,11 +717,14 @@ export default function PressTemplateLiveTest() {
   // Art placement: centered on the GT Bleed box (fallback: Cut, then full page).
   const anchor = bleedBox ?? cutBox ?? null;
   const artRect = useMemo(() => {
-    if (!template || !art || !anchor) return null;
-    if (art.wMm === null || art.hMm === null) return anchor; // raster: fit to anchor
+    if (!template || !art) return null;
+    // No GT Bleed/Cut box in the template (layerless PDF): never go blank —
+    // anchor to the full page instead so you can still look (Bill, Aug 16 2026).
+    const anchor2 = anchor ?? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm };
+    if (art.wMm === null || art.hMm === null) return anchor2; // raster: fit to anchor
     // Orientation-aware: if rotated match, still center on anchor with real dims.
-    const cx = anchor.xMm + anchor.wMm / 2;
-    const cy = anchor.yMm + anchor.hMm / 2;
+    const cx = anchor2.xMm + anchor2.wMm / 2;
+    const cy = anchor2.yMm + anchor2.hMm / 2;
     return { xMm: cx - art.wMm / 2, yMm: cy - art.hMm / 2, wMm: art.wMm, hMm: art.hMm };
   }, [template, art, anchor]);
 
@@ -795,10 +803,19 @@ export default function PressTemplateLiveTest() {
 
   return (
     <PressShell active="Templates" t={t}>
+      {/* Keyframes live at page root — they used to sit inside ThinProgress
+          and disappeared whenever no progress bar was mounted (Bill, Aug 16 2026:
+          "I don't see any animations at all"). */}
+      <style>{`@keyframes gt-thin-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(250%); } }
+@keyframes gt-certify-glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(49,158,216,0); } 50% { box-shadow: 0 0 0 4px rgba(49,158,216,0.25); } }
+@keyframes gt-verdict-arrive { 0% { opacity: 0; transform: translateY(-6px); } 100% { opacity: 1; transform: translateY(0); } }
+@keyframes gt-verdict-ring { 0% { box-shadow: 0 0 0 0 var(--gt-verdict-glow); } 45% { box-shadow: 0 0 0 6px var(--gt-verdict-glow); } 100% { box-shadow: 0 0 0 0 rgba(0,0,0,0); } }
+@keyframes gt-orbit-spin { from { transform: translate(-50%,-50%) rotate(0deg); } to { transform: translate(-50%,-50%) rotate(360deg); } }
+@keyframes gt-pending-fill { 0%, 100% { background-color: rgba(245,158,11,0); box-shadow: 0 0 0 0 rgba(245,158,11,0); } 50% { background-color: rgba(245,158,11,0.16); box-shadow: 0 0 0 3px rgba(245,158,11,0.16); } }`}</style>
       <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
         <nav aria-label="breadcrumb" data-testid="breadcrumb-livetest">
           <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
-            <li className="inline-flex items-center"><button type="button" className={cn('transition-colors', t.hoverInk)}>Templates</button></li>
+            <li className="inline-flex items-center"><button type="button" onClick={() => { window.location.hash = '#/PressTemplatesIndex'; }} className={cn('transition-colors', t.hoverInk)} data-testid="link-breadcrumb-templates">Templates</button></li>
             <li role="presentation" aria-hidden="true"><ChevronRight className="w-3.5 h-3.5" /></li>
             {/* Crumb = where you are: the template's own name once one is open
                 (Bill, Aug 15 2026); "Live test" only before a file arrives. */}
@@ -813,7 +830,7 @@ export default function PressTemplateLiveTest() {
             <h1 style={{ fontSize: 30, letterSpacing: '-0.02em', fontWeight: 600, lineHeight: 1.12 }}>
               <span style={{ color: t.ink }}>Template. </span>
               <span style={{ color: t.subink, fontWeight: 500 }}>Test.</span>
-              {!savedMeta && <span style={{ color: t.subink, fontWeight: 500 }}> Certify.</span>}
+              <span style={{ color: t.subink, fontWeight: 500 }}> Certify.</span>
             </h1>
             <p className="mt-1.5 text-[13.5px]" style={{ color: t.subink, maxWidth: 720 }}>
               Upload a press template with GT layers, then an art file. The overlays below are read
@@ -824,28 +841,8 @@ export default function PressTemplateLiveTest() {
               Cancel leaves; Replace template… (header •••) swaps the file. */}
         </div>
 
-        {/* Step rail — quiet Apple-style text steps, no pills (Bill, Aug 14 2026) */}
-        <div className="mt-6 flex items-center gap-2.5 text-[13px]" data-testid="step-rail">
-          {(['Template', 'Art file', 'Results'] as const).map((label, i) => {
-            const n = i + 1;
-            const state = step > n ? 'done' : step === n ? 'now' : 'todo';
-            return (
-              <div key={label} className="flex items-center gap-2.5">
-                {i > 0 && <ChevronRight className="w-3.5 h-3.5" style={{ color: t.faint }} />}
-                <span
-                  className="inline-flex items-center gap-1.5"
-                  style={{
-                    color: state === 'now' ? t.ink : state === 'done' ? t.subink : t.faint,
-                    fontWeight: state === 'now' ? 600 : 500,
-                  }}
-                >
-                  {state === 'done' && <CheckCircle2 style={{ width: 14, height: 14, color: t.ready }} />}
-                  {label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
+        {/* Step rail removed (Bill, Aug 16 2026) — the checks banner
+            below the heading carries the state now. */}
 
         {error && (
           <p className="mt-4 text-[12.5px]" style={{ color: t.crit }} data-testid="text-error">{error}</p>
@@ -962,6 +959,150 @@ export default function PressTemplateLiveTest() {
         {/* ── Step 2+3 · Template loaded — full-width preview; layers pop over ── */}
         {template && (
           <div className="mt-6">
+            {/* Pending — same module as Pass/Fail, shown while an uncertified
+                template has no test yet (Bill, Aug 16 2026): the banner is the
+                page's one status voice, Pending → Pass/Fail. */}
+            {!art && !savedMeta && (
+              <div className="mb-4">
+                {/* Action wanted — a quiet amber ring with a point of light
+                    orbiting the border, Apple-subtle (Bill, Aug 16 2026).
+                    Browsers without @property just show the soft amber ring. */}
+                <div className="rounded-2xl relative overflow-hidden" style={{ padding: 1.5 }}>
+                  {/* The beam: an oversized conic square spinning by transform —
+                      moves everywhere, no @property needed. */}
+                  <div
+                    className="absolute pointer-events-none"
+                    style={{
+                      left: '50%', top: '50%', width: '250%', aspectRatio: '1 / 1',
+                      background: `conic-gradient(rgba(245,158,11,0.16) 0deg, rgba(245,158,11,0.6) 24deg, rgba(255,255,255,0.92) 32deg, rgba(245,158,11,0.6) 40deg, rgba(245,158,11,0.16) 90deg, rgba(245,158,11,0.16) 360deg)`,
+                      animation: 'gt-orbit-spin 3.6s linear infinite',
+                    }}
+                    aria-hidden
+                  />
+                <div className="relative rounded-2xl overflow-hidden" style={{ backgroundColor: t.card, borderRadius: 14.5 }}>
+                  <button
+                    type="button"
+                    onClick={() => setPendingOpen((v) => !v)}
+                    aria-expanded={pendingOpen}
+                    className="w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
+                    style={{ borderBottom: pendingOpen ? `1px solid ${t.hairline}` : 'none' }}
+                    data-testid="button-toggle-pending"
+                  >
+                    <span className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: t.neutralWash }}>
+                      <History style={{ color: t.faint, width: 18, height: 18 }} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13.5px] font-semibold" style={{ color: t.ink }} data-testid="text-pending-verdict">
+                        Pending
+                        <span className="ml-2 font-normal" style={{ color: t.subink }}>not certified yet</span>
+                      </div>
+                      <div className="text-[12px] mt-0.5 truncate" style={{ color: t.subink }}>
+                        Upload an art file and the measured checks run right here — pass them and this template is certified.
+                      </div>
+                    </div>
+                    <ChevronDown
+                      className="w-4 h-4 flex-shrink-0 transition-transform"
+                      style={{ color: t.faint, transform: pendingOpen ? 'rotate(180deg)' : 'none' }}
+                      aria-hidden
+                    />
+                  </button>
+                  {pendingOpen && (
+                    <div className="px-5">
+                      {/* Rows align under the banner title, same as the results card */}
+                      <div style={{ marginLeft: 48 }} className="py-3 text-[12.5px]">
+                        <span style={{ color: t.faint }}>No art files tested yet.</span>
+                      </div>
+                      <div className="flex items-center justify-end py-3 text-[12px]">
+                        <button
+                          type="button"
+                          onClick={() => artInput.current?.click()}
+                          className={cn('font-medium transition-colors', t.hoverInk)}
+                          style={{ color: t.subink }}
+                          data-testid="button-upload-art-pending"
+                        >
+                          Choose an art file
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                </div>
+              </div>
+            )}
+
+            {/* Results — moved up under the heading so the verdict never
+                gets lost below the fold (Bill, Aug 16 2026). Collapsible as before. */}
+            {art && (
+              <div className="mb-4" key={art.name}>
+                {/* Arrival = settle + one soft ring pulse in the verdict color —
+                    draws the eye once, then goes quiet (Bill, Aug 16 2026). */}
+                <div
+                  className="rounded-2xl overflow-hidden"
+                  style={{
+                    backgroundColor: t.card,
+                    border: `1px solid ${t.hairline}`,
+                    ['--gt-verdict-glow' as string]: allPass
+                      ? 'rgba(48,164,108,0.35)'
+                      : measured.some((c) => c.tone === 'fail')
+                        ? 'rgba(229,72,77,0.35)'
+                        : 'rgba(120,120,128,0.25)',
+                    animation: 'gt-verdict-arrive 0.45s cubic-bezier(0.22,1,0.36,1) both, gt-verdict-ring 1.1s ease-out 0.45s 1',
+                  }}
+                >
+                  {/* Banner = the verdict. Click to fold/unfold the detail rows —
+                      folded by default on a clean pass, open on anything else. */}
+                  <button
+                    type="button"
+                    onClick={() => setChecksOpen((v) => !v)}
+                    aria-expanded={checksOpen}
+                    className="w-full flex items-center gap-3 px-5 py-4 text-left transition-colors"
+                    style={{ borderBottom: checksOpen ? `1px solid ${t.hairline}` : 'none' }}
+                    data-testid="button-toggle-checks"
+                  >
+                    <span className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: allPass ? t.readyWash : measured.some((c) => c.tone === 'fail') ? t.critWash : t.neutralWash }}>
+                      {allPass
+                        ? <CheckCircle2 className="w-4.5 h-4.5" style={{ color: t.ready, width: 18, height: 18 }} />
+                        : measured.some((c) => c.tone === 'fail')
+                          ? <XCircle style={{ color: t.crit, width: 18, height: 18 }} />
+                          : <MinusCircle style={{ color: t.faint, width: 18, height: 18 }} />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13.5px] font-semibold" style={{ color: t.ink }} data-testid="text-verdict">
+                        {allPass ? 'Pass! All measured checks passed' : measured.some((c) => c.tone === 'fail') ? 'Fail! Measured checks flag issues' : 'Visual only — nothing to measure'}
+                        <span className="ml-2 font-normal" style={{ color: t.subink }}>
+                          {measured.length > 0 ? `${measured.filter((c) => c.tone === 'pass').length} of ${measured.length} passed` : ''}
+                        </span>
+                      </div>
+                      <div className="text-[12px] mt-0.5 truncate" style={{ color: t.subink }}>{art.name}</div>
+                    </div>
+                    <ChevronDown
+                      className="w-4 h-4 flex-shrink-0 transition-transform"
+                      style={{ color: t.faint, transform: checksOpen ? 'rotate(180deg)' : 'none' }}
+                      aria-hidden
+                    />
+                  </button>
+                  {checksOpen && (
+                  <div className="px-5">
+                    {/* Rows align under the banner's title, not its icon (36px circle + 12px gap) */}
+                    <div style={{ marginLeft: 48 }}>
+                      {checks.map((row) => <CheckLine key={row.param} row={row} t={t} />)}
+                    </div>
+                    <div className="flex items-center justify-end py-3 text-[12px]">
+                      <button
+                        type="button"
+                        onClick={() => artInput.current?.click()}
+                        className={cn('font-medium transition-colors', t.hoverInk)}
+                        style={{ color: t.subink }}
+                        data-testid="button-upload-art-again"
+                      >
+                        Try another file
+                      </button>
+                    </div>
+                  </div>
+                  )}
+                </div>
+              </div>
+            )}
             {/* Preview card — accept actions live in the card header now (Bill, Aug 14 2026) */}
             <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}>
               <div className="flex items-center justify-between gap-3 px-6 py-4" style={{ borderBottom: `1px solid ${t.hairline}` }}>
@@ -1018,7 +1159,13 @@ export default function PressTemplateLiveTest() {
                       Originally {originalName}
                     </div>
                   )}
-                  <div className="text-[12px] mt-0.5" style={{ color: t.subink }}>
+                  {/* Capped + ellipsized — the fine print never runs the card's
+                      full width (Bill, Aug 16 2026). Full text on hover. */}
+                  <div
+                    className="text-[12px] mt-0.5 truncate"
+                    style={{ color: t.subink, maxWidth: 520 }}
+                    title={`${template.wMm.toFixed(2)} × ${template.hMm.toFixed(2)} mm · ${template.layers.length} GT layers read${uploadedAt ? ` · uploaded ${uploadedAt} by you` : ''}${art ? ` · art: ${art.name}` : ''}`}
+                  >
                     {template.wMm.toFixed(2)} × {template.hMm.toFixed(2)} mm · {template.layers.length} GT layers read
                     {uploadedAt ? ` · uploaded ${uploadedAt} by you` : ''}
                     {art ? ` · art: ${art.name}` : ''}
@@ -1038,6 +1185,84 @@ export default function PressTemplateLiveTest() {
                 </div>
                 {/* Tight right-hand group — apple-canon spacing (Bill, Aug 14 2026) */}
                 <div className="flex items-center gap-2 flex-shrink-0">
+                  
+                  {/* Accept actions — alongside the layers icon (Bill, Aug 14 2026) */}
+                  {busy === 'art' ? (
+                    <ThinProgress label="Reading art" t={t} testid="progress-reading-art" />
+                  ) : (
+                    <>
+                      {/* Apple-way header (Otis + Bill, Aug 15 2026): nothing saves
+                          automatically — Cancel leaves quietly, Test runs an art file,
+                          Save is the only action that persists (the one filled blue). */}
+                      {/* Cancel only when there's unsaved work to walk away from
+                          (Bill, Aug 16 2026) — opening a template clean shows no Cancel. */}
+                      {dirty && (
+                        <button
+                          type="button"
+                          onClick={() => { window.location.hash = '#/PressTemplatesIndex'; }}
+                          disabled={busy !== null}
+                          className={cn('h-8 px-2.5 rounded-full text-[12.5px] font-medium transition-colors disabled:opacity-60', t.hoverWash)}
+                          style={{ color: t.subink }}
+                          data-testid="button-cancel-template"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                      
+                      {/* Save tells the truth (Bill, Aug 15 2026): filled blue only
+                          when there's something to save; otherwise a quiet outline —
+                          background showing through, never a grayed-out blue. */}
+                      {/* Clean template = quiet Close; unsaved work = filled-blue Save
+                          (Bill, Aug 16 2026). Nothing autosaves; Save stays the one act
+                          that persists. */}
+                      <button
+                        type="button"
+                        onClick={() => { if (dirty) saveAndExit(); else window.location.hash = '#/PressTemplatesIndex'; }}
+                        disabled={busy !== null}
+                        className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors disabled:opacity-60"
+                        style={dirty
+                          ? { backgroundColor: t.blue, color: '#fff' }
+                          : { backgroundColor: 'transparent', color: t.subink, border: `1px solid ${t.hairline}` }}
+                        data-testid="button-accept-save"
+                      >
+                        {dirty ? 'Save' : 'Close'}
+                      </button>
+                                          </>
+                  )}
+                </div>
+              </div>
+
+              {/* View chips — Full Template / Back / Front / Spine (moved up, Bill Aug 14 2026) */}
+              <div className="flex flex-wrap items-center gap-2 px-6 py-3" style={{ borderBottom: `1px solid ${t.hairline}` }}>
+                <div className="inline-flex items-center rounded-full p-0.5" style={{ backgroundColor: t.soft }} role="group" aria-label="Preview view" data-testid="chip-view-area">
+                  {([
+                    ['full', 'Full Template'],
+                    ['Back Cover', 'Back'],
+                    ['Front Cover', 'Front'],
+                    ['Spine', 'Spine'],
+                  ] as const)
+                    .filter(([v]) => v === 'full' || zones.some((z) => z.zone === v && (z.line || z.area)))
+                    .map(([v, label]) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => pickView(v)}
+                        className="h-8 px-4 rounded-full text-[13px] font-semibold transition-colors"
+                        style={{
+                          backgroundColor: viewArea === v ? t.card : 'transparent',
+                          color: viewArea === v ? t.ink : t.subink,
+                          boxShadow: viewArea === v ? '0 1px 3px rgba(0,0,0,0.18)' : 'none',
+                        }}
+                        data-testid={`chip-area-${label.toLowerCase().replace(/\s+/g, '-')}`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                </div>
+                {/* Working controls moved down beside the view chips — layers,
+                    Test & Certify, and ••• live where the work happens
+                    (Bill, Aug 16 2026 — matches the live build). */}
+                <div className="ml-auto flex items-center gap-2">
                   {/* Pop-open layer table — anchored popover on the icon (Bill, Aug 14 2026) */}
                   <div className="relative flex-shrink-0">
                   <button
@@ -1064,8 +1289,8 @@ export default function PressTemplateLiveTest() {
                     >
                       <div className="flex items-start justify-between gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${t.hairline}` }}>
                         <div>
-                          <div className="text-[13.5px] font-semibold" style={{ color: t.ink }}>Layers read from the file</div>
-                          <div className="text-[12px] mt-0.5" style={{ color: t.subink }}>Exact mm, straight from Illustrator</div>
+                          <div className="text-[15px] font-semibold" style={{ color: t.ink }}>Layers read from the file</div>
+                          <div className="text-[13px] mt-0.5" style={{ color: t.subink }}>Exact mm, straight from Illustrator</div>
                         </div>
                         <button
                           type="button"
@@ -1083,15 +1308,15 @@ export default function PressTemplateLiveTest() {
                           const box = line ?? area;
                           if (!box) return null;
                           return (
-                            <div key={zone} className="flex items-baseline justify-between gap-3 py-2" style={{ borderBottom: `1px solid ${t.hairline}` }}>
-                              <span className="text-[12.5px] font-medium flex items-center gap-2" style={{ color: t.ink }}>
-                                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: zoneColor(zone) }} />
+                            <div key={zone} className="flex items-baseline justify-between gap-3 py-2.5" style={{ borderBottom: `1px solid ${t.hairline}` }}>
+                              <span className="text-[14px] font-semibold flex items-center gap-2" style={{ color: t.ink }}>
+                                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: zoneColor(zone) }} />
                                 {zone}
-                                <span className="text-[10.5px] font-semibold" style={{ color: t.faint }}>
+                                <span className="text-[11px] font-semibold" style={{ color: t.faint }}>
                                   {line && area ? 'LINE + AREA' : line ? 'LINE' : 'AREA'}
                                 </span>
                               </span>
-                              <span className="text-[11.5px] tabular-nums flex-shrink-0" style={{ color: t.subink }}>
+                              <span className="text-[13.5px] font-medium tabular-nums flex-shrink-0" style={{ color: t.ink }}>
                                 {box.wMm.toFixed(2)} × {box.hMm.toFixed(2)} mm
                               </span>
                             </div>
@@ -1102,25 +1327,7 @@ export default function PressTemplateLiveTest() {
                   </>
                 )}
                   </div>
-                  {/* Accept actions — alongside the layers icon (Bill, Aug 14 2026) */}
-                  {busy === 'art' ? (
-                    <ThinProgress label="Reading art" t={t} testid="progress-reading-art" />
-                  ) : (
-                    <>
-                      {/* Apple-way header (Otis + Bill, Aug 15 2026): nothing saves
-                          automatically — Cancel leaves quietly, Test runs an art file,
-                          Save is the only action that persists (the one filled blue). */}
-                      <button
-                        type="button"
-                        onClick={() => { window.location.hash = '#/PressTemplatesIndex'; }}
-                        disabled={busy !== null}
-                        className={cn('h-8 px-2.5 rounded-full text-[12.5px] font-medium transition-colors disabled:opacity-60', t.hoverWash)}
-                        style={{ color: t.subink }}
-                        data-testid="button-cancel-template"
-                      >
-                        Cancel
-                      </button>
-                      {/* Once a test is underway, "Test" gives way to
+{/* Once a test is underway, "Test" gives way to
                           "Save result & test another" — a trail staff can revisit (Bill, Aug 14 2026) */}
                       {art && (
                         <button
@@ -1146,31 +1353,15 @@ export default function PressTemplateLiveTest() {
                           className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-opacity disabled:opacity-60"
                           style={{
                             backgroundColor: t.card, color: t.ink, border: `1px solid ${t.hairline}`,
-                            animation: !savedMeta && busy === null ? 'gt-certify-glow 2.4s ease-in-out infinite' : undefined,
+                            animation: !savedMeta && busy === null ? 'gt-pending-fill 3.6s ease-in-out infinite' : undefined,
                           }}
                           data-testid="button-upload-art"
                         >
                           <ShieldCheck style={{ width: 14, height: 14, color: t.blue }} />
-                          {savedMeta ? 'Test' : 'Test & certify'}
+                          Test &amp; Certify
                         </button>
                       )}
-                      {/* Save tells the truth (Bill, Aug 15 2026): filled blue only
-                          when there's something to save; otherwise a quiet outline —
-                          background showing through, never a grayed-out blue. */}
-                      <button
-                        type="button"
-                        onClick={saveAndExit}
-                        disabled={busy !== null || !dirty}
-                        title={dirty ? undefined : 'Nothing to save — replace the file, rename, or run a new test'}
-                        className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors"
-                        style={dirty
-                          ? { backgroundColor: t.blue, color: '#fff', opacity: busy !== null ? 0.6 : 1 }
-                          : { backgroundColor: 'transparent', color: t.subink, border: `1px solid ${t.hairline}` }}
-                        data-testid="button-accept-save"
-                      >
-                        Save
-                      </button>
-                      {/* ••• under Save — history & tests live here; Replace supersedes
+{/* ••• under Save — history & tests live here; Replace supersedes
                           in place so the template keeps one tile forever (Bill, Aug 15 2026). */}
                       <div className="relative flex-shrink-0">
                         <button
@@ -1268,37 +1459,6 @@ export default function PressTemplateLiveTest() {
                           </>
                         )}
                       </div>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* View chips — Full Template / Back / Front / Spine (moved up, Bill Aug 14 2026) */}
-              <div className="flex flex-wrap items-center gap-2 px-6 py-3" style={{ borderBottom: `1px solid ${t.hairline}` }}>
-                <div className="inline-flex items-center rounded-full p-0.5" style={{ backgroundColor: t.soft }} role="group" aria-label="Preview view" data-testid="chip-view-area">
-                  {([
-                    ['full', 'Full Template'],
-                    ['Back Cover', 'Back'],
-                    ['Front Cover', 'Front'],
-                    ['Spine', 'Spine'],
-                  ] as const)
-                    .filter(([v]) => v === 'full' || zones.some((z) => z.zone === v && (z.line || z.area)))
-                    .map(([v, label]) => (
-                      <button
-                        key={v}
-                        type="button"
-                        onClick={() => pickView(v)}
-                        className="h-8 px-4 rounded-full text-[13px] font-semibold transition-colors"
-                        style={{
-                          backgroundColor: viewArea === v ? t.card : 'transparent',
-                          color: viewArea === v ? t.ink : t.subink,
-                          boxShadow: viewArea === v ? '0 1px 3px rgba(0,0,0,0.18)' : 'none',
-                        }}
-                        data-testid={`chip-area-${label.toLowerCase().replace(/\s+/g, '-')}`}
-                      >
-                        {label}
-                      </button>
-                    ))}
                 </div>
               </div>
 
@@ -1689,45 +1849,6 @@ export default function PressTemplateLiveTest() {
               </div>
             </div>
 
-            {/* Results — full width, below the preview */}
-            {art && (
-              <div className="mt-4">
-                <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}>
-                  <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${t.hairline}` }}>
-                    <span className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: allPass ? t.readyWash : measured.some((c) => c.tone === 'fail') ? t.critWash : t.neutralWash }}>
-                      {allPass
-                        ? <CheckCircle2 className="w-4.5 h-4.5" style={{ color: t.ready, width: 18, height: 18 }} />
-                        : measured.some((c) => c.tone === 'fail')
-                          ? <XCircle style={{ color: t.crit, width: 18, height: 18 }} />
-                          : <MinusCircle style={{ color: t.faint, width: 18, height: 18 }} />}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="text-[13.5px] font-semibold" style={{ color: t.ink }} data-testid="text-verdict">
-                        {allPass ? 'Measured checks pass' : measured.some((c) => c.tone === 'fail') ? 'Measured checks flag issues' : 'Visual only'}
-                      </div>
-                      <div className="text-[12px] mt-0.5 truncate" style={{ color: t.subink }}>{art.name}</div>
-                    </div>
-                  </div>
-                  <div className="px-5">
-                    {checks.map((row) => <CheckLine key={row.param} row={row} t={t} />)}
-                    <div className="flex items-center justify-between py-3 text-[12px]">
-                      <span style={{ color: t.subink }}>
-                        {measured.filter((c) => c.tone === 'pass').length} of {measured.length} measured checks passed
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => artInput.current?.click()}
-                        className={cn('font-medium transition-colors', t.hoverInk)}
-                        style={{ color: t.subink }}
-                        data-testid="button-upload-art-again"
-                      >
-                        Try another file
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
 
             {/* No save-confirm dialog (Bill, Aug 15 2026): Save in the header
                 saves and returns to Templates — one act, no congrats sheet. */}
