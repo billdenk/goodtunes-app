@@ -963,7 +963,10 @@ export default function PressTemplateLiveTest({
     } else if (Array.isArray(inkChecks)) {
       rows.push(...inkChecks);
     } else {
-      rows.push({ param: 'Color & resolution', tone: 'na', detail: 'Ink + ppi inspection unavailable — runs again at prepress' });
+      // A dead measurement is not a shrug — offer the retry right here
+      // (gogoods, Aug 16 2026: a one-off network drop left "unavailable",
+      // a Pass! header, and a blank preview until a full page refresh).
+      rows.push({ param: 'Color & resolution', tone: 'na', detail: 'The ink + resolution check didn’t finish (connection hiccup). Use “Re-run measurement” below — no need to re-pick the file.' });
     }
     return rows;
   }, [template, art, bleedBox, cutBox, inkChecks]);
@@ -973,10 +976,22 @@ export default function PressTemplateLiveTest({
   // claim a clean pass over rows that aren't measured yet (review, Aug 15
   // 2026); a failed inspection stays advisory like the old prepress note.
   const inkPending = inkChecks === 'checking';
-  const allPass = !inkPending && measured.length > 0 && measured.every((c) => c.tone === 'pass');
+  // A failed measurement must never let the header claim a clean pass —
+  // for a raster nothing real was measured yet (gogoods, Aug 16 2026).
+  const inkFailed = inkChecks === 'error';
+  const allPass = !inkPending && !inkFailed && measured.length > 0 && measured.every((c) => c.tone === 'pass');
   // New result → banner folds itself on a clean pass, opens on anything else.
   useEffect(() => { if (art) setChecksOpen(!allPass); }, [art?.name, allPass]); // eslint-disable-line react-hooks/exhaustive-deps
-  const verdictWord = inkPending ? 'Checking…' : allPass ? 'Pass' : measured.some((c) => c.tone === 'fail') ? 'Flagged' : 'Visual only';
+  const verdictWord = inkPending ? 'Checking…' : inkFailed ? 'Incomplete' : allPass ? 'Pass' : measured.some((c) => c.tone === 'fail') ? 'Flagged' : 'Visual only';
+
+  // Re-run the server measurement on the SAME file — a network hiccup must
+  // not force a page refresh + re-pick (gogoods, Aug 16 2026).
+  const retryInkInspect = () => {
+    const f = artFile.current;
+    if (!f) return;
+    const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
+    runInkInspect(f, isPdf ? 'application/pdf' : f.type || 'image/jpeg');
+  };
 
   // Save the current art's result into the trail, then invite the next file.
   const saveResultAndTestAnother = () => {
@@ -1522,6 +1537,7 @@ export default function PressTemplateLiveTest({
                           ? (inkProgress !== null && inkProgress < 1
                               ? `Uploading art for ink & resolution check… ${Math.round(inkProgress * 100)}%`
                               : 'Measuring ink & resolution…')
+                          : inkFailed ? 'Measurement didn’t finish — re-run the ink & resolution check'
                           : allPass ? 'Pass! All measured checks passed' : measured.some((c) => c.tone === 'fail') ? 'Fail! Measured checks flag issues' : 'Visual only — nothing to measure'}
                         <span className="ml-2 font-normal" style={{ color: t.subink }}>
                           {!inkPending && measured.length > 0 ? `${measured.filter((c) => c.tone === 'pass').length} of ${measured.length} passed` : ''}
@@ -1557,7 +1573,19 @@ export default function PressTemplateLiveTest({
                     <div style={{ marginLeft: 48 }}>
                       {checks.map((row) => <CheckLine key={row.param} row={row} t={t} />)}
                     </div>
-                    <div className="flex items-center justify-end py-3 text-[12px]">
+                    <div className="flex items-center justify-end gap-4 py-3 text-[12px]">
+                      {inkFailed && (
+                        <button
+                          type="button"
+                          onClick={retryInkInspect}
+                          disabled={busy !== null}
+                          className="font-semibold transition-opacity disabled:opacity-60"
+                          style={{ color: t.blue }}
+                          data-testid="button-retry-ink-inspect"
+                        >
+                          Re-run measurement
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => artInput.current?.click()}
