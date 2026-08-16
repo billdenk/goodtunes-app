@@ -1,0 +1,28 @@
+Here's the paste for Otis, Bill:
+
+---
+
+**Handoff: press-template-live-test correction round — commit `49df060` on main (Aug 16, 2026)**
+
+Ruby re-committed `handoff/press-template-live-test/` — `PressTemplateLiveTest.tsx`, `PressTemplatesIndex.tsx`, and README. Both .tsx files **supersede the prior copies character-for-character**. Standing law applies: delete-first, copy the presentational code verbatim, only swap `MOCK_` data and module-store stand-ins for real wiring. Any visual difference other than data values is a failure. Full change list is in the README's "Correction round — Aug 16 2026" section; highlights:
+
+**PressTemplateLiveTest**
+- Verdict banner leads with the word: "Pass! All measured checks passed" / "Fail! Measured checks flag issues" / "Visual only — nothing to measure".
+- Results banner now sits directly under the heading, above the preview card. The "Template › Art file › Results" step rail is gone.
+- Results arrival: banner settles in (0.45s translate+fade), then ONE ring pulse in the verdict color, per new art file. Then quiet.
+- NEW Pending banner in the same slot when a template is uncertified with no test yet: "Pending — not certified yet" + instruction; expands to "No art files tested yet" + "Choose an art file". The top slot is the page's single status voice: Pending → Pass!/Fail!.
+- Pending attention cues: soft amber ring with a white point of light orbiting the border (3.6s/lap, plain transform rotation), and Test & Certify pulses a gradated amber fill on the same rhythm. Blue stays reserved for the one filled action per screen.
+- Header: Cancel renders only when dirty; the trailing button is quiet "Close" when clean, filled-blue "Save" when dirty. Layers + Test & Certify + ••• live at the right end of the view-chips row.
+- Layers popover type bumped (title 15px, rows 14px semibold, mm 13.5px). Template fine-print line capped at 520px with ellipsis + full text on hover. Breadcrumb "Templates" is wired back to the index.
+- **Gotcha (root cause of a real bug):** all keyframes live in an always-mounted `<style>` at page root. Do NOT move them inside a conditionally rendered child — they vanish with it and every animation silently freezes.
+
+**PressTemplatesIndex**
+- Pending/caution accent now matches the live-test Pending amber family: dark `#f59e0b`, light `#b45309`.
+
+**Acceptance** — screenshot both themes at 1440/1024/768, per state: pending-no-test (amber orbit + pulsing button), results-pass, results-fail, visual-only, certified-reopened (no Pending banner, no pulse), dirty vs clean header buttons.
+
+**One integration question, flag back to Bill rather than adapt silently:** you've since wired live ink + resolution checks ("Measuring ink & resolution…", measured Color/PPI rows). This handoff predates that — where the mock's static check rows and your live measured rows conflict, keep your live wiring and match this handoff's presentation (row layout, word+icon verdicts, banner behavior). If anything else collides, ask Bill.
+
+Please add this round to the STATUS.md ledger as `49df060` — and note `e01acd0, 3f44ecb, 3aca2b1, 47f5785, 4d078f4, fa3a812, 4371256` are still awaiting their ledger entries.
+
+---
