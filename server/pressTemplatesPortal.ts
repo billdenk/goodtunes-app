@@ -1263,20 +1263,40 @@ export function registerPressTemplateFlowRoutes(
       const rasterKind = ctype.startsWith("image/jpeg") ? "jpeg" : ctype.startsWith("image/png") ? "png" : null;
       if (rasterKind) {
         try {
-          const buf = await new Promise<Buffer | null>((resolve) => {
+          // Buffer the body WITHOUT destroying the socket mid-upload — the
+          // client must receive the declared 413/422, not a network error
+          // (review, Aug 16 2026). On cap/timeout we stop consuming, answer,
+          // and only then drop the connection.
+          const { buf, err } = await new Promise<{ buf: Buffer | null; err: "too_large" | "timeout" | "aborted" | null }>((resolve) => {
             const chunks: Buffer[] = [];
             let n = 0;
             let done = false;
-            const finish = (v: Buffer | null) => { if (!done) { done = true; clearTimeout(timer); resolve(v); } };
-            const timer = setTimeout(() => { finish(null); req.destroy(); }, 300_000);
+            const finish = (buf: Buffer | null, err: "too_large" | "timeout" | "aborted" | null) => {
+              if (done) return;
+              done = true;
+              clearTimeout(timer);
+              req.removeAllListeners("data");
+              req.pause();
+              resolve({ buf, err });
+            };
+            const timer = setTimeout(() => finish(null, "timeout"), 300_000);
             req.on("data", (c: Buffer) => {
               n += c.length;
-              if (n > ART_INSPECT_MAX_BYTES) { finish(null); req.destroy(); return; }
+              if (n > ART_INSPECT_MAX_BYTES) { finish(null, "too_large"); return; }
               chunks.push(c);
             });
-            req.on("end", () => finish(Buffer.concat(chunks)));
-            req.on("error", () => finish(null));
+            req.on("end", () => finish(Buffer.concat(chunks), null));
+            req.on("error", () => finish(null, "aborted"));
           });
+          const dropAfterResponse = () => { res.once("finish", () => req.destroy()); res.once("close", () => req.destroy()); };
+          if (err === "too_large") {
+            dropAfterResponse();
+            return res.status(413).json({ message: "That file is too large to inspect (300 MB max)." });
+          }
+          if (err === "timeout") {
+            dropAfterResponse();
+            return res.status(422).json({ message: "The upload took too long to inspect — ink + PPI will be verified at prepress." });
+          }
           if (!buf || buf.length === 0) {
             return res.status(422).json({ message: "Couldn't read that image — ink + PPI will be verified at prepress." });
           }
@@ -1312,7 +1332,48 @@ export function registerPressTemplateFlowRoutes(
           } else {
             rows.push({ param: "Color", tone: "na", detail: "Couldn't determine the color space — confirm CMYK on export." });
           }
-          const density = meta.density && meta.density > 1 ? meta.density : null;
+          // Only trust a density that's actually EMBEDDED in the file —
+          // sharp/libvips defaults untagged JPEGs to 72 DPI, which would make
+          // us "measure" a physical size the file never claimed (review, Aug
+          // 16 2026). Parse JFIF APP0 / PNG pHYs ourselves; fall back to
+          // sharp's density only when it isn't the 72 default (Exif-tagged
+          // files surface there).
+          const embeddedPpi = (): number | null => {
+            try {
+              if (rasterKind === "jpeg") {
+                // Scan JPEG segments for APP0 "JFIF": units 1 = dots/inch, 2 = dots/cm.
+                let p = 2;
+                while (p + 4 <= buf.length && buf[p] === 0xff) {
+                  const marker = buf[p + 1];
+                  if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd9)) { p += 2; continue; }
+                  const len = buf.readUInt16BE(p + 2);
+                  if (marker === 0xe0 && len >= 14 && buf.toString("latin1", p + 4, p + 9) === "JFIF\0") {
+                    const units = buf[p + 11];
+                    const xden = buf.readUInt16BE(p + 12);
+                    if (units === 1 && xden > 1) return xden;
+                    if (units === 2 && xden > 1) return xden * 2.54;
+                    return null; // units 0 = aspect ratio only, no physical size
+                  }
+                  if (marker === 0xda) break; // start of scan — no JFIF found
+                  p += 2 + len;
+                }
+              } else if (rasterKind === "png") {
+                const idx = buf.indexOf("pHYs", 8, "latin1");
+                if (idx >= 0 && idx + 13 <= buf.length) {
+                  const ppuX = buf.readUInt32BE(idx + 4);
+                  const unit = buf[idx + 12];
+                  if (unit === 1 && ppuX > 0) return ppuX * 0.0254; // pixels/metre → PPI
+                }
+                return null;
+              }
+            } catch { /* fall through */ }
+            // Exif-carried resolution shows up in sharp's density; the bare
+            // libvips default is exactly 72, so a 72 here stays untrusted.
+            if (meta.density && meta.density > 1 && meta.density !== 72) return meta.density;
+            return null;
+          };
+          const densityRaw = embeddedPpi();
+          const density = densityRaw ? Math.round(densityRaw) : null;
           const r3 = (v: number) => Math.round(v * 1000) / 1000;
           const SIZE_TOL = 0.05; // inches — same tolerance as validateArt
           if (aw != null && ah != null && aw > 0 && ah > 0) {

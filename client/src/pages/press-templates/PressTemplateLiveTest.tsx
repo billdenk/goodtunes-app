@@ -419,6 +419,10 @@ export default function PressTemplateLiveTest({
   // picked (or the page unmounts) so a superseded scan can never write
   // progress or results over the new selection (review, Aug 16 2026).
   const inkXhr = useRef<XMLHttpRequest | null>(null);
+  // Monotonic pick token — a slow parse of pick A must never overwrite state
+  // after pick B lands (review, Aug 16 2026: FileReader/pdfjs are async, so
+  // rapid A→B picks race without this).
+  const pickSeq = useRef(0);
   useEffect(() => () => { inkXhr.current?.abort(); }, []);
   const [busy, setBusy] = useState<'template' | 'art' | 'save' | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -742,6 +746,7 @@ export default function PressTemplateLiveTest({
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
+    const myPick = ++pickSeq.current;
     setBusy('art'); setError(null);
     // Supersede any in-flight ink scan IMMEDIATELY — before the new file even
     // parses — so the old request can't keep painting progress/results while
@@ -756,6 +761,7 @@ export default function PressTemplateLiveTest({
         const doc = await (await loadPdfjs()).getDocument({ data: await f.arrayBuffer() }).promise;
         const { img, wMm, hMm } = await renderPage(doc, 1);
         const { layerNames } = await extractGtLayers(doc, 1);
+        if (pickSeq.current !== myPick) return; // a newer pick superseded this parse
         const gtNames = layerNames.filter((n) => n.trim().toUpperCase().startsWith('GT'));
         setArt({ name: f.name, img, wMm, hMm, pageCount: doc.numPages, gtLayerNames: gtNames });
         artFile.current = f;
@@ -773,16 +779,19 @@ export default function PressTemplateLiveTest({
           reader.onerror = () => reject(new Error('Could not read that image.'));
           reader.readAsDataURL(f);
         });
+        if (pickSeq.current !== myPick) return; // a newer pick superseded this read
         setArt({ name: f.name, img, wMm: null, hMm: null, pageCount: null, gtLayerNames: [] });
         artFile.current = f; // server test submission still requires a PDF and skips rasters
         setShowTemplate(false);
         runInkInspect(f, f.type || 'image/jpeg');
       }
+      if (pickSeq.current !== myPick) return;
       setDirty(true); // a loaded art result is unsaved work — Save persists it
     } catch (err) {
+      if (pickSeq.current !== myPick) return; // stale failure — don't clobber the newer pick
       setArt(null);
       setError(err instanceof Error ? err.message : 'Could not read that file.');
-    } finally { setBusy(null); }
+    } finally { if (pickSeq.current === myPick) setBusy(null); }
   };
 
   // Ink + PPI (and, for rasters, size/color) live on the server scanner —
@@ -791,12 +800,14 @@ export default function PressTemplateLiveTest({
   const runInkInspect = (f: File, contentType: string) => {
     setInkChecks('checking');
     setInkProgress(0);
+    let myXhr: XMLHttpRequest | null = null;
     void (async () => {
       try {
         // XHR instead of fetch: fetch can't report UPLOAD progress, and
         // watching the measurement happen live is the point (gogoods).
         const d = await new Promise<{ checks: CheckRow[] }>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
+          myXhr = xhr;
           inkXhr.current = xhr;
           // specId (when this session is on a known slot) lets the server
           // check bleed/artboard against the slot's certified template line.
@@ -825,10 +836,10 @@ export default function PressTemplateLiveTest({
       } catch {
         setInkChecks((prev) => (artFile.current === f ? 'error' : prev));
       } finally {
-        if (artFile.current === f) {
-          setInkProgress(null);
-          inkXhr.current = null;
-        }
+        if (artFile.current === f) setInkProgress(null);
+        // Only clear the ref if it's still OUR xhr — a newer pick may have
+        // already installed its own request (review, Aug 16 2026).
+        if (myXhr && inkXhr.current === myXhr) inkXhr.current = null;
       }
     })();
   };
