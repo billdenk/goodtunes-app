@@ -1467,7 +1467,10 @@ export function registerPressTemplateFlowRoutes(
           // preview failure never blocks the measured rows.
           let previewDataUrl: string | undefined;
           try {
-            const pv = await sharp(buf, { limitInputPixels: 1_000_000_000 })
+            // 320 MP cap — real jacket art tops out well under this (30" ×
+            // 600 PPI ≈ 234 MP); an unbounded decode of a crafted raster
+            // could exhaust worker memory (review, Aug 16 2026).
+            const pv = await sharp(buf, { limitInputPixels: 320_000_000 })
               .resize({ width: 2000, withoutEnlargement: true })
               .toColourspace("srgb")
               .jpeg({ quality: 78 })
@@ -1536,19 +1539,31 @@ export function registerPressTemplateFlowRoutes(
         // its background image at the bleed frame (gogoods, Aug 16 2026:
         // jacket PDF read ≈282 worst-case but ≈345 at its bleed placement).
         const page = scan.pageSizesInches[0] ?? null;
+        // The client-sent frame is bounded against the file's OWN page (the
+        // artboard, measured server-side from the PDF): it must fit inside
+        // the page and cover at least 40% of it in both dimensions, or it's
+        // ignored — a forged tiny frame can't manufacture a Pass (review,
+        // Aug 16 2026).
         const bleedWq = Number(req.query.bleedWIn), bleedHq = Number(req.query.bleedHIn);
-        const bleedBox = Number.isFinite(bleedWq) && Number.isFinite(bleedHq) && bleedWq > 0 && bleedHq > 0
-          ? { w: bleedWq, h: bleedHq } : null;
+        const bleedBox = (() => {
+          if (!Number.isFinite(bleedWq) || !Number.isFinite(bleedHq) || bleedWq <= 0 || bleedHq <= 0) return null;
+          if (!page) return null;
+          const TOL = 0.05;
+          const fitsInPage = bleedWq <= page.w + TOL && bleedHq <= page.h + TOL;
+          const coversEnough = bleedWq >= page.w * 0.4 && bleedHq >= page.h * 0.4;
+          return fitsInPage && coversEnough ? { w: bleedWq, h: bleedHq } : null;
+        })();
+        // PPI of the largest image BY PIXEL AREA (most plausibly the full-
+        // bleed background) placed at the given footprint — not the best-case
+        // image, which would let a hi-res icon mask a low-res background.
         const ppiAt = (dims: { w: number; h: number }[], box: { w: number; h: number }): number => {
-          let best = 0;
-          for (const d of dims) {
-            const est = Math.max(
-              Math.min(d.w / box.w, d.h / box.h),
-              Math.min(d.w / box.h, d.h / box.w),
-            );
-            if (est > best) best = est;
-          }
-          return best;
+          let biggest: { w: number; h: number } | null = null;
+          for (const d of dims) if (!biggest || d.w * d.h > biggest.w * biggest.h) biggest = d;
+          if (!biggest) return 0;
+          return Math.max(
+            Math.min(biggest.w / box.w, biggest.h / box.h),
+            Math.min(biggest.w / box.h, biggest.h / box.w),
+          );
         };
         const bestPpi = (dims: { w: number; h: number }[]): number => {
           if (!page) return 0;
@@ -1581,7 +1596,7 @@ export function registerPressTemplateFlowRoutes(
             best >= 300
               ? { param: "Image resolution (min 300 PPI)", tone: "pass", detail: `Largest embedded image ≈${best} PPI even if it spans the full artboard (worst case) — meets the 300 PPI minimum.` }
               : atBleed != null && atBleed >= 300
-              ? { param: "Image resolution (min 300 PPI)", tone: "pass", detail: `Largest embedded image ≈${atBleed} PPI at the template's bleed frame — art matching the template places its image there, and that meets the 300 PPI minimum. (≈${best} PPI only if it were stretched across the entire artboard, template margins included.)` }
+              ? { param: "Image resolution (min 300 PPI)", tone: "pass", detail: `Largest embedded image ≈${atBleed} PPI at the template's bleed frame — art matching the template places its image there, and that meets the 300 PPI minimum. (≈${best} PPI only if it were stretched across the entire artboard, template margins included. Exact placement is confirmed at prepress.)` }
               : atBleed != null
               ? { param: "Image resolution (min 300 PPI)", tone: "fail", detail: `Largest embedded image ≈${atBleed} PPI even at the template's bleed frame — below the 300 PPI minimum. Re-export with higher-resolution images.` }
               : { param: "Image resolution (min 300 PPI)", tone: "na", detail: `Largest embedded image ≈${best} PPI if it spans the full artboard — placement isn't measured, so an image covering just the bleed area is proportionally higher. Confirmed exactly at prepress.` },
