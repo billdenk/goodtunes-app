@@ -53,6 +53,7 @@ import {
 } from "./AdminManufacturer";
 import type { PressTemplate } from "@/components/admin/PressTemplateDownloads";
 import { useAdminDark } from "@/lib/adminAppearance";
+import { resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
 
 // ─── Theme-aware brand tokens (Apple calm visual language) ───────────
 // Theme-aware: light = the ratified press-portal palette (apple-canon light);
@@ -1009,8 +1010,11 @@ export function PressAlbumPackageBuilder({
   });
   // Same fallback the catalog page uses: a press without a dedicated label
   // logo (e.g. Hellbender) still shows its main mark on disc labels.
-  const labelLogoUrl = pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? null;
-  const labelBgColor = pressRow?.labelBgColor ?? null;
+  // Extra rung: fall back to the invited-press payload's logo so the disc
+  // center still wears the right press mark even when the manufacturers
+  // row fetch fails or comes back without branding fields.
+  const labelLogoUrl = pressRow?.labelLogoUrl || pressRow?.logoUrl || press?.logoUrl || null;
+  const labelBgColor = pressRow?.labelBgColor || null;
 
   // Vinyl formats the press actually offers, in canon order.
   const catalogFormats = useMemo<CatalogFormatRow[]>(() => {
@@ -1143,7 +1147,17 @@ export function PressAlbumPackageBuilder({
 
   // ── Jacket art chain (rule 1/2) ────────────────────────────────────
   const realArt = artworkUrl && artworkUrl !== PLACEHOLDER_ART ? artworkUrl : null;
-  const pressDefaultJacket = pressRow?.vinylPlaceholderUrl ?? press?.vinylPlaceholderUrl ?? null;
+  // Press-branded jacket fallback chain (matches the admin Albums list /
+  // package designer): uploaded press default jacket → bundled grayscale
+  // placeholder resolved by press domain (pressPlaceholderArt.ts). Only a
+  // truly press-less album should ever fall through to the generic
+  // product-mark icon below — a Memphis album must never wear another
+  // press's mark. `||` (not `??`) so empty-string DB values don't win.
+  const pressDefaultJacket =
+    pressRow?.vinylPlaceholderUrl ||
+    press?.vinylPlaceholderUrl ||
+    resolvePressPlaceholderArt(press?.domain) ||
+    null;
   const jacketUrl = realArt ?? pressDefaultJacket ?? null;
 
   // ── Save — the same endpoints SellPanel writes ─────────────────────

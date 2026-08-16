@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Factory, Lock, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAdminDark } from "@/lib/adminAppearance";
+import { WhiteMarkGlyph } from "@/pages/press-components/PressMarkGlyph";
 
 // Task #199 — Super-admin override for the "invited by press" stamp
 // that the press-invite flow writes onto people / labels. Hidden to
@@ -38,6 +40,7 @@ export function InvitedByPressPanel({
   currentPressMode?: string | null;
   onChanged?: () => void;
 }) {
+  const dark = useAdminDark();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: role } = useQuery<RoleInfo>({ queryKey: ["/api/me/role"] });
@@ -118,16 +121,19 @@ export function InvitedByPressPanel({
   });
   const skuDerivedPressName = currentPressId ? null : (skuSummary?.skuDerivedPressName ?? null);
 
-  // Non-super-admins only see the read-only line when a press is set;
-  // hide entirely otherwise to keep the partner-side surface clean.
-  if (!isSuperAdmin && !current) return null;
-
+  // Hooks stay above every early return (Rules of Hooks — the query-driven
+  // `current`/role flips between renders, so a hook below the guard crashes
+  // with "Rendered more hooks than during the previous render").
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const sorted = [...presses].sort((a, b) => a.name.localeCompare(b.name));
     if (!q) return sorted.slice(0, 50);
     return sorted.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 50);
   }, [presses, query]);
+
+  // Non-super-admins only see the read-only line when a press is set;
+  // hide entirely otherwise to keep the partner-side surface clean.
+  if (!isSuperAdmin && !current) return null;
 
   return (
     <div data-testid="panel-invited-by-press">
@@ -149,8 +155,20 @@ export function InvitedByPressPanel({
       </div>
       {current ? (
         <div className="flex items-center gap-3" data-testid="row-current-invited-press">
-          {(current.identityIconUrl ?? current.logoUrl) ? (
-            <img src={current.identityIconUrl ?? current.logoUrl ?? undefined} alt="" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
+          {current.identityIconUrl ? (
+            <img src={current.identityIconUrl} alt="" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
+          ) : current.logoUrl ? (
+            // Press-mark rule (docs/design-system.md): monochrome press logo
+            // uploads are often dark artwork on alpha — on the dark admin
+            // theme render them as a white mask so the mark stays legible.
+            // Light theme keeps the raw upload.
+            dark ? (
+              <div className="w-9 h-9 rounded-md border border-slate-200 flex items-center justify-center" aria-hidden>
+                <WhiteMarkGlyph logoUrl={current.logoUrl} size={28} />
+              </div>
+            ) : (
+              <img src={current.logoUrl} alt="" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
+            )
           ) : (
             <div
               className="w-9 h-9 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center"
