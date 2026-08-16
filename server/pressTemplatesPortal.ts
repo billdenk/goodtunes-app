@@ -383,6 +383,11 @@ export function registerPressTemplateFlowRoutes(
   // in-memory (runs) so views don't hammer a file that can't render.
   const previewInFlight = new Set<string>();
   const runPreviewFailed = new Set<string>();
+  // A durably-failed render ([] on specs, "" on runs) gets ONE fresh attempt
+  // per instance lifetime — a prior deploy image without poppler persisted
+  // failures for files that render fine once the tool exists. The in-memory
+  // set keeps the original bound: no re-download storm on every GET.
+  const specPreviewRetried = new Set<string>();
   // One background maintenance chain per press at a time (import + preview
   // backfills kicked off the templates GET without blocking the response).
   const maintainInFlight = new Set<string>();
@@ -393,9 +398,15 @@ export function registerPressTemplateFlowRoutes(
   ): Promise<boolean> {
     let changed = false;
     for (const s of specs) {
-      if (!s.templateFileUrl || s.previewUrls !== null) continue;
+      if (!s.templateFileUrl) continue;
+      const failedBefore = Array.isArray(s.previewUrls) && s.previewUrls.length === 0;
+      if (s.previewUrls !== null && !failedBefore) continue;
       const key = `spec:${s.id}`;
       if (previewInFlight.has(key)) continue;
+      if (failedBefore) {
+        if (specPreviewRetried.has(key)) continue;
+        specPreviewRetried.add(key);
+      }
       previewInFlight.add(key);
       try {
         await renderTemplateSpecPreviews(pressId, s.id);
@@ -421,9 +432,11 @@ export function registerPressTemplateFlowRoutes(
       // instances — the in-memory set alone let every fresh autoscale
       // instance re-download unrenderable legacy files on the GET path,
       // which is what made the prod Templates page take ~10s to load).
-      if (run.previewUrl !== null) continue;
+      const runFailedBefore = run.previewUrl === "";
+      if (run.previewUrl !== null && !runFailedBefore) continue;
       const key = `run:${run.id}`;
       if (previewInFlight.has(key) || runPreviewFailed.has(key)) continue;
+      if (runFailedBefore) runPreviewFailed.add(key); // one fresh attempt per instance
       previewInFlight.add(key);
       try {
         const pages = spec.componentKey === "labels" ? 2 : 1;

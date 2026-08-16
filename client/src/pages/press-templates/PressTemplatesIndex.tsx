@@ -135,8 +135,9 @@ const STATUS_META: Record<
   pending: { label: "Pending", tone: "warn", Icon: Clock3 },
   failed: { label: "Failed", tone: "crit", Icon: XCircle },
   // Auto-imported legacy upload the importer couldn't confidently match to
-  // this slot — press confirms by re-attaching or archives it.
-  review: { label: "Needs review", tone: "warn", Icon: AlertTriangle },
+  // this slot. "Needs review" is not in the status model (Ruby, Aug 15 2026)
+  // — it presents as Pending; the ⓘ popover carries the why + action.
+  review: { label: "Pending", tone: "warn", Icon: Clock3 },
   // "empty" never reaches StatusChip (the empty tile renders its own affordance).
   empty: { label: "Empty", tone: "warn", Icon: Clock3 },
 };
@@ -637,8 +638,12 @@ function FilledTile({
         {preview ? (
           <img src={preview} alt={`${slot.title} — the template page itself`} className="w-full h-full object-cover object-top" data-testid={`img-tile-preview-${spec.id}`} />
         ) : (
-          <span className="w-full h-full flex items-center justify-center" style={{ backgroundColor: t.cardSoft }}>
-            <ComponentIcon kind={slot.kind} color={t.blue} fill={t.iconFill} size={54} />
+          /* Render pending/failed — stay on the WHITE preview ground with a
+             quiet gray mark. The blue icon-on-dark treatment belongs to empty
+             dashed slots only (Ruby delta 2, Aug 15 2026). Ground is always
+             white, so the grays are fixed, not theme vars. */
+          <span className="w-full h-full flex items-center justify-center">
+            <ComponentIcon kind={slot.kind} color="#a1a1a6" fill="#f0f0f2" size={54} />
           </span>
         )}
       </span>
@@ -658,8 +663,10 @@ function FilledTile({
             </span>
           )}
           {/* Pending's why + action behind a click ⓘ — a real popover, not a
-              hover tooltip (Bill, Aug 16 2026). */}
-          {status === "pending" && (
+              hover tooltip (Bill, Aug 16 2026). A legacy import we couldn't
+              confidently match presents as Pending too; its ⓘ carries the
+              review-specific why (Ruby delta 5, Aug 15 2026). */}
+          {(status === "pending" || status === "review") && (
             <span className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
               <span
                 role="button"
@@ -686,7 +693,9 @@ function FilledTile({
                     style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.subink, width: 260, top: pendingInfo.y + 8, left: Math.max(12, pendingInfo.x - 8) }}
                     data-testid={`text-pending-why-${spec.id}`}
                   >
-                    Attached, not yet certified — it certifies itself when a finished file passes. Open to test.
+                    {status === "review"
+                      ? "Imported from your earlier uploads — we couldn't confirm it matches this slot. Open to confirm it, or archive it."
+                      : "Attached, not yet certified — it certifies itself when a finished file passes. Open to test."}
                   </span>
                 </>
               )}
@@ -1282,8 +1291,10 @@ export function PressTemplatesIndex({
                       {sv.previewImg ? (
                         <img src={sv.previewImg} alt="" className="w-full h-full object-cover object-top" />
                       ) : (
-                        <span className="w-full h-full flex items-center justify-center" style={{ backgroundColor: t.cardSoft }}>
-                          <Layers className="w-6 h-6" style={{ color: t.faint }} />
+                        /* White ground + quiet gray mark — never icon-on-dark
+                           on a filled tile (Ruby delta 2, Aug 15 2026). */
+                        <span className="w-full h-full flex items-center justify-center">
+                          <Layers className="w-6 h-6" style={{ color: "#a1a1a6" }} />
                         </span>
                       )}
                     </span>
