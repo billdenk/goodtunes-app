@@ -1254,11 +1254,18 @@ export function registerPressTemplateFlowRoutes(
         return res.status(413).json({ message: "That file is too large to inspect (300 MB max)." });
       }
       try {
-        const { scan, error } = await scanPdfStream(req, { maxBytes: ART_INSPECT_MAX_BYTES, timeoutMs: 60_000 });
+        // 5-minute cap, not 60s — the timer covers the UPLOAD too, and a
+        // jacket-spread art PDF over a home uplink easily outlives a minute
+        // (gogoods hit "inspection unavailable" on prod, Aug 16 2026).
+        const { scan, error } = await scanPdfStream(req, { maxBytes: ART_INSPECT_MAX_BYTES, timeoutMs: 300_000 });
         if (error === "too_large") {
           return res.status(413).json({ message: "That file is too large to inspect (300 MB max)." });
         }
         if (!scan || error) {
+          console.warn(`[art-inspect] scan failed reason=${error ?? "no-scan"} bytes=${declared || "?"}`);
+          if (error === "timeout") {
+            return res.status(422).json({ message: "The upload took too long to inspect — ink + PPI will be verified at prepress." });
+          }
           return res.status(422).json({ message: "Couldn't inspect that file — ink + PPI will be verified at prepress." });
         }
         if (!scan.isPdf) {
