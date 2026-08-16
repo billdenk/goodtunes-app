@@ -924,9 +924,10 @@ export default function PressTemplateLiveTest({
   const checks: CheckRow[] = useMemo(() => {
     if (!template || !art) return [];
     const rows: CheckRow[] = [];
-    if (art.wMm === null || art.hMm === null) {
-      rows.push({ param: 'Physical size', tone: 'na', detail: 'Raster image — a JPG/PNG carries pixels, not physical mm; the Artboard size and Image resolution rows below measure it against the slot instead.' });
-    } else {
+    // gogoods, Aug 16 2026: rasters get NO "Physical size — Not measured" row —
+    // a JPG/PNG can never carry physical mm, so the row is permanent noise;
+    // Artboard size + Image resolution cover the slot fit for pixels.
+    if (art.wMm !== null && art.hMm !== null) {
       const near = (a: number, b: number, tol = 1) => Math.abs(a - b) <= tol;
       const dims = `${art.wMm.toFixed(1)} × ${art.hMm.toFixed(1)} mm`;
       if (bleedBox) {
