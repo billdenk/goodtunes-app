@@ -29,6 +29,7 @@ import {
   clearTemplateSpecMeasurements,
   deleteMirroredTemplateObject,
   mirrorExternalTemplatePdf,
+  scanPdfStream,
   scanTemplateUrl,
   detectTemplateOptionsForUrl,
   renderTestRunPreviews,
@@ -1230,6 +1231,111 @@ export function registerPressTemplateFlowRoutes(
         // The run row never landed — don't strand the mirrored object.
         await deleteMirroredTemplateObject(mirroredRunPath);
         throw e;
+      }
+    },
+  );
+
+  // POST /api/press/:id/templates/art-inspect — live ink + image-resolution
+  // inspection for the Template. Test. Certify. page (gogoods, Aug 15 2026:
+  // "we need it to run here — verify CMYK and 300ppi"). The client posts the
+  // picked art PDF as a raw body the moment it's loaded; nothing is stored.
+  // Read-only, so no press-editor gate. Semantics mirror the certification
+  // checks: CMYK-or-spot passes (embedded RGB previews ignored), RGB-only
+  // fails; PPI is a full-artboard lower-bound estimate against a 300 floor
+  // (1-bit images against 800, per the Memphis template fine print).
+  app.post(
+    "/api/press/:id/templates/art-inspect",
+    requireAdmin,
+    requirePressScope,
+    async (req, res) => {
+      const ART_INSPECT_MAX_BYTES = 300 * 1024 * 1024;
+      const declared = Number(req.headers["content-length"] ?? 0);
+      if (declared > ART_INSPECT_MAX_BYTES) {
+        return res.status(413).json({ message: "That file is too large to inspect (300 MB max)." });
+      }
+      try {
+        const { scan, error } = await scanPdfStream(req, { maxBytes: ART_INSPECT_MAX_BYTES, timeoutMs: 60_000 });
+        if (error === "too_large") {
+          return res.status(413).json({ message: "That file is too large to inspect (300 MB max)." });
+        }
+        if (!scan || error) {
+          return res.status(422).json({ message: "Couldn't inspect that file — ink + PPI will be verified at prepress." });
+        }
+        if (!scan.isPdf) {
+          return res.status(422).json({ message: "That file isn't a PDF — export a PDF for ink and resolution checks." });
+        }
+        if (scan.truncated) {
+          // A partial scan must not report measured rows as authoritative.
+          return res.status(422).json({ message: "Couldn't read the whole file — ink + PPI will be verified at prepress." });
+        }
+        const rows: Array<{ param: string; tone: "pass" | "fail" | "na"; detail: string }> = [];
+        // Ink — same canon as the certification test's cmyk-or-pms branch.
+        const spotUsage = (scan as any).spotUsage ?? (scan.hasSpot ? "unknown" : "none");
+        const spotInUse = scan.hasSpot && spotUsage !== "unused";
+        if (scan.hasCMYK || spotInUse) {
+          const parts = [scan.hasCMYK ? "CMYK" : null, spotInUse ? "spot/PMS" : null].filter(Boolean);
+          rows.push({
+            param: "Color",
+            tone: "pass",
+            detail: `${parts.join(" + ")} ink present${scan.hasRGB ? " — embedded RGB preview ignored" : ""}`,
+          });
+        } else if (scan.hasRGB) {
+          rows.push({
+            param: "Color",
+            tone: "fail",
+            detail: "RGB only — print art must be CMYK (or named spot/PMS colors). Convert and re-export.",
+          });
+        } else {
+          rows.push({ param: "Color", tone: "na", detail: "Couldn't determine color mode — confirm CMYK on export." });
+        }
+        // Image resolution — lower-bound estimate assuming full-artboard
+        // placement (same estimator as certification; placement itself
+        // isn't measured in a PDF).
+        const page = scan.pageSizesInches[0] ?? null;
+        const bestPpi = (dims: { w: number; h: number }[]): number => {
+          if (!page) return 0;
+          let best = 0;
+          for (const d of dims) {
+            const est = Math.max(
+              Math.min(d.w / page.w, d.h / page.h),
+              Math.min(d.w / page.h, d.h / page.w),
+            );
+            if (est > best) best = est;
+          }
+          return best;
+        };
+        if (scan.imageDimsPx.length === 0) {
+          rows.push({
+            param: "Image resolution (min 300 PPI)",
+            tone: "na",
+            detail: "No embedded raster images found — vector-only art has no resolution floor.",
+          });
+        } else if (!page) {
+          rows.push({
+            param: "Image resolution (min 300 PPI)",
+            tone: "na",
+            detail: "Couldn't read the page size to estimate PPI — verify placed images at prepress.",
+          });
+        } else {
+          const best = Math.round(bestPpi(scan.imageDimsPx));
+          rows.push(
+            best >= 300
+              ? { param: "Image resolution (min 300 PPI)", tone: "pass", detail: `Largest embedded image ≈${best} PPI at full-artboard placement — meets the 300 PPI minimum (estimate; placement not measured)` }
+              : { param: "Image resolution (min 300 PPI)", tone: "fail", detail: `Largest embedded image ≈${best} PPI at full-artboard placement — below the 300 PPI minimum. Re-export with higher-resolution images.` },
+          );
+        }
+        if (scan.bitmapImageDimsPx.length > 0 && page) {
+          const best = Math.round(bestPpi(scan.bitmapImageDimsPx));
+          rows.push(
+            best >= 800
+              ? { param: "1-bit image resolution (min 800 PPI)", tone: "pass", detail: `Largest 1-bit image ≈${best} PPI at full-artboard placement — meets the 800 PPI minimum` }
+              : { param: "1-bit image resolution (min 800 PPI)", tone: "fail", detail: `Largest 1-bit image ≈${best} PPI at full-artboard placement — below the 800 PPI minimum for line art.` },
+          );
+        }
+        res.json({ checks: rows });
+      } catch (e: any) {
+        console.error("[art-inspect] failed:", e?.message ?? e);
+        res.status(422).json({ message: "Couldn't inspect that file — ink + PPI will be verified at prepress." });
       }
     },
   );

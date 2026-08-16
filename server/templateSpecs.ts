@@ -33,6 +33,43 @@ export async function scanObjectPdf(objectPath: string): Promise<CompletedPdfSca
   return scanner.finish();
 }
 
+// gogoods, Aug 15 2026 — scan a PDF arriving as a raw request stream (the
+// live-test page posts the picked art file directly, before any Save), same
+// bounded scanner as every other path.
+export async function scanPdfStream(
+  stream: NodeJS.ReadableStream & { destroy?: (err?: Error) => void },
+  opts?: { maxBytes?: number; timeoutMs?: number },
+): Promise<{ scan: CompletedPdfScan | null; error: "too_large" | "timeout" | null }> {
+  const maxBytes = opts?.maxBytes ?? TEMPLATE_SCAN_MAX_BYTES;
+  const timeoutMs = opts?.timeoutMs ?? 60_000;
+  const scanner = new CompletedPdfScanner({ maxBytes });
+  let seen = 0;
+  let bail: "too_large" | "timeout" | null = null;
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      bail = "timeout";
+      stream.destroy?.();
+      resolve();
+    }, timeoutMs);
+    stream.on("data", (chunk: Buffer) => {
+      seen += chunk.length;
+      if (seen > maxBytes) {
+        // Don't drain arbitrary-sized bodies to EOF — kill the request.
+        bail = "too_large";
+        clearTimeout(timer);
+        stream.destroy?.();
+        resolve();
+        return;
+      }
+      scanner.push(chunk);
+    });
+    stream.on("end", () => { clearTimeout(timer); resolve(); });
+    stream.on("error", (e: Error) => { clearTimeout(timer); bail ? resolve() : reject(e); });
+  });
+  if (bail) return { scan: null, error: bail };
+  return { scan: scanner.finish(), error: null };
+}
+
 const TEMPLATE_SCAN_MAX_BYTES = 300 * 1024 * 1024;
 
 /** Stream-scan a template/test file wherever it lives (own object storage or

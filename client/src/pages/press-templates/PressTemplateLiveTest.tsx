@@ -402,6 +402,11 @@ export default function PressTemplateLiveTest({
   const queryClient = useQueryClient();
   const [template, setTemplate] = useState<TemplateState | null>(null);
   const [art, setArt] = useState<ArtState | null>(null);
+  // gogoods, Aug 15 2026 — live server-side ink + resolution inspection of
+  // the picked art PDF ("we need it to run here — verify CMYK and 300ppi").
+  // 'checking' while the scan streams; rows replace the Color & resolution
+  // line; 'error' degrades to the old prepress note.
+  const [inkChecks, setInkChecks] = useState<'checking' | 'error' | CheckRow[] | null>(null);
   const [busy, setBusy] = useState<'template' | 'art' | 'save' | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Arrived from the Templates page with a file already in hand — nothing is
@@ -705,6 +710,24 @@ export default function PressTemplateLiveTest({
         setArt({ name: f.name, img, wMm, hMm, pageCount: doc.numPages, gtLayerNames: gtNames });
         artFile.current = f;
         setShowTemplate(false);
+        // Ink + PPI live on the server scanner — stream the file up in the
+        // background; the row shows "Measuring…" until it lands.
+        setInkChecks('checking');
+        void (async () => {
+          try {
+            const r = await fetch(`/api/press/${pressId}/templates/art-inspect`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/pdf', ...authHeaders() },
+              credentials: 'include',
+              body: f,
+            });
+            if (!r.ok) throw new Error(String(r.status));
+            const d = (await r.json()) as { checks: CheckRow[] };
+            setInkChecks((prev) => (artFile.current === f ? d.checks : prev));
+          } catch {
+            setInkChecks((prev) => (artFile.current === f ? 'error' : prev));
+          }
+        })();
       } else {
         // Raster image — visual overlay only; no physical size in the file.
         const img = await new Promise<string>((resolve, reject) => {
@@ -715,6 +738,7 @@ export default function PressTemplateLiveTest({
         });
         setArt({ name: f.name, img, wMm: null, hMm: null, pageCount: null, gtLayerNames: [] });
         artFile.current = null; // raster overlay only — the server test needs a PDF
+        setInkChecks(null);
         setShowTemplate(false);
       }
       setDirty(true); // a loaded art result is unsaved work — Save persists it
@@ -777,13 +801,26 @@ export default function PressTemplateLiveTest({
       ? { param: 'File hygiene', tone: art.wMm === null ? 'na' : 'pass', detail: art.wMm === null ? 'Layer check needs a PDF' : 'No GT template layers left inside the art file' }
       : { param: 'File hygiene', tone: 'fail', detail: `Template layers still present in the art file: ${art.gtLayerNames.join(', ')} — delete them before handoff` });
     rows.push({ param: 'Safety', tone: 'na', detail: 'Visual — toggle the Safety overlays and look' });
-    rows.push({ param: 'Color & resolution', tone: 'na', detail: 'Ink + ppi inspection runs at prepress' });
+    // Ink + PPI — measured live by the server scanner (gogoods, Aug 15 2026).
+    if (art.wMm === null) {
+      rows.push({ param: 'Color & resolution', tone: 'na', detail: 'Ink + ppi checks need a PDF' });
+    } else if (inkChecks === 'checking') {
+      rows.push({ param: 'Color & resolution', tone: 'na', detail: 'Measuring ink and image resolution…' });
+    } else if (Array.isArray(inkChecks)) {
+      rows.push(...inkChecks);
+    } else {
+      rows.push({ param: 'Color & resolution', tone: 'na', detail: 'Ink + ppi inspection unavailable — runs again at prepress' });
+    }
     return rows;
-  }, [template, art, bleedBox, cutBox]);
+  }, [template, art, bleedBox, cutBox, inkChecks]);
 
   const measured = checks.filter((c) => c.tone !== 'na');
-  const allPass = measured.length > 0 && measured.every((c) => c.tone === 'pass');
-  const verdictWord = allPass ? 'Pass' : measured.some((c) => c.tone === 'fail') ? 'Flagged' : 'Visual only';
+  // While the server ink/PPI scan is still in flight, the header must not
+  // claim a clean pass over rows that aren't measured yet (review, Aug 15
+  // 2026); a failed inspection stays advisory like the old prepress note.
+  const inkPending = inkChecks === 'checking';
+  const allPass = !inkPending && measured.length > 0 && measured.every((c) => c.tone === 'pass');
+  const verdictWord = inkPending ? 'Checking…' : allPass ? 'Pass' : measured.some((c) => c.tone === 'fail') ? 'Flagged' : 'Visual only';
 
   // Save the current art's result into the trail, then invite the next file.
   const saveResultAndTestAnother = () => {
@@ -1931,7 +1968,7 @@ export default function PressTemplateLiveTest({
                     </span>
                     <div className="min-w-0">
                       <div className="text-[13.5px] font-semibold" style={{ color: t.ink }} data-testid="text-verdict">
-                        {allPass ? 'Measured checks pass' : measured.some((c) => c.tone === 'fail') ? 'Measured checks flag issues' : 'Visual only'}
+                        {inkPending ? 'Measuring ink & resolution…' : allPass ? 'Measured checks pass' : measured.some((c) => c.tone === 'fail') ? 'Measured checks flag issues' : 'Visual only'}
                       </div>
                       <div className="text-[12px] mt-0.5 truncate" style={{ color: t.subink }}>{art.name}</div>
                     </div>
