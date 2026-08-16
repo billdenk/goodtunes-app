@@ -1169,7 +1169,15 @@ export default function PressTemplateLiveTest({
       // inside the bleed box (gogoods, Aug 16 2026: the full-artboard JPG
       // rendered shrunken inside the bleed frame).
       const pageAspect = template.wMm / template.hMm;
-      const box = Math.abs(art.pxAspect / pageAspect - 1) <= 0.02
+      // Closest-aspect-wins (review, Aug 16 2026): on templates where the
+      // bleed frame and the full sheet have near-identical proportions, an
+      // aspect-only 2% gate could promote a bleed-sized JPG to full-sheet.
+      // Promote only when the full sheet is BOTH within tolerance and a
+      // strictly better aspect match than the anchor box; ties stay on the
+      // anchor (the safer placement — art never renders larger than intended).
+      const pageErr = Math.abs(art.pxAspect / pageAspect - 1);
+      const anchorErr = Math.abs(art.pxAspect / (anchor2.wMm / anchor2.hMm) - 1);
+      const box = pageErr <= 0.02 && pageErr < anchorErr
         ? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm }
         : anchor2;
       const boxAspect = box.wMm / box.hMm;
