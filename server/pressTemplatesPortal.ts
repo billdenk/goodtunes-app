@@ -1260,14 +1260,52 @@ export function registerPressTemplateFlowRoutes(
       // space. What it can't carry: trim/bleed boxes — so bleed is judged by
       // the frame covering the slot's full artboard (finished + bleed).
       const ctype = String(req.headers["content-type"] ?? "").toLowerCase();
-      const rasterKind = ctype.startsWith("image/jpeg") ? "jpeg" : ctype.startsWith("image/png") ? "png" : null;
+      let rasterKind = ctype.startsWith("image/jpeg") ? "jpeg" : ctype.startsWith("image/png") ? "png" : null;
+      // Large files can't ride through the deployment edge — it 413s big
+      // request bodies before they ever reach us (gogoods' 59MB CMYK jacket
+      // JPEG never arrived, Aug 16 2026; dev has no such cap, which is why it
+      // "worked here"). The client uploads those straight to object storage
+      // with the signed-PUT flow and posts {objectPath} instead; we read the
+      // bytes back from storage. The object stays private — no finalize/ACL.
+      let storedFile: Awaited<ReturnType<typeof import("./replit_integrations/object_storage/objectStorage").ObjectStorageService.prototype.getObjectEntityFile>> | null = null;
+      if (ctype.startsWith("application/json")) {
+        const objectPath = String((req.body as any)?.objectPath ?? "");
+        if (!/^\/objects\/uploads\/[A-Za-z0-9._-]+$/.test(objectPath)) {
+          return res.status(400).json({ message: "Invalid upload path." });
+        }
+        try {
+          const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+          storedFile = await new ObjectStorageService().getObjectEntityFile(objectPath);
+        } catch {
+          return res.status(404).json({ message: "Upload not found — pick the file again." });
+        }
+        try {
+          const [metaObj] = await storedFile.getMetadata();
+          if (Number(metaObj.size ?? 0) > ART_INSPECT_MAX_BYTES) {
+            return res.status(413).json({ message: "That file is too large to inspect (300 MB max)." });
+          }
+          const oct = String(metaObj.contentType ?? "").toLowerCase();
+          const lower = objectPath.toLowerCase();
+          rasterKind =
+            oct.startsWith("image/jpeg") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "jpeg"
+            : oct.startsWith("image/png") || lower.endsWith(".png") ? "png"
+            : null; // anything else falls to the PDF scanner below
+        } catch (e: any) {
+          console.error("[art-inspect] stored-object metadata failed:", e?.message ?? e);
+          return res.status(422).json({ message: "Couldn't read that upload — ink + PPI will be verified at prepress." });
+        }
+      }
       if (rasterKind) {
         try {
           // Buffer the body WITHOUT destroying the socket mid-upload — the
           // client must receive the declared 413/422, not a network error
           // (review, Aug 16 2026). On cap/timeout we stop consuming, answer,
           // and only then drop the connection.
-          const { buf, err } = await new Promise<{ buf: Buffer | null; err: "too_large" | "timeout" | "aborted" | null }>((resolve) => {
+          const { buf, err } = storedFile
+            ? await storedFile.download()
+                .then(([b]) => ({ buf: b as Buffer, err: null as "too_large" | "timeout" | "aborted" | null }))
+                .catch(() => ({ buf: null as Buffer | null, err: "aborted" as const }))
+            : await new Promise<{ buf: Buffer | null; err: "too_large" | "timeout" | "aborted" | null }>((resolve) => {
             const chunks: Buffer[] = [];
             let n = 0;
             let done = false;
@@ -1424,7 +1462,10 @@ export function registerPressTemplateFlowRoutes(
         // 5-minute cap, not 60s — the timer covers the UPLOAD too, and a
         // jacket-spread art PDF over a home uplink easily outlives a minute
         // (gogoods hit "inspection unavailable" on prod, Aug 16 2026).
-        const { scan, error } = await scanPdfStream(req, { maxBytes: ART_INSPECT_MAX_BYTES, timeoutMs: 300_000 });
+        const { scan, error } = await scanPdfStream(
+          storedFile ? (storedFile.createReadStream() as NodeJS.ReadableStream & { destroy?: (err?: Error) => void }) : req,
+          { maxBytes: ART_INSPECT_MAX_BYTES, timeoutMs: 300_000 },
+        );
         if (error === "too_large") {
           return res.status(413).json({ message: "That file is too large to inspect (300 MB max)." });
         }

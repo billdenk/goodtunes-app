@@ -797,12 +797,51 @@ export default function PressTemplateLiveTest({
   // Ink + PPI (and, for rasters, size/color) live on the server scanner —
   // stream the file up in the background; the row shows "Measuring…" until
   // it lands.
+  // The deployment edge 413s big request bodies before they ever reach the
+  // server (gogoods' 59MB CMYK jacket JPEG "inspection unavailable" on prod,
+  // Aug 16 2026 — dev has no such cap). Files over this ride the signed-PUT
+  // direct-to-storage flow instead, then we post just the object path.
+  const EDGE_SAFE_BYTES = 20 * 1024 * 1024;
+
   const runInkInspect = (f: File, contentType: string) => {
     setInkChecks('checking');
     setInkProgress(0);
     let myXhr: XMLHttpRequest | null = null;
     void (async () => {
       try {
+        let sendBody: File | string = f;
+        let sendCt = contentType;
+        if (f.size > EDGE_SAFE_BYTES) {
+          const signRes = await fetch('/api/admin/upload-doc/sign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(authHeaders() as Record<string, string>) },
+            credentials: 'include',
+            body: JSON.stringify({ contentType }),
+          });
+          if (!signRes.ok) throw new Error(String(signRes.status));
+          const { uploadUrl, finalPath } = (await signRes.json()) as { uploadUrl: string; finalPath: string };
+          if (artFile.current !== f) return; // superseded while signing
+          await new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            myXhr = xhr;
+            inkXhr.current = xhr;
+            xhr.open('PUT', uploadUrl);
+            xhr.setRequestHeader('Content-Type', contentType);
+            xhr.upload.onprogress = (ev) => {
+              if (ev.lengthComputable && artFile.current === f) setInkProgress(Math.min(ev.loaded / ev.total, 1));
+            };
+            xhr.upload.onload = () => { if (artFile.current === f) setInkProgress(1); };
+            xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(String(xhr.status))));
+            xhr.onerror = () => reject(new Error('network'));
+            xhr.onabort = () => reject(new Error('superseded'));
+            xhr.timeout = 6 * 60_000;
+            xhr.ontimeout = () => reject(new Error('timeout'));
+            xhr.send(f);
+          });
+          if (artFile.current !== f) return; // superseded during the upload
+          sendBody = JSON.stringify({ objectPath: finalPath });
+          sendCt = 'application/json';
+        }
         // XHR instead of fetch: fetch can't report UPLOAD progress, and
         // watching the measurement happen live is the point (gogoods).
         const d = await new Promise<{ checks: CheckRow[] }>((resolve, reject) => {
@@ -812,7 +851,7 @@ export default function PressTemplateLiveTest({
           // specId (when this session is on a known slot) lets the server
           // check bleed/artboard against the slot's certified template line.
           xhr.open('POST', `/api/press/${pressId}/templates/art-inspect${specRef.current ? `?specId=${encodeURIComponent(specRef.current)}` : ''}`);
-          xhr.setRequestHeader('Content-Type', contentType);
+          xhr.setRequestHeader('Content-Type', sendCt);
           for (const [k, v] of Object.entries(authHeaders() as Record<string, string>)) xhr.setRequestHeader(k, v);
           xhr.withCredentials = true;
           xhr.upload.onprogress = (ev) => {
@@ -830,7 +869,7 @@ export default function PressTemplateLiveTest({
           xhr.onabort = () => reject(new Error('superseded'));
           xhr.timeout = 6 * 60_000; // hair past the server's 5-minute cap
           xhr.ontimeout = () => reject(new Error('timeout'));
-          xhr.send(f);
+          xhr.send(sendBody);
         });
         setInkChecks((prev) => (artFile.current === f ? d.checks : prev));
       } catch {
