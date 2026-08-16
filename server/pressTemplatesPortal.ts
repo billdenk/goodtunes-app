@@ -1529,10 +1529,27 @@ export function registerPressTemplateFlowRoutes(
         } else {
           rows.push({ param: "Color", tone: "na", detail: "Couldn't determine color mode — confirm CMYK on export." });
         }
-        // Image resolution — lower-bound estimate assuming full-artboard
-        // placement (same estimator as certification; placement itself
-        // isn't measured in a PDF).
+        // Image resolution — placement isn't readable from the PDF, so we
+        // bracket it: the full page is the worst case, and the template's GT
+        // Bleed frame (sent by the client from the loaded template's own
+        // layers) is the INTENDED footprint — art matching the template puts
+        // its background image at the bleed frame (gogoods, Aug 16 2026:
+        // jacket PDF read ≈282 worst-case but ≈345 at its bleed placement).
         const page = scan.pageSizesInches[0] ?? null;
+        const bleedWq = Number(req.query.bleedWIn), bleedHq = Number(req.query.bleedHIn);
+        const bleedBox = Number.isFinite(bleedWq) && Number.isFinite(bleedHq) && bleedWq > 0 && bleedHq > 0
+          ? { w: bleedWq, h: bleedHq } : null;
+        const ppiAt = (dims: { w: number; h: number }[], box: { w: number; h: number }): number => {
+          let best = 0;
+          for (const d of dims) {
+            const est = Math.max(
+              Math.min(d.w / box.w, d.h / box.h),
+              Math.min(d.w / box.h, d.h / box.w),
+            );
+            if (est > best) best = est;
+          }
+          return best;
+        };
         const bestPpi = (dims: { w: number; h: number }[]): number => {
           if (!page) return 0;
           let best = 0;
@@ -1559,22 +1576,27 @@ export function registerPressTemplateFlowRoutes(
           });
         } else {
           const best = Math.round(bestPpi(scan.imageDimsPx));
+          const atBleed = bleedBox ? Math.round(ppiAt(scan.imageDimsPx, bleedBox)) : null;
           rows.push(
             best >= 300
               ? { param: "Image resolution (min 300 PPI)", tone: "pass", detail: `Largest embedded image ≈${best} PPI even if it spans the full artboard (worst case) — meets the 300 PPI minimum.` }
-              // Worst-case estimate only — placement isn't measured, and an
-              // image covering just the bleed area has proportionally higher
-              // true PPI (gogoods' jacket PDF read ≈282 worst-case but ≈345
-              // at its actual bleed-size placement, Aug 16 2026). A sub-300
-              // estimate is "can't confirm", not a fail.
+              : atBleed != null && atBleed >= 300
+              ? { param: "Image resolution (min 300 PPI)", tone: "pass", detail: `Largest embedded image ≈${atBleed} PPI at the template's bleed frame — art matching the template places its image there, and that meets the 300 PPI minimum. (≈${best} PPI only if it were stretched across the entire artboard, template margins included.)` }
+              : atBleed != null
+              ? { param: "Image resolution (min 300 PPI)", tone: "fail", detail: `Largest embedded image ≈${atBleed} PPI even at the template's bleed frame — below the 300 PPI minimum. Re-export with higher-resolution images.` }
               : { param: "Image resolution (min 300 PPI)", tone: "na", detail: `Largest embedded image ≈${best} PPI if it spans the full artboard — placement isn't measured, so an image covering just the bleed area is proportionally higher. Confirmed exactly at prepress.` },
           );
         }
         if (scan.bitmapImageDimsPx.length > 0 && page) {
           const best = Math.round(bestPpi(scan.bitmapImageDimsPx));
+          const atBleed = bleedBox ? Math.round(ppiAt(scan.bitmapImageDimsPx, bleedBox)) : null;
           rows.push(
             best >= 800
               ? { param: "1-bit image resolution (min 800 PPI)", tone: "pass", detail: `Largest 1-bit image ≈${best} PPI even if it spans the full artboard (worst case) — meets the 800 PPI minimum.` }
+              : atBleed != null && atBleed >= 800
+              ? { param: "1-bit image resolution (min 800 PPI)", tone: "pass", detail: `Largest 1-bit image ≈${atBleed} PPI at the template's bleed frame — meets the 800 PPI minimum.` }
+              : atBleed != null
+              ? { param: "1-bit image resolution (min 800 PPI)", tone: "fail", detail: `Largest 1-bit image ≈${atBleed} PPI even at the template's bleed frame — below the 800 PPI minimum for line art.` }
               : { param: "1-bit image resolution (min 800 PPI)", tone: "na", detail: `Largest 1-bit image ≈${best} PPI if it spans the full artboard — placement isn't measured, so a smaller placement is proportionally higher. Confirmed exactly at prepress.` },
           );
         }

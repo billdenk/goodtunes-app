@@ -851,7 +851,16 @@ export default function PressTemplateLiveTest({
           inkXhr.current = xhr;
           // specId (when this session is on a known slot) lets the server
           // check bleed/artboard against the slot's certified template line.
-          xhr.open('POST', `/api/press/${pressId}/templates/art-inspect${specRef.current ? `?specId=${encodeURIComponent(specRef.current)}` : ''}`);
+          // The template's GT Bleed box rides along too — a matching-the-
+          // template image is placed at the bleed frame, so the server can
+          // measure PDF image PPI against that intended footprint instead of
+          // only the full-artboard worst case (gogoods, Aug 16 2026).
+          const bleedZ = zones.find((z) => z.zone === 'Bleed');
+          const bb = bleedZ?.line ?? bleedZ?.area;
+          const qs = new URLSearchParams();
+          if (specRef.current) qs.set('specId', specRef.current);
+          if (bb) { qs.set('bleedWIn', String(bb.wMm / 25.4)); qs.set('bleedHIn', String(bb.hMm / 25.4)); }
+          xhr.open('POST', `/api/press/${pressId}/templates/art-inspect${qs.size ? `?${qs}` : ''}`);
           xhr.setRequestHeader('Content-Type', sendCt);
           for (const [k, v] of Object.entries(authHeaders() as Record<string, string>)) xhr.setRequestHeader(k, v);
           xhr.withCredentials = true;
