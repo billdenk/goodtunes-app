@@ -1213,6 +1213,10 @@ export default function PressTemplateLiveTest({
   // everything that isn't the spine (Bill, Aug 14 2026).
   const zoneRelevant = (zone: string) => {
     if (viewArea === 'full') return true;
+    // Bleed and Cut are template-wide lines that run through every panel —
+    // they must stay toggleable in the cropped views too (gogoods, Aug 16
+    // 2026: "there's no bleed setting in the dropdown — where did it go?").
+    if (zone === 'Bleed' || zone === 'Cut') return true;
     if (viewArea === 'Spine') return zone === 'Spine';
     const side = viewArea.split(' ')[0]; // 'Front' | 'Back'
     return zone.includes(side);
