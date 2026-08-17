@@ -1,0 +1,16 @@
+The whole restructure is out — `handoff/artist-portal-restructure/` on goodtunes-app main: the full walk file (all 7 scenes, 13 `MOCK_` consts, light + dark), all 6 assets, and a README that marks every dead-end as deliberate so Otis ships them as quiet no-ops instead of inventing endings.
+
+**Paste this to Otis:**
+
+---
+
+**Otis — second handoff tonight: the full Artist Portal Restructure.** Pull `handoff/artist-portal-restructure/` from main. This answers your earlier entry-point question: this IS the Assets tab handoff — the release view with the text tabs (Dashboard · Details · Assets · Store · Payments) whose vinyl art blocks link to the Template Test page you already have. Replace presentational code verbatim; wire data only (swap the `MOCK_` consts). The stepper and exploration banner are mock-only chrome — the scenes are your rail destinations and release tabs; rails stay yours. Delete-first applies: the old release tab set (Dashboard/Overview/Package/Digital/Physical/Shopify/Payments) comes out. **Dead-ends listed in the README are DELIBERATE for tomorrow's Hellbender demo — ship them as no-ops, do not invent endings.** Acceptance: screenshot diff per scene, both themes, 1440/1024/768; record the commit in STATUS.md's ledger and push it. Questions beat inventions.
+
+---
+
+**And yes — on press:** there IS un-shipped press work. What's sitting locally:
+- **New screens:** the Estimates home (PressEstimatesIndex) and the Package Builder — both handoff-ready except a mechanical `MOCK_` rename.
+- **Changed screens:** the estimate builder (Add-a-person modal, per-press gold accent — nice Hellbender talking point) and Packages index — these would be correction handoffs.
+- **A rail sweep** across ~33 press files (the new "Create" nav group) — mechanical, but touches screens Otis already shipped.
+
+The live press side Otis has (templates, catalog) is already demo-solid from the earlier handoffs. Pushing the press batch tonight means Otis wiring two more screens plus corrections by morning — doable but it stacks risk on demo day. My call: **demo the new press pieces from the Playground links, ship them to Otis after Hellbender.** Say the word if you want them pushed tonight anyway and I'll run the same prep-and-push train on them.
