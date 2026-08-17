@@ -1,0 +1,18 @@
+Here's the block to paste to Otis:
+
+---
+
+**Otis — new handoff: Artist Template Test page**
+
+Pull `handoff/artist-template-test/` from main (3 files: `ArtistTemplateTest.tsx`, `assets/niina-jacket.png`, `README.md`). Standing handoff law in `handoff/README-template.md` applies.
+
+1. **Replace presentational code verbatim; wire data only.** The .tsx is the source, not a reference — copy it character-for-character, then swap only the `MOCK_` consts (`MOCK_ART`, `MOCK_TEMPLATE`, `MOCK_TEST_FILE`, `MOCK_CHECKS`) for real data. Delete-first: any existing artist-facing test/preview UI comes out before this goes in.
+2. **What it is:** the artist-facing version of your live press "Template. Test. Certify." page — same exact layout, press-only items deliberately removed (GT-layers check, Save/Cancel, "18 GT layers read", trail line, "Save result & test another"). Do NOT re-add those for artists. Zero filled-blue on this screen by design — it's a read-only viewer.
+3. **Entry point:** artists reach it by clicking an art block on a release's Assets tab. The breadcrumb "Assets" link should navigate back to that release's Assets view.
+4. **Wiring notes (in the README):** overlay chips (Template/Bleed/Cut/Spine/Front/Back) are decorative in the mock — drive them with the SAME overlay rendering your press live-test page already uses, never a separate implementation. The in-progress upload state isn't mocked — reuse the press page's "Uploading… 58%" progress treatment verbatim. "Download test proof" and "Try another file" also need wiring.
+5. **Acceptance:** full-page screenshot diff vs the handoff file, both themes (dark charcoal default + light), at 1440/1024/768. Any visual difference other than data values is a failure. Record the handoff commit in STATUS.md's ledger, and push STATUS.md to GitHub after.
+6. **Questions beat inventions** — anything ambiguous, flag it to Bill; don't adapt silently.
+
+---
+
+That's everything — the README in the repo carries the same detail, so Otis has it in two places.
