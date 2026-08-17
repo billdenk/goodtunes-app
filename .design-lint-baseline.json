@@ -10516,6 +10516,11 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "className=\"block text-center text-[11.5px] text-slate-400 hover:text-slate-600 underline underline-offset-2 mb-2\""
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/CreditsImportSheet.tsx",
     "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900 flex items-center gap-2\">"
   },
@@ -21070,6 +21075,116 @@
     "snippet": "<span className=\"text-fan-secondary uppercase tracking-[0.1em] text-[10px]\">DEV</span>"
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<ol className=\"flex flex-wrap items-center gap-2 text-[13px]\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 16, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 620, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<h2 className=\"text-[16px] font-semibold\" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{TEMPLATE.name}</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[13px] font-semibold\" style={{ color: t.ready }} data-testid=\"badge-certified\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[13px]\" style={{ color: t.faint }}>{TEMPLATE.certifiedDate}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className=\"h-8 px-3.5 rounded-full text-[12.5px] font-medium transition-colors whitespace-nowrap\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className={cn('inline-flex items-center gap-1.5 h-7 rounded-full text-[12px] font-medium transition-colors', t.hoverCard)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[12px] font-medium transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[16px] leading-none\" style={{ marginTop: -1 }}>&minus;</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1 text-[12.5px] font-medium tabular-nums\" style={{ color: t.subink, minWidth: 52, justifyContent: 'center' }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[15px] leading-none\">+</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid=\"canvas-no-preview\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[13px]\" style={{ color: t.subink }}>{passed} of {rows.length} passed</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"block text-[12.5px] truncate\" style={{ marginTop: 2, color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<div className=\"text-[13px]\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<div className=\"text-[12.5px]\" style={{ marginTop: 2, color: t.subink }}>{r.detail}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<button type=\"button\" className=\"text-[13px] font-medium transition-opacity hover:opacity-80\" style={{ color: t.subink }} data-testid=\"button-try-another\">Try another file</button>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<button type=\"button\" className={cn('inline-flex items-center justify-center rounded-full transition-colors', t.hoverCard)} style={{ width: 34, height: 34, border: `1px solid ${t.hairline}`, color: t."
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/ArtistDashboard.tsx",
     "snippet": "const BLUE = \"#319ED8\";"
@@ -24263,6 +24378,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
     "snippet": "<div className=\"text-[12px] mt-0.5 truncate\" style={{ color: t.subink }}>{art.name}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
+    "snippet": "<div className=\"flex items-center justify-end gap-4 py-3 text-[12px]\">"
   },
   {
     "rule": "hardcoded-font-size",

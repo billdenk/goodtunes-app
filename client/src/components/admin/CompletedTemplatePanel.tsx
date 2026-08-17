@@ -544,6 +544,19 @@ function ArtCard({
         {spec ? cardTitle(spec, config) : component?.label ?? componentId}
       </div>
 
+      {/* TEMPORARY (Ruby, Aug 16 2026) — direct link to the artist-facing
+          Test view until the restructured Assets tab (separate handoff)
+          becomes the real entry point. Remove when Assets lands. */}
+      {present && (component?.checks?.length ?? 0) > 0 && (
+        <a
+          href={`/artist/albums/${albumId}/art-test/${encodeURIComponent(componentId)}`}
+          className="block text-center text-[11.5px] text-slate-400 hover:text-slate-600 underline underline-offset-2 mb-2"
+          data-testid={`link-art-test-${componentId}`}
+        >
+          Open test view (temporary)
+        </a>
+      )}
+
       {/* Art area — thumbnail / generic tile / press placeholder. */}
       <div className="relative group mx-auto w-full">
         <div

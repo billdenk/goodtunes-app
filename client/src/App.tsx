@@ -44,6 +44,7 @@ import { FavoriteArtists } from "@/pages/FavoriteArtists";
 import { Bookmarks } from "@/pages/Bookmarks";
 import { ArtistDetail } from "@/pages/ArtistDetail";
 import { ArtistDashboard } from "@/pages/ArtistDashboard";
+import { ArtistTemplateTest } from "@/pages/artist/ArtistTemplateTest";
 import { NonProfitDashboard } from "@/pages/NonProfitDashboard";
 import { LabelDashboard } from "@/pages/LabelDashboard";
 import { ManagerDashboard } from "@/pages/ManagerDashboard";
@@ -963,6 +964,14 @@ function Router() {
             press-partner route guard bounces back to the portal dashboard. */}
         <Route path="/vendor/albums/:id">
           <ProtectedRoute component={VendorPortal} />
+        </Route>
+        {/* Artist Template Test (Ruby handoff, Aug 16 2026) — the artist-side
+            read-only proof view of an art file checked against the press
+            template. Focused sheet, no rail. Listed BEFORE /artist/albums/:id
+            so the deeper path wins. Entry is a temporary link on the
+            completed-art cards until the restructured Assets tab lands. */}
+        <Route path="/artist/albums/:id/art-test/:componentId">
+          <ProtectedRoute component={ArtistTemplateTest} />
         </Route>
         {/* Task #2524 — an artist opening one of their albums stays inside the
             portal shell (ArtistDashboard renders AdminAlbum embedded). Listed
