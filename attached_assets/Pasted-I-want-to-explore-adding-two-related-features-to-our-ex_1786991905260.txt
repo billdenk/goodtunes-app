@@ -1,0 +1,42 @@
+I want to explore adding two related features to our existing app, but please do not build or modify anything yet.
+First, review the existing app structure and reply with:
+Your understanding of what I want to accomplish
+What parts of the existing app this would likely touch
+What information you need from me before implementation
+A recommended MVP scope
+The legitimacy/compliance concerns I should understand
+A proposed implementation plan
+Any questions I should answer before you start coding
+The two features I want to explore are:
+UPC-A barcode artwork generator
+Users should be able to create print-ready UPC-A barcode artwork for vinyl albums and other music releases. The safe MVP should let users enter a UPC/GTIN they already own, then validate and render barcode files.
+Likely requirements:
+Accept a 12-digit UPC-A / GTIN-12 number.
+Optionally accept 11 digits and calculate the 12th check digit.
+Validate the check digit.
+Reject non-numeric, wrong-length, or invalid check digit entries.
+Make clear that check-digit validation does not prove ownership, GS1 registration, uniqueness, or retailer acceptance.
+Render a standards-aware UPC-A barcode.
+Include human-readable digits.
+Preserve quiet zones.
+Export downloadable SVG and PNG at minimum.
+Possibly support PDF/EPS later for print workflows.
+Save generated barcode projects in the user’s account if that fits our existing app model.
+Store related release metadata, such as artist name, album title, label name, release format, variant, catalog number, release date, and UPC.
+Required disclaimers:
+This service creates barcode artwork only.
+Users are responsible for obtaining a legitimate UPC/GTIN from GS1, a distributor, or another authorized source.
+We should not claim retail acceptance unless the UPC is validly licensed and product data has been submitted to retailers/distributors.
+Each distinct sellable product/version may need its own UPC.
+Legitimate UPC sales path
+I also want to understand what would be required to let users actually obtain legitimate UPCs through us in the future.
+Please research/consider GS1 US Channel Partner and Solution Partner options. I do not want a fake UPC issuance system or a generic number generator. I want to know what would be needed for a legitimate path, such as:
+Whether we would need to become a GS1 US Channel Partner, Solution Partner, Certified Identification Partner, or use another authorized GS1 pathway.
+Whether GS1 offers APIs, referral links, embedded purchase flows, or partner tooling for issuing GTINs.
+What customer/product data we would need to collect.
+Who would be the license holder/owner of the UPC/GTIN.
+How we would avoid assigning numbers under our own company in a way that causes retailer verification problems.
+What records, certificates, confirmations, or GS1 lookup support users would expect.
+What legal/compliance language we would need.
+What parts of this could be automated versus requiring manual partnership approval or GS1 onboarding.
+Please start by giving me a careful recommendation and a list of questions. Do not code anything until I confirm the scope.
