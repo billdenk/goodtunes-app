@@ -179,17 +179,41 @@ async function releaseHandler(req: Request, res: Response) {
     WHERE album_id = ${albumId} AND recipient_person_id = ${scope.personId}
     ORDER BY created_at DESC
   `);
-  const payments = ((pr as any).rows ?? []).map((r: any) => ({
+  // Shape into the client's grouped-project contract: one project per
+  // release with its payment requests as milestones. Walk vocabulary:
+  // pending → requested, paid → confirmed.
+  const milestones = ((pr as any).rows ?? []).map((r: any) => ({
     id: r.id,
-    description: r.description,
+    label: r.description || "Payment",
     amountCents: Number(r.amount_cents),
-    currency: r.currency,
-    // Walk vocabulary: pending → requested, paid → confirmed.
     status: r.status === "paid" ? "confirmed" : r.status === "pending" ? "requested" : r.status,
-    createdAt: r.created_at ? new Date(r.created_at).toISOString() : null,
-    paidAt: r.paid_at ? new Date(r.paid_at).toISOString() : null,
+    note: r.status === "paid" && r.paid_at
+      ? `Paid ${new Date(r.paid_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+      : r.created_at
+        ? `Requested ${new Date(r.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}.`
+        : "",
     payUrl: r.status === "pending" ? r.stripe_payment_link_url || null : null,
   }));
+  // Press name for the "GoodTunes releases funds to <press>" context line.
+  const pressRes: any = milestones.length
+    ? await db.execute(sql`
+        SELECT m.name FROM album_skus s JOIN manufacturers m ON m.id = s.press_id
+        WHERE s.album_id = ${albumId} AND s.press_id IS NOT NULL LIMIT 1
+      `)
+    : { rows: [] };
+  const pressName = ((pressRes as any).rows ?? [])[0]?.name ?? "your press";
+  const payments = milestones.length
+    ? [{
+        id: albumId,
+        title: album.title,
+        press: pressName,
+        summary: "Pressing",
+        outstandingCents: milestones
+          .filter((m: any) => m.status !== "confirmed")
+          .reduce((s: number, m: any) => s + m.amountCents, 0),
+        milestones,
+      }]
+    : [];
 
   const artistShareSlug = (person as any)?.artistShareSlug ?? null;
   const shareSlug = album.share_slug ?? null;

@@ -34,21 +34,16 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { ArtistShopifyTab } from "@/components/operator/ArtistShopifyTab";
 import { modulesForRole } from "@/components/operator/registry";
-import { AdminReports } from "@/pages/AdminReports";
 // Artist portal restructure (Ruby handoff, Aug 2026) — wall of releases,
 // five-tab release view, Reports hub, Settings.
 import { ArtistReleasesWall } from "@/pages/artist/restructure/ArtistReleasesWall";
 import { ArtistRelease } from "@/pages/artist/restructure/ArtistRelease";
 import { ArtistReportsHub, registerReportPanes } from "@/pages/artist/restructure/ArtistReportsHub";
 import { ArtistSettingsPage } from "@/pages/artist/restructure/ArtistSettingsPage";
-// Task #2524 — an artist opening one of their albums stays INSIDE this portal
-// shell; AdminAlbum renders in `embedded` mode (no operator /admin chrome).
-import { AdminAlbum } from "@/pages/AdminAlbum";
 import { BuyerReport } from "@/components/partner/BuyerReport";
 import { BRAND, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
 import {
@@ -190,8 +185,16 @@ export function ArtistDashboard() {
     // ?range= param still applies via presetFromSearch below.
     if (t === "overview" || t === "people") return "dashboard";
     // Restructure — Audience/Acquisition/Buyers live inside the Reports hub
-    // now; stale deep links land there.
-    if (t === "audience" || t === "acquisition" || t === "buyers") return "reports";
+    // now; stale deep links land on the matching hub sub-tab.
+    if (t === "audience" || t === "acquisition" || t === "buyers") {
+      const sp = new URLSearchParams(window.location.search);
+      if (!sp.get("rtab")) {
+        sp.set("tab", "reports");
+        sp.set("rtab", t);
+        window.history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
+      }
+      return "reports";
+    }
     if (t === "dashboard" || t === "catalog" || t === "orders" || t === "referrals" || t === "shopify" || t === "reports" || t === "settings") return t;
     return "dashboard";
   });
@@ -375,7 +378,6 @@ const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
   id: "dashboard" | "catalog" | "orders" | "reports" | "referrals" | "shopify" | "settings";
   label: string;
 }>;
-type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];
 
 // ─── KPI card ─────────────────────────────────────────────────────────
 // Thin adapter onto the shared house KPI primitive (KpiCard). Callers keep
