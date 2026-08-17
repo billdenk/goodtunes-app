@@ -40,7 +40,7 @@ import {
   LayoutDashboard, Users, Disc3, UserPlus, Library, Cog, Gift,
   Search, Bell, MessageSquarePlus, CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Moon, Sun, Upload, RotateCcw, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck,
 } from 'lucide-react';
-import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Boxes, Disc as NavVinyl, Square as NavJacket, CircleDot as NavLabel, FileText as NavInsert, Sticker as NavSticker, ReceiptText as NavPricing } from 'lucide-react';
+import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Boxes, Disc as NavVinyl, Square as NavJacket, CircleDot as NavLabel, FileText as NavInsert, Sticker as NavSticker, ReceiptText as NavPricing, ClipboardList as NavEstimatesIcon } from 'lucide-react';
 import labelTemplatePdfUrl from '../assets/label-template-r091125.pdf?url';
 import mrpLogo from '../assets/mrp-logo.svg';
 
@@ -104,9 +104,18 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 // ─── Apple-canon press shell (duplicated verbatim across all press mocks — no drift) ───
 // Canon rail tree — copied from PressRailCanon.PRESS_NAV_CANON (Bill, Aug 16 2026).
 // When the canon changes, change PressRailCanon first, then re-copy here.
-const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean }> }> = [
+const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; route?: string }> }> = [
   { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Clients', icon: Users },
+  {
+    // Create (founder, Aug 16 2026): an estimate or a package are two different
+    // creations on two pages — one "Create" entry, live links to each.
+    label: 'Create', icon: NavEstimatesIcon,
+    children: [
+      { label: 'Estimates', icon: NavEstimatesIcon, route: 'PressEstimatesIndex' },
+      { label: 'Packages', icon: NavPackage, route: 'PressPackagesIndex' },
+    ],
+  },
   { label: 'Projects', icon: Disc3 },
   { label: 'Acquisition', icon: UserPlus },
   {
@@ -119,15 +128,18 @@ const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: 
     ],
   },
   {
+    // Components wired to their existing mock pages (Bill, Aug 16 2026) so the
+    // set can be reviewed for correctness + template linkage. Inner Sleeves and
+    // Inserts have no press-side page yet — they stay inert until designed.
     label: 'Components', icon: Boxes,
     children: [
-      { label: 'Vinyl', icon: NavVinyl },
-      { label: 'Jackets', icon: NavJacket },
+      { label: 'Vinyl', icon: NavVinyl, route: 'PressVinylColorSetup' },
+      { label: 'Jackets', icon: NavJacket, route: 'PressCatalogJacketDefaults' },
       { label: 'Inner Sleeves', icon: NavLayers },
-      { label: 'Center Labels', icon: NavLabel },
+      { label: 'Center Labels', icon: NavLabel, route: 'PressCatalogVinylLabels' },
       { label: 'Inserts', icon: NavInsert },
-      { label: 'Stickers', icon: NavSticker },
-      { label: 'Pricing', icon: NavPricing },
+      { label: 'Stickers', icon: NavSticker, route: 'PressCatalogStickers' },
+      { label: 'Pricing', icon: NavPricing, route: 'PressCatalogPricing' },
     ],
   },
   { label: 'White Label', icon: NavLayers, soon: true },
@@ -207,13 +219,13 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                     </button>
                     {isOpen && (
                     <div className="space-y-0.5">
-                      {item.children.map(({ label, icon: Icon, soon }) => {
+                      {item.children.map(({ label, icon: Icon, soon, route }) => {
                         const isActive = label === active;
                         return (
                           <a
                             key={label}
-                            href="#"
-                            onClick={(e) => e.preventDefault()}
+                            href={route ? `#/${route}` : '#'}
+                            onClick={(e) => { if (!route) e.preventDefault(); }}
                             className={cn('flex items-center gap-2.5 pl-7 pr-2.5 h-9 rounded-lg text-[13px] transition-colors', !isActive && t.hoverWash)}
                             style={{ fontWeight: isActive ? 600 : 500, color: isActive ? t.ink : t.subink, backgroundColor: isActive ? t.card : undefined, boxShadow: isActive ? t.navShadow : undefined }}
                           >
@@ -1455,9 +1467,12 @@ export default function PressTemplateLiveTest() {
                               aria-label="History and tests"
                               data-testid="panel-history-tests"
                             >
-                              <div className="flex items-start justify-between gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${t.hairline}` }}>
+                              {/* Header must clearly outrank the revision rows — bigger title on a
+                                  soft wash band; rows keep medium-weight names (Bill, Aug 16 2026:
+                                  header and row read as "two selections" when near-identical). */}
+                              <div className="flex items-start justify-between gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${t.hairline}`, backgroundColor: t.soft }}>
                                 <div>
-                                  <div className="text-[13.5px] font-semibold" style={{ color: t.ink }}>History &amp; tests</div>
+                                  <div className="text-[15px] font-semibold tracking-[-0.01em]" style={{ color: t.ink }}>History &amp; tests</div>
                                   <div className="text-[12px] mt-0.5" style={{ color: t.subink }}>Every revision of this template, tests attached</div>
                                 </div>
                                 <button type="button" onClick={() => setShowTests(false)} aria-label="Close" className="w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${t.hairline}`, color: t.subink }} data-testid="button-close-history">
@@ -1465,10 +1480,10 @@ export default function PressTemplateLiveTest() {
                                 </button>
                               </div>
                               <div className="px-5 py-3 max-h-[420px] overflow-y-auto">
-                                {[{ name: template.name, wMm: template.wMm, hMm: template.hMm, at: uploadedAt ?? '', tests: testLog, current: true }, ...revisions.map((r) => ({ ...r, current: false }))].map((rev, ri) => (
-                                  <div key={ri} className="py-3" style={{ borderBottom: `1px solid ${t.hairline}` }}>
+                                {[{ name: template.name, wMm: template.wMm, hMm: template.hMm, at: uploadedAt ?? '', tests: testLog, current: true }, ...revisions.map((r) => ({ ...r, current: false }))].map((rev, ri, arr) => (
+                                  <div key={ri} className="py-3" style={{ borderBottom: ri < arr.length - 1 ? `1px solid ${t.hairline}` : undefined }}>
                                     <div className="flex items-baseline justify-between gap-3">
-                                      <span className="text-[12.5px] font-semibold truncate" style={{ color: t.ink }} title={rev.name}>{rev.name}</span>
+                                      <span className="text-[12.5px] font-medium truncate" style={{ color: t.ink }} title={rev.name}>{rev.name}</span>
                                       <span className="text-[11px] font-semibold flex-shrink-0 inline-flex items-center gap-1" style={{ color: rev.current ? t.ready : t.faint }}>
                                         {rev.current ? <><BadgeCheck style={{ width: 12, height: 12 }} /> Current</> : <><History style={{ width: 12, height: 12 }} /> Superseded</>}
                                       </span>
