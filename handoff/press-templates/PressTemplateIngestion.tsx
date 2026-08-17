@@ -108,9 +108,18 @@ function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
 }
 
-const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean }> }> = [
+const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; route?: string }> }> = [
   { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Clients', icon: Users },
+  {
+    // Create (founder, Aug 16 2026): an estimate or a package are two different
+    // creations on two pages — one "Create" entry, live links to each.
+    label: 'Create', icon: ClipboardList,
+    children: [
+      { label: 'Estimates', icon: ClipboardList, route: 'PressEstimatesIndex' },
+      { label: 'Packages', icon: NavPackage, route: 'PressPackagesIndex' },
+    ],
+  },
   { label: 'Projects', icon: Disc3 },
   { label: 'Acquisition', icon: UserPlus },
   {
@@ -203,13 +212,13 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                       <span className="truncate flex-1 text-left">{item.label}</span>
                     </button>
                     <div className="space-y-0.5">
-                      {item.children.map(({ label, icon: Icon, soon }) => {
+                      {item.children.map(({ label, icon: Icon, soon, route }) => {
                         const isActive = label === active;
                         return (
                           <a
                             key={label}
-                            href="#"
-                            onClick={(e) => e.preventDefault()}
+                            href={route ? `#/${route}` : '#'}
+                            onClick={(e) => { if (!route) e.preventDefault(); }}
                             className={cn('flex items-center gap-2.5 pl-7 pr-2.5 h-9 rounded-lg text-[13px] transition-colors', !isActive && t.hoverWash)}
                             style={{
                               fontWeight: isActive ? 600 : 500,
