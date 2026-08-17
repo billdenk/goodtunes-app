@@ -102,7 +102,12 @@ function WallCardTile({ card, t, onOpen }: { card: WallCard; t: Theme; onOpen: (
   );
 }
 
-export function ArtistReleasesWall({ qs }: { qs: string }) {
+export function ArtistReleasesWall({ qs, onOpenAlbum }: {
+  qs: string;
+  /** Admin mirror override — route tiles to /admin/albums/:id instead of
+   * the portal's own /artist/albums/:id. */
+  onOpenAlbum?: (albumId: string) => void;
+}) {
   const t = useRestructureTheme();
   const [, navigate] = useLocation();
   const wall = useQuery<{ cards: WallCard[] }>({
@@ -125,7 +130,7 @@ export function ArtistReleasesWall({ qs }: { qs: string }) {
       ) : (
         <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 240px), 1fr))', gap: 18 }}>
           {cards.map((c) => (
-            <WallCardTile key={c.id} card={c} t={t} onOpen={() => navigate(`/artist/albums/${c.id}`)} />
+            <WallCardTile key={c.id} card={c} t={t} onOpen={() => (onOpenAlbum ? onOpenAlbum(c.id) : navigate(`/artist/albums/${c.id}`))} />
           ))}
         </div>
       )}

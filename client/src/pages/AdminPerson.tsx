@@ -1,8 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { getInitials } from "@/lib/initials";
 import { formatUsdCents } from "@shared/money";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
-import { Link, useRoute, useLocation } from "wouter";
+import { Link, useRoute, useLocation, useSearch } from "wouter";
+import {
+  ArtistTabBody,
+  useArtistRangeQs,
+  ARTIST_PORTAL_TABS,
+  type ArtistPortalTab,
+} from "@/pages/ArtistDashboard";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
 import {
@@ -461,7 +467,12 @@ interface ManagerLite {
 // even though the discography endpoints under the hood still say
 // "discography" — the rename is UI-only on purpose so the iTunes pull
 // machinery doesn't ripple.
-type Tab = "dashboard" | "overview" | "cover" | "members" | "releases" | "streaming" | "gear" | "splits" | "payouts" | "permissions";
+// Mirror (artist restructure) — for artist-shaped people the top strip leads
+// with the artist portal's own modules (Dashboard/Releases/Orders/Reports/
+// Referrals/Shopify/Settings), then a divider, then the operator-only tabs.
+// "releases" stays the operator's GoodTunes® Releases management panel;
+// the mirrored partner view is "catalog" (the wall).
+type Tab = ArtistPortalTab | "overview" | "cover" | "members" | "releases" | "streaming" | "gear" | "splits" | "payouts" | "permissions";
 const BASE_TABS: { key: Tab; label: string }[] = [
   // Task #590 — Dashboard leads on every partner detail page, including
   // artist-scope. Most artist KPIs render Coming soon until the
@@ -660,7 +671,8 @@ export function AdminPerson() {
   const { toast } = useToast();
   // Task #590 — Dashboard is default; `?tab=` deep links keep working.
   const ALL_TAB_KEYS: readonly Tab[] = [
-    "dashboard", "overview", "cover", "members", "releases", "streaming", "gear", "splits", "payouts", "permissions",
+    "dashboard", "catalog", "orders", "reports", "referrals", "shopify", "settings",
+    "overview", "cover", "members", "releases", "streaming", "gear", "splits", "payouts", "permissions",
   ];
   const [tab, setTabState] = useState<Tab>(() => {
     if (typeof window === "undefined") return "dashboard";
@@ -676,6 +688,14 @@ export function AdminPerson() {
       window.history.replaceState({}, "", u.toString());
     } catch {}
   };
+  // Mirror — DashboardTab KPI tiles deep-link between modules by writing
+  // ?tab= via wouter navigation; keep local tab state in sync with the URL.
+  const searchStr = useSearch();
+  useEffect(() => {
+    const t = new URLSearchParams(searchStr).get("tab");
+    if (t && (ALL_TAB_KEYS as readonly string[]).includes(t)) setTabState(t as Tab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchStr]);
   // Photo editor lives as a modal hanging off the header avatar (same
   // pencil-on-thumbnail pattern as AdminAlbum's Artwork editor). The
   // dedicated Photo tab was removed; Cover is still its own tab because
@@ -812,6 +832,27 @@ export function AdminPerson() {
       ? labels.find((l) => l.id === person.labelId)?.name ?? null
       : null;
 
+  // Full mirror (ruled Aug 17 2026): for artist-shaped people the operator
+  // page leads with the artist portal's OWN modules, then a divider, then
+  // the operator-only extras. One body, two chromes — ArtistTabBody is the
+  // same component the /artist portal mounts; god view rides personId.
+  const mirrorMode =
+    !!person && !pressMode && person.shape !== "contact" && personIsArtist(person);
+  const mirrorTabs: { key: Tab; label: string }[] = mirrorMode
+    ? ARTIST_PORTAL_TABS.map((m) => ({ key: m.id as Tab, label: m.label }))
+    : [];
+  // Operator extras: the mirror Dashboard replaces the old operator
+  // AdminPartnerDashboard tab; everything else keeps its panel. "releases"
+  // (GoodTunes® Releases) stays — it carries the operator-only Add Album +
+  // buyer-roster affordances the partner catalog wall deliberately lacks.
+  const operatorTabs: { key: Tab; label: string }[] = pressMode
+    ? PRESS_PERSON_TABS
+    : person
+      ? tabsForPerson(person).filter((t) => !(mirrorMode && t.key === "dashboard"))
+      : [];
+  const stripTabs = [...mirrorTabs, ...operatorTabs];
+  const artistRange = useArtistRangeQs(mirrorMode ? personId : null);
+
   // Task #665 — once the Person resolves, coerce the tab to a key
   // tabsForPerson() actually renders. Contact-shape people don't have
   // Dashboard/Releases/Streaming/Gear/Splits/Payouts tabs, so a direct
@@ -820,9 +861,7 @@ export function AdminPerson() {
   // Dashboard shell on a partner contact.
   useEffect(() => {
     if (!person) return;
-    const allowed = new Set(
-      (pressMode ? PRESS_PERSON_TABS : tabsForPerson(person)).map((t) => t.key),
-    );
+    const allowed = new Set(stripTabs.map((t) => t.key));
     if (!allowed.has(tab)) {
       setTabState("overview");
       try {
@@ -832,7 +871,7 @@ export function AdminPerson() {
       } catch {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [person?.shape, person?.isGroup]);
+  }, [person?.shape, person?.isGroup, tab, mirrorMode, pressMode]);
 
   if (authLoading || isLoading) {
     return (
@@ -1044,9 +1083,18 @@ export function AdminPerson() {
           data-testid="tabs-admin-person"
         >
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
-            {(pressMode ? PRESS_PERSON_TABS : tabsForPerson(person)).map((t) => (
+            {stripTabs.map((t, i) => (
+              <Fragment key={t.key}>
+              {/* Divider between the mirrored portal modules and the
+                  operator-only extras. */}
+              {mirrorMode && i === mirrorTabs.length && (
+                <span
+                  aria-hidden
+                  className="self-center h-4 w-px bg-slate-200 shrink-0"
+                  data-testid="tabs-operator-divider"
+                />
+              )}
               <button
-                key={t.key}
                 onClick={() => setTab(t.key)}
                 className={[
                   "relative pb-2.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
@@ -1061,6 +1109,7 @@ export function AdminPerson() {
                   <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
                 )}
               </button>
+              </Fragment>
             ))}
           </div>
           {pressMode ? (
@@ -1098,7 +1147,25 @@ export function AdminPerson() {
         </div>
 
         {/* TAB CONTENT */}
-        {tab === "dashboard" && !pressMode && (
+        {/* Mirror — the artist portal's own module bodies, one body two
+            chromes. God view rides ?personId= / the qs threaded here. */}
+        {mirrorMode &&
+          (["dashboard", "catalog", "orders", "reports", "referrals", "shopify", "settings"] as const)
+            .includes(tab as ArtistPortalTab) && (
+          <ArtistTabBody
+            tab={tab as ArtistPortalTab}
+            qs={artistRange.qs}
+            personId={person.id}
+            artistName={person.name}
+            preset={artistRange.preset}
+            onPresetChange={artistRange.applyPreset}
+            onOpenAlbum={(id) =>
+              navigate(`/admin/albums/${id}?from=person&personId=${person.id}`)
+            }
+            operatorView
+          />
+        )}
+        {tab === "dashboard" && !pressMode && !mirrorMode && (
           <AdminPartnerDashboard
             scope="artist"
             scopeIdQs={person.id}

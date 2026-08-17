@@ -98,7 +98,7 @@ type TabId = "dashboard" | "people" | "estimates" | "packages" | "catalog" | "sp
 const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "estimates", "packages", "catalog", "specs", "templates", "comp-vinyl", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
-interface PressMe {
+export interface PressMe {
   id: string;
   name: string;
   logoUrl: string | null;
@@ -222,10 +222,20 @@ function pressPortalHref(tab: string): string {
   return `/vendor?${carry.toString()}`;
 }
 
-export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; isSuperAdminView: boolean }) {
+// Shared nav state for the press module surface. Owns the ?tab / ?view /
+// ?person / ?estimate / ?package URL wiring so the SAME module body can be
+// mounted by PressPortal (left-rail portal) AND the super-admin press page
+// (top tabs on /admin/manufacturers/:id) without drift. Handlers are
+// path-agnostic — they always preserve window.location.pathname.
+export function usePressPortalNav(opts?: {
+  /** Extra valid tab ids beyond the press module set (admin-only tabs). */
+  extraTabIds?: readonly string[];
+  /** Host-specific legacy deep-link resolution, checked first. */
+  resolveExtra?: (t: string | null, params: URLSearchParams) => string | null;
+}) {
   // Task #2075 — AdminFrame's press rail (shown on the catalog editor) and
-  // any other deep link land here as `/vendor?tab=<id>`. Read it on mount so
-  // those links open the right tab, and keep it in sync if the URL changes.
+  // any other deep link land here as `?tab=<id>`. Read it on mount so those
+  // links open the right tab, and keep it in sync if the URL changes.
   // Task #2188 — Legacy `?tab=settings&settings=catalog` redirects to the
   // new top-level catalog tab so old links degrade gracefully.
   const search = useSearch();
@@ -245,15 +255,11 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   const createView = params.get("view");
   const estimateIdFromUrl = params.get("estimate");
   const packageIdFromUrl = params.get("package");
-
-  // `/vendor/albums/:id` opens that album's admin page embedded in this portal
-  // shell (Physical tab), mirroring the artist portal. When matched we force
-  // the Albums nav item active and route tab clicks back out to the portal.
-  const [isAlbumView, albumRouteParams] = useRoute<{ id: string }>("/vendor/albums/:id");
   const [, navigate] = useLocation();
-  const albumViewId = isAlbumView ? (albumRouteParams?.id ?? null) : null;
 
-  const resolveTab = (t: string | null, sub: string | null): TabId => {
+  const resolveTab = (t: string | null, sub: string | null): string => {
+    const extra = opts?.resolveExtra?.(t, params);
+    if (extra) return extra;
     if (t === "settings" && sub === "catalog") return "catalog";
     // "GoodDeed Certificates" (the pricing tab) is visible to press logins
     // again per the press-specs handoff rail (Bill, Aug 11 2026 — supersedes
@@ -261,52 +267,34 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
     // The Customers tab was folded into People (People is now the single
     // directory). Old ?tab=customers deep-links degrade to People.
     if (t === "customers") return "people";
-    if (t && (PRESS_TAB_IDS as string[]).includes(t)) return t as TabId;
+    if (t && (PRESS_TAB_IDS as string[]).includes(t)) return t;
+    if (t && opts?.extraTabIds?.includes(t)) return t;
     return "dashboard";
   };
 
-  const [tab, setTab] = useState<TabId>(() => resolveTab(tabFromUrl, settingsSubFromUrl));
+  const [tab, setTab] = useState<string>(() => resolveTab(tabFromUrl, settingsSubFromUrl));
   const [openPersonId, setOpenPersonId] = useState<string | null>(() => personFromUrl ?? null);
 
   useEffect(() => {
     setTab(resolveTab(tabFromUrl, settingsSubFromUrl));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabFromUrl, settingsSubFromUrl]);
   useEffect(() => {
     setOpenPersonId(personFromUrl ?? null);
   }, [personFromUrl]);
-  const { data: me, isLoading } = useQuery<PressMe>({
-    queryKey: [`/api/press/${pressId}/me`],
-  });
-
-  if (isLoading) {
-    return (
-      <main className="min-h-screen bg-[color:var(--apple-tile)] flex items-center justify-center">
-        <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
-      </main>
-    );
-  }
-
-  // Press-specs handoff rail (Bill, Aug 11 2026) — Catalog is a collapsible
-  // section whose children include "GoodDeed Certificates" (the pricing tab,
-  // now visible to press logins again — supersedes the Task #2222 hide) and
-  // the decorative "White Label" Soon row (inert; rendered by OperatorShell,
-  // never routable — it's not in PRESS_TAB_IDS so ?tab=whitelabel resolves
-  // to dashboard).
-  const tabs = modulesForRole("press") as ReadonlyArray<{ id: TabId; label: string; soon?: boolean }>;
-
-  // Cached for the catalog tab (pressDomain drives Hellbender/MRP import buttons).
-  const pressDomain = me?.domain ?? null;
 
   // Write the active tab back to the URL (history replace, not push) so that
   // window.location.href captured by FeedbackLauncher carries the real sub-page.
   // Switching tabs always closes any open person detail.
-  const handleTabChange = (newTab: TabId) => {
+  const handleTabChange = (newTab: string) => {
     setTab(newTab);
     setOpenPersonId(null);
     const sp = new URLSearchParams(window.location.search);
     sp.set("tab", newTab);
     sp.delete("person");
     sp.delete("view");
+    sp.delete("estimate");
+    sp.delete("package");
     history.replaceState(null, "", `${window.location.pathname}?${sp}`);
   };
 
@@ -314,14 +302,14 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   // keeping the URL deep-linkable (portal tab-in-URL rule). Wouter's location
   // doesn't track query strings, so navigate() re-renders with the new search.
   // Enter/leave the Create builders, keeping the URL deep-linkable.
-  const setCreateViewParam = (tab: "estimates" | "packages", opts: { builder: boolean; id?: string | null }) => {
+  const setCreateViewParam = (tab: "estimates" | "packages", opts2: { builder: boolean; id?: string | null }) => {
     const sp = new URLSearchParams(window.location.search);
     sp.set("tab", tab);
     sp.delete("estimate");
     sp.delete("package");
-    if (opts.builder) {
+    if (opts2.builder) {
       sp.set("view", "builder");
-      if (opts.id) sp.set(tab === "estimates" ? "estimate" : "package", opts.id);
+      if (opts2.id) sp.set(tab === "estimates" ? "estimate" : "package", opts2.id);
     } else {
       sp.delete("view");
     }
@@ -355,6 +343,54 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
     sp.delete("person");
     history.replaceState(null, "", `${window.location.pathname}?${sp}`);
   };
+
+  return {
+    tab,
+    openPersonId,
+    catalogView,
+    createView,
+    estimateIdFromUrl,
+    packageIdFromUrl,
+    handleTabChange,
+    setCreateViewParam,
+    setCatalogViewParam,
+    openPerson,
+    closePerson,
+  };
+}
+
+export type PressPortalNav = ReturnType<typeof usePressPortalNav>;
+
+export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; isSuperAdminView: boolean }) {
+  const nav = usePressPortalNav();
+  const { tab, handleTabChange } = nav;
+
+  // `/vendor/albums/:id` opens that album's admin page embedded in this portal
+  // shell (Physical tab), mirroring the artist portal. When matched we force
+  // the Albums nav item active and route tab clicks back out to the portal.
+  const [isAlbumView, albumRouteParams] = useRoute<{ id: string }>("/vendor/albums/:id");
+  const [, navigate] = useLocation();
+  const albumViewId = isAlbumView ? (albumRouteParams?.id ?? null) : null;
+
+  const { data: me, isLoading } = useQuery<PressMe>({
+    queryKey: [`/api/press/${pressId}/me`],
+  });
+
+  if (isLoading) {
+    return (
+      <main className="min-h-screen bg-[color:var(--apple-tile)] flex items-center justify-center">
+        <Loader2 className="w-6 h-6 text-[color:var(--brand-blue)] animate-spin" />
+      </main>
+    );
+  }
+
+  // Press-specs handoff rail (Bill, Aug 11 2026) — Catalog is a collapsible
+  // section whose children include "GoodDeed Certificates" (the pricing tab,
+  // now visible to press logins again — supersedes the Task #2222 hide) and
+  // the decorative "White Label" Soon row (inert; rendered by OperatorShell,
+  // never routable — it's not in PRESS_TAB_IDS so ?tab=whitelabel resolves
+  // to dashboard).
+  const tabs = modulesForRole("press") as ReadonlyArray<{ id: TabId; label: string; soon?: boolean }>;
 
   return (
     <OperatorShell
@@ -399,6 +435,41 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
           backHref={pressPortalHref("albums")}
         />
       ) : (
+        <PressTabBody pressId={pressId} isSuperAdminView={isSuperAdminView} me={me} nav={nav} />
+      )}
+    </OperatorShell>
+  );
+}
+
+// The press module surface — every `tab === …` mount in one place, shared by
+// PressPortal (left rail) and the super-admin press page's mirrored top tabs
+// (AdminManufacturer.tsx). One body, two chromes: never fork these mounts.
+export function PressTabBody({
+  pressId,
+  isSuperAdminView,
+  me,
+  nav,
+}: {
+  pressId: string;
+  isSuperAdminView: boolean;
+  me: PressMe | undefined;
+  nav: PressPortalNav;
+}) {
+  const {
+    tab,
+    openPersonId,
+    catalogView,
+    createView,
+    estimateIdFromUrl,
+    packageIdFromUrl,
+    setCreateViewParam,
+    setCatalogViewParam,
+    openPerson,
+    closePerson,
+  } = nav;
+  // Cached for the catalog tab (pressDomain drives Hellbender/MRP import buttons).
+  const pressDomain = me?.domain ?? null;
+  return (
       <>
       {tab === "dashboard" && (
         <PressDashboardTab pressId={pressId} isSuperAdminView={isSuperAdminView} />
@@ -503,8 +574,6 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       )}
       {tab === "settings" && <SettingsTab pressId={pressId} pressName={me?.name ?? ""} />}
       </>
-      )}
-    </OperatorShell>
   );
 }
 

@@ -347,27 +347,17 @@ export function ArtistDashboard() {
         <>
       {/* Task #2893 — single merged, tier-disciplined Dashboard (the old
           shared PartnerDashboard tab + Overview tab are one page now). */}
-      {tab === "dashboard" && (
-        <DashboardTab
-          qs={qs}
-          artistName={me.data?.name ?? null}
-          preset={preset}
-          onPresetChange={applyPreset}
-        />
-      )}
-      {/* Restructure: the wall of releases IS the catalog. */}
-      {tab === "catalog" && <ArtistReleasesWall qs={qs} />}
-      {tab === "orders" && <OrdersTab qs={qs} />}
-      {tab === "referrals" && <ReferralsTab />}
-      {/* Task #2914 — artists connect their own Shopify store from the
-          portal (same connect card as /admin/shopify, artist copy). */}
-      {tab === "shopify" && <ArtistShopifyTab />}
-      {/* Restructure: Reports hub — Audience / Acquisition / Buyers moved
-          in here as sub-tabs beside the Payments / Earnings ledgers. */}
-      {tab === "reports" && (
-        <ArtistReportsHub qs={`?${qs}`} personId={me.data?.personId ?? null} />
-      )}
-      {tab === "settings" && <ArtistSettingsPage />}
+      {/* One body, two chromes — the super-admin artist page (AdminPerson)
+          mounts this same ArtistTabBody with an explicit personId. Never
+          fork these mounts. */}
+      <ArtistTabBody
+        tab={tab}
+        qs={qs}
+        personId={me.data?.personId ?? null}
+        artistName={me.data?.name ?? null}
+        preset={preset}
+        onPresetChange={applyPreset}
+      />
         </>
       )}
     </OperatorShell>
@@ -378,6 +368,76 @@ const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
   id: "dashboard" | "catalog" | "orders" | "reports" | "referrals" | "shopify" | "settings";
   label: string;
 }>;
+
+// ---------------------------------------------------------------------------
+// Super-admin mirror (AdminPerson.tsx) — the artist detail page renders the
+// SAME portal modules as top tabs. One body, two chromes: never fork these
+// mounts.
+export type ArtistPortalTab =
+  | "dashboard" | "catalog" | "orders" | "reports" | "referrals" | "shopify" | "settings";
+export const ARTIST_PORTAL_TABS = ARTIST_TABS;
+
+/** Range/preset + query-string state for the artist modules, with an explicit
+ * personId for god view. Mirrors the portal's own ?range= handling. */
+export function useArtistRangeQs(personId?: string | null) {
+  const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
+  // Mirror the portal's URL-as-source-of-truth: a KPI deep link or a later
+  // ?range= navigation must re-seed the preset, not just the initial mount.
+  const searchStr = useSearch();
+  useEffect(() => {
+    const p = presetFromSearch(searchStr);
+    if (p) setPreset(p);
+  }, [searchStr]);
+  const applyPreset = (p: PresetId) => {
+    setPreset(p);
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("range", p);
+    history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
+  };
+  const range = useMemo(() => rangeFor(preset), [preset]);
+  const qs = useMemo(() => {
+    const u = new URLSearchParams({ from: range.from, to: range.to });
+    if (personId) u.set("personId", personId);
+    return u.toString();
+  }, [range, personId]);
+  return { preset, applyPreset, qs };
+}
+
+export function ArtistTabBody({
+  tab, qs, personId, artistName, preset, onPresetChange, onOpenAlbum, operatorView,
+}: {
+  tab: ArtistPortalTab;
+  qs: string;
+  personId: string | null;
+  artistName: string | null;
+  preset: PresetId;
+  onPresetChange: (p: PresetId) => void;
+  /** Override where a release tile navigates (admin mirror routes to
+   * /admin/albums/:id; the portal keeps its own /artist/albums/:id). */
+  onOpenAlbum?: (albumId: string) => void;
+  /** True on the super-admin mirror — hides artist-session-only surfaces
+   * (the referral invite panel; its endpoints reject non-artist callers). */
+  operatorView?: boolean;
+}) {
+  return (
+    <>
+      {/* Task #2893 — single merged, tier-disciplined Dashboard. */}
+      {tab === "dashboard" && (
+        <DashboardTab qs={qs} artistName={artistName} preset={preset} onPresetChange={onPresetChange} />
+      )}
+      {/* Restructure: the wall of releases IS the catalog. */}
+      {tab === "catalog" && <ArtistReleasesWall qs={qs} onOpenAlbum={onOpenAlbum} />}
+      {tab === "orders" && <OrdersTab qs={qs} />}
+      {tab === "referrals" && <ReferralsTab personId={personId} hideInvitePanel={operatorView} />}
+      {/* Task #2914 — same connect card as /admin/shopify, artist copy. */}
+      {tab === "shopify" && <ArtistShopifyTab personId={personId} />}
+      {/* Restructure: Reports hub — Audience / Acquisition / Buyers as
+          sub-tabs beside the Payments / Earnings ledgers. */}
+      {tab === "reports" && <ArtistReportsHub qs={`?${qs}`} personId={personId} />}
+      {tab === "settings" && <ArtistSettingsPage personId={personId} />}
+    </>
+  );
+}
 
 // ─── KPI card ─────────────────────────────────────────────────────────
 // Thin adapter onto the shared house KPI primitive (KpiCard). Callers keep
@@ -1758,9 +1818,13 @@ function BuyersTab({ qs, personId }: { qs: string; personId: string | null }) {
   );
 }
 
-function ReferralsTab() {
+function ReferralsTab({ personId, hideInvitePanel }: { personId?: string | null; hideInvitePanel?: boolean }) {
+  // Super-admin god view targets a specific artist via ?personId= — the prop
+  // comes from the admin mirror; the portal's own god view rides the URL.
+  const pid = personId ?? new URLSearchParams(window.location.search).get("personId");
+  const suffix = pid ? `?personId=${encodeURIComponent(pid)}` : "";
   const swaps = useQuery<{ asReferrer: SwapApiRow[]; asInvitee: SwapApiRow[] }>({
-    queryKey: ["/api/artist/referrals/swaps"],
+    queryKey: [`/api/artist/referrals/swaps${suffix}`],
   });
   const swapRows: SwapRow[] = [
     ...(swaps.data?.asReferrer ?? []).map((r) => ({ ...r, role: "referrer" as const })),
@@ -1772,7 +1836,7 @@ function ReferralsTab() {
       await apiRequest("POST", `/api/artist/referrals/${id}/pre-elect`, { swapState: state });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/artist/referrals/swaps"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/artist/referrals/swaps${suffix}`] });
       toast({ title: "Saved" });
     },
     onError: (e: Error) => {
@@ -1786,7 +1850,7 @@ function ReferralsTab() {
     paidCents: number;
     partners: { id: string; name: string; photoUrl: string | null; units: number; pendingCents: number; referralStartedAt: string | null; earningWindowActive: boolean; earningWindowEndsAt: string | null }[];
     nonProfits: { id: string; name: string; logoUrl: string | null }[];
-  }>({ queryKey: ["/api/artist/referrals"] });
+  }>({ queryKey: [`/api/artist/referrals${suffix}`] });
   if (q.isLoading) {
     return <p className="py-10 text-center text-[color:var(--apple-faint)] text-[13px]">Loading…</p>;
   }
@@ -1797,7 +1861,16 @@ function ReferralsTab() {
   const fmt = (c: number) => formatUsdCents(c);
   return (
     <>
-      <InviteArtistPanel />
+      {/* Operator mirror hides the invite panel — /api/artist/invites is
+          artist-session-only (it 403s super_admins), so the mirror shows
+          the artist's referral numbers without a dead invite form. */}
+      {hideInvitePanel ? (
+        <p className="text-[13px] text-[color:var(--apple-faint)]" data-testid="referrals-operator-note">
+          Invites are sent by the artist from their own portal.
+        </p>
+      ) : (
+        <InviteArtistPanel />
+      )}
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="referrals-kpis">
         <Kpi label="Pending payout" value={fmt(d.pendingCents)} sub={`${d.pendingCount} unit${d.pendingCount === 1 ? "" : "s"} this period`} testId="kpi-ref-pending" />
         <Kpi label="Paid out" value={fmt(d.paidCents)} testId="kpi-ref-paid" />

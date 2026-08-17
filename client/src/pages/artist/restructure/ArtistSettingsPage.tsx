@@ -44,10 +44,11 @@ function initials(name: string) {
   return name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]?.toUpperCase() ?? '').join('') || '?';
 }
 
-export function ArtistSettingsPage() {
+export function ArtistSettingsPage({ personId: personIdProp }: { personId?: string | null } = {}) {
   const t = useRestructureTheme();
   // Super-admin god view passes ?personId= through the URL — thread it.
-  const personId = new URLSearchParams(window.location.search).get('personId');
+  // The admin mirror (AdminPerson) passes an explicit prop instead.
+  const personId = personIdProp ?? new URLSearchParams(window.location.search).get('personId');
   const teamQ = useQuery<TeamPayload>({ queryKey: [`/api/artist/team${personId ? `?personId=${personId}` : ''}`] });
   const shopifyQ = useQuery<ShopifyOverview>({ queryKey: [`/api/artist/shopify/overview${personId ? `?personId=${personId}` : ''}`], retry: false });
 

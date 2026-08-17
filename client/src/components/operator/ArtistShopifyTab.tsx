@@ -18,11 +18,12 @@ type Overview = {
   pendingLinks: Array<{ id: string; shopDomain: string; lastGeneratedAt: string }>;
 };
 
-export function ArtistShopifyTab() {
+export function ArtistShopifyTab({ personId: personIdProp }: { personId?: string | null } = {}) {
   const { toast } = useToast();
   // Super-admin god-view passes ?personId= through, mirroring every other
-  // artist-portal endpoint. Artists resolve from their own session.
-  const personId = new URLSearchParams(window.location.search).get("personId");
+  // artist-portal endpoint. Artists resolve from their own session. The
+  // admin mirror (AdminPerson) passes an explicit prop instead of the URL.
+  const personId = personIdProp ?? new URLSearchParams(window.location.search).get("personId");
   const suffix = personId ? `?personId=${encodeURIComponent(personId)}` : "";
   const overviewKey = `/api/artist/shopify/overview${suffix}`;
 

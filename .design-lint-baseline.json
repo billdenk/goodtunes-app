@@ -18532,7 +18532,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<span className=\"text-[10px] font-semibold uppercase tracking-wide rounded-full px-1.5 py-0.5 bg-slate-100 text-slate-400\">Soon</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
     "snippet": "<span className=\"text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "\"px-3 py-1.5 rounded-full text-[12.5px] font-semibold transition-colors\","
   },
   {
     "rule": "hardcoded-font-size",

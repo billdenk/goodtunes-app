@@ -43,19 +43,17 @@ import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { StatusDot } from "@/components/admin/StatusDot";
 import { NotificationsCard } from "@/components/admin/NotificationsCard";
 import { PartnerPermissionsPanel } from "@/components/admin/PartnerPermissionsPanel";
-import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard";
 import { PressLogoEditorDialog } from "@/components/admin/PressLogoEditorDialog";
 import { OrganizationPeople } from "@/components/admin/OrganizationPeople";
 import { PartnerCapabilitiesCard, PRESS_CAPABILITIES } from "@/components/admin/PartnerCapabilitiesCard";
 import { Switch } from "@/components/ui/switch";
-import { EntityAlbumsTab } from "@/components/admin/EntityAlbumsTab";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { SaveLink, CardHeader, EditPencil } from "@/components/admin/EditCardChrome";
 import { IconButton } from "@/components/ui/IconButton";
-import { PressPackagePricingCatalog } from "@/pages/PressPackagePricingCatalog";
-import { PressSpecs } from "@/pages/PressSpecs";
+import { PressTabBody, usePressPortalNav, type PressMe } from "@/pages/PressPortal";
+import { modulesForRole, SECTION_LABELS, type OperatorSectionId } from "@/components/operator/registry";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -253,46 +251,57 @@ export function AdminManufacturer() {
   const [artistDialogOpen, setArtistDialogOpen] = useState(false);
   const [titleDialogOpen, setTitleDialogOpen] = useState(false);
   const [pendingArtist, setPendingArtist] = useState<{ name: string; id: string } | null>(null);
-  // Task #295 — Overview / People / Albums / Analytics parity with
-  // the Maker template. Overview keeps the editable profile + press
-  // catalog + permissions cards; the other three tabs are shared
-  // components driven by `/api/admin/manufacturers/:id/...` endpoints.
-  // Task #590 — Dashboard leads, Overview demoted to second. `?tab=` deep
-  // links keep working; default lands on Dashboard.
-  type ManufacturerTab = "dashboard" | "overview" | "people" | "albums" | "catalog" | "analytics";
-  const MFR_TAB_KEYS: readonly ManufacturerTab[] = ["dashboard", "overview", "people", "albums", "catalog", "analytics"];
-  const [tab, setTabState] = useState<ManufacturerTab>(() => {
-    if (typeof window === "undefined") return "dashboard";
-    const q = new URLSearchParams(window.location.search).get("tab");
-    return (MFR_TAB_KEYS as readonly string[]).includes(q ?? "") ? (q as ManufacturerTab) : "dashboard";
+  // Mirror rule (gogoods, Aug 17 2026): the super-admin press page carries
+  // the SAME sections as the press portal's left rail — registry-driven, on
+  // top tabs instead of the side rail — plus operator-only extras (Overview /
+  // Contacts / Analytics) after a divider. The bodies are the press portal's
+  // own module mounts (PressTabBody), so the two surfaces can't drift.
+  const ADMIN_EXTRA_TABS = ["overview", "contacts", "analytics"] as const;
+  const nav = usePressPortalNav({
+    extraTabIds: ADMIN_EXTRA_TABS,
+    resolveExtra: (t, sp) => {
+      // Legacy admin deep links from before the mirror restructure:
+      // ?tab=catalog&section=specs|gooddeeds. (Plain ?tab=catalog now means
+      // the press's GoodTunes Packages catalog, same as the portal.)
+      const section = sp.get("section");
+      if (t === "catalog" && section === "specs") return "specs";
+      // The operator GoodDeed printing editor moved onto Overview.
+      if (t === "catalog" && section === "gooddeeds") return "overview";
+      return null;
+    },
   });
-  const setTab = (next: ManufacturerTab) => {
-    setTabState(next);
-    try {
-      const u = new URL(window.location.href);
-      if (next === "dashboard") u.searchParams.delete("tab");
-      else u.searchParams.set("tab", next);
-      window.history.replaceState({}, "", u.toString());
-    } catch {}
-  };
+  const { tab, handleTabChange } = nav;
 
-  // handoff/press-specs — which Catalog section the quiet pull-down shows
-  // (GoodTunes Packages / White Label / GoodDeed Certificates / Specs).
-  // Deep-linkable via ?section= (partner-portal tab-in-URL convention).
-  const [catalogSection, setCatalogSectionState] = useState<CatalogSection>(() => {
-    if (typeof window === "undefined") return "packages";
-    const q = new URLSearchParams(window.location.search).get("section");
-    return q === "specs" || q === "gooddeeds" ? q : "packages";
+  // Same scoped read the press portal itself uses (requirePressScope admits
+  // operators — the god view at /vendor?scopeId= rides the same route).
+  const { data: pressMe } = useQuery<PressMe>({
+    queryKey: [`/api/press/${params?.id ?? ""}/me`],
+    enabled: !!user?.isAdmin && !!params?.id,
   });
-  const setCatalogSection = (next: CatalogSection) => {
-    setCatalogSectionState(next);
-    try {
-      const u = new URL(window.location.href);
-      if (next === "packages") u.searchParams.delete("section");
-      else u.searchParams.set("section", next);
-      window.history.replaceState({}, "", u.toString());
-    } catch {}
-  };
+
+  // Build the top strip from the press registry: flat modules become tabs,
+  // consecutive sectioned modules collapse into one group tab (Create /
+  // Product Specs / Components) whose children render as a sub-pill row.
+  type StripEntry =
+    | { kind: "tab"; id: string; label: string; soon?: boolean }
+    | { kind: "group"; section: OperatorSectionId; label: string; children: { id: string; label: string }[] };
+  const strip: StripEntry[] = [];
+  for (const mod of modulesForRole("press")) {
+    if (mod.section) {
+      const last = strip[strip.length - 1];
+      if (last && last.kind === "group" && last.section === mod.section) {
+        last.children.push({ id: mod.id, label: mod.label });
+      } else {
+        strip.push({ kind: "group", section: mod.section, label: SECTION_LABELS[mod.section], children: [{ id: mod.id, label: mod.label }] });
+      }
+    } else {
+      strip.push({ kind: "tab", id: mod.id, label: mod.label, soon: mod.soon });
+    }
+  }
+  const activeGroup = strip.find(
+    (e): e is Extract<StripEntry, { kind: "group" }> => e.kind === "group" && e.children.some((c) => c.id === tab),
+  );
+  const isExtraTab = (ADMIN_EXTRA_TABS as readonly string[]).includes(tab);
 
   const { data: m, isLoading } = useQuery<Manufacturer>({
     queryKey: ["/api/manufacturers", id],
@@ -552,23 +561,75 @@ export function AdminManufacturer() {
           data-testid="tabs-admin-press"
         >
           <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
+            {strip.map((e) => {
+              if (e.kind === "group") {
+                const active = e.children.some((c) => c.id === tab);
+                return (
+                  <button
+                    key={`group-${e.section}`}
+                    type="button"
+                    onClick={() => handleTabChange(e.children[0].id)}
+                    className={[
+                      "relative pb-2.5 text-sm font-semibold whitespace-nowrap transition-colors",
+                      active ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
+                    ].join(" ")}
+                    data-testid={`tab-group-${e.section}`}
+                  >
+                    {e.label}
+                    {active && (
+                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
+                    )}
+                  </button>
+                );
+              }
+              if (e.soon) {
+                // Decorative "Soon" row (White Label) — mirrors the portal
+                // rail's dimmed non-clickable treatment; god view says "Soon".
+                return (
+                  <span
+                    key={e.id}
+                    className="relative pb-2.5 text-sm font-semibold whitespace-nowrap text-slate-300 inline-flex items-center gap-1.5 cursor-default select-none"
+                    data-testid={`tab-${e.id}`}
+                  >
+                    {e.label}
+                    <span className="text-[10px] font-semibold uppercase tracking-wide rounded-full px-1.5 py-0.5 bg-slate-100 text-slate-400">Soon</span>
+                  </span>
+                );
+              }
+              return (
+                <button
+                  key={e.id}
+                  type="button"
+                  onClick={() => handleTabChange(e.id)}
+                  className={[
+                    "relative pb-2.5 text-sm font-semibold whitespace-nowrap transition-colors",
+                    tab === e.id ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
+                  ].join(" ")}
+                  data-testid={`tab-${e.id}`}
+                >
+                  {e.label}
+                  {tab === e.id && (
+                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
+                  )}
+                </button>
+              );
+            })}
+            {/* Operator-only extras, after a quiet divider — surfaces with no
+                press-portal equivalent (profile editing, plant contacts,
+                operator analytics). */}
+            <span aria-hidden className="h-4 w-px bg-slate-200 flex-shrink-0 mb-2" />
             {([
-              { key: "dashboard", label: "Dashboard" },
               { key: "overview", label: "Overview" },
-              { key: "people", label: "People" },
-              { key: "albums", label: "Albums" },
-              { key: "catalog", label: "Catalog" },
+              { key: "contacts", label: "Contacts" },
               { key: "analytics", label: "Analytics" },
             ] as const).map((t) => (
               <button
                 key={t.key}
                 type="button"
-                onClick={() => setTab(t.key)}
+                onClick={() => handleTabChange(t.key)}
                 className={[
                   "relative pb-2.5 text-sm font-semibold whitespace-nowrap transition-colors",
-                  tab === t.key
-                    ? "text-slate-900"
-                    : "text-slate-400 hover:text-slate-700",
+                  tab === t.key ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
                 ].join(" ")}
                 data-testid={`tab-${t.key}`}
               >
@@ -610,14 +671,27 @@ export function AdminManufacturer() {
           </div>
         </div>
 
-        {tab === "dashboard" && (
-          <AdminPartnerDashboard
-            scope="vendor"
-            scopeKindQs="manufacturer"
-            scopeIdQs={m.id}
-            title={m.name}
-            subtitle="Press dashboard"
-          />
+        {/* Sub-pills for the active group tab (Create / Product Specs /
+            Components) — the portal rail shows these as indented children. */}
+        {activeGroup && (
+          <div className="flex items-center gap-2 flex-wrap" data-testid={`subtabs-${activeGroup.section}`}>
+            {activeGroup.children.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => handleTabChange(c.id)}
+                className={[
+                  "px-3 py-1.5 rounded-full text-[12.5px] font-semibold transition-colors",
+                  tab === c.id
+                    ? "bg-slate-900 text-white"
+                    : "bg-slate-100 text-slate-500 hover:text-slate-800",
+                ].join(" ")}
+                data-testid={`subtab-${c.id}`}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
         )}
 
         {tab === "overview" && (
@@ -646,9 +720,16 @@ export function AdminManufacturer() {
             <NotificationsCard partnerKind="manufacturer" partnerId={m.id} partnerName={m.name} />
 
             <ReferralsPanel pressId={m.id} />
+
+            {/* Operator GoodDeed printing settings — moved here from the old
+                ?tab=catalog&section=gooddeeds view when the page adopted the
+                press-portal mirror tabs (which have no operator equivalent). */}
+            <div className="max-w-3xl">
+              <GoodDeedPrintingEditor pressId={id} />
+            </div>
           </>
         )}
-        {tab === "people" && (
+        {tab === "contacts" && (
           <OrganizationPeople
             apiPath={`/api/manufacturers/${m.id}/people`}
             testIdPrefix="press"
@@ -659,9 +740,15 @@ export function AdminManufacturer() {
             blurb="People at this plant — production manager, account rep, whoever you need to reach."
           />
         )}
-        {tab === "albums" && (
+        {tab === "analytics" && (
+          <EntityAnalyticsTab
+            apiPath={`/api/admin/manufacturers/${m.id}/analytics`}
+            testIdPrefix="press"
+          />
+        )}
+        {!isExtraTab && (
           <div className="space-y-4">
-            {isOperator && (
+            {tab === "albums" && isOperator && (
               <div className="flex items-center justify-end">
                 <button
                   type="button"
@@ -675,11 +762,9 @@ export function AdminManufacturer() {
                 </button>
               </div>
             )}
-            <EntityAlbumsTab
-              apiPath={`/api/admin/manufacturers/${m.id}/albums`}
-              testIdPrefix="press"
-              emptyHint="No pressing-order requests have resolved to this press yet."
-            />
+            {/* Mirror body — the press portal's own module mounts, driven by
+                the shared nav hook (same ?tab/?view/?person/?estimate wiring). */}
+            <PressTabBody pressId={id} isSuperAdminView me={pressMe} nav={nav} />
             <NewAlbumArtistDialog
               open={artistDialogOpen}
               onOpenChange={(next) => { if (createAlbum.isPending && !next) return; setArtistDialogOpen(next); }}
@@ -709,47 +794,6 @@ export function AdminManufacturer() {
               }}
             />
           </div>
-        )}
-        {tab === "catalog" && catalogSection === "specs" && (
-          <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }}>
-            {/* Section pull-down removed per Bill (2026-08-15) — the heading
-                names the page; navigation is the rail + format pills. The
-                ?section= deep link still selects this section. */}
-            <div className="flex items-center gap-4">
-              <h1 className="tracking-tight" style={{ color: adminDark ? "#f5f5f7" : "var(--apple-ink)", fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
-                Catalog
-              </h1>
-            </div>
-            <PressSpecs pressId={id} variant="admin" />
-          </div>
-        )}
-        {tab === "catalog" && catalogSection === "gooddeeds" && (
-          <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }}>
-            <div className="flex items-center gap-4">
-              <h1 className="tracking-tight" style={{ color: adminDark ? "#f5f5f7" : "var(--apple-ink)", fontSize: 32, lineHeight: 1.1, fontWeight: 700 }}>
-                Catalog
-              </h1>
-            </div>
-            <div className="mt-6 max-w-3xl">
-              <GoodDeedPrintingEditor pressId={id} />
-            </div>
-          </div>
-        )}
-        {tab === "catalog" && catalogSection === "packages" && (
-          <>
-            <PressPackagePricingCatalog
-              pressId={id}
-              pressDomain={m?.domain ?? null}
-              placeholderUrl={m?.vinylPlaceholderUrl ?? null}
-              pressLogoUrl={m?.logoUrl ?? null}
-            />
-          </>
-        )}
-        {tab === "analytics" && (
-          <EntityAnalyticsTab
-            apiPath={`/api/admin/manufacturers/${m.id}/analytics`}
-            testIdPrefix="press"
-          />
         )}
       </div>
 
@@ -3072,9 +3116,6 @@ export function FormatDropdown({
   );
 }
 
-// Catalog section state — the H1 pull-down chrome was removed per Bill
-// (2026-08-15); sections stay deep-linkable via ?section=.
-type CatalogSection = "packages" | "white-label" | "gooddeeds" | "specs";
 // ─── GoodDeed printing price editor ──────────────────────────────────────────
 // Per-press price ladder for GoodDeed certificate printing runs.
 // Stored in manufacturers.gooddeed_printing_json.
