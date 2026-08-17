@@ -107,6 +107,83 @@ test("non-square measured label PDF: panel stays a 1:1 circle, caption stays hon
   assert.ok(s.caption.includes(`${INCHES_TO_MM(6.5)} × ${INCHES_TO_MM(7.6811)} mm`), `caption states page size: ${s.caption}`);
 });
 
+// ---------------------------------------------------------------------------
+// Task #3156 — two-up label pages (Hellbender's 12" template: 8.5 × 4.25 in,
+// two circular dies side by side) must never be forced into a single-die
+// circle or gain a fabricated page-spanning oval ring.
+// ---------------------------------------------------------------------------
+test("two-up labels: page renders at true aspect with rectangular rings, no Hole, no oval", () => {
+  const spec = makeSpec({
+    componentKey: "labels",
+    variantKey: "",
+    templateFileName: "GoodTunes_CenterLabels_12InchTemplate_HELLBENDER-2.pdf",
+    measuredArtboardWInches: 8.5,
+    measuredArtboardHInches: 4.25,
+    measuredPages: 1,
+    bleedLineInches: 0.125,
+    printRules: { safetyMarginInches: 0.125 },
+  });
+  const s = buildStudySpec(spec, "Center labels", '12" LP');
+  assert.equal(s.shape, "square", "multi-up label page drops the circle model — no oval");
+  const ids = (s.zones ?? []).map((z) => z.id);
+  assert.ok(!ids.includes("hole"), "no single spindle Hole ring on a two-up page");
+  assert.ok(ids.includes("bleed") && ids.includes("cut") && ids.includes("safe"));
+  assert.equal(s.panels?.length, 1);
+  assert.ok(Math.abs((s.panels![0].aspect ?? 1) - 2) < 1e-9, "panel keeps the page's true 2:1 aspect");
+  assert.ok(s.caption.includes(`${INCHES_TO_MM(8.5)} × ${INCHES_TO_MM(4.25)} mm`), s.caption);
+  assert.equal(s.footnote, undefined, "labels never claim pending fold spec");
+});
+
+test("two-up labels: measured guides stay ignored (no merged multi-die bounding box)", () => {
+  const spec = makeSpec({
+    componentKey: "labels",
+    variantKey: "",
+    measuredArtboardWInches: 8.5,
+    measuredArtboardHInches: 4.25,
+    measuredPages: 1,
+    bleedLineInches: 0.125,
+    measuredGuides: JKTWS_GUIDES, // classifier output must never shape label rings
+  });
+  const s = buildStudySpec(spec, "Center labels", '12" LP');
+  const bleed = s.zones!.find((z) => z.id === "bleed")!;
+  assert.equal(bleed.inset, "0%", "rings stay page-edge insets, never guide-derived");
+  const ids = (s.zones ?? []).map((z) => z.id);
+  assert.ok(!ids.includes("fold"), "guide score lines never leak onto a label page");
+});
+
+test("two-up labels: proof view inherits the corrected geometry (true aspect, square)", () => {
+  const spec = makeSpec({
+    componentKey: "labels",
+    variantKey: "",
+    measuredArtboardWInches: 8.5,
+    measuredArtboardHInches: 4.25,
+    measuredPages: 1,
+  });
+  const run = {
+    fileName: "labels.pdf",
+    fileUrl: "/objects/uploads/run-src",
+    previewUrl: "/objects/uploads/a.png",
+    previewUrl2: null,
+  };
+  const proof = buildProofSpec(spec, run, "Center labels", '12" LP');
+  assert.ok(proof);
+  assert.equal(proof!.shape, "square");
+  assert.ok(Math.abs((proof!.panels![0].aspect ?? 1) - 2) < 1e-9, "proof panel keeps the true aspect");
+});
+
+test("single-die labels near square (MRP 6.5 × 7.6811) keep the circle model", () => {
+  const spec = makeSpec({
+    componentKey: "labels",
+    variantKey: "",
+    measuredArtboardWInches: 6.5,
+    measuredArtboardHInches: 7.6811,
+    measuredPages: 4,
+  });
+  const s = buildStudySpec(spec, "Center labels", '12" LP');
+  assert.equal(s.shape, "circle");
+  assert.ok((s.zones ?? []).some((z) => z.id === "hole"));
+});
+
 test("gatefold jacket: spine fold line from the variant spec, no pending note", () => {
   const spec = makeSpec({
     componentKey: "jacket",

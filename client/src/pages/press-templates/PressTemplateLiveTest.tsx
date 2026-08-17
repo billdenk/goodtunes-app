@@ -277,13 +277,27 @@ async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: number): Pr
   for (const [name, b] of Object.entries(boxes)) {
     if (!Number.isFinite(b.minX)) continue;
     const { zone, kind } = zoneFromName(name);
+    // Round overlay ONLY when the layer is a SINGLE circle/ellipse: all
+    // curves AND the largest curve subpath spans (nearly) the whole merged
+    // bbox. A multi-up label layer (Task #3156 — e.g. Hellbender's two-up
+    // 12" page, one circle per die on the same layer) merges into a wide
+    // bbox no single subpath fills — drawing that with 50% radius invents a
+    // page-spanning oval over the real dies, so it falls back to the honest
+    // rectangular bounding box instead.
+    let singleRound = b.curves > 0 && b.lines === 0;
+    if (singleRound && b.subs.length > 0) {
+      const bw = b.maxX - b.minX, bh = b.maxY - b.minY;
+      const covers = b.subs.some((s) =>
+        bw > 0 && bh > 0 && (s.maxX - s.minX) >= 0.8 * bw && (s.maxY - s.minY) >= 0.8 * bh);
+      if (!covers) singleRound = false;
+    }
     const layer: GtLayer = {
       name, zone, kind,
       xMm: b.minX * PT_TO_MM,
       yMm: (vp1.height - b.maxY) * PT_TO_MM, // flip to top-left origin
       wMm: (b.maxX - b.minX) * PT_TO_MM,
       hMm: (b.maxY - b.minY) * PT_TO_MM,
-      round: b.curves > 0 && b.lines === 0,
+      round: singleRound,
     };
     // Frame detection: an AREA drawn as outer edge + inner hole. The largest
     // subpath strictly inside the outer box is the hole — wash only the band.

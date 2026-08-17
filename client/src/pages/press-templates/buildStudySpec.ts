@@ -19,6 +19,22 @@ const SPINDLE_HOLE_INCHES = 0.286;
 // instead of borrowing another product's lines.
 const FOLDED_COMPONENTS = new Set(["jacket", "inner_sleeve", "booklet", "j_card", "o_card"]);
 
+// Task #3156 — multi-up label templates (e.g. Hellbender's two-up 12" page,
+// 215.8 × 107.8 mm with Side A / Side B dies side by side). The single-die
+// circle model assumes the page IS the die; a page whose aspect is far from
+// square carries more than one die, and forcing it into a 1:1 circle both
+// crops the render and paints an invented page-spanning oval. Detection is
+// aspect-based (we have no per-die centers client-side): beyond this ratio
+// the page cannot be one circular die. MRP's real single-die label page is
+// 6.5 × 7.6811 in (ratio ≈ 1.18) and must stay on the circle model.
+const LABEL_MULTI_UP_RATIO = 1.45;
+
+/** True when a labels page's measured dims can't be a single circular die. */
+function isMultiUpLabelPage(w: number | null | undefined, h: number | null | undefined): boolean {
+  if (typeof w !== "number" || typeof h !== "number" || !(w > 0 && h > 0)) return false;
+  return Math.max(w, h) / Math.min(w, h) > LABEL_MULTI_UP_RATIO;
+}
+
 /**
  * Fold/score line spec for the slot's exact product variant, as left-%
  * positions across the flat spread. Only variants whose fold geometry we
@@ -60,14 +76,20 @@ function templateGeometry(spec: TemplateSpecWithHistory): {
 } {
   const zones: StudyZone[] = [];
   const printRules = (spec.printRules ?? {}) as Record<string, unknown>;
-  const isLabel = spec.componentKey === "labels";
-  const shape: "circle" | "square" = isLabel ? "circle" : "square";
+  const isLabelComponent = spec.componentKey === "labels";
 
   // The uploaded file drives the panel: measured dimensions + page count win;
   // operator-entered values fill in only when measurement is absent.
   const w = spec.measuredArtboardWInches ?? spec.artboardWInches;
   const h = spec.measuredArtboardHInches ?? spec.artboardHInches;
   const pages = spec.measuredPages ?? spec.expectedPages ?? 0;
+
+  // Task #3156 — a labels page whose aspect can't be one circular die (two-up
+  // pages like Hellbender's) drops the circle model entirely: the page renders
+  // at its TRUE aspect with rectangular rings and no Hole ring, never a
+  // fabricated page-spanning oval. Single-die labels keep the circle.
+  const isLabel = isLabelComponent && !isMultiUpLabelPage(w, h);
+  const shape: "circle" | "square" = isLabel ? "circle" : "square";
 
   const mmDims =
     typeof w === "number" && typeof h === "number"
@@ -80,7 +102,10 @@ function templateGeometry(spec: TemplateSpecWithHistory): {
   // separation. When present, the rings sit exactly where the PDF draws its
   // guides (labels keep the concentric-circle model — the die is circular,
   // guide rectangles don't map onto it).
-  const guides = !isLabel && typeof w === "number" && typeof h === "number" && w > 0 && h > 0 ? measuredGuidesOf(spec) : null;
+  // Labels — single-die AND multi-up — never consume guide rectangles: on a
+  // circle they don't map, and on a multi-die page the classifier's merged
+  // bounding boxes could span multiple dies (Task #3156 — bail conservatively).
+  const guides = !isLabelComponent && typeof w === "number" && typeof h === "number" && w > 0 && h > 0 ? measuredGuidesOf(spec) : null;
 
   // Bleed line: like the dims/pages above, the PREVIEW shows what's in the
   // uploaded file — measured first (box metadata, then dieline guides),
