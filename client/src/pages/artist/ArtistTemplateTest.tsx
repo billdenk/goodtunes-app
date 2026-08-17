@@ -190,7 +190,16 @@ export function ArtistTemplateTest() {
   }));
   const allPass = CHECKS.length > 0 && CHECKS.every((r) => r.tone === 'pass' || r.word === 'Advisory');
 
-  if (albumId && !scan.isLoading && !component) {
+  // Loading / error / not-found are explicit — the full page only renders on
+  // a successful response that actually contains the requested component.
+  // "No test found" is reserved for a SUCCESSFUL read missing the component;
+  // an access or server failure says so honestly instead.
+  if (!component) {
+    const message = scan.isLoading
+      ? 'Loading\u2026'
+      : scan.isError
+        ? "This test couldn't be loaded. You may not have access to this release, or something went wrong \u2014 try again."
+        : 'No test found for this art file yet.';
     return (
       <div className="min-h-[100dvh]" style={{ background: t.canvas, color: t.ink }} data-testid="artist-template-test">
         <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: '32px 40px 96px' }}>
@@ -201,8 +210,8 @@ export function ArtistTemplateTest() {
               </li>
             </ol>
           </nav>
-          <p className="text-[13.5px]" style={{ marginTop: 16, color: t.subink }}>
-            No test found for this art file yet.
+          <p className="text-[13.5px]" style={{ marginTop: 16, color: t.subink }} data-testid={scan.isLoading ? 'state-loading' : scan.isError ? 'state-error' : 'state-not-found'}>
+            {message}
           </p>
         </div>
       </div>
