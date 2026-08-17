@@ -114,9 +114,18 @@ const THEMES: Record<'light' | 'dark', Theme> = {
 
 // Canon rail tree — copied from PressRailCanon.PRESS_NAV_CANON (Bill, Aug 16 2026).
 // When the canon changes, change PressRailCanon first, then re-copy here.
-const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean }> }> = [
+const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; route?: string }> }> = [
   { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Clients', icon: Users },
+  {
+    // Create (founder, Aug 16 2026): an estimate or a package are two different
+    // creations on two pages — one "Create" entry, live links to each.
+    label: 'Create', icon: ClipboardList,
+    children: [
+      { label: 'Estimates', icon: ClipboardList, route: 'PressEstimatesIndex' },
+      { label: 'Packages', icon: NavPackage, route: 'PressPackagesIndex' },
+    ],
+  },
   { label: 'Projects', icon: Disc3 },
   { label: 'Acquisition', icon: UserPlus },
   {
@@ -129,15 +138,18 @@ const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: 
     ],
   },
   {
+    // Components wired to their existing mock pages (Bill, Aug 16 2026) so the
+    // set can be reviewed for correctness + template linkage. Inner Sleeves and
+    // Inserts have no press-side page yet — they stay inert until designed.
     label: 'Components', icon: Boxes,
     children: [
-      { label: 'Vinyl', icon: NavVinyl },
-      { label: 'Jackets', icon: NavJacket },
+      { label: 'Vinyl', icon: NavVinyl, route: 'PressVinylColorSetup' },
+      { label: 'Jackets', icon: NavJacket, route: 'PressCatalogJacketDefaults' },
       { label: 'Inner Sleeves', icon: NavLayers },
-      { label: 'Center Labels', icon: NavLabel },
+      { label: 'Center Labels', icon: NavLabel, route: 'PressCatalogVinylLabels' },
       { label: 'Inserts', icon: NavInsert },
-      { label: 'Stickers', icon: NavSticker },
-      { label: 'Pricing', icon: NavPricing },
+      { label: 'Stickers', icon: NavSticker, route: 'PressCatalogStickers' },
+      { label: 'Pricing', icon: NavPricing, route: 'PressCatalogPricing' },
     ],
   },
   { label: 'White Label', icon: NavLayers, soon: true },
@@ -234,13 +246,13 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                     </button>
                     {isOpen && (
                     <div className="space-y-0.5">
-                      {item.children.map(({ label, icon: Icon, soon }) => {
+                      {item.children.map(({ label, icon: Icon, soon, route }) => {
                         const isActive = label === active;
                         return (
                           <a
                             key={label}
-                            href="#"
-                            onClick={(e) => e.preventDefault()}
+                            href={route ? `#/${route}` : '#'}
+                            onClick={(e) => { if (!route) e.preventDefault(); }}
                             className={cn('flex items-center gap-2.5 pl-7 pr-2.5 h-9 rounded-lg text-[13px] transition-colors', !isActive && t.hoverWash)}
                             style={{
                               fontWeight: isActive ? 600 : 500,
