@@ -50,6 +50,11 @@ import { ReferralLinkWidget } from "@/components/admin/ReferralLinkWidget";
 import { AdminAlbum } from "@/pages/AdminAlbum";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { PressTemplatesTab } from "@/pages/press-templates/PressTemplatesTab";
+// Press "Create" flow (Ruby handoff, handoff/press-estimates-packages/, Aug 17 2026).
+import { PressEstimatesIndex } from "@/pages/press-create/PressEstimatesIndex";
+import { PressPackagesIndex } from "@/pages/press-create/PressPackagesIndex";
+import { PressQuoteBuilder } from "@/pages/press-create/PressQuoteBuilder";
+import { PressPackageBuilder } from "@/pages/press-create/PressPackageBuilder";
 import {
   PressVinylComponentTab,
   PressJacketsComponentTab,
@@ -88,9 +93,9 @@ import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 
 // pipeline + reports stay in the union so direct ?tab= URLs still render
 // their content (they're just hidden from the nav per Task #2188).
-type TabId = "dashboard" | "people" | "catalog" | "specs" | "templates" | "comp-vinyl" | "comp-jackets" | "comp-sleeves" | "comp-inserts" | "comp-labels" | "comp-stickers" | "comp-pricing" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "acquisition" | "settings";
+type TabId = "dashboard" | "people" | "estimates" | "packages" | "catalog" | "specs" | "templates" | "comp-vinyl" | "comp-jackets" | "comp-sleeves" | "comp-inserts" | "comp-labels" | "comp-stickers" | "comp-pricing" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "acquisition" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "catalog", "specs", "templates", "comp-vinyl", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "estimates", "packages", "catalog", "specs", "templates", "comp-vinyl", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 interface PressMe {
@@ -234,6 +239,12 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   // Screen 4 — `?tab=catalog&view=colors` opens the Apple-canon "Add your
   // vinyl" color setup sub-view instead of the full catalog panel.
   const catalogView = params.get("view");
+  // Press Create flow — `?tab=estimates&view=builder&estimate=<id>` opens the
+  // estimate builder (no id = fresh); same shape for packages. Deep-linkable
+  // per the portal tab-in-URL rule.
+  const createView = params.get("view");
+  const estimateIdFromUrl = params.get("estimate");
+  const packageIdFromUrl = params.get("package");
 
   // `/vendor/albums/:id` opens that album's admin page embedded in this portal
   // shell (Physical tab), mirroring the artist portal. When matched we force
@@ -302,6 +313,22 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   // Enter/leave the catalog "Add your vinyl" colors sub-view (`?view=colors`),
   // keeping the URL deep-linkable (portal tab-in-URL rule). Wouter's location
   // doesn't track query strings, so navigate() re-renders with the new search.
+  // Enter/leave the Create builders, keeping the URL deep-linkable.
+  const setCreateViewParam = (tab: "estimates" | "packages", opts: { builder: boolean; id?: string | null }) => {
+    const sp = new URLSearchParams(window.location.search);
+    sp.set("tab", tab);
+    sp.delete("estimate");
+    sp.delete("package");
+    if (opts.builder) {
+      sp.set("view", "builder");
+      if (opts.id) sp.set(tab === "estimates" ? "estimate" : "package", opts.id);
+    } else {
+      sp.delete("view");
+    }
+    setTab(tab);
+    navigate(`${window.location.pathname}?${sp}`, { replace: true });
+  };
+
   const setCatalogViewParam = (view: string | null) => {
     const sp = new URLSearchParams(window.location.search);
     sp.set("tab", "catalog");
@@ -354,7 +381,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       // while the embedded album view is open (it brings its own chrome).
       pageTitle={
         albumViewId ||
-        ["dashboard", "catalog", "specs", "pricing", "referrals", "reports", "people", "albums", "acquisition", "templates", "comp-vinyl", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing"].includes(tab)
+        ["dashboard", "estimates", "packages", "catalog", "specs", "pricing", "referrals", "reports", "people", "albums", "acquisition", "templates", "comp-vinyl", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing"].includes(tab)
           ? undefined
           : tab === "pipeline"
             ? "Pipeline"
@@ -408,6 +435,35 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
         </div>
       ))}
       {tab === "specs" && <PressSpecs pressId={pressId} />}
+      {tab === "estimates" && (createView === "builder" ? (
+        <PressQuoteBuilder
+          pressId={pressId}
+          estimateId={estimateIdFromUrl}
+          canEdit={me?.canEdit !== false}
+          onExit={(dest) => setCreateViewParam(dest ?? "estimates", { builder: false })}
+        />
+      ) : (
+        <PressEstimatesIndex
+          pressId={pressId}
+          canEdit={me?.canEdit !== false}
+          onBuildEstimate={(estimateId) => setCreateViewParam("estimates", { builder: true, id: estimateId })}
+        />
+      ))}
+      {tab === "packages" && (createView === "builder" ? (
+        <PressPackageBuilder
+          pressId={pressId}
+          packageId={packageIdFromUrl}
+          canEdit={me?.canEdit !== false}
+          onExit={(dest) => setCreateViewParam(dest ?? "packages", { builder: false })}
+        />
+      ) : (
+        <PressPackagesIndex
+          pressId={pressId}
+          canEdit={me?.canEdit !== false}
+          onCreatePackage={() => setCreateViewParam("packages", { builder: true, id: null })}
+          onOpenPackage={(id) => setCreateViewParam("packages", { builder: true, id })}
+        />
+      ))}
       {tab === "templates" && <PressTemplatesTab pressId={pressId} />}
       {tab === "comp-vinyl" && <PressVinylComponentTab pressId={pressId} />}
       {tab === "comp-jackets" && <PressJacketsComponentTab pressId={pressId} />}

@@ -5832,6 +5832,25 @@ export type InsertPartnerPermissions = typeof partnerPermissions.$inferInsert;
 // status lifecycle: new → reviewing → in_progress → shipped → closed
 // `escalated` is the "Escalated to dev" flag. `internalNotes` is operator-only; `publicReply`
 // is surfaced back to the submitter in their "My requests" history.
+// Press "Create" flow (Ruby handoff, handoff/press-estimates-packages/,
+// Aug 17 2026): a press builds ESTIMATES (per-client vinyl builds) and
+// PACKAGES (reusable named builds) in the progressive builder. One table,
+// discriminated by `kind`; the full builder state + display fields live in
+// `payload` jsonb (build summary, size, totals, direction, source, art).
+export const pressEstimates = pgTable("press_estimates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pressId: varchar("press_id").notNull(), // manufacturers.id
+  kind: text("kind").notNull(), // "estimate" | "package"
+  // Human-facing estimate number, e.g. "MRP-081726-01" (press initials +
+  // MMDDYY + per-day sequence). Null for packages (they go by title).
+  displayId: text("display_id"),
+  title: text("title").notNull(), // estimate: client/artist name; package: package name
+  status: text("status").notNull().default("Draft"), // estimate: Draft|Sent|Viewed|Converted|Abandoned; package: draft|live
+  payload: jsonb("payload").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const partnerFeedback = pgTable("partner_feedback", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   submitterUserId: varchar("submitter_user_id").notNull(),

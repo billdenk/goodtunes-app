@@ -87,7 +87,7 @@ export type PartnerVerb =
 /** Collapsible rail groups. Only "catalog" exists today — mirrors the
  * super-admin's Catalog section (People/Roster + Albums nested under a
  * chevron header directly under Dashboard). */
-export type OperatorSectionId = "catalog" | "productSpecs" | "components";
+export type OperatorSectionId = "catalog" | "create" | "productSpecs" | "components";
 
 /** Header labels for each collapsible section. */
 export const SECTION_LABELS: Record<OperatorSectionId, string> = {
@@ -96,6 +96,9 @@ export const SECTION_LABELS: Record<OperatorSectionId, string> = {
   // portal's group is "Product Specs"; other portals keep "Catalog".
   productSpecs: "Product Specs",
   components: "Components",
+  // Press "Create" group (Ruby handoff, handoff/press-estimates-packages/,
+  // Aug 17 2026): Estimates + Packages, between Clients and Projects.
+  create: "Create",
 };
 
 export interface OperatorModuleDef {
@@ -207,6 +210,11 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // Icons follow the press playground mock canon (Bill, Aug 2026):
   // Clients=Users, Acquisition=UserPlus, Catalog=Library, Referrals=Gift.
   { id: "people",     label: "Clients",          icon: Users,            roles: ["press"] },
+  // "Create" group (Ruby handoff, handoff/press-estimates-packages/, Aug 17
+  // 2026): the press's estimate + package builders, between Clients and
+  // Projects per the handoff PRESS_NAV order.
+  { id: "estimates",  label: "Estimates",        icon: FileText,         section: "create", roles: ["press"] },
+  { id: "packages",   label: "Packages",         icon: Package,          section: "create", roles: ["press"] },
   { id: "albums",     label: "Projects",         icon: Disc3,            roles: ["press"] },
   { id: "acquisition", label: "Acquisition",    icon: UserPlus,         roles: ["press"] },
   // "Product Specs" is a collapsible SECTION per the press rail canon

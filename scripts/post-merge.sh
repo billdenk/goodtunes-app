@@ -241,6 +241,42 @@ SQL
 migrate_rig_quote_requests dev  "${DATABASE_URL:-}"
 migrate_rig_quote_requests prod "${PROD_DATABASE_URL:-}"
 
+# ── press_estimates (press Create flow: estimates + packages) ───────────────
+# Ruby handoff handoff/press-estimates-packages/ (Aug 17 2026). Same drill:
+# schema-drift guard requires the table on BOTH dev and prod; idempotent.
+migrate_press_estimates() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press_estimates migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS press_estimates (
+  id         varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id   varchar NOT NULL,
+  kind       text    NOT NULL,
+  display_id text,
+  title      text    NOT NULL,
+  status     text    NOT NULL DEFAULT 'Draft',
+  payload    jsonb   NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS press_estimates_press_kind_idx ON press_estimates (press_id, kind);
+CREATE UNIQUE INDEX IF NOT EXISTS press_estimates_press_display_uq
+  ON press_estimates (press_id, display_id) WHERE display_id IS NOT NULL;
+COMMIT;
+SQL
+  then
+    echo "post-merge: press_estimates migration ok on $label"
+  else
+    echo "post-merge: WARNING — press_estimates migration failed on $label (continuing)"
+  fi
+}
+migrate_press_estimates dev  "${DATABASE_URL:-}"
+migrate_press_estimates prod "${PROD_DATABASE_URL:-}"
+
 # view_as_audit_log — audit trail of admin "view as" (impersonation) actions.
 # This table is NOT declared in shared/schema.ts; server/auth/viewAsToken.ts
 # creates it lazily with CREATE TABLE IF NOT EXISTS on first "view as" use. That

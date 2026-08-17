@@ -26,6 +26,7 @@ import {
   manufacturers,
   pressSwitchHistory,
   pressColorTiers,
+  pressEstimates,
 } from "@shared/schema";
 import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./earlyCut";
 import { sqlPersonIdByContactEmail } from "./partnerInvites";
@@ -2225,6 +2226,132 @@ export function registerPressPortalRoutes(
   // invoice with its variance vs the locked quote and the transfer
   // status. Connect onboarding is managed inline in the press portal
   // via PayoutAccountPanel calling the shared /api/admin/payouts/* routes.
+  // ── Press "Create" flow: estimates + packages (Ruby handoff, Aug 17 2026)
+  // One table (press_estimates), discriminated by kind. The full builder
+  // state + display fields live in payload jsonb; the server owns the
+  // human-facing estimate number (press initials + MMDDYY + per-day seq).
+  const estimateKindSchema = z.enum(["estimate", "package"]);
+  const estimatePayloadSchema = z.record(z.any());
+  const ESTIMATE_STATUSES = ["Draft", "Sent", "Viewed", "Converted", "Abandoned"] as const;
+  const PACKAGE_STATUSES = ["draft", "live"] as const;
+
+  function pressInitials(name: string): string {
+    const letters = (name || "")
+      .split(/\s+/)
+      .map((w) => w.replace(/[^A-Za-z0-9]/g, ""))
+      .filter(Boolean)
+      .map((w) => w[0].toUpperCase());
+    const initials = letters.join("").slice(0, 3);
+    return initials || "GT";
+  }
+
+  // Every estimates route resolves the press first — requirePressScope lets
+  // super-admins through for ANY id, so without this a typo'd/nonexistent
+  // press id would read empty lists or mint orphan rows.
+  async function resolvePress(pressId: string): Promise<{ name: string } | null> {
+    const rows = await db.select({ name: manufacturers.name }).from(manufacturers).where(eq(manufacturers.id, pressId)).limit(1);
+    return rows[0] ?? null;
+  }
+
+  app.get("/api/press/:id/estimates", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    if (!(await resolvePress(pressId))) return res.status(404).json({ message: "Press not found" });
+    const kindParse = estimateKindSchema.safeParse(req.query.kind ?? "estimate");
+    if (!kindParse.success) return res.status(400).json({ message: "kind must be estimate|package" });
+    const rows = await db
+      .select()
+      .from(pressEstimates)
+      .where(and(eq(pressEstimates.pressId, pressId), eq(pressEstimates.kind, kindParse.data)))
+      .orderBy(sql`${pressEstimates.updatedAt} DESC`);
+    res.json({ rows });
+  });
+
+  app.post("/api/press/:id/estimates", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const body = z
+      .object({
+        kind: estimateKindSchema,
+        title: z.string().trim().min(1).max(200),
+        status: z.string().trim().max(40).optional(),
+        payload: estimatePayloadSchema.optional(),
+      })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: "Invalid estimate body" });
+    const { kind, title, status, payload } = body.data;
+    const press = await resolvePress(pressId);
+    if (!press) return res.status(404).json({ message: "Press not found" });
+    const allowed = kind === "estimate" ? ESTIMATE_STATUSES : PACKAGE_STATUSES;
+    // Reject a supplied-but-invalid status outright (never silently coerce);
+    // an absent status gets the kind's default.
+    if (status !== undefined && !(allowed as readonly string[]).includes(status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+    const finalStatus = status ?? (kind === "estimate" ? "Draft" : "draft");
+
+    // displayId minting is serialized per press with a pg advisory xact lock
+    // (two concurrent creates would otherwise COUNT the same seq); the
+    // partial unique index on (press_id, display_id) backstops it.
+    const row = await db.transaction(async (tx) => {
+      let displayId: string | null = null;
+      if (kind === "estimate") {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${"press_estimates:" + pressId}))`);
+        const prefix = pressInitials(press.name);
+        const now = new Date();
+        const mm = String(now.getMonth() + 1).padStart(2, "0");
+        const dd = String(now.getDate()).padStart(2, "0");
+        const yy = String(now.getFullYear() % 100).padStart(2, "0");
+        const stamp = `${prefix}-${mm}${dd}${yy}`;
+        const countRows = await tx.execute<any>(sql`
+          SELECT count(*)::int AS n FROM press_estimates
+          WHERE press_id = ${pressId} AND kind = 'estimate' AND display_id LIKE ${stamp + "-%"}
+        `);
+        const n = (((countRows as any).rows ?? [])[0]?.n ?? 0) + 1;
+        displayId = `${stamp}-${String(n).padStart(2, "0")}`;
+      }
+      const [inserted] = await tx
+        .insert(pressEstimates)
+        .values({ pressId, kind, title, status: finalStatus, payload: payload ?? {}, displayId })
+        .returning();
+      return inserted;
+    });
+    res.status(201).json(row);
+  });
+
+  app.put("/api/press/:id/estimates/:estimateId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const estimateId = String(req.params.estimateId);
+    const body = z
+      .object({
+        title: z.string().trim().min(1).max(200).optional(),
+        status: z.string().trim().max(40).optional(),
+        payload: estimatePayloadSchema.optional(),
+      })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: "Invalid estimate body" });
+    if (!(await resolvePress(pressId))) return res.status(404).json({ message: "Press not found" });
+    const existing = await db
+      .select()
+      .from(pressEstimates)
+      .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
+      .limit(1);
+    if (!existing[0]) return res.status(404).json({ message: "Estimate not found" });
+    const allowed = existing[0].kind === "estimate" ? ESTIMATE_STATUSES : PACKAGE_STATUSES;
+    if (body.data.status && !(allowed as readonly string[]).includes(body.data.status)) {
+      return res.status(400).json({ message: "Invalid status" });
+    }
+    const [row] = await db
+      .update(pressEstimates)
+      .set({
+        ...(body.data.title !== undefined ? { title: body.data.title } : {}),
+        ...(body.data.status !== undefined ? { status: body.data.status } : {}),
+        ...(body.data.payload !== undefined ? { payload: body.data.payload } : {}),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
+      .returning();
+    res.json(row);
+  });
+
   app.get("/api/press/:id/payouts", requireAdmin, requirePressScope, async (req, res) => {
     const pressId = String(req.params.id);
     const acctRows = await db.execute<any>(sql`
