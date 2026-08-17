@@ -157,6 +157,15 @@ export function variantOptionsNote(options: Array<{ key: string; label: string }
   return `One template — covers ${options.map((o) => o.label.toLowerCase()).join(" and ")}`;
 }
 
+/** Task #3154 — a slot still carrying a pasted EXTERNAL link (legacy rows
+ *  from before the mirror-into-object-storage rule). New attaches always
+ *  store `/objects/…` paths, and the one-time sweep mirrors every external
+ *  link that still serves a PDF — so any remaining external URL means the
+ *  file can no longer be fetched and the slot needs a re-upload. */
+export function templateFileNeedsReupload(spec: TemplateSpecWithHistory | undefined): boolean {
+  return !!spec?.templateFileUrl && !spec.templateFileUrl.startsWith("/");
+}
+
 /** Slot status derived for the index tiles. */
 export type SlotStatus = "certified" | "pending" | "failed" | "empty" | "review";
 

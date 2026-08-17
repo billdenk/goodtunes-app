@@ -681,7 +681,19 @@ export default function PressTemplateLiveTest({
             credentials: 'include',
             signal: ctrl.signal,
           });
-          if (!r.ok) throw new Error(`Couldn't fetch the template file (${r.status})`);
+          if (!r.ok) {
+            // Task #3154 — a legacy pasted link that no longer serves the
+            // file comes back 422 { code: "template_link_dead" }: surface
+            // the actionable re-upload message, not a generic fetch error.
+            let msg = `Couldn't fetch the template file (${r.status})`;
+            try {
+              const body = (await r.json()) as { code?: string; message?: string };
+              if (body?.code === 'template_link_dead') {
+                msg = body.message ?? "This template's file link no longer works — replace the file from the Templates page.";
+              }
+            } catch { /* non-JSON body — keep the generic message */ }
+            throw new Error(msg);
+          }
           const blob = await r.blob();
           if (cancelled) return;
           const file = new File([blob], spec.templateFileName ?? 'template.pdf', { type: 'application/pdf' });

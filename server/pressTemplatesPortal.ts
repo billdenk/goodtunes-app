@@ -571,8 +571,20 @@ export function registerPressTemplateFlowRoutes(
     const tmp = path.join(os.tmpdir(), `press-template-${spec.id}-${Date.now()}.pdf`);
     try {
       const fetched = await fetchAndScanPdf(url, { spoolTo: tmp });
-      if (!fetched.ok || fetched.spooled !== true) {
-        return res.status(502).json({ message: fetched.ok ? "Couldn't spool the template file." : fetched.error });
+      if (!fetched.ok) {
+        // Task #3154 — a dead/unreachable/not-a-PDF external link is CLIENT
+        // state (a legacy pasted link whose host stopped serving the file),
+        // not a server fault: answer 422 with a code the Templates UI maps
+        // to a "needs re-upload" slot state. 5xx stays reserved for genuine
+        // infra failures so the /api 5xx ops alert doesn't page on every
+        // open of a stale slot.
+        return res.status(422).json({
+          code: "template_link_dead",
+          message: `${fetched.error} Re-attach the template file to this slot to fix it.`,
+        });
+      }
+      if (fetched.spooled !== true) {
+        return res.status(502).json({ message: "Couldn't spool the template file." });
       }
       res.setHeader("Content-Type", "application/pdf");
       const stream = fs.createReadStream(tmp);

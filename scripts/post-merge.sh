@@ -12319,6 +12319,29 @@ SQL
 add_templates_archive_cols dev  "${DATABASE_URL:-}"
 add_templates_archive_cols prod "${PROD_DATABASE_URL:-}"
 
+# ── Task #3154: mirror legacy EXTERNAL press template links into object
+# storage. Prod carries pre-mirror-rule press_template_specs rows whose
+# template_file_url is still a pasted external link; when that host dies the
+# download proxy used to 502 and page ops. The script mirrors every still-
+# fetchable external PDF (same policy as new attaches) and leaves dead ones
+# in place — the Templates UI now flags those as "Needs re-upload". Marker-
+# guarded inside the script (task_3154_mirror_external_templates, per DB);
+# idempotent; dev is a no-op today (zero external rows).
+mirror_external_template_files_task_3154() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-3154 template link mirror on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" timeout 600 npx tsx scripts/mirror-external-template-files.ts; then
+    echo "post-merge: task-3154 template link mirror ok on $label"
+  else
+    echo "post-merge: WARNING — task-3154 template link mirror failed on $label (continuing)"
+  fi
+}
+mirror_external_template_files_task_3154 dev  "${DATABASE_URL:-}"
+mirror_external_template_files_task_3154 prod "${PROD_DATABASE_URL:-}"
+
 # ── Stamp the full-run fingerprint (see the skip block at the top) ─────────
 # Reached only on a full pass that survived to here; from now on, merges that
 # don't touch this script skip straight to the mirror sync below.

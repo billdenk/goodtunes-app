@@ -11,3 +11,5 @@ Standing rule (gogoods, Aug 15 2026): "just like audio, we should always downloa
 - Helper: `mirrorExternalTemplatePdf` in `server/templateSpecs.ts` (SSRF-guarded scan+spool → streamed signed PUT → admin/public ACL; deletes its own object on late failure). `deleteMirroredTemplateObject` for caller-side compensation when the DB write that would reference the object fails.
 - Enforce at EVERY write boundary that accepts a URL (portal + admin routes both had one — the reviewer caught the admin one), and reject `http://`/other schemes up front.
 - Old rows saved before the rule still hold external links; they heal when re-attached.
+
+**Legacy dead-link handling (Aug 2026):** rows persisted before the rule can still hold external URLs; a one-time sweep mirrors the fetchable ones. After that, ANY remaining external `template_file_url` means the file is unfetchable → download route answers 422 `{code:"template_link_dead"}` (never 5xx — 5xx pages ops on every open) and the Templates UI presents the slot as "Needs re-upload". ShareFile share pages and Dropbox .zip links are inherently unmirrorable (not direct PDFs) — those always end as re-upload flags, not sweep bugs.

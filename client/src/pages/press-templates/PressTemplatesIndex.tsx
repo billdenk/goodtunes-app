@@ -31,6 +31,7 @@ import { useAdminDark } from "@/lib/adminAppearance";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import {
   slotStatus,
+  templateFileNeedsReupload,
   variantOptionsNote,
   type TemplatesPayload,
   type TemplateSpecWithHistory,
@@ -610,6 +611,11 @@ function FilledTile({
   onOpen: () => void;
 }) {
   const status = slotStatus(spec);
+  // Task #3154 — legacy slot still pointing at a dead external link: the
+  // file can't be downloaded any more, so the tile presents "Needs
+  // re-upload" instead of a broken open; ••• → Replace template… attaches
+  // a fresh file and clears the state (the save stores an /objects path).
+  const needsReupload = templateFileNeedsReupload(spec);
   const live = spec.revisions.find((r) => r.status === "certified" || r.status === "pending");
   const historyRevs = spec.revisions.filter((r) => r.status === "superseded" || r.status === "archived");
   // Task #3065 — one file covering multiple options gets the confirmed
@@ -656,8 +662,19 @@ function FilledTile({
           </span>
         </div>
         <div className="mt-1 flex items-center gap-2">
-          <StatusChip status={status} t={t} />
-          {status === "certified" && live?.certifiedAt && (
+          {needsReupload ? (
+            <span
+              className="inline-flex items-center gap-1.5 text-[12px] font-medium"
+              style={{ color: t.crit }}
+              data-testid={`status-needs-reupload-${spec.id}`}
+            >
+              <AlertCircle className="w-3.5 h-3.5" />
+              Needs re-upload
+            </span>
+          ) : (
+            <StatusChip status={status} t={t} />
+          )}
+          {!needsReupload && status === "certified" && live?.certifiedAt && (
             <span className="text-[11.5px]" style={{ color: t.faint }}>
               {new Date(live.certifiedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
             </span>
@@ -666,7 +683,7 @@ function FilledTile({
               hover tooltip (Bill, Aug 16 2026). A legacy import we couldn't
               confidently match presents as Pending too; its ⓘ carries the
               review-specific why (Ruby delta 5, Aug 15 2026). */}
-          {(status === "pending" || status === "review" || status === "failed") && (
+          {(needsReupload || status === "pending" || status === "review" || status === "failed") && (
             <span className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
               <span
                 role="button"
@@ -693,7 +710,9 @@ function FilledTile({
                     style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.subink, width: 260, top: pendingInfo.y + 8, left: Math.max(12, pendingInfo.x - 8) }}
                     data-testid={`text-pending-why-${spec.id}`}
                   >
-                    {status === "review"
+                    {needsReupload
+                      ? "The original file was a pasted link that no longer works — we can't download it any more. Use ••• → Replace template… to attach the file again."
+                      : status === "review"
                       ? "Imported from your earlier uploads — we couldn't confirm it matches this slot. Open to confirm it, or archive it."
                       : status === "failed"
                         ? "Last test failed — the art didn't pass the measured checks. Open to test a fixed file."
