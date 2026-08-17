@@ -16,13 +16,15 @@ import {
   Search, Bell, MessageSquarePlus, BadgeCheck, Clock3, XCircle, History, Upload, FileQuestion,
   Moon, Sun, MoreHorizontal, Archive, X, RotateCcw, Plus, Info,
 } from 'lucide-react';
-import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate } from 'lucide-react';
+import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Boxes, Disc as NavVinyl, Square as NavJacket, CircleDot as NavLabel, FileText as NavInsert, Sticker as NavSticker, ReceiptText as NavPricing } from 'lucide-react';
 import mrpLogo from '../assets/mrp-logo.svg';
-import gtPreviewTemplate from '../assets/gt-preview-template-circle.png';
+import gtPreviewTemplate from '../assets/gt-preview-template-flat.jpg';
+import gtPreviewJacket from '../assets/gt-preview-jacket-flat.jpg';
 // Real MRP center-label template PDF — clicking the certified tile opens it
 // live, exactly as it looked before it was saved (Bill, Aug 14 2026).
 // eslint-disable-next-line import/no-unresolved
 import labelTemplatePdfUrl from '../assets/label-template-r091125.pdf?url';
+import jacketTemplatePdfUrl from '../assets/jacket-template-r072226.pdf?url';
 import goodtunesLogo from '../assets/goodtunes-logo.png';
 import brandonPhoto from '../assets/brandon-seavers.png';
 
@@ -79,7 +81,7 @@ const THEMES: Record<'light' | 'dark', Theme> = {
     dashedBorder: 'rgba(0,0,0,0.18)',
     ready: '#1c8a5b',
     crit: '#e0245e',
-    warn: '#c98a00',
+    warn: '#b45309',  // pending amber, darkened for light-bg legibility — same hue family as the live-test Pending ring
     iconFill: '#ffffff',
     logoFilter: undefined,
   },
@@ -104,33 +106,67 @@ const THEMES: Record<'light' | 'dark', Theme> = {
     dashedBorder: 'rgba(255,255,255,0.22)',
     ready: '#34c98e', // brightened ready accent on dark
     crit: '#ff5d8f',  // brightened critical accent on dark
-    warn: '#e8b34b',  // brightened warning accent on dark
+    warn: '#f59e0b',  // pending amber — same hue as the live-test screen's Pending ring (Bill, Aug 16 2026)
     iconFill: '#1e1e20',
     logoFilter: 'invert(1) brightness(1.8)',
   },
 };
 
-const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean }> }> = [
+// Canon rail tree — copied from PressRailCanon.PRESS_NAV_CANON (Bill, Aug 16 2026).
+// When the canon changes, change PressRailCanon first, then re-copy here.
+const PRESS_NAV: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; children?: Array<{ label: string; icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>; soon?: boolean; route?: string }> }> = [
   { label: 'Dashboard', icon: LayoutDashboard },
   { label: 'Clients', icon: Users },
+  {
+    // Create (founder, Aug 16 2026): an estimate or a package are two different
+    // creations on two pages — one "Create" entry, live links to each.
+    label: 'Create', icon: ClipboardList,
+    children: [
+      { label: 'Estimates', icon: ClipboardList, route: 'PressEstimatesIndex' },
+      { label: 'Packages', icon: NavPackage, route: 'PressPackagesIndex' },
+    ],
+  },
   { label: 'Projects', icon: Disc3 },
   { label: 'Acquisition', icon: UserPlus },
   {
-    label: 'Catalog',
-    icon: Library,
+    label: 'Product Specs', icon: Library,
     children: [
       { label: 'GoodTunes Packages', icon: NavPackage },
-      { label: 'White Label', icon: NavLayers, soon: true },
       { label: 'GoodDeed Certificates', icon: NavAward },
-      { label: 'Specs', icon: NavWave, soon: true },
-      { label: 'Templates', icon: NavTemplate, soon: true },
+      { label: 'Specs', icon: NavWave },
+      { label: 'Templates', icon: NavTemplate },
     ],
   },
+  {
+    // Components wired to their existing mock pages (Bill, Aug 16 2026) so the
+    // set can be reviewed for correctness + template linkage. Inner Sleeves and
+    // Inserts have no press-side page yet — they stay inert until designed.
+    label: 'Components', icon: Boxes,
+    children: [
+      { label: 'Vinyl', icon: NavVinyl, route: 'PressVinylColorSetup' },
+      { label: 'Jackets', icon: NavJacket, route: 'PressCatalogJacketDefaults' },
+      { label: 'Inner Sleeves', icon: NavLayers },
+      { label: 'Center Labels', icon: NavLabel, route: 'PressCatalogVinylLabels' },
+      { label: 'Inserts', icon: NavInsert },
+      { label: 'Stickers', icon: NavSticker, route: 'PressCatalogStickers' },
+      { label: 'Pricing', icon: NavPricing, route: 'PressCatalogPricing' },
+    ],
+  },
+  { label: 'White Label', icon: NavLayers, soon: true },
   { label: 'Settings', icon: Cog },
   { label: 'Referrals', icon: Gift },
 ];
 
 function PressShell({ active, t, children }: { active: string; t: Theme; children: React.ReactNode }) {
+  // Canon collapse behavior: the group holding the active page starts open,
+  // the others start closed (PressRailCanon, Bill Aug 16 2026).
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    const o: Record<string, boolean> = {};
+    for (const item of PRESS_NAV) {
+      if (item.children) o[item.label] = item.label === active || item.children.some((c) => c.label === active);
+    }
+    return o;
+  });
   return (
     <div className="h-screen flex flex-col font-sans" style={{ fontFamily: 'Inter, system-ui, sans-serif', backgroundColor: t.canvas, color: t.ink }}>
       <header
@@ -188,11 +224,14 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
           <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
             {PRESS_NAV.map((item) => {
               if (item.children) {
+                const isOpen = openGroups[item.label];
                 const groupActive = item.label === active;
                 return (
                   <div key={item.label}>
                     <button
                       type="button"
+                      onClick={() => setOpenGroups((o) => ({ ...o, [item.label]: !o[item.label] }))}
+                      aria-expanded={isOpen}
                       className={cn('w-full flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !groupActive && t.hoverWash)}
                       style={{
                         fontWeight: groupActive ? 600 : 500,
@@ -200,18 +239,20 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                         backgroundColor: groupActive ? t.card : undefined,
                         boxShadow: groupActive ? t.pillShadow : undefined,
                       }}
+                      data-testid={`nav-group-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                     >
-                      <NavChevron className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
+                      <NavChevron className="w-4 h-4 flex-shrink-0 transition-transform" style={{ color: t.faint, transform: isOpen ? 'none' : 'rotate(-90deg)' }} />
                       <span className="truncate flex-1 text-left">{item.label}</span>
                     </button>
+                    {isOpen && (
                     <div className="space-y-0.5">
-                      {item.children.map(({ label, icon: Icon, soon }) => {
+                      {item.children.map(({ label, icon: Icon, soon, route }) => {
                         const isActive = label === active;
                         return (
                           <a
                             key={label}
-                            href="#"
-                            onClick={(e) => e.preventDefault()}
+                            href={route ? `#/${route}` : '#'}
+                            onClick={(e) => { if (!route) e.preventDefault(); }}
                             className={cn('flex items-center gap-2.5 pl-7 pr-2.5 h-9 rounded-lg text-[13px] transition-colors', !isActive && t.hoverWash)}
                             style={{
                               fontWeight: isActive ? 600 : 500,
@@ -231,10 +272,11 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                         );
                       })}
                     </div>
+                    )}
                   </div>
                 );
               }
-              const { label, icon: Icon } = item;
+              const { label, icon: Icon, soon } = item;
               const isActive = label === active;
               return (
                 <a
@@ -251,6 +293,11 @@ function PressShell({ active, t, children }: { active: string; t: Theme; childre
                 >
                   <Icon className="w-4 h-4 flex-shrink-0" style={{ color: isActive ? t.ink : t.faint }} />
                   <span className="truncate flex-1">{label}</span>
+                  {soon && (
+                    <span className="text-[10px] font-semibold px-2 h-[18px] inline-flex items-center rounded-full flex-shrink-0" style={{ backgroundColor: t.cardSoft, color: t.subink }}>
+                      Request
+                    </span>
+                  )}
                 </a>
               );
             })}
@@ -337,14 +384,15 @@ function ComponentIcon({ kind, color, fill, size = 44 }: { kind: IconKind; color
 
 // Per-tile ••• overflow — appears on hover in the tile's top-right corner.
 // Archive lives here (with a confirm); archived tiles get Restore instead.
-function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore, onReplace }: {
+function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore, onReplace, pos }: {
   tileKey: string; title: string; archived: boolean; t: Theme;
   menuFor: string | null; setMenuFor: (k: string | null) => void;
   onArchive: () => void; onRestore: () => void; onReplace?: () => void;
+  pos?: string; // position classes — default hugs the tile's top-right corner
 }) {
   const open = menuFor === tileKey;
   return (
-    <div className="absolute top-2.5 right-2.5 z-10">
+    <div className={cn('absolute z-10', pos ?? 'top-2.5 right-2.5')}>
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setMenuFor(open ? null : tileKey); }}
@@ -416,12 +464,30 @@ const MOCK_TEMPLATES: Array<{
   icon: IconKind; title: string;
   component: string; variant: string; code: string; rev: string;
   certified?: string; status: Status; note?: string; history?: Array<{ rev: string; note: string }>;
+  // Press-given nickname (Otis plumbing, Aug 15 2026): canonical slot title stays
+  // fixed; the press's own file name rides along as quiet secondary text.
+  nickname?: string; img?: string;
 }> = [
   {
     icon: 'labels', title: 'Center labels',
     component: '12" LP center label', variant: '2LP · 100mm trim', code: '12-LBL100M-2', rev: 'R-091125',
     certified: 'Certified Sep 14, 2026', status: 'certified',
     history: [{ rev: 'R-072326', note: 'Superseded Sep 14, 2026 — 2 jobs in flight were flagged for review' }],
+  },
+  // Pending demo (Otis handoff, Aug 15 2026): template attached, not yet
+  // certified — shows the nickname home + the pending why/action on the tile.
+  {
+    icon: 'jacket', title: 'Single jacket',
+    component: '12" single jacket', variant: '3 mm spine · 1 pocket', code: '12-JKTSG3D-100', rev: 'R-072226',
+    status: 'pending', nickname: 'MRP_Jacket12in_3.5mmSpine', img: gtPreviewJacket,
+  },
+  // Failed demo (Bill, Aug 16 2026): the ⓘ tells you WHAT happened without
+  // leaving the shelf — same click popover as Pending, different story.
+  {
+    icon: 'jacket', title: 'Gatefold jacket',
+    component: '12" gatefold jacket', variant: 'Opens flat · 3 mm spine', code: '12-JKTGF3D-100', rev: 'R-081426',
+    status: 'failed', nickname: 'MRP_Gatefold12in', img: gtPreviewJacket,
+    note: 'Last test failed Aug 15, 2026 — the art came up 4 mm short of the GT Bleed on the long edge. Open to test a fixed file.',
   },
 ];
 
@@ -512,6 +578,9 @@ export default function PressTemplatesIndex() {
   // — same per-press dismissal we use for GoodTunes standards elsewhere.
   const [archivedSlots, setArchivedSlots] = useState<Set<string>>(new Set());
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  // Which pending tile's ⓘ popover is open (Bill, Aug 16 2026). Anchored by
+  // viewport coords — the tile clips overflow, so the popover floats fixed.
+  const [pendingInfoFor, setPendingInfoFor] = useState<{ code: string; x: number; y: number } | null>(null);
   const [confirmArchive, setConfirmArchive] = useState<{ key: string; title: string } | null>(null);
   const doArchive = (key: string) => {
     if (key.startsWith('saved:')) setArchivedSaved((s) => new Set(s).add(Number(key.slice(6))));
@@ -525,13 +594,19 @@ export default function PressTemplatesIndex() {
     else setArchivedCodes((s) => { const n = new Set(s); n.delete(key); return n; });
     setMenuFor(null);
   };
-  // Open the certified mock template live — fetch the real PDF asset, hand it
-  // to the live test page the same way a fresh upload would arrive.
+  // Open a shelf template live — fetch its real PDF asset, hand it to the live
+  // test page the same way a fresh upload would arrive. Status rides along so
+  // the live test shows the same truth as the tile (Bill, Aug 15 2026).
   const openMockLive = async (name: string) => {
-    const blob = await fetch(labelTemplatePdfUrl).then((r) => r.blob());
-    pendingTemplateFile.file = new File([blob], '12-LBL100M-2 — R-091125.pdf', { type: 'application/pdf' });
+    const tpl = MOCK_TEMPLATES.find((m) => m.title === name);
+    const jacket = tpl?.icon === 'jacket';
+    const url = jacket ? jacketTemplatePdfUrl : labelTemplatePdfUrl;
+    const fname = jacket ? '12-JKTSG3D-100 — R-072226.pdf' : '12-LBL100M-2 — R-091125.pdf';
+    const blob = await fetch(url).then((r) => r.blob());
+    pendingTemplateFile.file = new File([blob], fname, { type: 'application/pdf' });
     pendingTemplateFile.name = name;
     pendingTemplateFile.fromSaved = true; // reopening — arrives clean, Save stays quiet
+    pendingTemplateFile.status = tpl?.status === 'pending' ? 'pending' : 'certified';
     window.location.hash = '#/PressTemplateLiveTest';
   };
   const uploadInput = useRef<HTMLInputElement>(null);
@@ -556,7 +631,7 @@ export default function PressTemplatesIndex() {
       <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div>
-            <div className="text-[12px] font-medium" style={{ color: t.faint }}>Catalog · Templates</div>
+            <div className="text-[12px] font-medium" style={{ color: t.faint }}>Product Specs · Templates</div>
             <h1 className="mt-1" style={{ fontSize: 30, letterSpacing: '-0.02em', fontWeight: 600, lineHeight: 1.12 }}>
               <span style={{ color: t.ink }}>Templates. </span>
               <span style={{ color: t.subink, fontWeight: 500 }}>Your standards, set.</span>
@@ -612,19 +687,26 @@ export default function PressTemplatesIndex() {
                 {v}
               </button>
             ))}
-            <span className="mx-1.5 self-stretch w-px" style={{ backgroundColor: t.hairline }} aria-hidden />
-            {format === 'Vinyl' && (['7″', '10″', '12″'] as const).map((sz) => (
-              <button
-                key={sz}
-                type="button"
-                onClick={() => setSize(sz)}
-                className="h-7 px-3 rounded-full text-[12px] font-semibold tabular-nums transition-colors"
-                style={sz === size ? { backgroundColor: t.pillActive, color: t.ink, boxShadow: t.segShadow } : { color: t.faint, cursor: 'pointer' }}
-                data-testid={`filter-size-${sz.replace('″', '')}`}
-              >
-                {sz}
-              </button>
-            ))}
+            {/* Size pills + their leading divider render together — on non-vinyl
+                formats both disappear, so two dividers never sit adjacent
+                (Bill, Aug 16 2026). */}
+            {format === 'Vinyl' && (
+              <>
+                <span className="mx-1.5 self-stretch w-px" style={{ backgroundColor: t.hairline }} aria-hidden />
+                {(['7″', '10″', '12″'] as const).map((sz) => (
+                  <button
+                    key={sz}
+                    type="button"
+                    onClick={() => setSize(sz)}
+                    className="h-7 px-3 rounded-full text-[12px] font-semibold tabular-nums transition-colors"
+                    style={sz === size ? { backgroundColor: t.pillActive, color: t.ink, boxShadow: t.segShadow } : { color: t.faint, cursor: 'pointer' }}
+                    data-testid={`filter-size-${sz.replace('″', '')}`}
+                  >
+                    {sz}
+                  </button>
+                ))}
+              </>
+            )}
             {/* Overflow menu hidden for now — "Duplicate a template" (reuse a file for
                 another size) is parked for a future pass per Bill, Aug 12 2026. */}
             <span className="mx-1.5 self-stretch w-px" style={{ backgroundColor: t.hairline }} aria-hidden />
@@ -652,39 +734,87 @@ export default function PressTemplatesIndex() {
             if ((view === 'Current' && isArchived) || (view === 'Archived' && !isArchived)) return null;
             return (
             <div key={tpl.code + tpl.rev} className="relative group" style={{ opacity: isArchived ? 0.7 : 1 }}>
-            <button type="button" onClick={() => { void openMockLive(tpl.title); }} className={cn('gt-tile w-full h-full rounded-2xl px-6 pt-7 pb-5 flex flex-col items-center text-center transition-colors cursor-pointer', t.tileHover)} style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }} data-testid={`tile-template-${tpl.code}`}>
-              {/* GT PREVIEW crop — the template shows itself; the component icon sits as a small badge */}
-              <div className="relative">
-                <span className="rounded-full overflow-hidden block" style={{ width: 104, height: 104, backgroundColor: '#fff', border: `1px solid ${t.hairline}` }}>
-                  <img src={gtPreviewTemplate} alt={`${tpl.title} — preview from the GT PREVIEW layer`} className="w-full h-full object-cover" data-testid={`img-tile-preview-${tpl.code}`} />
-                </span>
-                <span className="absolute -bottom-1 -right-1 rounded-full flex items-center justify-center" style={{ width: 30, height: 30, backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }}>
-                  <ComponentIcon kind={tpl.icon} color={t.blue} fill={t.iconFill} size={18} />
-                </span>
-              </div>
-              <div className="mt-4 text-[15px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{tpl.title}</div>
-              <div className="gt-detail mt-1 text-[12.5px]" style={{ color: t.subink }}>{tpl.component} · {tpl.variant}</div>
-              <div className="gt-detail mt-0.5 text-[12.5px] tabular-nums" style={{ color: t.subink }}>{tpl.code} <span style={{ color: t.faint }}>·</span> {tpl.rev}</div>
-              <div className="mt-3 flex items-center gap-2">
-                {isArchived ? (
-                  <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: t.faint }}>
-                    <Archive className="w-3.5 h-3.5" />
-                    Archived
+            {/* GoodStudio-card treatment (Bill, Aug 15 2026): preview bleeds
+                edge-to-edge across the tile's top; text block flush-left below. */}
+            <button type="button" onClick={() => { void openMockLive(tpl.title); }} className={cn('gt-tile w-full h-full rounded-2xl overflow-hidden flex flex-col text-left transition-colors cursor-pointer', t.tileHover)} style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }} data-testid={`tile-template-${tpl.code}`}>
+              {/* GoodStudio proportions (Bill, Aug 15 2026): big preview, small quiet
+                  text block — name + Certified at rest, file identity on hover. */}
+              <span className="block w-full flex-shrink-0" style={{ height: 200, backgroundColor: '#fff', borderBottom: `1px solid ${t.hairline}` }}>
+                <img src={tpl.img ?? gtPreviewTemplate} alt={`${tpl.title} — the template page itself`} className="w-full h-full object-cover object-top" data-testid={`img-tile-preview-${tpl.code}`} />
+              </span>
+              <div className="w-full px-5 pt-3.5 pb-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-[16px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{tpl.title}</div>
+                  {/* Icon docks across from the name; yields to the ••• on hover */}
+                  <span className="flex-shrink-0 transition-opacity group-hover:opacity-0" aria-hidden>
+                    <ComponentIcon kind={tpl.icon} color={t.blue} fill={t.iconFill} size={20} />
                   </span>
-                ) : (
-                  <StatusChip status={tpl.status} t={t} />
-                )}
-                {tpl.certified && <span className="text-[11.5px]" style={{ color: t.faint }}>{tpl.certified.replace('Certified ', '')}</span>}
-              </div>
-              {tpl.history?.map((h) => (
-                <div key={h.rev} className="gt-detail mt-2 flex items-center justify-center gap-1.5 text-[11.5px]" style={{ color: t.faint }}>
-                  <History className="w-3 h-3 flex-shrink-0" />
-                  <span className="tabular-nums">{h.rev}</span>
-                  <span>superseded · in history</span>
                 </div>
-              ))}
+                <div className="mt-1 flex items-center gap-2">
+                  {isArchived ? (
+                    <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ color: t.faint }}>
+                      <Archive className="w-3.5 h-3.5" />
+                      Archived
+                    </span>
+                  ) : (
+                    <StatusChip status={tpl.status} t={t} />
+                  )}
+                  {tpl.certified && <span className="text-[11.5px]" style={{ color: t.faint }}>{tpl.certified.replace('Certified ', '')}</span>}
+                  {/* Pending's why + action live behind an ⓘ beside the chip (Bill,
+                      Aug 16 2026) — keeps the tile's bottom half GoodStudio-short.
+                      Click to open; it's a real popover, not a hover tooltip. */}
+                  {(tpl.status === 'pending' || tpl.status === 'failed') && !isArchived && (
+                    <span className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        aria-label={tpl.status === 'failed' ? 'What happened?' : 'Why is this pending?'}
+                        onClick={(e) => {
+                          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                          setPendingInfoFor((v) => (v?.code === tpl.code ? null : { code: tpl.code, x: r.left, y: r.bottom }));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            setPendingInfoFor((v) => (v?.code === tpl.code ? null : { code: tpl.code, x: r.left, y: r.bottom }));
+                          }
+                        }}
+                        className="inline-flex items-center justify-center cursor-pointer"
+                        style={{ color: t.faint }}
+                        data-testid={`info-pending-${tpl.code}`}
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </span>
+                      {pendingInfoFor?.code === tpl.code && (
+                        <>
+                          <span className="fixed inset-0 z-[70]" onClick={() => setPendingInfoFor(null)} />
+                          <span
+                            className="fixed z-[71] block rounded-xl px-4 py-3 text-[12px] leading-relaxed shadow-2xl"
+                            style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, color: t.subink, width: 260, top: pendingInfoFor.y + 8, left: Math.max(12, pendingInfoFor.x - 8) }}
+                            data-testid={`text-pending-why-${tpl.code}`}
+                          >
+                            {tpl.note ?? 'Attached, not yet certified — it certifies itself when a finished file passes. Open to test.'}
+                          </span>
+                        </>
+                      )}
+                    </span>
+                  )}
+                </div>
+                {tpl.nickname && (
+                  <div className="gt-detail mt-1.5 text-[12px] truncate" style={{ color: t.subink }} title={tpl.nickname}>{tpl.nickname}</div>
+                )}
+                <div className="gt-detail mt-1 text-[12px] tabular-nums" style={{ color: t.subink }}>{tpl.code} <span style={{ color: t.faint }}>·</span> {tpl.rev}</div>
+                {tpl.history?.map((h) => (
+                  <div key={h.rev} className="gt-detail mt-1 flex items-center gap-1.5 text-[11.5px]" style={{ color: t.faint }}>
+                    <History className="w-3 h-3 flex-shrink-0" />
+                    <span className="tabular-nums">{h.rev}</span>
+                    <span>superseded · in history</span>
+                  </div>
+                ))}
+              </div>
             </button>
-            <TileOverflow tileKey={tpl.code} title={tpl.title} archived={isArchived} t={t} menuFor={menuFor} setMenuFor={setMenuFor} onArchive={() => setConfirmArchive({ key: tpl.code, title: tpl.title })} onRestore={() => doRestore(tpl.code)} onReplace={() => startReplace(tpl.title)} />
+            <TileOverflow tileKey={tpl.code} title={tpl.title} archived={isArchived} t={t} menuFor={menuFor} setMenuFor={setMenuFor} onArchive={() => setConfirmArchive({ key: tpl.code, title: tpl.title })} onRestore={() => doRestore(tpl.code)} onReplace={() => startReplace(tpl.title)} pos="top-[206px] right-3" />
             </div>
             );
           })}
@@ -702,7 +832,7 @@ export default function PressTemplatesIndex() {
             <button
               type="button"
               onClick={() => { pendingTemplateFile.file = sv.file; window.location.hash = '#/PressTemplateLiveTest'; }}
-              className={cn('gt-tile w-full h-full rounded-2xl px-6 pt-7 pb-5 flex flex-col items-center text-center transition-colors cursor-pointer', t.tileHover)}
+              className={cn('gt-tile w-full h-full rounded-2xl overflow-hidden flex flex-col text-left transition-colors cursor-pointer', t.tileHover)}
               style={{
                 backgroundColor: t.card,
                 border: `1px solid ${sv.fresh && flashFresh ? '#319ED8' : t.hairline}`,
@@ -711,22 +841,24 @@ export default function PressTemplatesIndex() {
               }}
               data-testid={`tile-saved-template-${i}`}
             >
-              <span className="rounded-full overflow-hidden block" style={{ width: 104, height: 104, backgroundColor: '#fff', border: `1px solid ${t.hairline}` }}>
-                <img src={sv.img} alt={`${sv.name} — saved from the live test`} className="w-full h-full object-cover" />
+              <span className="block w-full flex-shrink-0" style={{ height: 200, backgroundColor: '#fff', borderBottom: `1px solid ${t.hairline}` }}>
+                <img src={sv.img} alt={`${sv.name} — saved from the live test`} className="w-full h-full object-cover object-top" />
               </span>
-              <div className="mt-4 text-[15px] font-semibold truncate w-full" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={sv.name}>{sv.name}</div>
-              <div className="gt-detail mt-1 text-[12.5px] tabular-nums" style={{ color: t.subink }}>{sv.wMm.toFixed(1)} × {sv.hMm.toFixed(1)} mm · {sv.layerCount} GT layers</div>
-              <div className="mt-3 flex items-center gap-2 text-[11.5px]" style={{ color: t.faint }}>
-                {isArchived ? (
-                  <><Archive className="w-3.5 h-3.5 flex-shrink-0" /><span style={{ fontWeight: 600 }}>Archived</span></>
-                ) : (
-                  <><BadgeCheck className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.ready }} /><span style={{ color: t.ready, fontWeight: 600 }}>Saved</span></>
-                )}
-                <span>{sv.savedAt}</span>
-                {sv.tests.length > 0 && <span>· {sv.tests.length} art file{sv.tests.length === 1 ? '' : 's'} tested</span>}
+              <div className="w-full px-5 pt-3.5 pb-4">
+                <div className="text-[16px] font-semibold truncate w-full" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={sv.name}>{sv.name}</div>
+                <div className="mt-1 flex items-center gap-2 text-[11.5px]" style={{ color: t.faint }}>
+                  {isArchived ? (
+                    <><Archive className="w-3.5 h-3.5 flex-shrink-0" /><span style={{ fontWeight: 600 }}>Archived</span></>
+                  ) : (
+                    <><BadgeCheck className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.ready }} /><span style={{ color: t.ready, fontWeight: 600 }}>Saved</span></>
+                  )}
+                  <span>{sv.savedAt}</span>
+                  {sv.tests.length > 0 && <span>· {sv.tests.length} art file{sv.tests.length === 1 ? '' : 's'} tested</span>}
+                </div>
+                <div className="gt-detail mt-1.5 text-[12px] tabular-nums" style={{ color: t.subink }}>{sv.wMm.toFixed(1)} × {sv.hMm.toFixed(1)} mm · {sv.layerCount} GT layers</div>
               </div>
             </button>
-            <TileOverflow tileKey={key} title={sv.name} archived={isArchived} t={t} menuFor={menuFor} setMenuFor={setMenuFor} onArchive={() => setConfirmArchive({ key, title: sv.name })} onRestore={() => doRestore(key)} onReplace={() => startReplace(sv.name)} />
+            <TileOverflow tileKey={key} title={sv.name} archived={isArchived} t={t} menuFor={menuFor} setMenuFor={setMenuFor} onArchive={() => setConfirmArchive({ key, title: sv.name })} onRestore={() => doRestore(key)} onReplace={() => startReplace(sv.name)} pos="top-[206px] right-3" />
             </div>
             );
           })}
@@ -740,7 +872,11 @@ export default function PressTemplatesIndex() {
 /* Fine print rests hidden; hover reveals it. Space stays reserved so the grid never jumps (Bill, Aug 15 2026). */
 .gt-tile .gt-detail { opacity: 0; transition: opacity 150ms ease; }
 .gt-tile:hover .gt-detail, .gt-tile:focus-visible .gt-detail { opacity: 1; }`}</style>
-          {(format === 'Vinyl' ? SLOT_SETS[size] : FORMAT_SLOTS[format]).map(({ kind, title, note }) => {
+          {(format === 'Vinyl' ? SLOT_SETS[size] : FORMAT_SLOTS[format])
+            // A slot with a template attached renders as its filled tile above —
+            // never show the dashed placeholder twice (Otis bug fix, Aug 15 2026).
+            .filter(({ title }) => !(format === 'Vinyl' && size === '12″' && MOCK_TEMPLATES.some((m) => m.title === title)))
+            .map(({ kind, title, note }) => {
             const key = `slot:${title}`;
             const isArchived = archivedSlots.has(title);
             if ((view === 'Archived' && !isArchived) || (view !== 'Archived' && isArchived && view === 'Current')) return null;
