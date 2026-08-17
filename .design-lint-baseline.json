@@ -21982,6 +21982,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/ArtistDashboard.tsx",
+    "snippet": "<p className=\"text-[13px] text-[color:var(--apple-faint)]\" data-testid=\"referrals-operator-note\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/ArtistDashboard.tsx",
     "snippet": "<span className=\"text-[11px] text-[color:var(--apple-subink)] uppercase tracking-wider\">Non-profit</span>"
   },
   {

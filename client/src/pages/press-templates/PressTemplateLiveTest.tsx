@@ -2402,6 +2402,11 @@ export default function PressTemplateLiveTest({
                     const box = viewMode === 'line' ? (line ?? area) : (area ?? line);
                     if (!box) return null;
                     const c = zoneColor(zone);
+                    // Area shading alpha: dark canvas uses 0x30 (~19%) and light
+                    // canvas uses 0x40 (~25%) — both are ~3x the previous 0x14
+                    // (~8%) so on/off state is unmistakable at a glance while
+                    // underlying template linework remains readable through the wash.
+                    const areaAlpha = dark ? '30' : '40';
                     return (
                       <div key={zone}>
                         {viewMode === 'area' && area && (
@@ -2414,7 +2419,7 @@ export default function PressTemplateLiveTest({
                             >
                               <path
                                 d={`${shapePath(area.xMm, area.yMm, area.wMm, area.hMm, area.round)} ${shapePath(area.inXMm!, area.inYMm!, area.inWMm!, area.inHMm!, area.round)}`}
-                                fill={`${c}14`}
+                                fill={`${c}${areaAlpha}`}
                                 fillRule="evenodd"
                               />
                             </svg>
@@ -2424,7 +2429,7 @@ export default function PressTemplateLiveTest({
                               style={{
                                 left: pct(area.xMm, template.wMm), top: pct(area.yMm, template.hMm),
                                 width: pct(area.wMm, template.wMm), height: pct(area.hMm, template.hMm),
-                                backgroundColor: `${c}14`,
+                                backgroundColor: `${c}${areaAlpha}`,
                                 borderRadius: area.round ? '50%' : undefined,
                               }}
                             />
