@@ -73,7 +73,7 @@ export type ArtistScope = {
   viewerIsOperator?: boolean;
 };
 
-async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: string; status: number }> {
+export async function resolveArtistScope(req: Request): Promise<ArtistScope | { error: string; status: number }> {
   const userId = req.session?.userId;
   if (!userId) return { error: "Unauthorized", status: 401 };
   const info = await getUserRole(userId);

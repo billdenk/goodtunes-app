@@ -126,21 +126,19 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // super-admin. The "catalog" module renders the releases list — its id
   // stays "catalog" (ArtistDashboard keys the embedded album view on it)
   // but its LABEL is "Albums".
+  // Artist portal restructure (Ruby handoff, Aug 2026): the wall of
+  // releases IS the catalog; Audience/Acquisition/Buyers moved inside the
+  // Reports hub; People dropped from the artist rail; Settings added.
   { id: "dashboard",   label: "Dashboard",   icon: LayoutDashboard, roles: ["artist"] },
-  { id: "people",      label: "People",      icon: User,      section: "catalog", roles: ["artist"] },
-  { id: "catalog",     label: "Albums",      icon: Disc3,     section: "catalog", roles: ["artist"] },
-  // (Overview merged into Dashboard — Task #2893. Label/manager keep theirs.)
-  { id: "audience",    label: "Audience",    icon: Users,     roles: ["artist"] },
-  { id: "acquisition", label: "Acquisition", icon: Megaphone, roles: ["artist"] },
+  { id: "catalog",     label: "Releases",    icon: Disc3,     roles: ["artist"] },
   { id: "orders",      label: "Orders",      icon: ShoppingBag, roles: ["artist"] },
-  { id: "buyers",      label: "Buyers",      icon: UserCheck, roles: ["artist"] },
+  // Reports hub — Audience / Acquisition / Buyers / Payments / Earnings.
+  { id: "reports",     label: "Reports",     icon: BarChart3, roles: ["artist"] },
   { id: "referrals",   label: "Referrals",   icon: UserPlus,  roles: ["artist"] },
   // Task #2914 — artists connect their own Shopify store from the portal
   // (pre-vetted, no approval gate). Same connect card as /admin/shopify.
   { id: "shopify",     label: "Shopify",     icon: Store,     roles: ["artist"] },
-  // Reports renders the shared AdminReports in `embedded` mode INSIDE the
-  // artist portal shell (no /admin chrome). See ArtistDashboard.tsx.
-  { id: "reports",     label: "Reports",     icon: BarChart3, roles: ["artist"] },
+  { id: "settings",    label: "Settings",    icon: Cog,       roles: ["artist"] },
 
   // Label shell — `/label` (LabelDashboard.tsx). Catalog section (Roster,
   // Albums) under Dashboard. "catalog" relabeled "Albums".

@@ -21082,7 +21082,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 16, color: t.subink }}>"
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 16, color: t.subink }} data-testid={scan.isLoading ? 'state-loading' : scan.isError ? 'state-error' : 'state-not-found'}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21183,6 +21183,606 @@
     "rule": "naked-icon-button",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<button type=\"button\" className={cn('inline-flex items-center justify-center rounded-full transition-colors', t.hoverCard)} style={{ width: 34, height: 34, border: `1px solid ${t.hairline}`, color: t."
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "className=\"text-[15px] transition-colors whitespace-nowrap hover:opacity-90\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[15px] font-semibold\" style={{ color: t.ink }}>{headline}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ marginTop: 3, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[14px] font-semibold min-w-0\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-2 text-[13px] font-medium\" style={{ color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>{s.label}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 4, color: t.subink }}>{s.delta}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<h2 className=\"text-[15px] font-semibold\" style={{ color: t.ink, marginBottom: 12 }}>As it happens.</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[13.5px] min-w-0\" style={{ color: t.subink }}>{a.title}{a.detail ? ` — ${a.detail}` : ''}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[12.5px] flex-shrink-0\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<h2 className=\"text-[22px] font-semibold tracking-tight\" style={{ color: t.ink }}>Details.</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 4, color: t.subink }}>Everything about this release at a glance.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[12px] font-semibold uppercase tracking-wider flex-shrink-0\" style={{ color: t.faint }}>{r2.label}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[13.5px] text-right min-w-0\" style={{ color: t.subink }}>{r2.value}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"text-[15px] font-semibold truncate\" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{block.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 text-[13px] font-medium flex-shrink-0 transition-opacity hover:opacity-80\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold\" style={{ color: t.ink }}>Master these for vinyl with Wave</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 3, color: t.subink, lineHeight: 1.45 }}>Vinyl cuts best from a dedicated master. Wave prepares a lacquer-ready set from your album masters.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<button type=\"button\" className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium flex-shrink-0 transition-colors', t.hoverCard)} style={{ padding: '8px 16px', color: t.subink"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[13px]\" style={{ color: t.subink }}>No tracks yet.</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[12px] font-semibold tabular-nums flex-shrink-0\" style={{ width: 22, color: t.faint }}>{i + 1}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-medium truncate\" style={{ color: t.ink }}>{song.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"text-[11.5px]\" style={{ color: t.faint }}>{forVinyl ? 'Lacquer master · from your album masters' : 'Album master'}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "className={cn('apr-add inline-flex items-center h-9 px-2.5 rounded-full text-[13px] font-semibold flex-shrink-0', t.hoverCard)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<h2 className=\"text-[22px] font-semibold tracking-tight\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<button type=\"button\" className=\"inline-flex items-center gap-1.5 text-[13px] font-medium flex-shrink-0 transition-opacity hover:opacity-80\" style={{ color: t.subink }} data-testid=\"button-add-bonus-c"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 560, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>No print files scanned yet</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>Once {pressName} scans your finished print files, each piece shows up here checked against the press template.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[14px] font-semibold\" style={{ marginTop: portal.release.artworkUrl ? 16 : 0, color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<button type=\"button\" onClick={() => setAssetFormat('vinyl')} className=\"text-[13px] font-semibold\" style={{ marginTop: 14, color: BLUE }}>Show vinyl art</button>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<h2 className=\"text-[16px] font-semibold\" style={{ color: t.ink }}>Where does this sell?</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ marginTop: 4, color: t.subink, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"text-[14.5px] font-semibold\" style={{ color: t.ink }}>{o.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 3, color: t.subink, lineHeight: 1.45 }}>{o.blurb}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<h3 className=\"text-[14.5px] font-semibold\" style={{ color: t.ink }}>Share link</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-semibold\" style={{ padding: '3px 9px', background: t.passBg, color: t.ready }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.subink }}>This is your GoodTunes® storefront — the page fans land on.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 12, color: t.faint }}>Share links appear once your storefront page is set up.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[9px] uppercase tracking-wider font-bold flex-shrink-0\" style={{ color: t.faint, marginRight: 8 }}>{row.label}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[12.5px] truncate\" style={{ color: t.ink }}>{row.url}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<h3 className=\"text-[14.5px] font-semibold\" style={{ color: t.ink }}>Your Shopify store</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[12.5px] font-semibold\" style={{ color: t.ink }}>Connected — fans buy on your store; we handle GoodDeed® and can fulfill.</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.subink, lineHeight: 1.5 }}>Connect the store, map this album to a product, and paste its sale URL. Fans buy on your store; we handle GoodDe"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[12.5px] font-semibold\" style={{ color: t.warnInk }}>Not connected — needed before you can publish to Shopify</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<h3 className=\"text-[14.5px] font-semibold\" style={{ color: t.ink }}>Email appearance</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.subink }}>The post-purchase note fans get. Follows the channel above.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"text-[13px] font-semibold\" style={{ color: t.ink }}>Thank you for backing {portal.release.title}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 2, color: t.subink, lineHeight: 1.45 }}>Your music is in the GoodTunes® player, and your GoodDeed® is on its way.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<h3 className=\"text-[15px] font-semibold\" style={{ color: t.ink }}>{ready ? 'Ready for fans.' : 'Getting ready.'}</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 4, color: t.subink, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[13px] font-medium\" style={{ color: c.done ? t.ink : t.subink }}>{c.label}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[11.5px]\" style={{ marginTop: 14, color: t.faint, lineHeight: 1.5 }}>Everything passed — this release is set up end to end.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"text-[14.5px] font-semibold truncate\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"text-[12.5px] mt-0.5\" style={{ color: quoted ? t.subink : t.warnInk }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[12px] font-semibold\" style={{ padding: '4px 10px', background: t.soft, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[9px] uppercase tracking-wider font-bold\" style={{ color: t.faint }}>Payment schedule</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.subink }}>Generated from your accepted estimate</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold\" style={{ background: t.soft, color: t.subink }}>{i + 1}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold\" style={{ color: t.ink }}>{m.label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<div className=\"text-[15px] font-semibold\" style={{ marginTop: 2, color: t.ink }}>{fmtDollars(m.amountCents)}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[11.5px]\" style={{ marginTop: 4, color: t.faint, lineHeight: 1.45 }}>{m.note}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[11.5px]\" style={{ marginTop: 12, color: t.faint, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<h2 className=\"text-[22px] font-semibold tracking-tight\" style={{ color: t.ink }}>Money out to the plant</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>Nothing owed on this release.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>Payment schedules appear here once a pressing project starts.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 26, color: t.subink }}>Loading this release…</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 26, color: t.subink }} data-testid=\"release-error\">Couldn&rsquo;t load this release. Refresh to try again.</p>"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"h-9 w-9 rounded-full bg-white ring-1 ring-black/10 flex items-center justify-center flex-shrink-0 p-1.5\">"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold\" style={{ background: t.soft, color: t.subink }}>{i + 1}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReleasesWall.tsx",
+    "snippet": "className=\"absolute inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReleasesWall.tsx",
+    "snippet": "<h3 className=\"text-[15.5px] font-semibold truncate min-w-0\" style={{ color: t.ink, letterSpacing: '-0.015em' }}>{card.name}</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReleasesWall.tsx",
+    "snippet": "<div className=\"text-[12px] truncate\" style={{ marginTop: 6, color: t.subink, lineHeight: 1.4 }} data-testid={`badge-${card.id}`}>{badge}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReleasesWall.tsx",
+    "snippet": "<span className=\"text-[11.5px]\" style={{ color: t.faint }}>{card.year}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReleasesWall.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 24, color: t.subink }}>Loading your releases…</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReleasesWall.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 24, color: t.subink }} data-testid=\"wall-error\">Couldn&rsquo;t load your releases. Refresh to try again.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReleasesWall.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 24, color: t.subink }} data-testid=\"wall-empty\">No releases yet.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-semibold\" style={{ padding: '3px 9px', background: owed ? t.warnBg : t.passBg, color: owed ? t.warnInk : t.ready }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<h3 className=\"text-[16px] font-semibold\" style={{ marginTop: 12, color: t.ink }}>{owed ? 'Payments' : 'Earnings'}</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 4, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<div className=\"text-[30px] font-semibold\" style={{ marginTop: 12, color: t.ink, letterSpacing: '-0.02em' }}>{total}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<div className=\"text-[12px]\" style={{ color: t.subink }}>{owed ? 'outstanding' : 'paid to you'}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<div className=\"text-[12.5px]\" style={{ paddingTop: 10, color: t.faint }}>{owed ? 'Nothing outstanding.' : 'No payouts yet.'}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<div className=\"text-[13px] font-medium truncate\" style={{ color: t.ink }}>{r.label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<div className=\"text-[11.5px]\" style={{ color: t.faint }}>{r.sub}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<span className=\"text-[13.5px] font-semibold flex-shrink-0\" style={{ color: t.ink }}>{fmtDollars(r.amountCents)}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<button key={r.id} type=\"button\" onClick={() => setTab(r.id)} data-testid={`reports-tab-${r.id}`} className=\"relative inline-flex items-center gap-2 text-[14px] transition-colors whitespace-nowrap\" st"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<span className=\"text-[13px] font-semibold\" style={{ color: t.ink }}>Kept separate on purpose</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<span className=\"text-[12.5px]\" style={{ color: t.subink }}>— you owe {neverNetted.owed} and you&rsquo;re owed {neverNetted.earned}. Two truths, never shown as &ldquo;{neverNetted.netted}.&rdquo;</spa"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 20, color: t.subink }}>Loading ledgers…</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistReportsHub.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 20, color: t.subink }} data-testid=\"ledgers-error\">Couldn&rsquo;t load the ledgers. Refresh to try again.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<h2 className=\"text-[16px] font-semibold\" style={{ color: t.ink }}>{title}</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 3, color: t.subink }}>{blurb}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<div className=\"text-[13px]\" style={{ padding: '18px', color: t.subink }}>Loading team…</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<span className=\"rounded-full flex items-center justify-center flex-shrink-0 text-[12px] font-bold\" style={{ width: 32, height: 32, background: t.soft, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold truncate\" style={{ color: t.ink }}>{m.name}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "{m.email && <div className=\"text-[11.5px] truncate\" style={{ color: t.faint }}>{m.email}</div>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "right={<span className=\"text-[12.5px] font-medium\" style={{ color: t.subink }}>{m.role}</span>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<span className=\"text-[13.5px] font-medium\" style={{ color: t.subink }}>Invite someone</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold\" style={{ color: t.ink }}>Shopify</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<div className=\"text-[11.5px]\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px] font-semibold\" style={{ color: t.ready }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<button type=\"button\" className=\"inline-flex items-center gap-1 text-[12.5px] font-medium\" style={{ color: t.subink }} data-testid=\"button-manage-shopify\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px] font-medium\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<div className=\"text-[13.5px] font-semibold\" style={{ color: t.ink }}>Payout account</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<div className=\"text-[11.5px]\" style={{ color: t.faint }}>Where your earnings land</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<button type=\"button\" className=\"inline-flex items-center gap-1 text-[12.5px] font-medium\" style={{ color: t.subink }} data-testid=\"button-setup-payout\">"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "// #319ED8 blue pill max per screen; commas in dollar amounts."
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "export const BLUE = '#319ED8';"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[12px] font-semibold\" style={{ padding: '4px 10px', background: s.bg, color: s.color }} data-testid={`milestone-status-${word}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "className={cn('inline-flex items-center gap-1.5 rounded-full transition-colors', size === 'lg' ? 'h-10 px-5 text-[14px]' : 'h-8 px-3.5 text-[12.5px]')}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[12px] font-semibold\" style={{ padding: '4px 10px', background: t.passBg, color: t.ready }} data-testid=\"chip-block-pass\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[12px] font-semibold\" style={{ padding: '4px 10px', background: t.failBg, color: t.fail }} data-testid=\"chip-block-fail\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[12px] font-semibold\" style={{ padding: '4px 10px', background: t.soft, color: t.subink }} data-testid=\"chip-block-waiting\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-medium\" style={{ padding: '3px 9px', background: t.soft, color: t.subink }} data-testid=\"chip-inherit-pass\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-medium\" style={{ padding: '3px 9px', background: `${BLUE}14`, color: BLUE }} data-testid=\"chip-inherit-override\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-semibold\" style={{ padding: '3px 9px', background: t.failBg, color: t.fail }} data-testid=\"chip-inherit-fail\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/shared.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[11.5px]\" style={{ color: '#fff', opacity: 0.55 }} data-testid=\"channel-none\">"
   },
   {
     "rule": "brand-hex-literal",

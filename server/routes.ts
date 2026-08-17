@@ -25222,6 +25222,10 @@ export async function registerRoutes(
   const { registerArtistReportRoutes } = await import("./artistReports");
   await registerArtistReportRoutes(app);
 
+  // ─── Artist Portal Restructure (Ruby handoff, Aug 17 2026) ─────
+  const { registerArtistPortalRoutes } = await import("./artistPortal");
+  await registerArtistPortalRoutes(app);
+
   // ─── Task #76 — Label rollup reporting dashboard ──────────────
   const { registerLabelReportRoutes } = await import("./labelReports");
   await registerLabelReportRoutes(app);

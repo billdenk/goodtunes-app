@@ -40,6 +40,12 @@ import { OperatorShell } from "@/components/operator/OperatorShell";
 import { ArtistShopifyTab } from "@/components/operator/ArtistShopifyTab";
 import { modulesForRole } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
+// Artist portal restructure (Ruby handoff, Aug 2026) — wall of releases,
+// five-tab release view, Reports hub, Settings.
+import { ArtistReleasesWall } from "@/pages/artist/restructure/ArtistReleasesWall";
+import { ArtistRelease } from "@/pages/artist/restructure/ArtistRelease";
+import { ArtistReportsHub, registerReportPanes } from "@/pages/artist/restructure/ArtistReportsHub";
+import { ArtistSettingsPage } from "@/pages/artist/restructure/ArtistSettingsPage";
 // Task #2524 — an artist opening one of their albums stays INSIDE this portal
 // shell; AdminAlbum renders in `embedded` mode (no operator /admin chrome).
 import { AdminAlbum } from "@/pages/AdminAlbum";
@@ -177,13 +183,16 @@ function rangeFor(preset: PresetId): Range {
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
   const [compare, setCompare] = useState(true);
-  const [tab, setTab] = useState<"dashboard" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "shopify" | "reports">(() => {
+  const [tab, setTab] = useState<"dashboard" | "catalog" | "orders" | "reports" | "referrals" | "shopify" | "settings">(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
     // Task #2893 — Overview merged into Dashboard. Stale ?tab=overview deep
     // links (bookmarks, old KPI tiles) land on the merged Dashboard; their
     // ?range= param still applies via presetFromSearch below.
-    if (t === "overview") return "dashboard";
-    if (t === "dashboard" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "shopify" || t === "reports") return t;
+    if (t === "overview" || t === "people") return "dashboard";
+    // Restructure — Audience/Acquisition/Buyers live inside the Reports hub
+    // now; stale deep links land there.
+    if (t === "audience" || t === "acquisition" || t === "buyers") return "reports";
+    if (t === "dashboard" || t === "catalog" || t === "orders" || t === "referrals" || t === "shopify" || t === "reports" || t === "settings") return t;
     return "dashboard";
   });
   // Task #2486 — Dashboard-tab KPI tiles deep-link via `?tab=…` (wouter
@@ -193,8 +202,9 @@ export function ArtistDashboard() {
   const search = useSearch();
   useEffect(() => {
     const t = new URLSearchParams(search).get("tab");
-    if (t === "overview") setTab("dashboard"); // merged — Task #2893
-    else if (t === "dashboard" || t === "audience" || t === "acquisition" || t === "catalog" || t === "orders" || t === "buyers" || t === "referrals" || t === "people" || t === "shopify" || t === "reports") {
+    if (t === "overview" || t === "people") setTab("dashboard"); // merged — Task #2893
+    else if (t === "audience" || t === "acquisition" || t === "buyers") setTab("reports"); // restructure — hub sub-tabs
+    else if (t === "dashboard" || t === "catalog" || t === "orders" || t === "referrals" || t === "shopify" || t === "reports" || t === "settings") {
       setTab(t);
     }
     const p = presetFromSearch(search);
@@ -297,7 +307,7 @@ export function ArtistDashboard() {
       // (time-of-day greeting + range pills + View payouts) per the design
       // reference, so the shell page header is suppressed there too.
       pageTitle={albumViewId || tab === "reports" || tab === "dashboard" ? undefined : currentTabLabel}
-      hideHeaderIdentity={!!albumViewId || tab === "reports" || tab === "dashboard"}
+      hideHeaderIdentity={!!albumViewId || tab === "reports" || tab === "dashboard" || tab === "settings"}
       headerActions={
         albumViewId || tab === "reports" || tab === "shopify" || tab === "dashboard" ? undefined : (
           <>
@@ -327,11 +337,9 @@ export function ArtistDashboard() {
           tab active), rendering AdminAlbum without the operator /admin chrome.
           Back link returns to the portal catalog list. */}
       {albumViewId ? (
-        <AdminAlbum
-          embedded
-          albumId={albumViewId}
-          backHref="/artist?tab=catalog"
-        />
+        // Restructure: the artist release view replaces the embedded
+        // AdminAlbum pathway (delete-first per the handoff contract).
+        <ArtistRelease albumId={albumViewId} />
       ) : (
         <>
       {/* Task #2893 — single merged, tier-disciplined Dashboard (the old
@@ -344,27 +352,19 @@ export function ArtistDashboard() {
           onPresetChange={applyPreset}
         />
       )}
-      {tab === "audience" && <AudienceTab qs={qs} />}
-      {tab === "acquisition" && (
-        <AcquisitionTab
-          kind="artist"
-          scopeId={new URLSearchParams(window.location.search).get("personId")}
-          rangeQs={qs}
-        />
-      )}
-      {tab === "catalog" && <CatalogTab qs={qs} />}
+      {/* Restructure: the wall of releases IS the catalog. */}
+      {tab === "catalog" && <ArtistReleasesWall qs={qs} />}
       {tab === "orders" && <OrdersTab qs={qs} />}
-      {tab === "buyers" && <BuyersTab qs={qs} personId={me.data?.personId ?? null} />}
       {tab === "referrals" && <ReferralsTab />}
-      {tab === "people" && <ArtistPeoplePanel />}
       {/* Task #2914 — artists connect their own Shopify store from the
           portal (same connect card as /admin/shopify, artist copy). */}
       {tab === "shopify" && <ArtistShopifyTab />}
-      {/* Task #2522 — Reports renders the shared AdminReports in `embedded`
-          mode so the artist stays inside their own portal shell (no /admin
-          chrome). Scope is resolved server-side from the caller (or ?personId=
-          for a viewing-as super-admin), exactly as the god-view page does. */}
-      {tab === "reports" && <AdminReports embedded />}
+      {/* Restructure: Reports hub — Audience / Acquisition / Buyers moved
+          in here as sub-tabs beside the Payments / Earnings ledgers. */}
+      {tab === "reports" && (
+        <ArtistReportsHub qs={`?${qs}`} personId={me.data?.personId ?? null} />
+      )}
+      {tab === "settings" && <ArtistSettingsPage />}
         </>
       )}
     </OperatorShell>
@@ -372,7 +372,7 @@ export function ArtistDashboard() {
 }
 
 const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
-  id: "dashboard" | "audience" | "acquisition" | "catalog" | "orders" | "buyers" | "referrals" | "people" | "shopify" | "reports";
+  id: "dashboard" | "catalog" | "orders" | "reports" | "referrals" | "shopify" | "settings";
   label: string;
 }>;
 type ArtistTabId = (typeof ARTIST_TABS)[number]["id"];
@@ -1933,3 +1933,10 @@ function ReferralsTab() {
     </>
   );
 }
+
+// Restructure — hand the local Audience/Buyers panes to the Reports hub
+// (module registration avoids a circular import; hub qs arrives as "?...").
+registerReportPanes({
+  audience: ({ qs }) => <AudienceTab qs={qs.replace(/^\?/, "")} />,
+  buyers: ({ qs, personId }) => <BuyersTab qs={qs.replace(/^\?/, "")} personId={personId} />,
+});

@@ -145,6 +145,16 @@ export function useAdminDark(): boolean {
   return useSyncExternalStore(onAdminAppearanceChange, isAdminDark, () => false);
 }
 
+// Dev-only screenshot helper — `?gtAppearance=dark|light|system` persists the
+// preference (same localStorage key the Settings toggle writes). Never active
+// in production builds.
+try {
+  if (import.meta.env.DEV) {
+    const v = new URLSearchParams(window.location.search).get("gtAppearance");
+    if (v === "light" || v === "dark" || v === "system") setAdminAppearance(v);
+  }
+} catch {}
+
 // Track the OS setting live while "system" is selected. Installed once at
 // module load; cheap no-op when a fixed preference is set.
 try {
