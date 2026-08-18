@@ -65,13 +65,22 @@ export type SideGroup = { side: SideName; entries: Array<{ zone: string; label: 
  *  - `groups` is Front → Back → Spine, entries in deterministic zoneSort order
  *    (Memphis: Cover, Safety, Foil — visually unchanged).
  *  A zone is only groupable when at least one of its layers parsed confidently
- *  (kind line/area); a side word inside an `other`-kind name is not enough. */
+ *  (kind line/area); a side word inside an `other`-kind name is not enough.
+ *  Also returns family groups: zones that share a common multi-word prefix and
+ *  differ only in the last word (e.g. "Center Holes Bleed/Cut/Safety") are
+ *  folded into a single dropdown; side grouping has precedence. */
+export type FamilyGroup = { prefix: string; entries: Array<{ zone: string; label: string }> };
+
 export function groupZonesForPills(layers: Array<{ zone: string; kind: 'line' | 'area' | 'other' }>): {
   grouped: Map<string, { side: SideName; label: string }>;
   groups: SideGroup[];
+  familyGrouped: Map<string, { prefix: string; label: string }>;
+  familyGroups: FamilyGroup[];
 } {
   const confident = new Map<string, boolean>();
   for (const l of layers) confident.set(l.zone, (confident.get(l.zone) ?? false) || l.kind !== 'other');
+
+  // Side grouping — Front/Back/Spine takes precedence.
   const grouped = new Map<string, { side: SideName; label: string }>();
   confident.forEach((ok, zone) => {
     if (!ok) return;
@@ -87,5 +96,40 @@ export function groupZonesForPills(layers: Array<{ zone: string; kind: 'line' | 
         .map(([zone, g]) => ({ zone, label: g.label })),
     }))
     .filter((g) => g.entries.length > 0);
-  return { grouped, groups };
+
+  // Family grouping — zones not already side-grouped, with a common multi-word
+  // prefix and differing only in the last word.  Only fires when 2+ zones share
+  // the same prefix (single-member prefixes stay as standalone pills).
+  const prefixCount = new Map<string, string[]>();
+  confident.forEach((ok, zone) => {
+    if (!ok || grouped.has(zone)) return;
+    const words = zone.split(' ');
+    // Require at least 3 words so the shared prefix is itself multi-word
+    // (e.g. "Center Holes Bleed" → prefix "Center Holes").  Two-word zones
+    // like "Hole Bleed" would produce a one-word "Hole" prefix — that is too
+    // broad and would incorrectly merge unrelated zones.
+    if (words.length < 3) return;
+    const prefix = words.slice(0, -1).join(' ');
+    const arr = prefixCount.get(prefix) ?? [];
+    arr.push(zone);
+    prefixCount.set(prefix, arr);
+  });
+
+  const familyGrouped = new Map<string, { prefix: string; label: string }>();
+  const familyGroups: FamilyGroup[] = [];
+  prefixCount.forEach((zones, prefix) => {
+    if (zones.length < 2) return; // not a family
+    const entries = zones
+      .sort((a, b) => zoneSort(a, b))
+      .map((zone) => {
+        const label = zone.slice(prefix.length + 1); // strip "prefix " to get the qualifier
+        familyGrouped.set(zone, { prefix, label });
+        return { zone, label };
+      });
+    familyGroups.push({ prefix, entries });
+  });
+  // Sort families deterministically by prefix name.
+  familyGroups.sort((a, b) => a.prefix.localeCompare(b.prefix));
+
+  return { grouped, groups, familyGrouped, familyGroups };
 }

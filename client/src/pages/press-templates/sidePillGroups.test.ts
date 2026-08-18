@@ -127,3 +127,132 @@ test('nothing vanishes: every zone is either grouped or standalone', () => {
   assert.equal(grouped.size + standalone.length, zones.size);
   assert.ok(standalone.includes('Front Weird')); // other-kind stays visible as its own pill
 });
+
+// ── Task #3173 — family (prefix) grouping ──
+
+test('Center Holes Bleed/Cut/Safety form one family group', () => {
+  const { familyGroups, familyGrouped } = groupZonesForPills([
+    line('Center Holes Bleed'),
+    line('Center Holes Cut'),
+    area('Center Holes Safety'),
+    line('Bleed'),
+  ]);
+  assert.equal(familyGroups.length, 1);
+  assert.equal(familyGroups[0].prefix, 'Center Holes');
+  assert.deepEqual(
+    familyGroups[0].entries,
+    [
+      { zone: 'Center Holes Bleed', label: 'Bleed' },
+      { zone: 'Center Holes Cut', label: 'Cut' },
+      { zone: 'Center Holes Safety', label: 'Safety' },
+    ],
+  );
+  assert.ok(familyGrouped.has('Center Holes Bleed'));
+  assert.ok(familyGrouped.has('Center Holes Cut'));
+  assert.ok(familyGrouped.has('Center Holes Safety'));
+  // The standalone "Bleed" zone is not family-grouped
+  assert.equal(familyGrouped.has('Bleed'), false);
+});
+
+test('a lone prefix-qualified zone stays standalone (no single-item dropdown)', () => {
+  const { familyGroups, familyGrouped } = groupZonesForPills([
+    line('Center Holes Bleed'),
+    line('Bleed'),
+    line('Cut'),
+  ]);
+  assert.equal(familyGroups.length, 0);
+  assert.equal(familyGrouped.size, 0);
+});
+
+test('Front/Back/Spine side grouping is unaffected by family logic', () => {
+  const { groups, grouped, familyGrouped } = groupZonesForPills([
+    line('Front Cover'), area('Front Safety'),
+    line('Back Cover'), area('Back Safety'),
+    line('Center Holes Bleed'), line('Center Holes Cut'),
+    line('Bleed'),
+  ]);
+  // Side groups unchanged
+  assert.deepEqual(groups.map((g) => g.side), ['Front', 'Back']);
+  assert.ok(grouped.has('Front Cover') && grouped.has('Back Cover'));
+  // Side-grouped zones are never family-grouped
+  assert.equal(familyGrouped.has('Front Cover'), false);
+  assert.equal(familyGrouped.has('Back Cover'), false);
+  // Family group formed for Center Holes
+  assert.ok(familyGrouped.has('Center Holes Bleed'));
+  assert.ok(familyGrouped.has('Center Holes Cut'));
+});
+
+test('zones with a side word AND a family qualifier resolve as side-grouped (side takes precedence)', () => {
+  // "Front Holes Bleed" starts with the side word "Front" — parseSideZone sees it
+  // as Front / "Holes Bleed", so it goes into the Front side group, not a family.
+  const { grouped, familyGrouped } = groupZonesForPills([
+    line('Front Holes Bleed'),
+    line('Front Holes Cut'),
+  ]);
+  assert.ok(grouped.has('Front Holes Bleed'));
+  assert.ok(grouped.has('Front Holes Cut'));
+  assert.equal(familyGrouped.has('Front Holes Bleed'), false);
+  assert.equal(familyGrouped.has('Front Holes Cut'), false);
+});
+
+test('one-word shared prefix stays standalone — no spurious grouping', () => {
+  // "Hole Bleed" + "Hole Cut" share the one-word prefix "Hole" — this must NOT
+  // form a family dropdown because one-word prefixes are too broad.
+  // The three-word "Center Holes Bleed/Cut" case must still group normally.
+  const { familyGroups, familyGrouped } = groupZonesForPills([
+    line('Hole Bleed'),
+    line('Hole Cut'),
+    line('Center Holes Bleed'),
+    line('Center Holes Cut'),
+  ]);
+  // Only the multi-word prefix group should form
+  assert.equal(familyGroups.length, 1);
+  assert.equal(familyGroups[0].prefix, 'Center Holes');
+  assert.equal(familyGrouped.has('Hole Bleed'), false);
+  assert.equal(familyGrouped.has('Hole Cut'), false);
+  assert.ok(familyGrouped.has('Center Holes Bleed'));
+  assert.ok(familyGrouped.has('Center Holes Cut'));
+});
+
+test('other-kind zones are never family-grouped, even with a matching prefix', () => {
+  const { familyGroups, familyGrouped } = groupZonesForPills([
+    other('Center Holes Bleed'),
+    other('Center Holes Cut'),
+  ]);
+  assert.equal(familyGroups.length, 0);
+  assert.equal(familyGrouped.size, 0);
+});
+
+test('a zone with both other-kind and line-kind layers IS family-grouped', () => {
+  const { familyGrouped } = groupZonesForPills([
+    other('Center Holes Bleed'), line('Center Holes Bleed'),
+    line('Center Holes Cut'),
+  ]);
+  assert.ok(familyGrouped.has('Center Holes Bleed'));
+  assert.ok(familyGrouped.has('Center Holes Cut'));
+});
+
+test('multiple distinct family groups are each returned', () => {
+  const { familyGroups } = groupZonesForPills([
+    line('Center Holes Bleed'), line('Center Holes Cut'),
+    line('Outer Ring Bleed'), line('Outer Ring Safety'),
+    line('Bleed'),
+  ]);
+  assert.equal(familyGroups.length, 2);
+  const prefixes = familyGroups.map((g) => g.prefix).sort();
+  assert.deepEqual(prefixes, ['Center Holes', 'Outer Ring']);
+});
+
+test('nothing vanishes with family grouping: every zone grouped OR standalone', () => {
+  const layers = [
+    line('Bleed'), line('Center Holes Bleed'), line('Center Holes Cut'),
+    other('Center Holes Safety'), line('Artboard'),
+  ];
+  const { grouped, familyGrouped } = groupZonesForPills(layers);
+  const zones = new Set(layers.map((l) => l.zone));
+  const allGrouped = new Set([...grouped.keys(), ...familyGrouped.keys()]);
+  const standalone = [...zones].filter((z) => !allGrouped.has(z));
+  assert.equal(allGrouped.size + standalone.length, zones.size);
+  // "Center Holes Safety" is other-kind only → stays standalone, not family-grouped
+  assert.ok(standalone.includes('Center Holes Safety'));
+});

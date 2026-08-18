@@ -413,7 +413,7 @@ async function shrinkDataUrl(dataUrl: string, targetWidth = 480): Promise<string
 // ─── Zone display order + accents (word + shape carry meaning; color supportive) ───
 // ZONE_ORDER/zoneSort + side grouping live in sidePillGroups.ts (Task #3163)
 // so the consolidation rule is testable without jsdom.
-import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, type SideName } from './sidePillGroups';
+import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, type SideName, type FamilyGroup } from './sidePillGroups';
 const ZONE_COLORS: Record<string, string> = {
   Bleed: '#e0245e', Cut: '#319ED8', Spine: '#b07ce8', 'Front Cover': '#f5a623', 'Back Cover': '#f5a623',
   'Front Safety': '#34c98e', 'Back Safety': '#34c98e', Artboard: '#98989d',
@@ -572,7 +572,9 @@ export default function PressTemplateLiveTest({
   // Bill, Aug 14 2026: Front/Back zone chips consolidate side-specific zones
   // behind a dropdown. Generic since Task #3163 — any Front/Back/Spine-prefixed
   // zone folds into its side pill, so Hellbender's vocabulary works untouched.
-  const [openGroup, setOpenGroup] = useState<SideName | null>(null);
+  // Task #3173: also used for family-prefix groups (e.g. "Center Holes"), so
+  // the type is string rather than the narrower SideName.
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const templateInput = useRef<HTMLInputElement>(null);
   const artInput = useRef<HTMLInputElement>(null);
   // Raw art File from this session's test — spec/slot-mode Save submits it to
@@ -1099,7 +1101,9 @@ export default function PressTemplateLiveTest({
   // Side-pill consolidation (Task #3163): confidently-parsed Front/Back/Spine-
   // prefixed zones fold into per-side dropdowns; everything else (including
   // side words inside `other`-kind names) stays a standalone pill.
+  // Task #3173: also returns family groups (e.g. "Center Holes Bleed/Cut/Safety").
   const sideGroups = useMemo(() => groupZonesForPills(template?.layers ?? []), [template]);
+  const { familyGrouped, familyGroups } = sideGroups;
 
   const bleed = zones.find((z) => z.zone === 'Bleed');
   const cut = zones.find((z) => z.zone === 'Cut');
@@ -2285,7 +2289,7 @@ export default function PressTemplateLiveTest({
                         )}
                       </div>
                     )}
-                    {zones.filter((z) => !sideGroups.grouped.has(z.zone) && zoneRelevant(z.zone)).map(({ zone }) => {
+                    {zones.filter((z) => !sideGroups.grouped.has(z.zone) && !familyGrouped.has(z.zone) && zoneRelevant(z.zone)).map(({ zone }) => {
                       const on = activeZones.has(zone);
                       const c = zoneColor(zone);
                       return (
@@ -2364,6 +2368,89 @@ export default function PressTemplateLiveTest({
                                 className="absolute z-[66] mt-1.5 rounded-xl overflow-hidden shadow-xl"
                                 style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, minWidth: 148 }}
                                 data-testid={`menu-zone-${side.toLowerCase()}`}
+                              >
+                                {parts.map((p) => {
+                                  const on = activeZones.has(p);
+                                  return (
+                                    <button
+                                      key={p}
+                                      type="button"
+                                      onClick={() => toggleZone(p)}
+                                      className="w-full flex items-center justify-between gap-3 px-3.5 py-2 text-[12px] font-medium text-left"
+                                      style={{ color: t.ink }}
+                                      data-testid={`menu-zone-${p.toLowerCase().replace(/\s+/g, '-')}`}
+                                    >
+                                      <span className="flex items-center gap-2">
+                                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: on ? zoneColor(p) : t.faint }} />
+                                        {partLabel(p)}
+                                      </span>
+                                      <span style={{ color: on ? t.blue : t.faint }}>{on ? 'on' : 'off'}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                    {/* Family groups — shared-prefix zones (e.g. "Center Holes Bleed/Cut/Safety")
+                        consolidated behind a dropdown, same pattern as side pills (Task #3173) */}
+                    {familyGroups.map((family: FamilyGroup) => {
+                      const entries = family.entries.filter((e) => zoneRelevant(e.zone));
+                      if (entries.length === 0) return null;
+                      const parts = entries.map((e) => e.zone);
+                      const partLabel = (p: string) => family.entries.find((e) => e.zone === p)?.label ?? p;
+                      const onParts = parts.filter((p) => activeZones.has(p));
+                      const anyOn = onParts.length > 0;
+                      const c = zoneColor(family.prefix); // falls back to teal for unknown prefixes
+                      const status = anyOn ? onParts.map(partLabel).join(' + ') : 'off';
+                      const testKey = family.prefix.toLowerCase().replace(/\s+/g, '-');
+                      return (
+                        <div key={family.prefix} className="relative">
+                          <div
+                            className="inline-flex items-center h-6 rounded-full overflow-hidden"
+                            style={{
+                              border: `1px solid ${anyOn ? c : t.hairline}`,
+                              backgroundColor: anyOn ? `${c}1f` : 'transparent',
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveZones((prev) => {
+                                  const next = new Set(prev);
+                                  if (onParts.length > 0) parts.forEach((p) => next.delete(p));
+                                  else parts.forEach((p) => next.add(p));
+                                  return next;
+                                });
+                              }}
+                              className="inline-flex items-center gap-1.5 h-full pl-2.5 pr-1.5 text-[11px] font-medium"
+                              style={{ color: anyOn ? t.ink : t.faint }}
+                              data-testid={`chip-zone-${testKey}`}
+                            >
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: anyOn ? c : t.faint }} />
+                              {family.prefix}
+                              <span style={{ color: t.faint }}>{status}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setOpenGroup((g) => (g === family.prefix ? null : family.prefix))}
+                              aria-label={`${family.prefix} options`}
+                              className="h-full pl-1 pr-2 inline-flex items-center"
+                              style={{ color: t.subink, borderLeft: `1px solid ${anyOn ? `${c}55` : t.hairline}` }}
+                              data-testid={`chip-zone-${testKey}-menu`}
+                            >
+                              <NavChevron style={{ width: 13, height: 13 }} />
+                            </button>
+                          </div>
+                          {openGroup === family.prefix && (
+                            <>
+                              <div className="fixed inset-0 z-[65]" onClick={() => setOpenGroup(null)} />
+                              <div
+                                className="absolute z-[66] mt-1.5 rounded-xl overflow-hidden shadow-xl"
+                                style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, minWidth: 148 }}
+                                data-testid={`menu-zone-${testKey}`}
                               >
                                 {parts.map((p) => {
                                   const on = activeZones.has(p);
