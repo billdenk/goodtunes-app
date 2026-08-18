@@ -1,0 +1,32 @@
+All three files are pushed to `billdenk/goodtunes-app` main. Here's the note to paste to Otis:
+
+---
+
+**Otis — artist art-upload package (Aug 18, 2026)**
+
+**Files (re-pull, replace verbatim — MOCK_ consts and all, then wire data):**
+- `handoff/artist-portal-restructure/ArtistPortalRestructureFlow.tsx` (updated)
+- `handoff/artist-portal-restructure/mrp-jacket-template.png` (new asset — 200dpi render of the real MRP 12″ jacket template PDF from Andrew; repath the import to wherever assets live)
+- `handoff/artist-template-test/ArtistTemplateTest.tsx` (updated — raw-template pre-upload state, "No art yet" demo toggle, per-panel upload overlays)
+
+**What the goldenrod path in the restructure flow now demonstrates (this is the spec):**
+1. **Wall card, no art:** a coverless release shows the standard placeholder cover tile (no dashed drop-zone), a small "Needs print-ready art" chip styled like the Balance-due chip, and a frosted ••• on the cover with "Use Front panel as cover / Use Back panel as cover / Upload your own thumbnail". Clicking the card opens the art path.
+2. **Entry:** one Apple segmented control toggling **Upload images / Upload template**.
+3. **Upload template:** the real MRP template sheet renders full; until upload, only the sheet viewport is dimmed with the dark drag-and-drop box over it — the dialog never auto-opens; clicking the box opens it, and the dialog is contained inside the sheet viewport (chrome stays live so the artist can flip to Upload images).
+4. **Upload images:** view toolbar = **Full Template · Back · Front · Spine** segmented pill (press order). Each panel view is the real template **cropped/zoomed** to that region filling the white sheet card (spine = true thin column); empty panels get the standard-size dark drop box centered over the outer viewport (same size on all three, including spine). Full Template is locked (word + lock icon) until all three panels have art, then shows the stitched spread with a **Transparency** toggle (art at ~45% so template line work shows through for fit-checking).
+5. **File header card** (press grammar, artist-adapted) tops the canvas in both modes: title, status word+icon ("No art yet" → "Not tested"), source-file/dimensions/uploaded-by lines, Cancel + Save.
+6. **Overlay chip row** appears only after art exists: Bleed · Cut · Spine ring-dot chips, consolidated Front ⌄ / Back ⌄ dropdowns, Line/Area toggle, − 100% + zoom.
+7. **Artist toolbar has NO Test & Certify** — artists never certify. The ••• ghost circle carries File history / Download raw template / Replace file.
+
+**Two canon rules ratified today (apply app-wide):**
+- **Confirm buttons earn their blue.** A dialog/form confirm is NOT solid blue until the user has done something actionable (picked a file, typed a URL, changed a field). Until then: quiet pill, dark-gray hairline outline, transparent fill. It fills #319ED8 the moment the action becomes valid.
+- **Page-header actions are dark-gray-outline pills, never filled blue.** Top-right page actions (e.g. "Create release") are Apple-like quiet pills — ink text, dark-gray hairline outline, no fill. Filled blue is reserved for earned confirms.
+- Also: remove every "WeTransfer" mention from upload copy (it never worked); plain "paste a link to your file".
+
+**Answer to your Aug 10 question (press-supplied file in the artist Test slot):** show it, but label who supplied it — e.g. "Supplied by Memphis Record Pressing" on the file card and in File history. That matches the audit-trail model: the artist sees the truth about what's in the slot and history records every hand that touched it. Don't hide it, don't pretend the artist uploaded it.
+
+Questions beat inventions — ask Ruby via Bill if anything's ambiguous.
+
+---
+
+Note: the nav-restructure package (rail standard, partner-scoped super-admin rail, format-first Components) is still deliberately held back until you've walked those mocks and said go — it's not in this handoff.
