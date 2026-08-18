@@ -4,7 +4,7 @@
 // can't be grouped confidently stays a standalone pill (never dropped).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { groupZonesForPills, parseSideZone } from './sidePillGroups';
+import { groupZonesForPills, parseSideZone, zoneSide, pickSideFocusZone } from './sidePillGroups';
 
 type L = { zone: string; kind: 'line' | 'area' | 'other' };
 const line = (zone: string): L => ({ zone, kind: 'line' });
@@ -77,6 +77,44 @@ test('other-kind zones are never grouped, even with a side word', () => {
 test('a zone with BOTH an other-kind and a line-kind layer groups (any confident layer counts)', () => {
   const { grouped } = groupZonesForPills([other('Back Bleed'), line('Back Bleed')]);
   assert.deepEqual(grouped.get('Back Bleed'), { side: 'Back', label: 'Bleed' });
+});
+
+// ── Task #3168 — view chips + focus crop generalize by side ──
+
+test('zoneSide: side-prefixed zones, bare Spine, side-less zones', () => {
+  assert.equal(zoneSide('Front Cover'), 'Front');
+  assert.equal(zoneSide('Back Bleed'), 'Back');
+  assert.equal(zoneSide('Foil Stamping Back'), 'Back');
+  assert.equal(zoneSide('Spine'), 'Spine'); // bare Memphis Spine zone counts for the Spine view
+  assert.equal(zoneSide('Spine Text'), 'Spine');
+  assert.equal(zoneSide('Bleed'), null);
+  assert.equal(zoneSide('Cut'), null);
+  assert.equal(zoneSide('Artboard'), null);
+});
+
+test('pickSideFocusZone: Memphis picks the Cover box exactly as before', () => {
+  const zones = ['Bleed', 'Cut', 'Spine', 'Front Cover', 'Front Safety', 'Back Cover', 'Back Safety', 'Foil Stamping Front'];
+  assert.equal(pickSideFocusZone(zones, 'Front'), 'Front Cover');
+  assert.equal(pickSideFocusZone(zones, 'Back'), 'Back Cover');
+  assert.equal(pickSideFocusZone(zones, 'Spine'), 'Spine');
+});
+
+test('pickSideFocusZone: Hellbender-style falls back Cut → Bleed → Safe', () => {
+  assert.equal(pickSideFocusZone(['Front Cut', 'Front Bleed', 'Front Safe'], 'Front'), 'Front Cut');
+  assert.equal(pickSideFocusZone(['Back Bleed', 'Back Safe'], 'Back'), 'Back Bleed');
+  assert.equal(pickSideFocusZone(['Back Safe'], 'Back'), 'Back Safe');
+  assert.equal(pickSideFocusZone(['Front Safety'], 'Front'), 'Front Safety');
+});
+
+test('pickSideFocusZone: unknown labels still focus (deterministic), missing side = null', () => {
+  assert.equal(pickSideFocusZone(['Front Weird', 'Front Odd'], 'Front'), 'Front Odd'); // zoneSort tiebreak
+  assert.equal(pickSideFocusZone(['Bleed', 'Cut', 'Artboard'], 'Front'), null);
+  assert.equal(pickSideFocusZone([], 'Spine'), null);
+});
+
+test('pickSideFocusZone: global zones never leak into a side', () => {
+  assert.equal(pickSideFocusZone(['Bleed', 'Cut', 'Back Cut'], 'Back'), 'Back Cut');
+  assert.equal(pickSideFocusZone(['Spine Text'], 'Spine'), 'Spine Text');
 });
 
 test('nothing vanishes: every zone is either grouped or standalone', () => {

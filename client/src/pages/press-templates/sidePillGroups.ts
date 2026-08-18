@@ -31,6 +31,33 @@ export function parseSideZone(zone: string): { side: SideName; label: string } |
   return null;
 }
 
+/** Which side a zone belongs to for the FOCUSED-VIEW chips (Task #3168).
+ *  Same parsing as the pills, plus the bare Memphis `Spine` zone counts as the
+ *  Spine side (its view chip cropped to that zone long before side grouping). */
+export function zoneSide(zone: string): SideName | null {
+  if (zone === 'Spine') return 'Spine';
+  return parseSideZone(zone)?.side ?? null;
+}
+
+// Focus preference when a side has several measurable zones: the Cover box is
+// the side's true face (Memphis behavior, unchanged), else fall back to the
+// side's Cut, then Bleed, then Safety/Safe boxes, then anything else.
+const FOCUS_LABEL_ORDER = ['Cover', 'Cut', 'Bleed', 'Safety', 'Safe'];
+
+/** Pick the zone whose geometry a focused side view should crop to, out of the
+ *  zones that actually have measurable line/area layers. Null = no chip. */
+export function pickSideFocusZone(measurableZones: readonly string[], side: SideName): string | null {
+  const candidates = measurableZones.filter((z) => zoneSide(z) === side);
+  if (candidates.length === 0) return null;
+  const rank = (z: string): number => {
+    if (z === 'Spine') return 0; // bare Memphis Spine zone — exact historical crop
+    const label = parseSideZone(z)?.label ?? '';
+    const i = FOCUS_LABEL_ORDER.indexOf(label);
+    return i === -1 ? FOCUS_LABEL_ORDER.length + 1 : i;
+  };
+  return [...candidates].sort((a, b) => rank(a) - rank(b) || zoneSort(a, b))[0];
+}
+
 export type SideGroup = { side: SideName; entries: Array<{ zone: string; label: string }> };
 
 /** Group a template's parsed layers into side dropdowns.

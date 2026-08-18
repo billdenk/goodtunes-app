@@ -413,7 +413,7 @@ async function shrinkDataUrl(dataUrl: string, targetWidth = 480): Promise<string
 // ─── Zone display order + accents (word + shape carry meaning; color supportive) ───
 // ZONE_ORDER/zoneSort + side grouping live in sidePillGroups.ts (Task #3163)
 // so the consolidation rule is testable without jsdom.
-import { groupZonesForPills, zoneSort, SIDE_NAMES, type SideName } from './sidePillGroups';
+import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, type SideName } from './sidePillGroups';
 const ZONE_COLORS: Record<string, string> = {
   Bleed: '#e0245e', Cut: '#319ED8', Spine: '#b07ce8', 'Front Cover': '#f5a623', 'Back Cover': '#f5a623',
   'Front Safety': '#34c98e', 'Back Safety': '#34c98e', Artboard: '#98989d',
@@ -516,7 +516,9 @@ export default function PressTemplateLiveTest({
   const [viewMode, setViewMode] = useState<'line' | 'area'>('line');
   // Bill, Aug 14 2026: chips above the preview — Full Template / Back / Front /
   // Spine — plus a magnifying glass that zooms in and lets you drag to pan.
-  const [viewArea, setViewArea] = useState<'full' | 'Back Cover' | 'Front Cover' | 'Spine'>('full');
+  // Task #3168: chips are now SIDES, not exact Memphis zone names — any press's
+  // side-prefixed vocabulary (Hellbender's "Front Cut" etc.) gets its views.
+  const [viewArea, setViewArea] = useState<'full' | SideName>('full');
   const [zoom, setZoom] = useState(1); // 1 = fit the current view; > 1 in, < 1 out
   const [showTemplate, setShowTemplate] = useState(true); // hidden by default once art is in (Bill, Aug 14 2026)
   const [templatePanelOpen, setTemplatePanelOpen] = useState(false); // art-opacity dropdown on the Template chip
@@ -1430,7 +1432,11 @@ export default function PressTemplateLiveTest({
     if (!template) return null;
     let r = { x: 0, y: 0, w: template.wMm, h: template.hMm };
     if (viewArea !== 'full') {
-      const z = zones.find((zz) => zz.zone === viewArea);
+      // Task #3168: crop to the side's best measurable zone (Cover if present,
+      // else Cut/Bleed/Safety…) instead of requiring Memphis's exact names.
+      const measurable = zones.filter((zz) => zz.line || zz.area).map((zz) => zz.zone);
+      const pick = pickSideFocusZone(measurable, viewArea);
+      const z = pick ? zones.find((zz) => zz.zone === pick) : undefined;
       const b = z?.line ?? z?.area;
       if (b) {
         const pad = Math.max(b.wMm, b.hMm) * 0.04;
@@ -1474,8 +1480,9 @@ export default function PressTemplateLiveTest({
     // 2026: "there's no bleed setting in the dropdown — where did it go?").
     if (zone === 'Bleed' || zone === 'Cut') return true;
     if (viewArea === 'Spine') return zone === 'Spine' || zone.startsWith('Spine ');
-    const side = viewArea.split(' ')[0]; // 'Front' | 'Back'
-    return zone.includes(side);
+    // Side-aware (Task #3168): the historical substring match (covers Memphis's
+    // "Foil Stamping Front" etc.) plus any confidently side-parsed zone.
+    return zone.includes(viewArea) || zoneSide(zone) === viewArea;
   };
 
   const pickView = (v: typeof viewArea) => { setViewArea(v); setPanC(null); setZoom(1); };
@@ -1963,11 +1970,15 @@ export default function PressTemplateLiveTest({
                 <div className="inline-flex items-center rounded-full p-0.5" style={{ backgroundColor: t.soft }} role="group" aria-label="Preview view" data-testid="chip-view-area">
                   {([
                     ['full', 'Full Template'],
-                    ['Back Cover', 'Back'],
-                    ['Front Cover', 'Front'],
+                    ['Back', 'Back'],
+                    ['Front', 'Front'],
                     ['Spine', 'Spine'],
                   ] as const)
-                    .filter(([v]) => v === 'full' || zones.some((z) => z.zone === v && (z.line || z.area)))
+                    .filter(([v]) => v === 'full'
+                      // Task #3168: a side chip appears when ANY measurable zone
+                      // belongs to that side (Memphis Cover names or Hellbender-
+                      // style side-prefixed Cut/Bleed/Safe layers alike).
+                      || pickSideFocusZone(zones.filter((z) => z.line || z.area).map((z) => z.zone), v) !== null)
                     .map(([v, label]) => (
                       <button
                         key={v}
