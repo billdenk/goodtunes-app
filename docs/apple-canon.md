@@ -48,6 +48,15 @@ accents on ~14%-alpha translucent washes — see tokens).
   rounded-full, subink text + icon, transparent with a light-gray hover tint,
   never filled blue. A filled Feedback pill would steal the screen's one
   primary slot. (Ratified 2026-08-07; all mockups updated.)
+- **Confirm buttons earn their blue.** (Ratified 2026-08-18.) A dialog/form
+  confirm is NOT solid blue until the user has done something actionable —
+  picked a file, typed a URL, changed a field. Until then it is a quiet pill:
+  ink text, dark-gray hairline outline, transparent fill. It fills `#319ED8`
+  the moment the action becomes valid.
+- **Page-header actions are dark-gray-outline pills, never filled blue.**
+  (Ratified 2026-08-18.) Top-right page actions (e.g. "Create release") are
+  Apple-like quiet pills — ink text, dark-gray hairline outline, no fill.
+  Filled blue is reserved for earned confirms.
 - Overflow actions on artwork/tiles: a single small frosted `···` circle
   (`rgba(255,255,255,0.88)` + backdrop-blur) revealed on hover, opening a
   small white rounded-xl menu. Never multiple labeled pills over artwork.

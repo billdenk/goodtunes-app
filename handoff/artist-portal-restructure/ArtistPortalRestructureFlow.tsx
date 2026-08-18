@@ -21,7 +21,7 @@
 // alone (founder is colorblind), no emojis, real GoodDeed®, sentence case,
 // commas in every dollar amount, CTAs verbatim from the PressQuoteBuilder pill.
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode, type CSSProperties } from 'react';
 import {
   UserPlus,
   Search,
@@ -32,6 +32,9 @@ import {
   Store,
   BarChart3,
   Bell,
+  Upload,
+  ImagePlus,
+  LayoutTemplate,
   MessageSquarePlus,
   UserPen,
   LogOut,
@@ -55,6 +58,16 @@ import {
   Settings,
   Circle,
   Clock,
+  EyeOff,
+  BadgeCheck,
+  MoreHorizontal,
+  Pencil,
+  History,
+  PenLine,
+  PaintBucket,
+  ZoomIn,
+  ChevronDown,
+  Layers,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
@@ -69,6 +82,7 @@ import mrpLabelLogo from '../assets/mrp-logo.svg';
 import hellbenderIcon from '../assets/hellbender-icon.svg';
 import niinaPhoto from '../assets/niina-soleil.webp';
 import californialandCover from '../assets/californialand-cover.jpg';
+import mrpTemplate from '../assets/mrp-jacket-template.png';
 
 // ═══════════════════════════════════════════════════════════════════
 // TOKENS — copied verbatim from ArtistReleaseArtTab.tsx (light + charcoal dark)
@@ -341,20 +355,26 @@ function ArtistShell({ children, t, mode, setMode, onNav }: { children: ReactNod
 // Shared small primitives — copied grammar from source mocks
 // ═══════════════════════════════════════════════════════════════════
 
-// Canon CTA pill — verbatim weight from PressQuoteBuilder "Send estimate" pill.
-// The ONE filled-blue primary per screen (apple-canon: only the truly primary
-// CTA gets a filled blue pill).
-function CanonPill({ label, onClick, icon: Icon }: { label: string; onClick?: () => void; icon?: typeof ArrowRight }) {
+// Canon page-header / next-step action pill. NOT filled blue (Bill, round 6 —
+// now in apple-canon.md): page-header actions are quiet dark-gray-outline pills.
+// Filled #319ED8 blue is reserved for confirms that have earned it (the dialog
+// rule) — nothing on the wall/dashboard/detail views is big blue.
+// Canon page-header / next-step action — Apple-like quiet pill (Bill, round 6):
+// dark-gray hairline outline (t.dot, stronger than t.hairline), ink text + glyph,
+// NO fill, rounded-full. Filled blue is reserved for confirms that earn it (the
+// dialog rule) — nothing on the wall/dashboard/detail views is big blue.
+function CanonPill({ label, onClick, icon: Icon, t }: { label: string; onClick?: () => void; icon?: typeof ArrowRight; t: Theme }) {
   return (
-    <Button
-      className="rounded-full px-7 gap-2"
-      style={{ background: BLUE, color: '#fff', height: 44, fontSize: 14.5 }}
+    <button
+      type="button"
       onClick={onClick}
+      className={cn('inline-flex items-center gap-2 rounded-full font-semibold transition-colors', t.hoverCard)}
+      style={{ background: 'transparent', color: t.ink, height: 44, padding: '0 26px', fontSize: 13, border: `1px solid ${t.dot}` }}
       data-testid={`cta-${label.toLowerCase().replace(/\s+/g, '-')}`}
     >
-      {Icon && <Icon className="w-4 h-4" />}
+      {Icon && <Icon className="w-4 h-4" style={{ color: t.subink }} />}
       {label}
-    </Button>
+    </button>
   );
 }
 
@@ -390,7 +410,9 @@ type WallCard = {
   badge: string;          // derived from pill states, per Part 3
   channel: Channel;
   moneyFlag?: string;     // only when action needed
+  artFlag?: string;       // small cover chip when print art is still needed
   dimmed?: boolean;
+  needsArt?: boolean;     // first-run: no print art yet — cover overflow offers sources
 };
 
 // The active release the walk drills into (CALIFORNIALAND). Facts here feed the
@@ -408,7 +430,7 @@ const MOCK_RELEASE = {
 
 const MOCK_WALL_CARDS: WallCard[] = [
   { id: 'californialand', name: 'CALIFORNIALAND', year: '2026', cover: californialandCover, badge: 'Digital live · Vinyl at press · CD draft', channel: 'goodtunes', moneyFlag: 'Balance due Sep 4' },
-  { id: 'goldenrod', name: 'GOLDENROD', year: '2026', badge: 'Digital live · CD at press', channel: 'shopify' },
+  { id: 'goldenrod', name: 'GOLDENROD', year: '2026', badge: 'No print art yet — start from the blank template', channel: 'shopify', needsArt: true, artFlag: 'Needs print-ready art' },
   { id: 'hope', name: 'HOPE', year: '2025', badge: 'Digital live', channel: 'goodtunes' },
   { id: 'midnight', name: 'MIDNIGHT POSTCARDS', year: '2027', badge: 'Vinyl draft · CD draft', channel: null },
   { id: 'paper', name: 'PAPER LANTERNS', year: '2019', badge: 'Sunset', channel: 'goodtunes', dimmed: true },
@@ -441,8 +463,17 @@ function ChannelGlyph({ channel }: { channel: Channel }) {
   );
 }
 
+// Cover overflow menu items for a release that still needs print art — how the
+// artist would set the cover once panels exist. Mock dead-ends.
+const COVER_MENU: Array<{ id: string; label: string; icon: typeof ArrowRight }> = [
+  { id: 'front', label: 'Use Front panel as cover', icon: ImagePlus },
+  { id: 'back', label: 'Use Back panel as cover', icon: ImagePlus },
+  { id: 'upload', label: 'Upload your own thumbnail', icon: Upload },
+];
+
 function WallCardTile({ card, t, onOpen }: { card: WallCard; t: Theme; onOpen: () => void }) {
   const [hover, setHover] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div
       className="group rounded-3xl overflow-hidden cursor-pointer flex flex-col"
@@ -463,10 +494,28 @@ function WallCardTile({ card, t, onOpen }: { card: WallCard; t: Theme; onOpen: (
         {card.cover ? (
           <img src={card.cover} alt={`${card.name} artwork`} className="absolute inset-0 w-full h-full object-cover" style={{ filter: card.dimmed ? 'saturate(0.4)' : 'none' }} draggable={false} />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
+          /* No cover yet — the same quiet placeholder tile every coverless card
+             uses (Disc3 on the soft field). No dashed drop-zone: whether art is
+             missing is carried by the small chip, not the cover treatment. */
+          <div className="absolute inset-0 flex items-center justify-center" data-testid={`cover-placeholder-${card.id}`}>
             <Disc3 style={{ width: 56, height: 56, color: t.faint, strokeWidth: 1.25 }} />
           </div>
         )}
+
+        {/* Art-needed chip — same treatment as the money chip, top-left so it
+            doesn't collide with the overflow. Word + icon, never color alone. */}
+        {card.artFlag && (
+          <div
+            className="absolute inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-semibold"
+            style={{ top: 10, left: 10, padding: '4px 10px', background: 'rgba(0,0,0,0.62)', border: '1px solid rgba(255,255,255,0.16)', color: '#fff', backdropFilter: 'blur(6px)' }}
+            data-testid={`art-flag-${card.id}`}
+            title="This release has no print-ready art yet"
+          >
+            <FileImage className="w-3.5 h-3.5 flex-shrink-0" />
+            {card.artFlag}
+          </div>
+        )}
+
         {/* Money flag — overlaid on the cover art, top right. Wording is
             unambiguous: the artist pays GoodTunes for manufacturing milestones. */}
         {card.moneyFlag && (
@@ -478,6 +527,50 @@ function WallCardTile({ card, t, onOpen }: { card: WallCard; t: Theme; onOpen: (
           >
             <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 7, height: 7, border: `2px solid ${t.warn}` }} />
             {card.moneyFlag}
+          </div>
+        )}
+
+        {/* Cover overflow — canon frosted circle revealed on hover, opens the
+            small white rounded-xl menu to set the cover once art exists. */}
+        {card.needsArt && (
+          <div className="absolute" style={{ top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="w-7 h-7 rounded-full inline-flex items-center justify-center transition-opacity"
+              style={{ background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.18)', color: '#fff', backdropFilter: 'blur(6px)', opacity: hover || menuOpen ? 1 : 0 }}
+              aria-label="Cover options"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              data-testid={`cover-menu-${card.id}`}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} data-testid={`cover-menu-backdrop-${card.id}`} />
+                <div
+                  className="absolute z-20 rounded-xl overflow-hidden"
+                  style={{ top: 'calc(100% + 6px)', right: 0, minWidth: 216, background: t.card, border: `1px solid ${t.hairline}`, boxShadow: '0 16px 40px rgba(0,0,0,0.32)' }}
+                  role="menu"
+                  data-testid={`cover-menu-list-${card.id}`}
+                >
+                  {COVER_MENU.map((m, i) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => setMenuOpen(false)}
+                      className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', t.hoverCard)}
+                      style={{ padding: '10px 14px', color: t.ink, borderTop: i === 0 ? 'none' : `1px solid ${t.hairline}` }}
+                      data-testid={`cover-menu-${m.id}-${card.id}`}
+                    >
+                      <m.icon className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> {m.label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -498,7 +591,7 @@ function WallCardTile({ card, t, onOpen }: { card: WallCard; t: Theme; onOpen: (
   );
 }
 
-function SceneReleasesWall({ t, onOpenRelease }: { t: Theme; onOpenRelease: () => void }) {
+function SceneReleasesWall({ t, onOpenRelease, onOpenGoldenrod }: { t: Theme; onOpenRelease: () => void; onOpenGoldenrod: () => void }) {
   return (
     <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
       {/* Page header row: title/measure on the left, the canon primary
@@ -513,15 +606,20 @@ function SceneReleasesWall({ t, onOpenRelease }: { t: Theme; onOpenRelease: () =
             Cards stay canon — no table, no stats header. Each shows only derived facts: its per-format status, its channel, and a money flag when there&rsquo;s something to do.
           </p>
         </div>
-        {/* The one filled-blue primary on the wall — starts the Release →
-            Draft → Project builder (the artist estimates flow). */}
+        {/* Quiet page-header action (Apple-like, dark-gray outline, no fill) —
+            starts the Release → Draft → Project builder (artist estimates flow). */}
         <div className="flex-shrink-0">
-          <CanonPill label="Create release" icon={Plus} onClick={() => { window.location.hash = '#/ArtistEstimatesFlow'; }} />
+          <CanonPill label="Create release" icon={Plus} t={t} onClick={() => { window.location.hash = '#/ArtistEstimatesFlow'; }} />
         </div>
       </div>
       <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 240px), 1fr))', gap: 18 }}>
         {MOCK_WALL_CARDS.map((c) => (
-          <WallCardTile key={c.id} card={c} t={t} onOpen={c.id === 'californialand' ? onOpenRelease : () => {}} />
+          <WallCardTile
+            key={c.id}
+            card={c}
+            t={t}
+            onOpen={c.id === 'goldenrod' ? onOpenGoldenrod : c.id === 'californialand' ? onOpenRelease : () => {}}
+          />
         ))}
       </div>
     </div>
@@ -544,10 +642,20 @@ function ReleaseHeader({ activeTab, t, onTab, onCrumb }: { activeTab: string; t:
     <div>
       {/* Apple-canon breadcrumb: faint crumb links, ChevronRight separators,
           current page in ink, ~13px, sentence case, no uppercase, no middot. */}
-      <div className="flex items-center gap-1.5 text-[13px]" data-testid="release-breadcrumb">
+      <div className="flex items-center gap-2 text-[13px]" data-testid="release-breadcrumb">
         <button type="button" onClick={onCrumb} className="font-medium transition-opacity hover:opacity-80" style={{ color: t.faint }} data-testid="crumb-releases">Releases</button>
         <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.faint }} aria-hidden />
         <span className="font-medium" style={{ color: t.ink }}>{MOCK_RELEASE.title}</span>
+        {/* Compact LIVE badge (replaces the old full-width "is live for fans"
+            banner). Small rounded-rect, stronger hairline, word + icon so it
+            never reads by color alone. */}
+        <span
+          className="inline-flex items-center gap-1 rounded-md text-[11px] font-semibold"
+          style={{ padding: '2px 7px', color: t.subink, border: `1px solid ${t.dot}`, letterSpacing: '0.03em' }}
+          data-testid="badge-live"
+        >
+          <Check className="w-3 h-3" strokeWidth={3} /> LIVE
+        </span>
       </div>
 
       {/* Quiet plain-text page navigation — no chip, no container, no dots.
@@ -709,6 +817,16 @@ const MOCK_LP_BLOCKS: ArtBlock[] = [
       ],
     },
   },
+  {
+    // First-run empty slot — no file yet. Renders the dashed drop-zone + spec
+    // hint + "Upload art" pill so a first-time artist sees WHAT and WHERE.
+    id: 'obi',
+    title: 'Obi strip',
+    hint: 'Optional spine wrap — 40 × 302 mm finished + 3 mm bleed · PNG or PDF · CMYK · 300 PPI+',
+    shape: 'tall',
+    inheritance: { kind: 'inherited-fail', note: 'No art yet — upload to add this piece' },
+    state: { kind: 'empty' },
+  },
 ];
 
 function VerdictChip({ kind, t }: { kind: 'pass' | 'fail' | 'empty'; t: Theme }) {
@@ -775,7 +893,8 @@ function BlockCard({ block, t }: { block: ArtBlock; t: Theme }) {
       style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}
       data-testid={`block-${block.id}`}
     >
-      {/* Hero — art bleeds edge-to-edge across the top. */}
+      {/* Hero — art bleeds edge-to-edge across the top; empty slots show a
+          dashed drop-zone so the upload target is unmistakable. */}
       <span className="block w-full flex-shrink-0" style={{ height: 200, backgroundColor: t.dropEmpty, borderBottom: `1px solid ${t.hairline}` }}>
         {filled ? (
           <img
@@ -786,8 +905,11 @@ function BlockCard({ block, t }: { block: ArtBlock; t: Theme }) {
             data-testid={`img-block-${block.id}`}
           />
         ) : (
-          <span className="w-full h-full flex items-center justify-center">
-            <UploadCloud className="w-8 h-8" style={{ color: t.faint }} />
+          <span className="w-full h-full flex flex-col items-center justify-center gap-2 text-center" style={{ padding: 12 }}>
+            <span className="flex flex-col items-center justify-center gap-2 w-full h-full rounded-xl" style={{ border: `2px dashed ${t.dashed}` }}>
+              <UploadCloud className="w-8 h-8" style={{ color: t.subink, strokeWidth: 1.5 }} />
+              <span className="text-[11.5px]" style={{ color: t.faint }}>Drop art here</span>
+            </span>
           </span>
         )}
       </span>
@@ -795,9 +917,25 @@ function BlockCard({ block, t }: { block: ArtBlock; t: Theme }) {
       {/* Info under the image — name + which file is in effect. No specs. */}
       <div className="w-full flex flex-col flex-1" style={{ padding: '14px 18px 16px' }}>
         <div className="text-[15px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{block.title}</div>
-        <div style={{ marginTop: 8 }}>
-          <InheritanceChip inheritance={block.inheritance} t={t} />
-        </div>
+
+        {filled ? (
+          <div style={{ marginTop: 8 }}>
+            <InheritanceChip inheritance={block.inheritance} t={t} />
+          </div>
+        ) : (
+          <>
+            {/* Empty slot — spell out WHAT to upload (spec hint) and give a
+                visible upload pill so a first-time artist can't miss it. */}
+            <p className="text-[11.5px]" style={{ marginTop: 6, color: t.faint, lineHeight: 1.4 }} data-testid={`hint-${block.id}`}>{block.hint}</p>
+            <span
+              className={cn('inline-flex items-center justify-center gap-1.5 rounded-full text-[12.5px] font-semibold w-full transition-colors', t.hoverCard)}
+              style={{ marginTop: 10, padding: '8px 12px', border: `1px solid ${t.hairline}`, color: t.ink }}
+              data-testid={`upload-${block.id}`}
+            >
+              <UploadCloud className="w-4 h-4 flex-shrink-0" /> Upload {block.title.split(' \u00b7 ')[0].toLowerCase()} art
+            </span>
+          </>
+        )}
 
         {/* Status chip pinned to the BOTTOM — word + icon, never color alone. */}
         <div style={{ marginTop: 'auto', paddingTop: 12 }}>
@@ -900,7 +1038,8 @@ const FORMAT_WORD: Record<'digital' | 'master' | 'vinyl', string> = {
 // ═══════════════════════════════════════════════════════════════════
 // RELEASE DASHBOARD — the release-level front door (scoped to CALIFORNIALAND).
 // Borrows the portal dashboard grammar (next-thing band, stat cards, activity)
-// but for ONE release. ONE filled blue max: the "Pay balance" pill.
+// but for ONE release. No big blue — the "Pay balance" next-step is a quiet
+// dark-gray-outline CanonPill (Bill, round 6).
 // ═══════════════════════════════════════════════════════════════════
 
 // Per-format heartbeat rows. Status is always word + icon (never color alone,
@@ -919,7 +1058,7 @@ function FormatStatusIcon({ status, t }: { status: FmtStatus; t: Theme }) {
 }
 
 // Next-thing band copy — the release's single most important state + the one
-// actionable item (balance due) that carries the ONE filled blue pill.
+// actionable item (balance due) that carries the quiet next-step pill.
 const MOCK_DASH_NEXT = {
   headline: 'Vinyl is at press. Test pressing expected Sep 2.',
   balance: <>Balance due Sep 4 &mdash; $2,135 to GoodTunes&reg;.</>,
@@ -944,7 +1083,7 @@ function ReleaseDashboard({ t, onOpenFormat }: { t: Theme; onOpenFormat: () => v
   return (
     <div style={{ marginTop: 26 }} data-testid="release-dashboard">
       {/* 1 · Next-thing band. The release's single most important state, with the
-          one actionable item (balance due) carrying the ONE filled blue pill. */}
+          one actionable item (balance due) carrying the quiet next-step pill. */}
       <div
         className="flex items-center justify-between gap-6 rounded-2xl flex-wrap"
         style={{ padding: '18px 20px', border: `1px solid ${t.hairline}`, background: t.card }}
@@ -957,7 +1096,7 @@ function ReleaseDashboard({ t, onOpenFormat }: { t: Theme; onOpenFormat: () => v
             <p className="text-[13px]" style={{ marginTop: 3, color: t.subink }}>{MOCK_DASH_NEXT.balance}</p>
           </div>
         </div>
-        <CanonPill label={MOCK_DASH_NEXT.cta} onClick={() => {}} />
+        <CanonPill label={MOCK_DASH_NEXT.cta} t={t} onClick={() => {}} />
       </div>
 
       {/* 2 · Per-format heartbeat. Each row hints (chevron) it jumps to that format
@@ -1429,7 +1568,7 @@ function SceneStore({ t, onCrumb, onJump }: { t: Theme; onCrumb: () => void; onJ
                 ))}
               </div>
               <div style={{ marginTop: 18 }}>
-                <CanonPill label="Publish to fans" onClick={() => {}} icon={ArrowRight} />
+                <CanonPill label="Publish to fans" t={t} onClick={() => {}} icon={ArrowRight} />
               </div>
               {ready && (
                 <p className="text-[11.5px]" style={{ marginTop: 10, color: t.faint, lineHeight: 1.5 }}>Everything passed — you never have to hunt for the button that makes it real.</p>
@@ -1500,7 +1639,7 @@ function ProjectRow({ project, t }: { project: Project; t: Theme }) {
               Estimated
             </span>
           ) : (
-            <CanonPill label="Pay balance" onClick={() => {}} />
+            <CanonPill label="Pay balance" t={t} onClick={() => {}} />
           )}
         </div>
       </div>
@@ -1603,6 +1742,1066 @@ function LedgerCard({ kind, t }: { kind: 'owed' | 'earned'; t: Theme }) {
             <span className="text-[13.5px] font-semibold flex-shrink-0" style={{ color: t.ink }}>{r.amount}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// RAW TEMPLATE SCENE — where GOLDENROD lands. This release has never had print
+// art uploaded, so the artist sees the blank press template (white canvas,
+// Front/Back panels with template line work) and drops art straight onto it.
+// Mirrors the raw-template pre-upload state in ArtistTemplateTest.tsx. Self-
+// contained: all copy/facts in MOCK_RAW below, canon buttons only, no color-only.
+// ═══════════════════════════════════════════════════════════════════
+const MOCK_RAW = {
+  release: 'GOLDENROD',
+  templateName: '12″ single 3D jacket',
+  spec: '779.41 × 539.33 mm bleed · CMYK · 300 PPI+',
+  // File-header card facts — reused from the press-side "Widespine jacket" card
+  // grammar, artist-appropriate: title, source file, dims · layers · uploaded.
+  headerTitle: '12in Single 3D Jacket',
+  sourceFile: 'GOLDENROD-jacket-v3.pdf',
+  dims: '779.41 × 539.33 mm',
+  layers: 18,
+  uploadedAt: 'Aug 18 at 3:19 PM',
+};
+
+// The full press-side MRP template facts — mirrors the Memphis Record Pressing
+// template page (12-JKTSG3D-100). Rendered around the real mrp-jacket-template.png
+// (Andrew's PDF render). Self-contained MOCK, no press-file edits.
+const MOCK_MRP = {
+  press: 'Memphis Record Pressing',
+  title: '12in Single 3D Jacket',
+  number: '12-JKTSG3D-100',
+};
+
+// Per-panel upload — GOLDENROD is a 12" jacket-style cover, so three segments:
+// Front, Back, Spine. Each seats a mock art crop once "uploaded". Mock art is a
+// self-contained styled gradient (goldenrod has no cover asset yet) so the file
+// needs no new binary asset.
+type PanelId = 'front' | 'back' | 'spine';
+const MOCK_PANELS: Array<{ id: PanelId; label: string; hint: string; art: string }> = [
+  { id: 'front', label: 'Front', hint: '311.15 × 311.15 mm + bleed', art: 'linear-gradient(140deg, #e9b949 0%, #d98f3a 42%, #b5532e 78%, #7a2f52 100%)' },
+  { id: 'back', label: 'Back', hint: '311.15 × 311.15 mm + bleed', art: 'linear-gradient(140deg, #7a2f52 0%, #b5532e 40%, #d98f3a 80%, #e9b949 100%)' },
+  { id: 'spine', label: 'Spine', hint: '3.5 mm × 311.15 mm', art: 'linear-gradient(180deg, #d98f3a 0%, #b5532e 55%, #7a2f52 100%)' },
+];
+
+// Panel regions as fractions of the full MRP template sheet (6138 × 4247 render).
+// Measured from mrp-jacket-template.png: BACK is the left panel, FRONT the right,
+// SPINE the thin center strip between them. Bleed rects (outer) — art extends to
+// these; used to place the focus highlight, drop affordance and seated art.
+type Rect = { left: number; top: number; width: number; height: number };
+const PANEL_REGIONS: Record<PanelId, Rect> = {
+  back:  { left: 0.100, top: 0.195, width: 0.292, height: 0.600 },
+  front: { left: 0.515, top: 0.195, width: 0.292, height: 0.600 },
+  spine: { left: 0.483, top: 0.195, width: 0.028, height: 0.600 },
+};
+const pct = (n: number) => `${n * 100}%`;
+
+// Overlay toggle chips — the full press-side Test/Certify row grammar, reused
+// verbatim (word carries state: "Bleed off" / "Bleed on", plus a ring dot; never
+// color-only). Simple ring-dot chips: Bleed · Cut · Spine. Front · Back are
+// consolidated chips with a chevron dropdown (Cover / Safety / Foil), exactly
+// like the press-side Front/Back zone chips.
+const OVERLAY_SIMPLE: Array<{ id: string; label: string }> = [
+  { id: 'bleed', label: 'Bleed' },
+  { id: 'cut', label: 'Cut' },
+  { id: 'spine', label: 'Spine' },
+];
+// Front / Back consolidated dropdown parts (mirrors press "Front Cover / Front
+// Safety / Foil Stamping Front" behind one chip).
+const OVERLAY_GROUPS: Record<'front' | 'back', Array<{ id: string; label: string }>> = {
+  front: [
+    { id: 'front-cover', label: 'Cover' },
+    { id: 'front-safety', label: 'Safety' },
+    { id: 'front-foil', label: 'Foil' },
+  ],
+  back: [
+    { id: 'back-cover', label: 'Cover' },
+    { id: 'back-safety', label: 'Safety' },
+    { id: 'back-foil', label: 'Foil' },
+  ],
+};
+// Every overlay id the seatArt/toggle logic tracks (superset of both).
+const OVERLAY_IDS = [
+  'template', 'bleed', 'cut', 'safety', 'spine',
+  'front-cover', 'front-safety', 'front-foil',
+  'back-cover', 'back-safety', 'back-foil',
+];
+
+
+// The MRP template — the REAL press PDF render (mrp-jacket-template.png, Andrew's
+// "20260814_GoodTunes_MRP_Jacket12in_3.5mmSpine", 200dpi) on a white sheet at its
+// true aspect (≈ 1.445). No hand-built header/legend chrome — the MRP header,
+// BACK/FRONT panels, spine and legends all live in the asset itself.
+//
+// Until the artist uploads, the SHEET AREA ONLY is dimmed with the drop box over
+// it (a scrim scoped to the sheet, not the screen) — the segmented control above
+// stays live so they can switch to Upload images. After a mock upload the scrim
+// clears and the template shows normally.
+const JACKET_ASPECT = 779.41 / 539.33;
+
+// The canon drag & drop box — charcoal rounded-2xl card with a light dashed
+// border, cloud icon, bold white title, muted subtext — floating over a grayed
+// template area (dim scoped to the parent viewport). Identical in template mode
+// and in each zoomed Upload-images panel viewport. Fixed dark styling so it reads
+// the same in light + dark (it always sits over the white template sheet).
+function TemplateDropBox({ onUpload, title, testid }: { onUpload: () => void; title: string; testid: string }) {
+  return (
+    <div
+      className="absolute inset-0 flex items-center justify-center"
+      style={{ background: 'rgba(20,20,22,0.42)', backdropFilter: 'blur(1px)', WebkitBackdropFilter: 'blur(1px)', padding: 16 }}
+      data-testid={`${testid}-scrim`}
+    >
+      <button
+        type="button"
+        onClick={onUpload}
+        className="flex flex-col items-center justify-center text-center gap-2 rounded-2xl transition-opacity hover:opacity-95"
+        style={{
+          width: 'min(90%, 380px)',
+          padding: '26px 22px',
+          background: '#1c1c1e',
+          border: '1.5px dashed rgba(255,255,255,0.35)',
+          boxShadow: '0 16px 44px rgba(0,0,0,0.4)',
+        }}
+        data-testid={testid}
+      >
+        <UploadCloud className="w-7 h-7" style={{ color: 'rgba(255,255,255,0.85)', strokeWidth: 1.5 }} aria-hidden />
+        <span className="font-semibold text-[14px]" style={{ color: '#ffffff', lineHeight: 1.25 }}>{title}</span>
+        <span className="text-[12.5px]" style={{ color: 'rgba(255,255,255,0.6)' }}>or click to upload &middot; paste a URL</span>
+      </button>
+    </div>
+  );
+}
+
+// File-header card — reused verbatim from the press-side "Widespine jacket ·
+// Not tested / Originally … / dims · GT layers · uploaded … by you [Cancel]
+// [Save]" card, adapted for the artist. Title = the jacket/template name; status
+// chip is word + icon (No art yet → Not tested); sub-lines carry the source file
+// and, once something is uploaded, the dims · layers · uploaded-when-by-you line.
+// Right side: quiet Cancel + Save that OBEYS confirm-earns-its-blue — a gray
+// hairline-outline pill until something's changed/uploaded, filled blue once
+// earned. Mock actions.
+function FileHeaderCard({ t, uploaded, dirty, onCancel, onSave }: {
+  t: Theme;
+  uploaded: boolean;
+  dirty: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="rounded-2xl" style={{ padding: '16px 20px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="file-header-card">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          {/* Title + status ride together, same as the press card. */}
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className="text-[18px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={MOCK_RAW.headerTitle}>
+              {MOCK_RAW.headerTitle}
+            </div>
+            {uploaded ? (
+              <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-medium ml-1.5" style={{ color: t.faint }} data-testid="chip-file-status">
+                <History style={{ width: 13, height: 13 }} />
+                Not tested
+              </span>
+            ) : (
+              <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-medium ml-1.5" style={{ color: t.faint }} data-testid="chip-file-status">
+                <Clock style={{ width: 13, height: 13 }} />
+                No art yet
+              </span>
+            )}
+            <button
+              type="button"
+              aria-label="Rename"
+              className="flex-shrink-0 opacity-0 hover:opacity-100 transition-opacity"
+              style={{ color: t.subink }}
+              data-testid="button-rename-file"
+            >
+              <Pencil style={{ width: 13, height: 13 }} />
+            </button>
+          </div>
+          {/* Source file line — reads "Originally …" like the press card. */}
+          <div className="text-[11px] mt-0.5 truncate" style={{ color: t.faint }} title={MOCK_RAW.sourceFile}>
+            Originally {MOCK_RAW.sourceFile}
+          </div>
+          {/* Dims · layers · uploaded — only once something is uploaded, verbatim
+              press grammar ("… mm · NN GT layers read · uploaded … by you"). */}
+          {uploaded ? (
+            <div className="text-[12px] mt-0.5 truncate" style={{ color: t.subink }} title={`${MOCK_RAW.dims} · ${MOCK_RAW.layers} GT layers read · uploaded ${MOCK_RAW.uploadedAt} by you`}>
+              {MOCK_RAW.dims} &middot; {MOCK_RAW.layers} GT layers read &middot; uploaded {MOCK_RAW.uploadedAt} by you
+            </div>
+          ) : (
+            <div className="text-[12px] mt-0.5 truncate" style={{ color: t.subink }}>
+              {MOCK_RAW.dims} &middot; drop art to run the measured checks
+            </div>
+          )}
+        </div>
+        {/* Right group — quiet Cancel + earn-its-blue Save. */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {dirty && (
+            <button
+              type="button"
+              onClick={onCancel}
+              className={cn('h-8 px-2.5 rounded-full text-[12.5px] font-medium transition-colors', t.hoverCard)}
+              style={{ color: t.subink }}
+              data-testid="button-cancel-file"
+            >
+              Cancel
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={!dirty}
+            className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors disabled:cursor-default"
+            style={dirty
+              ? { backgroundColor: BLUE, color: '#fff' }
+              : { backgroundColor: 'transparent', color: t.subink, border: `1px solid ${t.hairline}` }}
+            data-testid="button-save-file"
+          >
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MrpTemplateCanvas({ t, hasArt, onUpload, onConfirm, onCloseDialog, dialogOpen }: {
+  t: Theme;
+  hasArt: boolean;
+  onUpload: () => void;
+  onConfirm: () => void;
+  onCloseDialog: () => void;
+  dialogOpen: boolean;
+}) {
+  return (
+    <div
+      className="w-full overflow-hidden rounded-2xl"
+      style={{ background: t.card, border: `1px solid ${t.hairline}`, padding: '28px 32px' }}
+      data-testid="mrp-template"
+    >
+      <div className="flex justify-center">
+        <div
+          className="relative overflow-hidden rounded-lg"
+          style={{ width: '100%', maxWidth: 900, aspectRatio: `${JACKET_ASPECT}`, background: '#ffffff', border: `1px solid ${t.hairline}` }}
+          data-testid="mrp-sheet"
+        >
+          {/* The template render — real MRP PDF asset, edge to edge. */}
+          <img src={mrpTemplate} alt={`${MOCK_MRP.title} template`} className="absolute inset-0 w-full h-full" style={{ objectFit: 'contain' }} draggable={false} data-testid="mrp-spread" />
+
+          {/* Sheet-scoped scrim + drop box — only until art lands. You can still
+              read the template under it and flip the toggle above. */}
+          {!hasArt && !dialogOpen && (
+            <TemplateDropBox onUpload={onUpload} title="Drag & drop your template" testid="mrp-drop" />
+          )}
+
+          {/* The upload dialog scoped to THIS sheet only — the rail, header and
+              mode toggle above stay crisp and clickable (Bill, round 5). */}
+          {dialogOpen && (
+            <UploadDialog
+              t={t}
+              title="Upload template"
+              variant="contained"
+              onClose={onCloseDialog}
+              onConfirm={onConfirm}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The upload dialog — the already-built canon pattern (scrim + card, X close
+// top-right, Upload file / Paste a URL segmented, one subtext line, Cancel quiet
+// borderless left of the rightmost confirm). Reused verbatim in grammar from
+// PressTemplatesUpload's add-template modal, sized down. Dead-end.
+function UploadDialog({ t, title, onClose, onConfirm, variant = 'screen' }: { t: Theme; title: string; onClose: () => void; onConfirm?: () => void; variant?: 'screen' | 'contained' }) {
+  const [source, setSource] = useState<'Upload file' | 'Paste a URL'>('Upload file');
+  // Canon rule "Confirm buttons earn their blue" — the confirm stays a quiet
+  // dark-gray-outline pill until the user has done something actionable: chosen a
+  // mock file (clicking the drop-zone) or typed a URL.
+  const [fileChosen, setFileChosen] = useState(false);
+  const [urlText, setUrlText] = useState('');
+  const canConfirm = source === 'Upload file' ? fileChosen : urlText.trim().length > 0;
+  // 'contained' scopes the scrim to the parent (the template sheet viewport)
+  // instead of the whole screen — the rail/header/toggle stay crisp and live.
+  const contained = variant === 'contained';
+  return (
+    <div
+      className={cn('flex items-center justify-center', contained ? 'absolute inset-0 z-20' : 'fixed inset-0 z-40')}
+      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: contained ? 16 : 20 }}
+      data-testid="upload-dialog-scrim"
+      onClick={onClose}
+    >
+      <div
+        className="rounded-2xl overflow-hidden w-full"
+        style={{ maxWidth: 460, background: t.card, border: `1px solid ${t.hairline}`, boxShadow: '0 24px 80px rgba(0,0,0,0.45)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        data-testid="upload-dialog"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header — title + one subtext line, X close top-right gray circle. */}
+        <div className="flex items-start justify-between gap-4" style={{ padding: '20px 22px 0' }}>
+          <div className="min-w-0">
+            <h2 className="text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{title}</h2>
+            <p className="text-[12.5px]" style={{ marginTop: 3, color: t.subink }}>Press-ready art for {MOCK_RAW.release} &mdash; we validate it automatically.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className={cn('w-8 h-8 -mr-1 rounded-full flex items-center justify-center flex-shrink-0 transition-colors', t.hoverCard)}
+            style={{ background: t.soft, color: t.subink }}
+            aria-label="Close"
+            data-testid="button-close-dialog"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div style={{ padding: '16px 22px 0' }}>
+          {/* Source toggle — canon segmented control. */}
+          <div className="inline-flex items-center rounded-full" style={{ padding: 3, background: t.soft }} role="tablist" aria-label="File source" data-testid="dialog-source">
+            {(['Upload file', 'Paste a URL'] as const).map((label) => {
+              const on = source === label;
+              return (
+                <button
+                  key={label}
+                  type="button"
+                  role="tab"
+                  aria-selected={on}
+                  onClick={() => setSource(label)}
+                  className="rounded-full transition-colors"
+                  style={{ padding: '5px 14px', fontSize: 12.5, fontWeight: on ? 600 : 500, color: on ? t.ink : t.faint, background: on ? t.card : 'transparent', boxShadow: on ? '0 1px 2px rgba(0,0,0,0.16)' : 'none' }}
+                  data-testid={`dialog-tab-${label === 'Upload file' ? 'upload' : 'url'}`}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {source === 'Upload file' ? (
+            <button
+              type="button"
+              onClick={() => setFileChosen(true)}
+              className={cn('mt-3 w-full rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-colors', t.hoverCard)}
+              style={{ border: `1.5px ${fileChosen ? 'solid' : 'dashed'} ${fileChosen ? t.subink : t.dashed}`, padding: '26px 20px' }}
+              data-testid="dialog-drop"
+            >
+              {fileChosen ? (
+                <>
+                  <FileImage className="w-6 h-6" style={{ color: t.subink }} />
+                  <span className="text-[13.5px] font-medium" style={{ color: t.ink }}>{MOCK_RAW.release}_art.pdf</span>
+                  <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: t.subink }}><Check className="w-3.5 h-3.5" strokeWidth={2.5} /> File chosen · click to replace</span>
+                </>
+              ) : (
+                <>
+                  <UploadCloud className="w-6 h-6" style={{ color: t.subink }} />
+                  <span className="text-[13.5px] font-medium" style={{ color: t.ink }}>Drag a file here, or click to pick</span>
+                  <span className="text-[12px]" style={{ color: t.faint }}>PDF, PNG or TIFF · CMYK · 300 PPI+</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <div className="mt-3 w-full rounded-2xl flex flex-col items-center justify-center gap-2.5" style={{ border: `1.5px dashed ${t.dashed}`, padding: '26px 20px' }} data-testid="dialog-url">
+              <div className="w-full flex items-center gap-2.5">
+                <input
+                  value={urlText}
+                  onChange={(e) => setUrlText(e.target.value)}
+                  placeholder="https://… paste a link to your file"
+                  className="flex-1 h-9 px-3.5 rounded-full text-[12.5px] focus:outline-none"
+                  style={{ background: t.soft, border: `1px solid ${t.hairline}`, color: t.ink }}
+                  data-testid="input-dialog-url"
+                />
+              </div>
+              <span className="text-[12px]" style={{ color: t.faint }}>We fetch the file from the link · validated automatically</span>
+            </div>
+          )}
+        </div>
+
+        {/* Footer — Cancel quiet borderless left, confirm filled-blue rightmost. */}
+        <div className="flex items-center justify-end gap-2" style={{ padding: '18px 22px 20px' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full text-[13px] font-medium transition-opacity hover:opacity-70"
+            style={{ padding: '0 14px', height: 38, color: t.subink, background: 'transparent' }}
+            data-testid="button-dialog-cancel"
+          >
+            Cancel
+          </button>
+          {/* Canon "Confirm buttons earn their blue": quiet dark-gray-outline pill
+              until an action is valid, then filled blue. */}
+          <button
+            type="button"
+            onClick={canConfirm ? (onConfirm ?? onClose) : undefined}
+            aria-disabled={!canConfirm}
+            className={cn('inline-flex items-center gap-1.5 rounded-full font-semibold transition-colors', canConfirm && 'hover:opacity-90')}
+            style={
+              canConfirm
+                ? { height: 38, padding: '0 20px', fontSize: 13, background: BLUE, color: '#fff', border: '1px solid transparent' }
+                : { height: 38, padding: '0 20px', fontSize: 13, background: 'transparent', color: t.subink, border: `1px solid ${t.dot}`, cursor: 'not-allowed' }
+            }
+            data-testid="button-dialog-confirm"
+          >
+            <Upload className="w-4 h-4" style={{ color: canConfirm ? '#fff' : t.subink }} /> {source === 'Upload file' ? 'Upload' : 'Fetch file'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Overlay-chip row — mirrors the Test/Certify canvas grammar verbatim: quiet
+// hairline chips whose WORD carries the on/off state (ring dot + "Bleed off" →
+// filled dot + "Bleed on"). Never color-only. Reused above the panel boxes and
+// on the stitched preview.
+// Zoom steps for the stepper (mirrors the press ZOOMS ladder).
+const OVERLAY_ZOOMS = [0.5, 0.75, 1, 1.5, 2, 3] as const;
+
+// The full press-side overlay chip row, reused verbatim: ring-dot toggle chips
+// (Bleed · Cut · Spine) + consolidated Front · Back chips with a chevron
+// dropdown (Cover / Safety / Foil), then the right-side cluster — a Line / Area
+// segmented toggle (PenLine / PaintBucket) and a zoom stepper (− · ZoomIn NN% · +).
+function OverlayChipRow({ t, state, onToggle }: { t: Theme; state: Record<string, boolean>; onToggle: (id: string) => void }) {
+  const [openGroup, setOpenGroup] = useState<null | 'front' | 'back'>(null);
+  const [viewMode, setViewMode] = useState<'line' | 'area'>('line');
+  const [zoom, setZoom] = useState(1);
+  const stepZoom = (dir: 1 | -1) => setZoom((z) => {
+    const i = OVERLAY_ZOOMS.indexOf(z as (typeof OVERLAY_ZOOMS)[number]);
+    const ni = Math.min(OVERLAY_ZOOMS.length - 1, Math.max(0, (i === -1 ? 2 : i) + dir));
+    return OVERLAY_ZOOMS[ni];
+  });
+
+  const SimpleChip = ({ id, label }: { id: string; label: string }) => {
+    const on = !!state[id];
+    return (
+      <button
+        type="button"
+        onClick={() => onToggle(id)}
+        className={cn('inline-flex items-center gap-1.5 h-7 rounded-full text-[12px] font-medium transition-colors', t.hoverCard)}
+        style={{ padding: '0 12px', color: on ? t.ink : t.subink, border: `1px solid ${on ? t.subink : t.hairline}`, background: on ? t.soft : 'transparent' }}
+        aria-pressed={on}
+        data-testid={`overlay-${id}`}
+      >
+        <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 6, height: 6, border: `1.5px solid ${on ? t.ink : t.faint}`, background: on ? t.ink : 'transparent' }} />
+        {label} {on ? 'on' : 'off'}
+      </button>
+    );
+  };
+
+  const GroupChip = ({ side }: { side: 'front' | 'back' }) => {
+    const parts = OVERLAY_GROUPS[side];
+    const onParts = parts.filter((p) => state[p.id]);
+    const anyOn = onParts.length > 0;
+    const label = side === 'front' ? 'Front' : 'Back';
+    const status = anyOn ? onParts.map((p) => p.label).join(' + ') : 'off';
+    return (
+      <div className="relative">
+        <div
+          className="inline-flex items-center h-7 rounded-full overflow-hidden"
+          style={{ border: `1px solid ${anyOn ? t.subink : t.hairline}`, background: anyOn ? t.soft : 'transparent' }}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              if (onParts.length > 0) parts.forEach((p) => { if (state[p.id]) onToggle(p.id); });
+              else parts.forEach((p) => { if (!state[p.id]) onToggle(p.id); });
+            }}
+            className="inline-flex items-center gap-1.5 h-full pl-3 pr-1.5 text-[12px] font-medium"
+            style={{ color: anyOn ? t.ink : t.subink }}
+            data-testid={`overlay-${side}`}
+          >
+            <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 6, height: 6, border: `1.5px solid ${anyOn ? t.ink : t.faint}`, background: anyOn ? t.ink : 'transparent' }} />
+            {label} <span style={{ color: t.faint }}>{status}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setOpenGroup((g) => (g === side ? null : side))}
+            aria-label={`${label} options`}
+            aria-expanded={openGroup === side}
+            className="h-full pl-1 pr-2 inline-flex items-center"
+            style={{ color: t.subink, borderLeft: `1px solid ${anyOn ? t.subink : t.hairline}` }}
+            data-testid={`overlay-${side}-menu`}
+          >
+            <ChevronDown style={{ width: 13, height: 13, transform: openGroup === side ? 'rotate(180deg)' : undefined, transition: 'transform 120ms' }} />
+          </button>
+        </div>
+        {openGroup === side && (
+          <>
+            <div className="fixed inset-0 z-[65]" onClick={() => setOpenGroup(null)} data-testid={`overlay-${side}-backdrop`} />
+            <div
+              className="absolute z-[66] mt-1.5 rounded-xl overflow-hidden shadow-xl"
+              style={{ background: t.card, border: `1px solid ${t.hairline}`, minWidth: 150 }}
+              role="menu"
+              data-testid={`overlay-menu-${side}`}
+            >
+              {parts.map((p) => {
+                const on = !!state[p.id];
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={on}
+                    onClick={() => onToggle(p.id)}
+                    className={cn('w-full flex items-center justify-between gap-3 px-3.5 py-2 text-[12px] font-medium text-left transition-colors', t.hoverCard)}
+                    style={{ color: t.ink }}
+                    data-testid={`overlay-menuitem-${p.id}`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 6, height: 6, border: `1.5px solid ${on ? t.ink : t.faint}`, background: on ? t.ink : 'transparent' }} />
+                      {p.label}
+                    </span>
+                    <span style={{ color: on ? BLUE : t.faint }}>{on ? 'on' : 'off'}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-3 flex-wrap w-full" data-testid="overlay-chips">
+      {/* Left — the overlay toggle chips. */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {OVERLAY_SIMPLE.map((c) => <SimpleChip key={c.id} id={c.id} label={c.label} />)}
+        <GroupChip side="front" />
+        <GroupChip side="back" />
+      </div>
+      {/* Right — Line / Area toggle + zoom stepper (press cluster, verbatim). */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="inline-flex items-center rounded-full p-0.5" style={{ background: t.soft }} role="group" aria-label="Overlay view" data-testid="overlay-view-mode">
+          {(['line', 'area'] as const).map((m) => {
+            const on = viewMode === m;
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setViewMode(m)}
+                className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[12px] font-semibold transition-colors"
+                style={{ background: on ? t.card : 'transparent', color: on ? t.ink : t.subink, boxShadow: on ? PILL_SHADOW : undefined }}
+                aria-pressed={on}
+                data-testid={`overlay-view-${m}`}
+              >
+                {m === 'line' ? <PenLine style={{ width: 12, height: 12 }} /> : <PaintBucket style={{ width: 12, height: 12 }} />}
+                {m === 'line' ? 'Line' : 'Area'}
+              </button>
+            );
+          })}
+        </div>
+        <div className="inline-flex items-center h-7 rounded-full overflow-hidden" style={{ border: `1px solid ${zoom !== 1 ? BLUE : t.hairline}` }} data-testid="overlay-zoom">
+          <button
+            type="button"
+            onClick={() => stepZoom(-1)}
+            disabled={zoom <= OVERLAY_ZOOMS[0]}
+            aria-label="Zoom out"
+            className="h-full px-2.5 text-[14px] font-semibold disabled:opacity-40"
+            style={{ color: t.subink }}
+            data-testid="overlay-zoom-out"
+          >
+            &minus;
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom(1)}
+            disabled={zoom === 1}
+            title="Reset to 100%"
+            aria-label="Reset zoom to 100%"
+            className="inline-flex items-center gap-1 px-1 h-full text-[11px] font-semibold tabular-nums"
+            style={{ color: zoom !== 1 ? BLUE : t.subink, minWidth: 54, justifyContent: 'center', cursor: zoom !== 1 ? 'pointer' : 'default' }}
+            data-testid="overlay-zoom-level"
+          >
+            <ZoomIn style={{ width: 12, height: 12 }} />
+            {Math.round(zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            onClick={() => stepZoom(1)}
+            disabled={zoom >= OVERLAY_ZOOMS[OVERLAY_ZOOMS.length - 1]}
+            aria-label="Zoom in"
+            className="h-full px-2.5 text-[14px] font-semibold disabled:opacity-40"
+            style={{ color: t.subink }}
+            data-testid="overlay-zoom-in"
+          >
+            +
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ONE large viewport for the selected area (Front / Back / Spine) — the press-
+// side per-segment grammar: the selected panel's region of the real template is
+// CROPPED + ZOOMED to fill the white sheet card (Front = front panel, Back = back
+// panel, Spine = the tall thin strip). No spotlight, no highlight ring — the
+// zoomed region IS the view. The crop is a pure CSS background (background-size +
+// background-position) so the template stays undistorted at any width; the
+// viewport takes the region's true pixel aspect. Until art is seated, the canon
+// The ••• menu items for the artist toolbar — canon white rounded-xl menu, word
+// + icon rows (reused from the press ••• / the WallCardTile cover menu grammar).
+// Artists don't certify, so no Test & Certify anywhere; these are file actions.
+const FILE_MENU: Array<{ id: string; label: string; icon: typeof ArrowRight }> = [
+  { id: 'history', label: 'File history', icon: History },
+  { id: 'download', label: 'Download raw template', icon: Download },
+  { id: 'replace', label: 'Replace file', icon: Upload },
+];
+
+// The view toolbar — reused VERBATIM from the press-side Test/Certify view row:
+// a segmented view pill on the LEFT (Full Template · Back · Front · Spine, in that
+// order) and a right cluster of ghost circle buttons. The ONE difference for the
+// artist: NO "Test & Certify" pill (artists don't certify) — just the layers
+// ghost circle + the ••• ghost circle. "Full Template" plays the role of the
+// whole-sheet view; in images mode it stays locked until all three panels have
+// art. The ••• opens the small white canon menu (File history / Download raw
+// template / Replace file). Mock actions.
+function ViewToolbar({ t, area, onArea, fullLocked, onMenu }: {
+  t: Theme;
+  area: PanelId | 'all';
+  onArea: (v: PanelId | 'all') => void;
+  fullLocked: boolean;
+  onMenu: (id: string) => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    <div className="flex items-center justify-between gap-4 flex-wrap" data-testid="view-toolbar">
+      {/* Left — segmented view pill, press order: Full Template · Back · Front · Spine. */}
+      <div className="inline-flex items-center rounded-full p-0.5 flex-shrink-0" style={{ background: t.soft }} role="radiogroup" aria-label="Preview view" data-testid="chip-view-area">
+        {([['all', 'Full Template'], ['back', 'Back'], ['front', 'Front'], ['spine', 'Spine']] as const).map(([v, label]) => {
+          const on = area === v;
+          const locked = v === 'all' && fullLocked;
+          return (
+            <button
+              key={v}
+              type="button"
+              role="radio"
+              aria-checked={on}
+              aria-disabled={locked}
+              disabled={locked}
+              onClick={() => { if (!locked) onArea(v); }}
+              className="inline-flex items-center gap-1.5 h-8 px-4 rounded-full text-[12.5px] transition-colors"
+              style={{
+                fontWeight: on ? 600 : 500,
+                color: locked ? t.faint : on ? t.ink : t.subink,
+                background: on ? t.card : 'transparent',
+                boxShadow: on ? PILL_SHADOW : undefined,
+                opacity: locked ? 0.55 : 1,
+                cursor: locked ? 'not-allowed' : 'pointer',
+              }}
+              title={locked ? 'Add front, back and spine art to see the full spread' : undefined}
+              data-testid={`chip-area-${v}`}
+            >
+              {locked && <Lock className="w-3 h-3 flex-shrink-0" style={{ color: t.faint }} aria-hidden />}
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Right — ghost circle cluster. NO Test & Certify (artists don't certify). */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <button
+          type="button"
+          title="Layers read from the file"
+          aria-label="Layers read from the file"
+          className="w-8 h-8 rounded-full inline-flex items-center justify-center transition-colors"
+          style={{ border: `1px solid ${t.hairline}`, color: t.subink, background: 'transparent' }}
+          data-testid="button-show-layers"
+        >
+          <Layers style={{ width: 14, height: 14 }} />
+        </button>
+        <div className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="More actions"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            className="w-8 h-8 rounded-full inline-flex items-center justify-center transition-colors"
+            style={{ border: `1px solid ${t.hairline}`, color: t.subink }}
+            data-testid="button-file-overflow"
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+          {menuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} data-testid="file-menu-backdrop" />
+              <div
+                className="absolute z-20 rounded-xl overflow-hidden"
+                style={{ top: 'calc(100% + 6px)', right: 0, minWidth: 216, background: t.card, border: `1px solid ${t.hairline}`, boxShadow: '0 16px 40px rgba(0,0,0,0.32)' }}
+                role="menu"
+                data-testid="file-menu-list"
+              >
+                {FILE_MENU.map((m, i) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setMenuOpen(false); onMenu(m.id); }}
+                    className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', t.hoverCard)}
+                    style={{ padding: '10px 14px', color: t.ink, borderTop: i === 0 ? 'none' : `1px solid ${t.hairline}` }}
+                    data-testid={`file-menu-${m.id}`}
+                  >
+                    <m.icon className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> {m.label}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// dark drag & drop box floats over a dimmed copy of the zoomed region; once
+// seated, the region shows the art crop with the toggled overlay line work.
+function PanelViewport({ t, panel, hasArt, overlay, onUpload, onCloseDialog, onConfirm, dialogOpen }: {
+  t: Theme;
+  panel: (typeof MOCK_PANELS)[number];
+  hasArt: boolean;
+  overlay: Record<string, boolean>;
+  onUpload: () => void;
+  onCloseDialog: () => void;
+  onConfirm: () => void;
+  dialogOpen: boolean;
+}) {
+  const RED = 'rgba(200,60,60,0.85)';
+  const BLUELINE = 'rgba(120,170,220,0.95)';
+  const r = PANEL_REGIONS[panel.id];
+  const isSpine = panel.id === 'spine';
+  // Viewport aspect = the region's true pixel aspect on the sheet. Background
+  // crop: scale the sheet so the region fills the viewport, then offset to it.
+  const regionAspect = (r.width * JACKET_ASPECT) / r.height;
+  const cropStyle: CSSProperties = {
+    backgroundImage: `url(${mrpTemplate})`,
+    backgroundRepeat: 'no-repeat',
+    backgroundColor: '#ffffff',
+    backgroundSize: `${(1 / r.width) * 100}% auto`,
+    backgroundPosition: `${(r.left / (1 - r.width)) * 100}% ${(r.top / (1 - r.height)) * 100}%`,
+  };
+  return (
+    <div
+      className="w-full overflow-hidden rounded-2xl"
+      style={{ background: t.card, border: `1px solid ${t.hairline}`, padding: '28px 32px' }}
+      data-testid="panel-viewport"
+    >
+      <div className="relative flex items-center justify-center" style={{ minHeight: 360 }}>
+        <div
+          className="group relative block overflow-hidden rounded-lg"
+          style={{
+            height: 460,
+            maxHeight: '70vh',
+            aspectRatio: `${regionAspect}`,
+            maxWidth: '100%',
+            background: '#ffffff',
+            border: `1px solid ${t.hairline}`,
+            ...(hasArt ? {} : cropStyle),
+          }}
+          data-testid={`panel-box-${panel.id}`}
+        >
+          {hasArt && (
+            <button
+              type="button"
+              onClick={onUpload}
+              className="absolute inset-0 block"
+              data-testid={`panel-art-${panel.id}`}
+              aria-label={`${panel.label} — replace art`}
+            >
+              <span className="absolute inset-0" style={{ background: panel.art }} />
+              {/* Template line work overlaid on the seated art, toggled by the
+                  overlay chips (bleed / cut are global; the panel's own Cover +
+                  Safety come from the Front/Back group chips; spine has its own). */}
+              {overlay.bleed && <span className="absolute" style={{ inset: 4, border: `1px dashed ${BLUELINE}` }} aria-hidden />}
+              {overlay.cut && <span className="absolute" style={{ inset: 8, border: `1px solid ${RED}` }} aria-hidden />}
+              {(isSpine ? overlay.spine : overlay[`${panel.id}-cover`]) && <span className="absolute" style={{ inset: 0, border: `1.5px solid ${RED}` }} aria-hidden />}
+              {!isSpine && overlay[`${panel.id}-safety`] && <span className="absolute" style={{ inset: 20, border: `1px dashed ${BLUELINE}` }} aria-hidden />}
+              {!isSpine && <span className="absolute top-2 left-2 text-[11px] font-semibold rounded-md" style={{ padding: '2px 7px', color: '#fff', background: 'rgba(20,20,22,0.5)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)' }}>{panel.label}</span>}
+              <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity" style={{ background: 'rgba(20,20,22,0.34)' }}>
+                <span className="inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium" style={{ padding: '6px 12px', color: '#fff', background: 'rgba(20,20,22,0.6)', border: '1px solid rgba(255,255,255,0.25)' }}>
+                  <Upload className="w-3.5 h-3.5" /> Replace
+                </span>
+              </span>
+            </button>
+          )}
+        </div>
+
+        {/* Empty state — the contained dialog, or the canon dark drop box. Both
+            overlay the OUTER container (not the narrow zoomed region), so the box
+            is the SAME standard size on every panel including the thin spine. The
+            dimmed zoomed region stays behind it as-is; the box just floats over it,
+            capped at 90% of the outer container on small widths. */}
+        {!hasArt && (dialogOpen ? (
+          <UploadDialog
+            t={t}
+            title={`Upload ${panel.label.toLowerCase()} art`}
+            variant="contained"
+            onClose={onCloseDialog}
+            onConfirm={onConfirm}
+          />
+        ) : (
+          <TemplateDropBox onUpload={onUpload} title={`Drag & drop your ${panel.label} art`} testid={`panel-drop-${panel.id}`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SceneRawTemplate({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
+  // Two entry modes toggled by the canon segmented control: per-panel image
+  // upload, or the full press template.
+  const [mode, setMode] = useState<'images' | 'template'>('images');
+  // Images-mode viewport focus — mirrors the press-side Test/Certify view pill:
+  // Front · Back · Spine · All. 'all' is the stitched full spread (replaces the
+  // old separate Preview action), disabled until all three panels have art.
+  const [area, setArea] = useState<PanelId | 'all'>('front');
+  const [dialog, setDialog] = useState<null | 'images' | 'template' | PanelId>(null);
+  // Mock upload state — clicking Upload in the dialog seats the mock crop.
+  const [panelArt, setPanelArt] = useState<Record<PanelId, boolean>>({ front: false, back: false, spine: false });
+  const [templateArt, setTemplateArt] = useState(false);
+  // Overlay toggles shared across both modes (Test/Certify grammar). Kept a
+  // single easily-swappable component (OverlayChipRow) for later consolidation.
+  const [overlay, setOverlay] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(OVERLAY_IDS.map((id) => [id, false])),
+  );
+  // Transparency check on the stitched (All) view.
+  const [transparent, setTransparent] = useState(false);
+  // File-header card: Save is the one act that persists — it earns its blue only
+  // once there's unsaved work (something uploaded since the last Save).
+  const [saved, setSaved] = useState(false);
+
+  const anyArt = panelArt.front || panelArt.back || panelArt.spine;
+  const allArt = panelArt.front && panelArt.back && panelArt.spine;
+  const hasArt = mode === 'template' ? templateArt : anyArt;
+  const toggleOverlay = (id: string) => setOverlay((s) => ({ ...s, [id]: !s[id] }));
+
+  // The dialog's confirm seats mock art for whichever target is uploading.
+  const seatArt = () => {
+    if (dialog === 'front' || dialog === 'back' || dialog === 'spine') {
+      setPanelArt((s) => ({ ...s, [dialog]: true }));
+    } else if (dialog === 'images') {
+      setPanelArt({ front: true, back: true, spine: true });
+    } else if (dialog === 'template') {
+      setTemplateArt(true);
+    }
+    setSaved(false); // fresh upload = unsaved work; Save earns its blue
+    setDialog(null);
+  };
+  const anyUpload = anyArt || templateArt;
+
+  // Keep the view pill sensible when switching modes: template mode opens on the
+  // whole-sheet "Full Template" view; images mode leaves Full Template only when
+  // it's still locked (not all three panels in yet).
+  useEffect(() => {
+    if (mode === 'template') setArea('all');
+    else if (area === 'all' && !allArt) setArea('front');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  return (
+    <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: '32px 40px 96px' }} data-testid="scene-rawtemplate">
+      {/* Apple-canon breadcrumb: faint crumb link, ChevronRight, current in ink. */}
+      <div className="flex items-center gap-1.5 text-[13px]" data-testid="raw-breadcrumb">
+        <button type="button" onClick={onCrumb} className="font-medium transition-opacity hover:opacity-80" style={{ color: t.faint }} data-testid="crumb-releases-raw">Releases</button>
+        <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.faint }} aria-hidden />
+        <span className="font-medium" style={{ color: t.ink }}>{MOCK_RAW.release}</span>
+      </div>
+
+      <h1 style={{ marginTop: 12, fontSize: 30, letterSpacing: '-0.02em', fontWeight: 600, lineHeight: 1.12 }}>
+        <span style={{ color: t.ink }}>Add your art. </span>
+        <span style={{ color: t.subink, fontWeight: 500 }}>Straight onto the template.</span>
+      </h1>
+      <p className="text-[13.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 620, lineHeight: 1.5 }}>
+        {MOCK_RAW.release} doesn&rsquo;t have print art yet. Add your front, back and spine art below, or drop the full {MOCK_RAW.templateName} &mdash; we&rsquo;ll check it against the press spec the moment it lands.
+      </p>
+
+      {/* Status — word + icon, quiet, never color alone. Reflects mock state. */}
+      <div className="rounded-2xl" style={{ marginTop: 22, padding: '16px 20px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="raw-pending">
+        <div className="flex items-center gap-3">
+          {anyArt ? (
+            <BadgeCheck className="w-5 h-5 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
+          ) : (
+            <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 16, height: 16, border: `2px solid ${t.subink}` }} />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-semibold" style={{ color: t.ink }}>
+              {allArt ? 'Art placed — see the full spread' : anyArt ? 'Art started — some panels still pending' : 'Pending — no art uploaded yet'}
+            </div>
+            <div className="text-[12.5px]" style={{ marginTop: 2, color: t.faint }}>{MOCK_RAW.spec}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Toolbar — ONE canon segmented control (Upload images / Upload template)
+          on the left, quiet "Download raw template" on the right. */}
+      <div className="flex items-center justify-between gap-3 flex-wrap" style={{ marginTop: 16 }}>
+        <SegChip
+          options={[['images', 'Upload images'], ['template', 'Upload template']]}
+          value={mode}
+          onChange={(v) => setMode(v)}
+          ariaLabel="Upload mode"
+          testPrefix="raw-entry-chips"
+          t={t}
+          icons={{ images: ImagePlus, template: LayoutTemplate }}
+        />
+        <button
+          type="button"
+          className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+          style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+          data-testid="button-download-raw"
+        >
+          <Download className="w-4 h-4 flex-shrink-0" /> Download raw template
+        </button>
+      </div>
+
+      {/* View toolbar — reused press-side view row verbatim (Full Template · Back ·
+          Front · Spine segmented pill + layers / ••• ghost circles), in BOTH modes.
+          No Test & Certify — artists don't certify. "Full Template" plays the role
+          of the whole-sheet view; in images mode it stays locked until all three
+          panels have art. In template mode picking a panel zooms into the uploaded
+          template; Full Template is the whole sheet. */}
+      <div style={{ marginTop: 16 }}>
+        <ViewToolbar
+          t={t}
+          area={area}
+          onArea={setArea}
+          fullLocked={mode === 'images' && !allArt}
+          onMenu={(id) => { if (id === 'replace') setDialog(mode === 'template' ? 'template' : (area === 'all' ? 'front' : area)); }}
+        />
+      </div>
+
+      {/* Transparency check — its own quiet control, only on the Full Template view
+          once all art is in (both modes read the stitched/whole sheet there). */}
+      {area === 'all' && ((mode === 'images' && allArt) || (mode === 'template' && templateArt)) && (
+        <div className="flex items-center justify-end" style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            onClick={() => setTransparent((v) => !v)}
+            className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+            style={{ padding: '7px 14px', color: transparent ? t.ink : t.subink, border: `1px solid ${t.hairline}`, background: transparent ? t.soft : 'transparent' }}
+            aria-pressed={transparent}
+            data-testid="button-transparency"
+          >
+            {transparent ? <Eye className="w-4 h-4 flex-shrink-0" /> : <EyeOff className="w-4 h-4 flex-shrink-0" />}
+            Transparency {transparent ? 'on' : 'off'}
+          </button>
+        </div>
+      )}
+
+      {/* Full overlay chip row (reused press-side grammar) — its own full-width
+          row in both modes, only after art/template exists (same gating as
+          before). */}
+      {((mode === 'images' && anyArt) || (mode === 'template' && templateArt)) && (
+        <div style={{ marginTop: 16 }}>
+          <OverlayChipRow t={t} state={overlay} onToggle={toggleOverlay} />
+        </div>
+      )}
+
+      {/* File-header card — reused press-side card grammar, sits on top of the
+          template view in both modes. */}
+      <div style={{ marginTop: 16 }}>
+        <FileHeaderCard
+          t={t}
+          uploaded={anyUpload}
+          dirty={anyUpload && !saved}
+          onCancel={() => { setPanelArt({ front: false, back: false, spine: false }); setTemplateArt(false); setSaved(false); }}
+          onSave={() => setSaved(true)}
+        />
+      </div>
+
+      {/* Canvas — one large viewport, switched by mode / area. Full Template =
+          the whole sheet (template mode: MrpTemplateCanvas; images mode: the
+          stitched spread). A panel = the zoomed per-panel viewport. */}
+      <div style={{ marginTop: 14 }}>
+        {area === 'all' && mode === 'template' && (
+          <MrpTemplateCanvas t={t} hasArt={templateArt} onUpload={() => setDialog('template')} onConfirm={seatArt} onCloseDialog={() => setDialog(null)} dialogOpen={dialog === 'template'} />
+        )}
+
+        {area === 'all' && mode === 'images' && (
+          <div data-testid="all-view">
+            <StitchedPreview t={t} panelArt={panelArt} transparent={transparent} />
+          </div>
+        )}
+
+        {area !== 'all' && (
+          <div data-testid="images-view">
+            <PanelViewport
+              t={t}
+              panel={MOCK_PANELS.find((p) => p.id === area)!}
+              hasArt={mode === 'template' ? templateArt : panelArt[area]}
+              overlay={overlay}
+              onUpload={() => setDialog(mode === 'template' ? 'template' : area)}
+              onConfirm={seatArt}
+              onCloseDialog={() => setDialog(null)}
+              dialogOpen={mode === 'template' ? dialog === 'template' : dialog === area}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* The template dialog is scoped to the sheet viewport (MrpTemplateCanvas)
+          and each panel dialog is scoped to its zoomed viewport (PanelViewport).
+          Only the bulk "images" dialog, if ever triggered, renders at screen
+          level — panels no longer use it. */}
+      {dialog === 'images' && (
+        <UploadDialog
+          t={t}
+          title="Upload images"
+          onClose={() => setDialog(null)}
+          onConfirm={seatArt}
+        />
+      )}
+    </div>
+  );
+}
+
+// Stitched full-template preview (the "All" view) — the WHOLE real MRP template
+// crisp, with each panel's seated art dropped into its region (Back · spine ·
+// Front). The transparency check drops the art to ~45% so the template header,
+// panels and line work show through beneath, confirming the fit against the spec.
+function StitchedPreview({ t, panelArt, transparent }: { t: Theme; panelArt: Record<PanelId, boolean>; transparent: boolean }) {
+  const artOpacity = transparent ? 0.45 : 1;
+  const byId = (id: PanelId) => MOCK_PANELS.find((p) => p.id === id)!;
+  const seg = (id: PanelId) => {
+    const rr = PANEL_REGIONS[id];
+    return (
+      <div
+        key={id}
+        className="absolute"
+        style={{ left: pct(rr.left), top: pct(rr.top), width: pct(rr.width), height: pct(rr.height) }}
+        data-testid={`stitch-${id}`}
+      >
+        {panelArt[id] && <div className="absolute inset-0" style={{ background: byId(id).art, opacity: artOpacity }} />}
+      </div>
+    );
+  };
+  return (
+    <div
+      className="w-full overflow-hidden rounded-2xl"
+      style={{ background: t.card, border: `1px solid ${t.hairline}`, padding: '28px 32px' }}
+      data-testid="stitched-preview"
+    >
+      <div className="relative mx-auto overflow-hidden rounded-lg" style={{ width: '100%', maxWidth: 900, aspectRatio: `${JACKET_ASPECT}`, background: '#fff', border: `1px solid ${t.hairline}` }}>
+        {/* The real template, crisp — the whole sheet. */}
+        <img src={mrpTemplate} alt={`${MOCK_MRP.title} template`} className="absolute inset-0 w-full h-full" style={{ objectFit: 'contain' }} draggable={false} />
+        {/* Seated art dropped into each region. Transparency lets the template
+            show through to check the fit. */}
+        {seg('back')}
+        {seg('spine')}
+        {seg('front')}
+      </div>
+      <div className="flex items-center justify-center gap-2" style={{ marginTop: 12 }}>
+        <span className="text-[11.5px]" style={{ color: t.faint }}>
+          {transparent ? 'Art at 45% — the template shows through to check the fit' : 'Full template · your art seated into back, spine and front'}
+        </span>
       </div>
     </div>
   );
@@ -1879,7 +3078,7 @@ function SceneSettings({ t }: { t: Theme }) {
 // the release breadcrumb + tab bar (which crosses between Assets / Store /
 // Payments). No scene stepper.
 // ═══════════════════════════════════════════════════════════════════
-type SceneId = 'wall' | 'assets' | 'store' | 'payments' | 'reports' | 'settings';
+type SceneId = 'wall' | 'assets' | 'store' | 'payments' | 'reports' | 'settings' | 'rawtemplate';
 
 export function ArtistPortalRestructureFlow() {
   const [mode, setModeState] = useState<Mode>(() => {
@@ -1912,15 +3111,19 @@ export function ArtistPortalRestructureFlow() {
   const goScene = (s: SceneId) => { setScene(s); window.scrollTo({ top: 0 }); };
   const goRelease = () => goScene('assets');
   const goWall = () => goScene('wall');
+  // GOLDENROD has never had print art uploaded — clicking it lands on the blank
+  // raw press-template state (not the seated-art release view).
+  const goRawTemplate = () => goScene('rawtemplate');
 
   return (
     <ArtistShell t={t} mode={mode} setMode={setMode} onNav={goScene}>
-      {scene === 'wall' && <SceneReleasesWall t={t} onOpenRelease={goRelease} />}
+      {scene === 'wall' && <SceneReleasesWall t={t} onOpenRelease={goRelease} onOpenGoldenrod={goRawTemplate} />}
       {scene === 'assets' && <SceneFormats t={t} onCrumb={goWall} onJump={goScene} />}
       {scene === 'store' && <SceneStore t={t} onCrumb={goWall} onJump={goScene} />}
       {scene === 'payments' && <ScenePayments t={t} onCrumb={goWall} onJump={goScene} />}
       {scene === 'reports' && <SceneReports t={t} />}
       {scene === 'settings' && <SceneSettings t={t} />}
+      {scene === 'rawtemplate' && <SceneRawTemplate t={t} onCrumb={goWall} />}
     </ArtistShell>
   );
 }

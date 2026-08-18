@@ -4411,7 +4411,7 @@ function TemplateDialog({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") commitUrl();
                 }}
-                placeholder="https://… Dropbox, Drive, WeTransfer"
+                placeholder="https://… paste a link to your file"
                 className={cn("min-w-0 flex-1 rounded-full text-[13px] focus:outline-none", dark ? "focus:border-white/30" : "focus:border-slate-400")}
                 style={{ height: 36, border: `1px solid ${HAIRLINE}`, padding: "0 14px", color: INK, background: dark ? CARD_SOFT : "#fff" }}
                 data-testid={`template-dialog-url-${tile.key}`}
