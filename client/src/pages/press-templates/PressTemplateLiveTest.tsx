@@ -151,6 +151,12 @@ export type GtLayer = {
   // Frame layers (an AREA drawn as outer edge + inner hole, like a bleed band):
   // the inner hole's box, so the wash can paint only the band, not the whole box.
   inXMm?: number; inYMm?: number; inWMm?: number; inHMm?: number;
+  // True drawn shape (Task #3164): SVG path data in mm, top-left origin,
+  // covering ALL subpaths of the layer. Only set when the shape is genuinely
+  // non-rectangular (e.g. a bleed edge with a glue-flap notch) and capture
+  // succeeded — simple rects/single circles keep the classic box rendering
+  // so existing templates look byte-identical.
+  pathMm?: string;
 };
 
 type Matrix = [number, number, number, number, number, number];
@@ -198,7 +204,7 @@ async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: number): Pr
   const ctmStack: Matrix[] = [];
   const mcStack: Array<string | null> = [];
   type SubBox = { minX: number; minY: number; maxX: number; maxY: number };
-  const boxes: Record<string, { minX: number; minY: number; maxX: number; maxY: number; curves: number; lines: number; subs: SubBox[] }> = {};
+  const boxes: Record<string, { minX: number; minY: number; maxX: number; maxY: number; curves: number; lines: number; subs: SubBox[]; dParts: string[]; pathOk: boolean; rectish: boolean }> = {};
 
   // Walk pdf.js 5.x packed path data (cmd, ...args): moveTo=0(2), lineTo=1(2),
   // curveTo=2(6), closePath=3/4(0). Lets us tell a circle (all curves) from a box.
@@ -209,6 +215,20 @@ async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: number): Pr
     let curves = 0, lines = 0;
     const subs: SubBox[] = [];
     let cur: SubBox | null = null;
+    // Real-shape capture (Task #3164): build SVG path data in mm (top-left
+    // origin) alongside the bbox, and note whether every subpath is a plain
+    // axis-aligned rectangle (all vertices sit on its own bbox edges) so
+    // callers can keep the classic box rendering for simple layers.
+    const dParts: string[] = [];
+    let pathOk = true;
+    let rectish = true;
+    let subCurves = 0;
+    let verts: Array<[number, number]> = [];
+    const mm = (x: number, y: number): [number, number] => {
+      const [X, Y] = applyM(m, x, y);
+      return [X * PT_TO_MM, (vp1.height - Y) * PT_TO_MM];
+    };
+    const fmt = (v: number) => (Math.round(v * 1000) / 1000).toString();
     const mark = (x: number, y: number) => {
       const [X, Y] = applyM(m, x, y);
       if (!cur) cur = { minX: X, minY: Y, maxX: X, maxY: Y };
@@ -217,28 +237,55 @@ async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: number): Pr
         cur.minY = Math.min(cur.minY, Y); cur.maxY = Math.max(cur.maxY, Y);
       }
     };
+    const vert = (x: number, y: number) => { verts.push(applyM(m, x, y)); };
+    const flushSub = () => {
+      if (cur) {
+        subs.push(cur);
+        // Rect test only meaningful for straight-edged subpaths.
+        if (subCurves > 0) rectish = false;
+        else {
+          const eps = 0.5; // pt
+          const c = cur as SubBox;
+          for (const [vx, vy] of verts) {
+            const onX = Math.abs(vx - c.minX) < eps || Math.abs(vx - c.maxX) < eps;
+            const onY = Math.abs(vy - c.minY) < eps || Math.abs(vy - c.maxY) < eps;
+            if (!onX || !onY) { rectish = false; break; }
+          }
+        }
+      }
+      cur = null; subCurves = 0; verts = [];
+    };
     if (data && data.length) {
       let j = 0, px = NaN, py = NaN;
       while (j < data.length) {
         const cmd = data[j++];
         if (cmd === 0) {
-          if (cur) subs.push(cur);
-          cur = null;
-          px = data[j]; py = data[j + 1]; mark(px, py); j += 2;
+          flushSub();
+          px = data[j]; py = data[j + 1]; mark(px, py); vert(px, py);
+          const [mx, my] = mm(px, py);
+          dParts.push(`M ${fmt(mx)} ${fmt(my)}`);
+          j += 2;
         } else if (cmd === 1) {
           const x = data[j], y = data[j + 1]; j += 2;
           if (Math.abs(x - px) > 0.01 || Math.abs(y - py) > 0.01) lines++;
-          mark(x, y); px = x; py = y;
+          mark(x, y); vert(x, y);
+          const [mx, my] = mm(x, y);
+          dParts.push(`L ${fmt(mx)} ${fmt(my)}`);
+          px = x; py = y;
         } else if (cmd === 2) {
-          curves++;
+          curves++; subCurves++;
           mark(data[j], data[j + 1]); mark(data[j + 2], data[j + 3]); mark(data[j + 4], data[j + 5]);
+          const [x1, y1] = mm(data[j], data[j + 1]);
+          const [x2, y2] = mm(data[j + 2], data[j + 3]);
+          const [x3, y3] = mm(data[j + 4], data[j + 5]);
+          dParts.push(`C ${fmt(x1)} ${fmt(y1)} ${fmt(x2)} ${fmt(y2)} ${fmt(x3)} ${fmt(y3)}`);
           px = data[j + 4]; py = data[j + 5]; j += 6;
-        } else if (cmd === 3 || cmd === 4) { /* closePath */ }
-        else { curves = 0; lines = 1; break; } // unknown encoding — treat as straight-edged
+        } else if (cmd === 3 || cmd === 4) { dParts.push('Z'); }
+        else { curves = 0; lines = 1; pathOk = false; break; } // unknown encoding — treat as straight-edged
       }
-      if (cur) subs.push(cur);
+      flushSub();
     }
-    return { curves, lines, subs };
+    return { curves, lines, subs, d: dParts.join(' '), pathOk, rectish };
   };
 
   for (let i = 0; i < ol.fnArray.length; i++) {
@@ -263,13 +310,16 @@ async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: number): Pr
       const c2 = applyM(ctm, mm3[2], mm3[3]);
       const c3 = applyM(ctm, mm3[0], mm3[3]);
       const c4 = applyM(ctm, mm3[2], mm3[1]);
-      const b = boxes[layer] ?? (boxes[layer] = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity, curves: 0, lines: 0, subs: [] });
+      const b = boxes[layer] ?? (boxes[layer] = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity, curves: 0, lines: 0, subs: [], dParts: [], pathOk: true, rectish: true });
       for (const [x, y] of [c1, c2, c3, c4]) {
         b.minX = Math.min(b.minX, x); b.maxX = Math.max(b.maxX, x);
         b.minY = Math.min(b.minY, y); b.maxY = Math.max(b.maxY, y);
       }
       const pc = countPathOps((args?.[1] as Array<ArrayLike<number>> | undefined)?.[0], ctm);
       b.curves += pc.curves; b.lines += pc.lines; b.subs.push(...pc.subs);
+      if (pc.d) b.dParts.push(pc.d);
+      b.pathOk = b.pathOk && pc.pathOk;
+      b.rectish = b.rectish && pc.rectish;
     }
   }
 
@@ -299,6 +349,13 @@ async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: number): Pr
       hMm: (b.maxY - b.minY) * PT_TO_MM,
       round: singleRound,
     };
+    // Real drawn shape (Task #3164): expose the captured SVG path only when
+    // the layer is genuinely non-rectangular (glue-flap notch, multi-die
+    // circles, …) and every constructPath decoded cleanly. Plain rects and
+    // single circles keep the classic box/ellipse rendering unchanged.
+    if (b.pathOk && b.dParts.length > 0 && !b.rectish && !singleRound) {
+      layer.pathMm = b.dParts.join(' ');
+    }
     // Frame detection: an AREA drawn as outer edge + inner hole. The largest
     // subpath strictly inside the outer box is the hole — wash only the band.
     const margin = 0.5; // pt
@@ -2473,7 +2530,17 @@ export default function PressTemplateLiveTest({
                     return (
                       <div key={zone}>
                         {viewMode === 'area' && area && (
-                          area.inWMm ? (
+                          area.pathMm ? (
+                            // True drawn shape (Task #3164) — even-odd wash of the
+                            // real vector path (notched bleed edges, multi-die layers)
+                            <svg
+                              className="absolute inset-0 w-full h-full pointer-events-none"
+                              viewBox={`0 0 ${template.wMm} ${template.hMm}`}
+                              preserveAspectRatio="none"
+                            >
+                              <path d={area.pathMm} fill={`${c}${areaAlpha}`} fillRule="evenodd" />
+                            </svg>
+                          ) : area.inWMm ? (
                             // Frame layer — wash only the band between outer edge and inner hole
                             <svg
                               className="absolute inset-0 w-full h-full pointer-events-none"
@@ -2498,17 +2565,38 @@ export default function PressTemplateLiveTest({
                             />
                           )
                         )}
-                        <div
-                          className="absolute pointer-events-none"
-                          style={{
-                            left: pct(box.xMm, template.wMm), top: pct(box.yMm, template.hMm),
-                            width: pct(box.wMm, template.wMm), height: pct(box.hMm, template.hMm),
-                            border: `1.5px ${zone === 'Bleed' || zone.includes('Safety') ? 'dashed' : 'solid'} ${c}`,
-                            boxSizing: 'border-box',
-                            borderRadius: box.round ? '50%' : undefined,
-                          }}
-                          data-testid={`overlay-${zone.toLowerCase().replace(/\s+/g, '-')}`}
-                        />
+                        {box.pathMm ? (
+                          // True drawn shape (Task #3164) — stroked real outline;
+                          // non-scaling stroke keeps the same 1.5px screen weight
+                          // as the classic border box.
+                          <svg
+                            className="absolute inset-0 w-full h-full pointer-events-none"
+                            viewBox={`0 0 ${template.wMm} ${template.hMm}`}
+                            preserveAspectRatio="none"
+                            data-testid={`overlay-${zone.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            <path
+                              d={box.pathMm}
+                              fill="none"
+                              stroke={c}
+                              strokeWidth={1.5}
+                              vectorEffect="non-scaling-stroke"
+                              strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                            />
+                          </svg>
+                        ) : (
+                          <div
+                            className="absolute pointer-events-none"
+                            style={{
+                              left: pct(box.xMm, template.wMm), top: pct(box.yMm, template.hMm),
+                              width: pct(box.wMm, template.wMm), height: pct(box.hMm, template.hMm),
+                              border: `1.5px ${zone === 'Bleed' || zone.includes('Safety') ? 'dashed' : 'solid'} ${c}`,
+                              boxSizing: 'border-box',
+                              borderRadius: box.round ? '50%' : undefined,
+                            }}
+                            data-testid={`overlay-${zone.toLowerCase().replace(/\s+/g, '-')}`}
+                          />
+                        )}
                         <span
                           className="absolute pointer-events-none text-[10px] font-bold px-1.5 py-0.5 rounded"
                           style={{
