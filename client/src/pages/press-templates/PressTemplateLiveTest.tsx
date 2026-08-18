@@ -354,16 +354,14 @@ async function shrinkDataUrl(dataUrl: string, targetWidth = 480): Promise<string
 }
 
 // ─── Zone display order + accents (word + shape carry meaning; color supportive) ───
-const ZONE_ORDER = ['Bleed', 'Cut', 'Spine', 'Front Cover', 'Back Cover', 'Front Safety', 'Back Safety', 'Artboard'];
+// ZONE_ORDER/zoneSort + side grouping live in sidePillGroups.ts (Task #3163)
+// so the consolidation rule is testable without jsdom.
+import { groupZonesForPills, zoneSort, SIDE_NAMES, type SideName } from './sidePillGroups';
 const ZONE_COLORS: Record<string, string> = {
   Bleed: '#e0245e', Cut: '#319ED8', Spine: '#b07ce8', 'Front Cover': '#f5a623', 'Back Cover': '#f5a623',
   'Front Safety': '#34c98e', 'Back Safety': '#34c98e', Artboard: '#98989d',
 };
 const zoneColor = (z: string) => ZONE_COLORS[z] ?? '#8fd4c1';
-const zoneSort = (a: string, b: string) => {
-  const ia = ZONE_ORDER.indexOf(a); const ib = ZONE_ORDER.indexOf(b);
-  return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
-};
 
 type CheckRow = { param: string; tone: 'pass' | 'fail' | 'na'; detail: string };
 
@@ -512,8 +510,10 @@ export default function PressTemplateLiveTest({
   const [nameDraft, setNameDraft] = useState('');
   const [uploadedAt, setUploadedAt] = useState<string | null>(null);
   const [originalName, setOriginalName] = useState<string | null>(null);
-  // Bill, Aug 14 2026: Front/Back zone chips consolidate Cover+Safety behind a dropdown.
-  const [openGroup, setOpenGroup] = useState<'Front' | 'Back' | null>(null);
+  // Bill, Aug 14 2026: Front/Back zone chips consolidate side-specific zones
+  // behind a dropdown. Generic since Task #3163 — any Front/Back/Spine-prefixed
+  // zone folds into its side pill, so Hellbender's vocabulary works untouched.
+  const [openGroup, setOpenGroup] = useState<SideName | null>(null);
   const templateInput = useRef<HTMLInputElement>(null);
   const artInput = useRef<HTMLInputElement>(null);
   // Raw art File from this session's test — spec/slot-mode Save submits it to
@@ -1037,6 +1037,11 @@ export default function PressTemplateLiveTest({
     return [...byZone.values()].sort((a, b) => zoneSort(a.zone, b.zone));
   }, [template]);
 
+  // Side-pill consolidation (Task #3163): confidently-parsed Front/Back/Spine-
+  // prefixed zones fold into per-side dropdowns; everything else (including
+  // side words inside `other`-kind names) stays a standalone pill.
+  const sideGroups = useMemo(() => groupZonesForPills(template?.layers ?? []), [template]);
+
   const bleed = zones.find((z) => z.zone === 'Bleed');
   const cut = zones.find((z) => z.zone === 'Cut');
   const bleedBox = bleed?.line ?? bleed?.area;
@@ -1411,7 +1416,7 @@ export default function PressTemplateLiveTest({
     // they must stay toggleable in the cropped views too (gogoods, Aug 16
     // 2026: "there's no bleed setting in the dropdown — where did it go?").
     if (zone === 'Bleed' || zone === 'Cut') return true;
-    if (viewArea === 'Spine') return zone === 'Spine';
+    if (viewArea === 'Spine') return zone === 'Spine' || zone.startsWith('Spine ');
     const side = viewArea.split(' ')[0]; // 'Front' | 'Back'
     return zone.includes(side);
   };
@@ -2212,7 +2217,7 @@ export default function PressTemplateLiveTest({
                         )}
                       </div>
                     )}
-                    {zones.filter((z) => !['Front Cover', 'Front Safety', 'Back Cover', 'Back Safety'].includes(z.zone) && !z.zone.startsWith('Foil Stamping') && zoneRelevant(z.zone)).map(({ zone }) => {
+                    {zones.filter((z) => !sideGroups.grouped.has(z.zone) && zoneRelevant(z.zone)).map(({ zone }) => {
                       const on = activeZones.has(zone);
                       const c = zoneColor(zone);
                       return (
@@ -2234,15 +2239,17 @@ export default function PressTemplateLiveTest({
                         </button>
                       );
                     })}
-                    {/* Front / Back — Cover + Safety consolidated behind a dropdown */}
-                    {(['Front', 'Back'] as const).map((side) => {
-                      if (!zoneRelevant(`${side} Cover`)) return null;
-                      const parts = [`${side} Cover`, `${side} Safety`, `Foil Stamping ${side}`].filter((p) => zones.some((z) => z.zone === p));
-                      if (parts.length === 0) return null;
-                      const partLabel = (p: string) => (p.startsWith('Foil') ? 'Foil' : p.split(' ')[1]);
+                    {/* Front / Back / Spine — side-prefixed zones consolidated behind a dropdown (Task #3163) */}
+                    {SIDE_NAMES.map((side) => {
+                      const group = sideGroups.groups.find((g) => g.side === side);
+                      if (!group) return null;
+                      const entries = group.entries.filter((e) => zoneRelevant(e.zone));
+                      if (entries.length === 0) return null;
+                      const parts = entries.map((e) => e.zone);
+                      const partLabel = (p: string) => group.entries.find((e) => e.zone === p)?.label ?? p;
                       const onParts = parts.filter((p) => activeZones.has(p));
                       const anyOn = onParts.length > 0;
-                      const c = zoneColor(`${side} Cover`);
+                      const c = zoneColor(side === 'Spine' ? 'Spine' : `${side} Cover`);
                       const status = anyOn ? onParts.map(partLabel).join(' + ') : 'off';
                       return (
                         <div key={side} className="relative">
