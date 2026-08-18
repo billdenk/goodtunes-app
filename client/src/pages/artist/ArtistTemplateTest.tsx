@@ -24,8 +24,8 @@
 // Canon: statuses are word + icon (Bill is colorblind), never color alone; real
 // GoodTunes(R) with the literal (R); "estimate" never "quote"; sentence case.
 
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRoute } from 'wouter';
 import {
   ChevronRight,
@@ -37,7 +37,16 @@ import {
   Download,
   PenLine,
   ZoomIn,
+  Upload,
+  Lock,
+  Circle,
+  ArrowLeftRight,
+  History,
+  type LucideIcon,
 } from 'lucide-react';
+import { queryClient, apiRequest } from '@/lib/queryClient';
+import { uploadAdminDoc } from '@/lib/adminUpload';
+import { useToast } from '@/hooks/use-toast';
 import { useAdminDark } from '@/lib/adminAppearance';
 import { VENDOR_SPECS, type VendorId, type CompletedTemplateConfig, type FinishedComponentSpec } from '@shared/vendorSpecs';
 import type { CompletedTemplateComponent, CompletedTemplateVerdict } from '@shared/uploadValidation';
@@ -99,6 +108,19 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 // payload → the exact const shapes the JSX reads; JSX itself untouched).
 // ═══════════════════════════════════════════════════════════════════
 
+type FileEventRow = {
+  id: string;
+  componentId: string;
+  event: 'uploaded' | 'downloaded' | 'unlocked' | string;
+  fileName: string | null;
+  dims: string | null;
+  result: string | null;
+  actorLabel: string | null;
+  at: string;
+};
+
+type LockState = { locked: boolean; pressName: string | null; downloadedAt: string | null };
+
 type ScanResponse = {
   configured: boolean;
   reason?: string | null;
@@ -108,6 +130,8 @@ type ScanResponse = {
   components: CompletedTemplateComponent[];
   status: CompletedTemplateVerdict;
   updatedAt: string | null;
+  fileEvents?: FileEventRow[];
+  locks?: Record<string, LockState>;
 };
 
 type CheckTone = 'pass' | 'na';
@@ -151,6 +175,45 @@ export function ArtistTemplateTest() {
     queryKey: ['/api/admin/albums', albumId, 'completed-template'],
     enabled: !!albumId,
   });
+  const { toast } = useToast();
+
+  // Item 1 — "Upload another file": real replace flow. Direct upload to our
+  // object storage, then the same measured-check run the press panel uses;
+  // a fresh checks card + a new "File history" row come back in the payload.
+  const [uploading, setUploading] = useState(false);
+  const check = useMutation({
+    mutationFn: async (vars: { url: string; fileName: string }) => {
+      const r = await apiRequest('POST', `/api/admin/albums/${albumId}/completed-template/check`, {
+        componentId,
+        url: vars.url,
+        fileName: vars.fileName,
+      });
+      return r.json() as Promise<ScanResponse>;
+    },
+    onSuccess: (resp) => {
+      queryClient.setQueryData(['/api/admin/albums', albumId, 'completed-template'], resp);
+      toast({ title: 'Checked', description: 'Your file was checked against the press template.' });
+    },
+    onError: (e: any) => toast({ title: "Couldn't replace the file", description: e?.message, variant: 'destructive' }),
+  });
+  const handleReplaceFile = async (file: File | undefined) => {
+    if (!file || uploading || check.isPending) return;
+    setUploading(true);
+    try {
+      const url = await uploadAdminDoc(file);
+      check.mutate({ url, fileName: file.name });
+    } catch (e: any) {
+      toast({ title: e?.message || 'Upload failed', variant: 'destructive' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Item 3 — production lock, derived server-side from the press-download
+  // audit trail (never client-claimed).
+  const lock: LockState = scan.data?.locks?.[componentId] ?? { locked: false, pressName: null, downloadedAt: null };
+  // Item 2 — file history rows for THIS slot, newest first (server order).
+  const history = (scan.data?.fileEvents ?? []).filter((e) => e.componentId === componentId);
 
   const component = scan.data?.components.find((c) => c.componentId === componentId) ?? null;
   const spec = scan.data?.requiredComponents.find((s) => s.id === componentId) ?? null;
@@ -247,7 +310,18 @@ export function ArtistTemplateTest() {
             screenshot 3. Check-circle + "Pass! All measured checks passed" +
             "5 of 5 passed" + filename; chevron to expand the rows; "Try another
             file" quiet action bottom-right when open. */}
-        <UploadCard t={t} rows={CHECKS} fileName={TEST_FILE} allPass={allPass} />
+        <UploadCard
+          t={t}
+          rows={CHECKS}
+          fileName={TEST_FILE}
+          allPass={allPass}
+          lock={lock}
+          busy={uploading || check.isPending}
+          onReplaceFile={handleReplaceFile}
+        />
+
+        {/* 4b · File history — upload/download audit trail (Item 2). */}
+        <HistoryCard t={t} rows={history} />
 
         {/* 4 · Template header card — read-only facts an artist cares about.
             Press-internal lines + Cancel/Save removed. */}
@@ -385,9 +459,29 @@ export function ArtistTemplateTest() {
 }
 
 // The upload / check card. Resting state = collapsed PASS summary (screenshot 3);
-// expanding shows the check rows + "Try another file" (screenshot 1).
-function UploadCard({ t, rows, fileName, allPass }: { t: Theme; rows: CheckRow[]; fileName: string; allPass: boolean }) {
+// expanding shows the check rows + the "Upload another file" replace affordance
+// (mirrors the press upload treatment). When the press has downloaded the file
+// for production, the footer flips to a locked banner and the upload pill
+// disables (word + icon, never color alone).
+function UploadCard({
+  t,
+  rows,
+  fileName,
+  allPass,
+  lock,
+  busy,
+  onReplaceFile,
+}: {
+  t: Theme;
+  rows: CheckRow[];
+  fileName: string;
+  allPass: boolean;
+  lock: LockState;
+  busy: boolean;
+  onReplaceFile: (file: File | undefined) => void;
+}) {
   const [open, setOpen] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const passed = rows.filter((r) => r.tone === 'pass').length;
   return (
     <div className="rounded-2xl overflow-hidden" style={{ marginTop: 22, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="upload-card">
@@ -433,11 +527,103 @@ function UploadCard({ t, rows, fileName, allPass }: { t: Theme; rows: CheckRow[]
               </div>
             );
           })}
-          <div className="flex justify-end" style={{ padding: '12px 20px', borderTop: `1px solid ${t.hairline}` }}>
-            <button type="button" className="text-[13px] font-medium transition-opacity hover:opacity-80" style={{ color: t.subink }} data-testid="button-try-another">Try another file</button>
-          </div>
+          {/* Footer — replace affordance, or the locked-for-production banner
+              once the press has downloaded the file (Items 1 + 3). */}
+          {lock.locked ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ padding: '14px 20px', borderTop: `1px solid ${t.hairline}` }} data-testid="locked-banner">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <Lock className="w-4 h-4 flex-shrink-0" style={{ color: t.subink, marginTop: 1 }} aria-hidden />
+                <p className="text-[12.5px]" style={{ color: t.subink, lineHeight: 1.5 }}>
+                  <span className="font-semibold" style={{ color: t.ink }}>Locked for production</span>
+                  {' \u2014 '}{lock.pressName ?? 'The press'} downloaded this file {fmtWhen(lock.downloadedAt)}. Ask them to unlock it if you need to replace it.
+                </p>
+              </div>
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium flex-shrink-0"
+                style={{ padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.faint, cursor: 'not-allowed', opacity: 0.6 }}
+                aria-disabled="true"
+                data-testid="button-upload-another-disabled"
+              >
+                <Lock className="w-4 h-4 flex-shrink-0" /> Upload locked
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3" style={{ padding: '12px 20px', borderTop: `1px solid ${t.hairline}` }}>
+              <span className="text-[12px]" style={{ color: t.faint }}>Replaces the current file and re-runs the checks.</span>
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => onReplaceFile(e.target.files?.[0])}
+                data-testid="input-replace-file"
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => fileRef.current?.click()}
+                className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium transition-colors flex-shrink-0', !busy && t.hoverCard)}
+                style={{ padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.ink, opacity: busy ? 0.6 : undefined }}
+                data-testid="button-upload-another"
+              >
+                <Upload className="w-4 h-4 flex-shrink-0" /> {busy ? 'Checking\u2026' : 'Upload another file'}
+              </button>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+// "Aug 17 at 9:12 AM" — the handoff's history/lock timestamp grammar.
+function fmtWhen(iso: string | null | undefined): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+  } catch {
+    return '';
+  }
+}
+
+// File history card (Item 2) — the upload/download audit trail. Canon list rows,
+// faint text, word + icon result on every row; newest first. The newest upload
+// is "Current"; prior uploads show their check result; press downloads are
+// their own event rows. Nothing is ever deleted.
+function HistoryCard({ t, rows }: { t: Theme; rows: FileEventRow[] }) {
+  if (rows.length === 0) return null;
+  const firstUploadIdx = rows.findIndex((r) => r.event === 'uploaded');
+  const meta = (row: FileEventRow, i: number): { word: string; icon: LucideIcon; color: string; fillDot?: boolean } => {
+    if (row.event === 'downloaded') return { word: 'Downloaded by press', icon: Download, color: t.subink };
+    if (row.event === 'unlocked') return { word: 'Unlocked by press', icon: Lock, color: t.subink };
+    if (i === firstUploadIdx) return { word: 'Current', icon: Circle, color: t.ready, fillDot: true };
+    if (row.result === 'pass') return { word: 'Passed', icon: CheckCircle2, color: t.subink };
+    return { word: 'Replaced', icon: ArrowLeftRight, color: t.faint };
+  };
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ marginTop: 16, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="file-history">
+      <div className="flex items-center gap-2" style={{ padding: '14px 20px', borderBottom: `1px solid ${t.hairline}` }}>
+        <History className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
+        <h2 className="text-[14px] font-semibold" style={{ color: t.ink }}>File history</h2>
+        <span className="text-[12.5px]" style={{ color: t.faint }}>every upload and download, newest first</span>
+      </div>
+      {rows.map((h, i) => {
+        const m = meta(h, i);
+        const Icon = m.icon;
+        return (
+          <div key={h.id} className="flex items-center justify-between gap-4" style={{ padding: '12px 20px', borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`history-row-${h.id}`}>
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium truncate" style={{ color: t.ink }}>{h.fileName ?? 'File'}</div>
+              <div className="text-[12px]" style={{ marginTop: 2, color: t.faint }}>{h.dims ? <>{h.dims} &middot; </> : null}{fmtWhen(h.at)}</div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>
+              <Icon className="w-3.5 h-3.5 flex-shrink-0" style={m.fillDot ? { fill: m.color } : undefined} aria-hidden />
+              {m.word}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

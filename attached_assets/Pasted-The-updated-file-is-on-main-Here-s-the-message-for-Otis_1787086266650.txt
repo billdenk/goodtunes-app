@@ -1,0 +1,21 @@
+The updated file is on main. Here's the message for Otis:
+
+---
+
+**For Otis — Artist Template Test update (Aug 17): upload/replace, file history, production lock**
+
+Re-pull `handoff/artist-template-test/ArtistTemplateTest.tsx` (replace verbatim; same rules — MOCK_ consts, wire data only, light+dark themes both). Three new capabilities since your last pull:
+
+**1. Upload another file.** The bare "Try another file" text in the checks-card footer is now a proper quiet hairline-pill secondary — "Upload another file" with Upload icon, plus the faint helper line "Replaces the current file and re-runs the checks." Wire it to a real file picker: replacing the art re-runs the same measured checks against the press template and produces a new checks card.
+
+**2. File history.** New "File history" card below the template-info card — a record of every upload: filename, dimensions, timestamp, and result as word + icon (Current · Passed · Replaced · Downloaded by press), newest first. Wire it to real upload events; every replacement appends a row, nothing is ever deleted. Data lives in `MOCK_HISTORY` — replace with the album's actual scan/upload records, artist-scoped read as before.
+
+**3. Production lock.** When the press downloads the file for production, the file **locks**: the artist's upload pill flips to a disabled "Upload locked" state (Lock icon + word — never color-only) and a quiet banner explains: "Locked for production — [press name] downloaded this file [date/time]. Ask them to unlock it if you need to replace it." The download event is also logged in File history. Only the press can unlock (that unlock control lands on the press side later — for now just enforce the lock server-side on press download). Purpose: audit trail so an artist can never claim the press pressed the wrong file. `MOCK_LOCK` holds the press + downloadedAt; the mock's top-bar Locked/Unlocked toggle is demo-only — **delete it** and drive the state from the real download record.
+
+Canon reminders: zero filled blue on this page, statuses word + icon, real ®, no boxed page headers.
+
+Questions beat inventions — ask before improvising.
+
+---
+
+Lock rule worth noting for the press handoff later: press download → lock + history row is the mechanism; the press-side "Unlock for replacement" control is on our to-mock list.

@@ -5,7 +5,7 @@ import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { registerPublishingSettlementRoutes, registerPublisherPortalRoutes } from "./publishingSettlementRoutes";
 import { sql, and, eq, ne, or, ilike, isNull, isNotNull, desc, inArray, gt } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, fulfillmentDestinations, albumPreviewGrants, pressingOrderRequests, TERMS_VERSION } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, fulfillmentDestinations, albumPreviewGrants, pressingOrderRequests, completedTemplateFileEvents, TERMS_VERSION } from "@shared/schema";
 import {
   MRP_DOMAIN,
   HELLBENDER_DOMAIN,
@@ -34187,6 +34187,73 @@ export async function registerRoutes(
     return { vendorId, config, row };
   }
 
+  // ── Completed-art file events + production lock (Ruby handoff, Aug 2026) ──
+  // Append-only audit trail per slot (uploads + press downloads, newest
+  // first) feeding the artist Test page's "File history" card. The lock is
+  // DERIVED from the trail: a slot is locked when its latest lock-relevant
+  // event ('downloaded' vs 'unlocked') is a press download. While locked,
+  // the album's own artist/label partners cannot replace the file (409 —
+  // audit trail so an artist can never claim the press pressed the wrong
+  // file); operators and the press itself stay unblocked. Only the press
+  // unlocks ('unlocked' is reserved for the upcoming press-side control).
+  type FileEventRow = {
+    id: string;
+    componentId: string;
+    event: string;
+    fileName: string | null;
+    dims: string | null;
+    result: string | null;
+    actorLabel: string | null;
+    at: string;
+  };
+  async function completedFileEvents(albumId: string): Promise<FileEventRow[]> {
+    const rows = await db
+      .select()
+      .from(completedTemplateFileEvents)
+      .where(eq(completedTemplateFileEvents.albumId, albumId))
+      .orderBy(desc(completedTemplateFileEvents.createdAt));
+    return rows.map((r) => ({
+      id: r.id,
+      componentId: r.componentId,
+      event: r.event,
+      fileName: r.fileName,
+      dims: r.dims,
+      result: r.result,
+      actorLabel: r.actorLabel,
+      at: new Date(r.createdAt).toISOString(),
+    }));
+  }
+  function deriveLocks(events: FileEventRow[]) {
+    // Events arrive newest-first; the first 'downloaded'/'unlocked' per
+    // component decides.
+    const locks: Record<string, { locked: boolean; pressName: string | null; downloadedAt: string | null }> = {};
+    for (const e of events) {
+      if (e.event !== "downloaded" && e.event !== "unlocked") continue;
+      if (locks[e.componentId]) continue;
+      locks[e.componentId] =
+        e.event === "downloaded"
+          ? { locked: true, pressName: e.actorLabel, downloadedAt: e.at }
+          : { locked: false, pressName: null, downloadedAt: null };
+    }
+    return locks;
+  }
+  // Caller classification for the lock: operators + the album's press pass;
+  // the album's own artist/label partners are the ones the lock stops.
+  async function callerIsOperatorOrPress(userId: string, albumId: string): Promise<{ operator: boolean; pressId: string | null }> {
+    const role = (await getUserRole(userId))?.role;
+    if (role === "super_admin" || role === "admin") return { operator: true, pressId: null };
+    try {
+      const pressId = await resolveAlbumPressId(albumId);
+      if (pressId) {
+        const { findMembershipForScope } = await import("./auth/roles");
+        if (await findMembershipForScope(userId, "manufacturer", pressId)) return { operator: false, pressId };
+      }
+    } catch {
+      /* fall through — treated as partner */
+    }
+    return { operator: false, pressId: null };
+  }
+
   // Shape the derived context (+ any persisted row) into the panel payload:
   // the derived vendor/config, the required-slot specs the operator must
   // satisfy, the supplied components (presence re-tagged), and the
@@ -34206,6 +34273,8 @@ export async function registerRoutes(
         pressPlaceholderUrl: null as string | null,
         acceptedFormatsNote: null as string | null,
         referenceArtifacts: [] as { kind: string; label: string; url: string; fileName: string | null }[],
+        fileEvents: [] as FileEventRow[],
+        locks: {} as Record<string, { locked: boolean; pressName: string | null; downloadedAt: string | null }>,
       };
     }
     const { vendorId, config, row } = ctx;
@@ -34249,6 +34318,7 @@ export async function registerRoutes(
     } catch {
       /* cosmetic only — never fail the payload */
     }
+    const fileEvents = await completedFileEvents(albumId);
     return {
       configured: true,
       reason: null as string | null,
@@ -34261,6 +34331,10 @@ export async function registerRoutes(
       pressPlaceholderUrl,
       acceptedFormatsNote,
       referenceArtifacts,
+      // Ruby handoff Aug 2026 — upload/download audit trail + derived
+      // per-slot production locks (see completedFileEvents/deriveLocks).
+      fileEvents,
+      locks: deriveLocks(fileEvents),
     };
   }
 
@@ -34302,6 +34376,20 @@ export async function registerRoutes(
     const required = await resolveRequired(vendorId, config);
     const spec = required.find((r) => r.id === body.data.componentId);
     if (!spec) return res.status(400).json({ message: "That component isn't required for this configuration." });
+
+    // Ruby handoff Aug 2026 — production lock: once the press has downloaded
+    // this slot's file for production, the album's own artist/label partners
+    // cannot replace it (audit trail — the pressed file must stay provable).
+    // Operators and the press itself stay unblocked; only the press unlocks.
+    const caller = await callerIsOperatorOrPress(req.session.userId!, req.params.id);
+    if (!caller.operator && !caller.pressId) {
+      const lock = deriveLocks(await completedFileEvents(req.params.id))[body.data.componentId];
+      if (lock?.locked) {
+        return res.status(409).json({
+          message: `Locked for production — ${lock.pressName ?? "the press"} downloaded this file${lock.downloadedAt ? ` ${new Date(lock.downloadedAt).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : ""}. Ask them to unlock it if you need to replace it.`,
+        });
+      }
+    }
 
     // handoff/press-settings-templates-policy (Bill, Aug 15 2026) — the press
     // requires a passing test before a template goes live, and this slot's
@@ -34420,7 +34508,56 @@ export async function registerRoutes(
       components,
       status,
     });
+    // Ruby handoff Aug 2026 — append the upload to the file-events audit
+    // trail (never deleted; the artist Test page's "File history" card).
+    try {
+      const first = scan.pageSizesInches[0] ?? null;
+      const dims = first ? `${(first.w * 25.4).toFixed(1)} \u00d7 ${(first.h * 25.4).toFixed(1)} mm` : null;
+      await db.insert(completedTemplateFileEvents).values({
+        albumId: req.params.id,
+        componentId: spec.id,
+        event: "uploaded",
+        fileName: fileName ?? null,
+        dims,
+        result: component.status ?? null,
+      });
+    } catch (e) {
+      console.warn("[completed-art] file-event insert failed", e);
+    }
     res.json(await completedTemplatePayload(req.params.id));
+  });
+
+  // Ruby handoff Aug 2026 — tracked production download of a slot's file.
+  // Any permitted caller gets the file, but a PRESS download is the lock
+  // event: it's appended to the file history ("Downloaded by press") and
+  // locks the slot against artist replacement until the press unlocks.
+  // Operator/partner downloads never lock. 302 → the persisted assetUrl
+  // (our own /objects path for direct uploads, session-served like the
+  // existing direct links).
+  app.get("/api/admin/albums/:id/completed-template/download/:componentId", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const componentId = decodeURIComponent(req.params.componentId);
+    const ctx = await resolveCompletedContext(req.params.id);
+    const component = ((ctx?.row?.components ?? []) as CompletedTemplateComponent[]).find(
+      (c) => c.componentId === componentId && c.assetUrl,
+    );
+    if (!component?.assetUrl) return res.status(404).json({ message: "No file on that slot yet." });
+    const caller = await callerIsOperatorOrPress(req.session.userId!, req.params.id);
+    if (!caller.operator && caller.pressId) {
+      try {
+        const press = await storage.getManufacturerById(caller.pressId);
+        await db.insert(completedTemplateFileEvents).values({
+          albumId: req.params.id,
+          componentId,
+          event: "downloaded",
+          fileName: component.fileName ?? null,
+          actorLabel: press?.name ?? "The press",
+        });
+      } catch (e) {
+        console.warn("[completed-art] download-event insert failed", e);
+      }
+    }
+    res.redirect(302, component.assetUrl);
   });
 
   // Remove a supplied file from a slot (correct a mistaken paste). The

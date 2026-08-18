@@ -6102,6 +6102,32 @@ export const completedTemplateChecks = pgTable("completed_template_checks", {
 export type CompletedTemplateCheck = typeof completedTemplateChecks.$inferSelect;
 export type InsertCompletedTemplateCheck = typeof completedTemplateChecks.$inferInsert;
 
+// ─── Completed-art file events (Ruby handoff, Aug 2026) ────────────────
+// Append-only audit trail per completed-art slot: every upload (check run)
+// and every press download, newest first on the artist Test page's "File
+// history" card. Nothing is ever deleted. The PRODUCTION LOCK is derived
+// from this trail: a slot is locked when its latest lock-relevant event
+// ('downloaded' vs 'unlocked') is a press download — while locked, the
+// album's own artist/label partners cannot replace the file (409); only
+// the press unlocks (press-side control lands later, the event type is
+// reserved now). Purpose: an artist can never claim the press pressed the
+// wrong file.
+export const completedTemplateFileEvents = pgTable("completed_template_file_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  albumId: varchar("album_id").notNull().references(() => albums.id, { onDelete: "cascade" }),
+  componentId: text("component_id").notNull(),
+  event: text("event").notNull(), // "uploaded" | "downloaded" | "unlocked"
+  fileName: text("file_name"),
+  dims: text("dims"), // human-readable measured page size at event time, e.g. "779.4 × 539.3 mm"
+  result: text("result"), // rolled-up check verdict at upload time ("pass" | "warn" | "fail"); null for downloads
+  actorLabel: text("actor_label"), // press name for downloads/unlocks; null for artist/operator uploads
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  byAlbumComponent: index("ctfe_album_component_idx").on(t.albumId, t.componentId, t.createdAt),
+}));
+
+export type CompletedTemplateFileEvent = typeof completedTemplateFileEvents.$inferSelect;
+
 // ─── Task #225 — Pressing-order requests (artist → GoodTunes review) ────
 // One row per "Go to Press!" submission from the artist Sell tab. Status
 // is a single column (pending | approved | rejected | cancelled).

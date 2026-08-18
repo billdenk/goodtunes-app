@@ -207,7 +207,10 @@ export function CompletedTemplatePanel({
     suppliedFiles.forEach((c, i) => {
       setTimeout(() => {
         const a = document.createElement("a");
-        a.href = c.assetUrl!;
+        // Tracked download (Ruby handoff Aug 2026): a press download is
+        // logged to the file history and locks the slot against artist
+        // replacement; operator downloads just stream. 302 → assetUrl.
+        a.href = `/api/admin/albums/${albumId}/completed-template/download/${encodeURIComponent(c.componentId)}`;
         a.download = c.fileName ?? "";
         a.target = "_blank";
         a.rel = "noopener noreferrer";
@@ -943,7 +946,7 @@ export function PreviewArtDialog({
             <DialogTitle className="text-slate-900">{title}</DialogTitle>
             {component.assetUrl && (
               <a
-                href={component.assetUrl}
+                href={`/api/admin/albums/${albumId}/completed-template/download/${encodeURIComponent(componentId)}`}
                 download={component.fileName ?? undefined}
                 target="_blank"
                 rel="noopener noreferrer"

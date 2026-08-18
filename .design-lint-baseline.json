@@ -21187,7 +21187,47 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<button type=\"button\" className=\"text-[13px] font-medium transition-opacity hover:opacity-80\" style={{ color: t.subink }} data-testid=\"button-try-another\">Try another file</button>"
+    "snippet": "<p className=\"text-[12.5px]\" style={{ color: t.subink, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.faint }}>Replaces the current file and re-runs the checks.</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium transition-colors flex-shrink-0', !busy && t.hoverCard)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<h2 className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>File history</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[12.5px]\" style={{ color: t.faint }}>every upload and download, newest first</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<div className=\"text-[13px] font-medium truncate\" style={{ color: t.ink }}>{h.fileName ?? 'File'}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<div className=\"text-[12px]\" style={{ marginTop: 2, color: t.faint }}>{h.dims ? <>{h.dims} &middot; </> : null}{fmtWhen(h.at)}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0\" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>"
   },
   {
     "rule": "naked-icon-button",

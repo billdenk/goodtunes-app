@@ -12212,6 +12212,34 @@ SQL
 create_press_live_templates dev  "${DATABASE_URL:-}"
 create_press_live_templates prod "${PROD_DATABASE_URL:-}"
 
+# ── Completed-art file events (Ruby handoff, Aug 18 2026) ──
+# Append-only upload/download audit trail per completed-art slot; drives the
+# artist Test page "File history" card + the production lock (press download
+# locks the slot against artist replacement). Idempotent on both DBs
+# (schema-drift guard covers it).
+create_completed_template_file_events() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[completed-file-events] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: completed-file-events DDL ok on $label" \
+    || echo "post-merge: WARNING — completed-file-events DDL failed on $label"
+CREATE TABLE IF NOT EXISTS completed_template_file_events (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id varchar NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+  component_id text NOT NULL,
+  event text NOT NULL,
+  file_name text,
+  dims text,
+  result text,
+  actor_label text,
+  created_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ctfe_album_component_idx ON completed_template_file_events (album_id, component_id, created_at);
+SQL
+}
+create_completed_template_file_events dev  "${DATABASE_URL:-}"
+create_completed_template_file_events prod "${PROD_DATABASE_URL:-}"
+
 # ── Task #3075 — fulfillment GoodDeed service pricing + cert-batch return label ──
 # gooddeed_service_json on fulfillment_partners (receive/hologram/shrinkwrap/
 # ship ladder) + 4 cert-batch return-label columns on albums. Idempotent on
