@@ -37,7 +37,6 @@ import {
   LogOut,
   Lock,
   Eye,
-  ChevronDown,
   ChevronRight,
   Check,
   X,
@@ -54,7 +53,6 @@ import {
   Mail,
   ArrowRight,
   Settings,
-  CreditCard,
   Circle,
   Clock,
 } from 'lucide-react';
@@ -105,6 +103,7 @@ const THEMES = {
     dashed: '#c9c9cf',
     dot: '#d0d0d5',
     logoFilter: 'none',
+    wordmarkFilter: 'none',
   },
   dark: {
     canvas: '#161618',
@@ -132,6 +131,9 @@ const THEMES = {
     dashed: '#46464d',
     dot: '#46464d',
     logoFilter: 'invert(1)',
+    // GoodTunes wordmark on dark — apple-canon CSS-invert to white (canon
+    // permits CSS invert for the single-color GoodTunes wordmark only).
+    wordmarkFilter: 'invert(1) brightness(2)',
   },
 };
 
@@ -153,28 +155,29 @@ const MOCK_USER = { firstName: 'Niina', email: 'niina@niinasoleil.com', initials
 // ═══════════════════════════════════════════════════════════════════
 // RAIL — new order per Part 1 (Audience/Acquisition/Buyers folded into Reports)
 // ═══════════════════════════════════════════════════════════════════
-type NavItem = { label: string; icon: typeof LayoutDashboard; active?: boolean };
+type NavItem = { label: string; icon: typeof LayoutDashboard; active?: boolean; scene?: SceneId };
 
-// Part 1: Dashboard · Releases · Orders · Reports · Shopify · Referrals, then
-// Settings pinned last (standard Apple bottom position). Audience / Acquisition /
-// Buyers are GONE — folded into Reports as tabs. The Shopify item is EARNED: it
-// only appears once the artist has connected a Shopify store. Niina is connected
-// on CALIFORNIALAND, so it shows here, below Reports.
+// Part 1: Dashboard · Releases · Orders · Reports · Shopify · Referrals in the
+// main list. Settings is NOT in this list — per the cross-vendor rail standard
+// (Bill) it is PINNED to the bottom of the rail, and Team lives INSIDE Settings
+// as a child section. Audience / Acquisition / Buyers are GONE — folded into
+// Reports as tabs. The Shopify item is EARNED: it only appears once the artist
+// has connected a Shopify store. Niina is connected on CALIFORNIALAND, so it
+// shows here, below Reports.
 const NAV_MAIN: NavItem[] = [
   { label: 'Dashboard', icon: LayoutDashboard },
-  { label: 'Releases', icon: Disc3, active: true },
+  { label: 'Releases', icon: Disc3, active: true, scene: 'wall' },
   { label: 'Orders', icon: ShoppingBag },
-  { label: 'Reports', icon: BarChart3 },
+  { label: 'Reports', icon: BarChart3, scene: 'reports' },
   { label: 'Shopify', icon: Store },
   { label: 'Referrals', icon: Gift },
-  { label: 'Settings', icon: Settings },
 ];
 
-function NavRow({ label, icon: Icon, active, t }: NavItem & { t: Theme }) {
+function NavRow({ label, icon: Icon, active, scene, t, onNav }: NavItem & { t: Theme; onNav?: (s: SceneId) => void }) {
   return (
     <a
       href="#"
-      onClick={(e) => e.preventDefault()}
+      onClick={(e) => { e.preventDefault(); if (scene && onNav) onNav(scene); }}
       data-testid={`nav-${label.toLowerCase()}`}
       className={cn('flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !active && t.hoverWash)}
       style={{ fontWeight: active ? 600 : 500, color: active ? t.ink : t.subink, backgroundColor: active ? t.card : undefined, boxShadow: active ? PILL_SHADOW : undefined }}
@@ -272,7 +275,7 @@ function UserMenu({ t, mode, setMode }: { t: Theme; mode: Mode; setMode: (m: Mod
 
 // PressShell chrome — copied verbatim from ArtistReleaseArtTab.tsx, rail swapped
 // to the new NAV_MAIN order (Team stays bottom-pinned).
-function ArtistShell({ children, t, mode, setMode }: { children: ReactNode; t: Theme; mode: Mode; setMode: (m: Mode) => void }) {
+function ArtistShell({ children, t, mode, setMode, onNav }: { children: ReactNode; t: Theme; mode: Mode; setMode: (m: Mode) => void; onNav: (s: SceneId) => void }) {
   return (
     <div className="min-h-[100dvh] flex flex-col font-sans" style={{ backgroundColor: t.canvas, color: t.ink }}>
       <header
@@ -315,10 +318,12 @@ function ArtistShell({ children, t, mode, setMode }: { children: ReactNode; t: T
             </div>
           </div>
           <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
-            {NAV_MAIN.map((item) => <NavRow key={item.label} {...item} t={t} />)}
+            {NAV_MAIN.map((item) => <NavRow key={item.label} {...item} t={t} onNav={onNav} />)}
           </nav>
+          {/* Settings pinned to the rail bottom (cross-vendor rail standard).
+              Team is no longer a rail row — it lives inside Settings. */}
           <div className="px-2.5 pb-2">
-            <NavRow label="Team" icon={UserPlus} t={t} />
+            <NavRow label="Settings" icon={Settings} scene="settings" t={t} onNav={onNav} />
           </div>
           <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${t.hairline}` }}>
             <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: t.faint }}>Powered by</span>
@@ -337,6 +342,8 @@ function ArtistShell({ children, t, mode, setMode }: { children: ReactNode; t: T
 // ═══════════════════════════════════════════════════════════════════
 
 // Canon CTA pill — verbatim weight from PressQuoteBuilder "Send estimate" pill.
+// The ONE filled-blue primary per screen (apple-canon: only the truly primary
+// CTA gets a filled blue pill).
 function CanonPill({ label, onClick, icon: Icon }: { label: string; onClick?: () => void; icon?: typeof ArrowRight }) {
   return (
     <Button
@@ -351,26 +358,22 @@ function CanonPill({ label, onClick, icon: Icon }: { label: string; onClick?: ()
   );
 }
 
-// Word + icon status chip — copied from VerdictChip grammar (never color alone).
-type StatusWord = 'requested' | 'paid' | 'held' | 'released' | 'confirmed';
-function MilestoneStatus({ word, t }: { word: StatusWord; t: Theme }) {
-  const map: Record<StatusWord, { label: string; color: string; bg: string; glyph: 'dot' | 'ring' | 'check' | 'lock' | 'arrow' }> = {
-    requested: { label: 'Requested', color: t.subink, bg: t.soft, glyph: 'ring' },
-    paid: { label: 'Paid by you', color: BLUE, bg: `${BLUE}14`, glyph: 'dot' },
-    held: { label: 'Held', color: t.warnInk, bg: t.warnBg, glyph: 'lock' },
-    released: { label: 'Released to press', color: BLUE, bg: `${BLUE}14`, glyph: 'arrow' },
-    confirmed: { label: 'Confirmed', color: t.ready, bg: t.passBg, glyph: 'check' },
-  };
-  const s = map[word];
+// Canon quiet secondary — a hairline pill (rounded-full, subink text + icon,
+// transparent with a light hover tint), NOT a second filled blue. Used when a
+// secondary/prerequisite action sits on a screen that already has its one
+// filled-blue primary elsewhere (apple-canon one-blue-max rule).
+function QuietPill({ label, onClick, icon: Icon, t }: { label: string; onClick?: () => void; icon?: typeof ArrowRight; t: Theme }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full text-[12px] font-semibold" style={{ padding: '4px 10px', background: s.bg, color: s.color }} data-testid={`milestone-status-${word}`}>
-      {s.glyph === 'check' && <Check className="w-3 h-3" strokeWidth={3} />}
-      {s.glyph === 'lock' && <Lock className="w-3 h-3" />}
-      {s.glyph === 'arrow' && <ArrowRight className="w-3 h-3" strokeWidth={2.5} />}
-      {s.glyph === 'dot' && <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 7, height: 7, background: s.color }} />}
-      {s.glyph === 'ring' && <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 7, height: 7, border: `1.5px solid ${s.color}` }} />}
-      {s.label}
-    </span>
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn('inline-flex items-center gap-2 rounded-full font-medium transition-colors', t.hoverCard)}
+      style={{ height: 44, padding: '0 24px', fontSize: 14.5, color: t.ink, border: `1px solid ${t.hairline}`, background: 'transparent' }}
+      data-testid={`cta-${label.toLowerCase().replace(/\s+/g, '-')}`}
+    >
+      {Icon && <Icon className="w-4 h-4" />}
+      {label}
+    </button>
   );
 }
 
@@ -498,13 +501,24 @@ function WallCardTile({ card, t, onOpen }: { card: WallCard; t: Theme; onOpen: (
 function SceneReleasesWall({ t, onOpenRelease }: { t: Theme; onOpenRelease: () => void }) {
   return (
     <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
-      <h1 className="font-semibold" style={{ fontSize: 30, lineHeight: 1.12, letterSpacing: '-0.03em' }}>
-        <span style={{ color: t.ink }}>Releases. </span>
-        <span style={{ color: t.subink }}>Every record you&rsquo;ve made.</span>
-      </h1>
-      <p className="text-[13.5px]" style={{ marginTop: 8, color: t.subink, maxWidth: 620, lineHeight: 1.5 }}>
-        Cards stay canon — no table, no stats header. Each shows only derived facts: its per-format status, its channel, and a money flag when there&rsquo;s something to do.
-      </p>
+      {/* Page header row: title/measure on the left, the canon primary
+          "Create release" on the top-right (apple-canon page-action spot). */}
+      <div className="flex items-start justify-between gap-6 flex-wrap">
+        <div className="min-w-0">
+          <h1 className="font-semibold" style={{ fontSize: 30, lineHeight: 1.12, letterSpacing: '-0.03em' }}>
+            <span style={{ color: t.ink }}>Releases. </span>
+            <span style={{ color: t.subink }}>Every record you&rsquo;ve made.</span>
+          </h1>
+          <p className="text-[13.5px]" style={{ marginTop: 8, color: t.subink, maxWidth: 620, lineHeight: 1.5 }}>
+            Cards stay canon — no table, no stats header. Each shows only derived facts: its per-format status, its channel, and a money flag when there&rsquo;s something to do.
+          </p>
+        </div>
+        {/* The one filled-blue primary on the wall — starts the Release →
+            Draft → Project builder (the artist estimates flow). */}
+        <div className="flex-shrink-0">
+          <CanonPill label="Create release" icon={Plus} onClick={() => { window.location.hash = '#/ArtistEstimatesFlow'; }} />
+        </div>
+      </div>
       <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 240px), 1fr))', gap: 18 }}>
         {MOCK_WALL_CARDS.map((c) => (
           <WallCardTile key={c.id} card={c} t={t} onOpen={c.id === 'californialand' ? onOpenRelease : () => {}} />
@@ -528,10 +542,12 @@ const RELEASE_TABS = [
 function ReleaseHeader({ activeTab, t, onTab, onCrumb }: { activeTab: string; t: Theme; onTab: (id: string) => void; onCrumb: () => void }) {
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.faint }}>
-        <button type="button" onClick={onCrumb} className="transition-colors hover:opacity-80" data-testid="crumb-releases">Releases</button>
-        <span style={{ color: t.dot }}>›</span>
-        <span style={{ color: t.subink }}>{MOCK_RELEASE.title}</span>
+      {/* Apple-canon breadcrumb: faint crumb links, ChevronRight separators,
+          current page in ink, ~13px, sentence case, no uppercase, no middot. */}
+      <div className="flex items-center gap-1.5 text-[13px]" data-testid="release-breadcrumb">
+        <button type="button" onClick={onCrumb} className="font-medium transition-opacity hover:opacity-80" style={{ color: t.faint }} data-testid="crumb-releases">Releases</button>
+        <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.faint }} aria-hidden />
+        <span className="font-medium" style={{ color: t.ink }}>{MOCK_RELEASE.title}</span>
       </div>
 
       {/* Quiet plain-text page navigation — no chip, no container, no dots.
@@ -850,7 +866,7 @@ function PressAttribution({ t }: { t: Theme }) {
       title={`Press: ${PARTNER_NAME}`}
     >
       <img src={mrpLabelLogo} alt={PARTNER_NAME} className="h-3.5 w-auto flex-shrink-0" style={{ filter: 'brightness(0) invert(1)', opacity: 0.55 }} />
-      Press
+      {PARTNER_NAME}
     </span>
   );
 }
@@ -1054,8 +1070,31 @@ function ReleaseDetails({ t }: { t: Theme }) {
   );
 }
 
-function SceneFormats({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
+// Which top-level scene owns each release tab. Store / Payments are their own
+// fully-built scenes; Dashboard / Details / Assets all live inside the Assets
+// scene. The release tab bar routes to the owning scene so navigation crosses
+// between the three fully-built scenes instead of dead-ending in placeholders.
+const TAB_SCENE: Record<string, SceneId> = {
+  dashboard: 'assets',
+  details: 'assets',
+  assets: 'assets',
+  store: 'store',
+  payments: 'payments',
+};
+
+// Build the release tab-bar click handler for a given scene: switch local tab
+// when the target lives in this scene, otherwise jump to the owning scene.
+function makeTabRouter(ownScene: SceneId, setLocal: (id: string) => void, onJump: (s: SceneId) => void) {
+  return (id: string) => {
+    const target = TAB_SCENE[id] ?? ownScene;
+    if (target === ownScene) setLocal(id);
+    else onJump(target);
+  };
+}
+
+function SceneFormats({ t, onCrumb, onJump }: { t: Theme; onCrumb: () => void; onJump: (s: SceneId) => void }) {
   const [tab, setTab] = useState('assets');
+  const onTab = makeTabRouter('assets', setTab, onJump);
   const [lane, setLane] = useState<'art' | 'audio'>('art');  // Art / Audio pair
   // Format sub tabs — the SAME list drives both Art & Audio lanes. Digital (the
   // GoodTunes Player master) sits in every list alongside the physical formats.
@@ -1066,7 +1105,7 @@ function SceneFormats({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
 
   return (
     <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
-      <ReleaseHeader activeTab={tab} t={t} onTab={setTab} onCrumb={onCrumb} />
+      <ReleaseHeader activeTab={tab} t={t} onTab={onTab} onCrumb={onCrumb} />
 
       {tab === 'dashboard' ? (
         <ReleaseDashboard t={t} onOpenFormat={() => setTab('assets')} />
@@ -1239,8 +1278,9 @@ const MOCK_STORE = {
   ],
 };
 
-function SceneStore({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
+function SceneStore({ t, onCrumb, onJump }: { t: Theme; onCrumb: () => void; onJump: (s: SceneId) => void }) {
   const [tab, setTab] = useState('store');
+  const onTab = makeTabRouter('store', setTab, onJump);
   const [channel, setChannel] = useState<'goodtunes' | 'shopify'>('goodtunes');
   const [gtFulfills, setGtFulfills] = useState(true);
 
@@ -1249,7 +1289,7 @@ function SceneStore({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
 
   return (
     <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
-      <ReleaseHeader activeTab={tab} t={t} onTab={setTab} onCrumb={onCrumb} />
+      <ReleaseHeader activeTab={tab} t={t} onTab={onTab} onCrumb={onCrumb} />
 
       {tab !== 'store' ? (
         <div className="rounded-2xl flex flex-col items-center justify-center text-center" style={{ marginTop: 26, padding: '48px 24px', border: `1px solid ${t.hairline}`, background: t.card }}>
@@ -1276,11 +1316,11 @@ function SceneStore({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
                       onClick={() => setChannel(o.id)}
                       data-testid={`channel-option-${o.id}`}
                       className="w-full rounded-2xl text-left transition-colors"
-                      style={{ padding: '16px 18px', border: `${active ? 2 : 1}px solid ${active ? BLUE : t.hairline}`, background: t.canvas }}
+                      style={{ padding: '16px 18px', border: `${active ? 2 : 1}px solid ${active ? BLUE : t.hairline}`, background: t.card }}
                     >
                       <div className="flex items-center gap-4">
                         <span className="flex items-center justify-center flex-shrink-0" style={{ width: 72 }}>
-                          <img src={o.logo} alt={o.alt} style={{ height: o.h, width: 'auto', filter: t.logoFilter }} />
+                          <img src={o.logo} alt={o.alt} style={{ height: o.h, width: 'auto', filter: o.id === 'goodtunes' ? t.wordmarkFilter : t.logoFilter }} />
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="text-[14.5px] font-semibold" style={{ color: t.ink }}>{o.title}</div>
@@ -1332,7 +1372,7 @@ function SceneStore({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
                   <span className="text-[12.5px] font-semibold" style={{ color: t.warnInk }}>Not connected — needed before you can publish to Shopify</span>
                 </div>
                 <div style={{ marginTop: 16 }}>
-                  <CanonPill label="Connect Shopify" onClick={() => {}} icon={ArrowRight} />
+                  <QuietPill label="Connect Shopify" onClick={() => {}} icon={ArrowRight} t={t} />
                 </div>
               </div>
             )}
@@ -1403,47 +1443,41 @@ function SceneStore({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// SCENE 5 — RELEASE PAYMENTS TAB (two project rows, expanded milestone schedule)
+// SCENE 5 — RELEASE PAYMENTS TAB (one row per project; balance paid inline)
 // ═══════════════════════════════════════════════════════════════════
-type Milestone = { id: string; label: string; amount: string; status: StatusWord; note: string };
 type Project = {
   id: string;
   title: string;
-  press: string;
   pressLogo: string;
   summary: string;
   outstanding?: string;
-  milestones?: Milestone[];
+  // A launch balance is due — the row shows the "Pay balance" primary.
+  // When false/absent the project is still being estimated.
+  balanceDue?: boolean;
 };
 
 const MOCK_PAYMENT_PROJECTS: Project[] = [
   {
     id: 'lp',
     title: '12" LP',
-    press: 'Memphis Record Pressing',
     pressLogo: mrpLabelLogo,
     summary: 'pressed by Memphis Record Pressing',
     outstanding: '$4,135 outstanding',
-    // 50% hybrid — two milestones (Part 5)
-    milestones: [
-      { id: 'm1', label: '50% to get on the press schedule', amount: '$4,135', status: 'confirmed', note: 'You paid, we held, then released to Memphis Record Pressing — confirmed by the plant.' },
-      { id: 'm2', label: 'Balance at launch', amount: '$4,135', status: 'requested', note: 'A quantity upsize at launch recalculates this balance milestone.' },
-    ],
+    balanceDue: true,
   },
   {
     id: 'cd',
     title: 'CD',
-    press: 'Hellbender',
     pressLogo: hellbenderIcon,
     summary: 'pressed by Hellbender',
   },
 ];
 
-function ProjectRow({ project, expanded, onToggle, t }: { project: Project; expanded: boolean; onToggle: () => void; t: Theme }) {
-  const quoted = !project.milestones;
+function ProjectRow({ project, t }: { project: Project; t: Theme }) {
+  const quoted = !project.balanceDue;
   return (
     <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid={`project-row-${project.id}`}>
-      <button type="button" onClick={project.milestones ? onToggle : undefined} className="w-full flex items-center justify-between gap-4 px-5" style={{ height: 68 }}>
+      <div className="w-full flex items-center justify-between gap-4 px-5" style={{ minHeight: 72 }}>
         <div className="flex items-center gap-3.5 min-w-0">
           <span className="h-9 w-9 rounded-full bg-white ring-1 ring-black/10 flex items-center justify-center flex-shrink-0 p-1.5">
             <img src={project.pressLogo} alt="" aria-hidden className="w-full h-full object-contain" style={{ filter: 'brightness(0)' }} />
@@ -1457,6 +1491,8 @@ function ProjectRow({ project, expanded, onToggle, t }: { project: Project; expa
             </div>
           </div>
         </div>
+        {/* Right of the action row: the canon primary for a project with a
+            balance due; a quiet status chip for one still being estimated. */}
         <div className="flex items-center gap-3 flex-shrink-0">
           {quoted ? (
             <span className="inline-flex items-center gap-1.5 rounded-full text-[12px] font-semibold" style={{ padding: '4px 10px', background: t.soft, color: t.subink }}>
@@ -1464,53 +1500,21 @@ function ProjectRow({ project, expanded, onToggle, t }: { project: Project; expa
               Estimated
             </span>
           ) : (
-            <ChevronDown className="w-4 h-4 transition-transform" style={{ color: t.faint, transform: expanded ? 'rotate(180deg)' : 'none' }} />
+            <CanonPill label="Pay balance" onClick={() => {}} />
           )}
         </div>
-      </button>
-
-      {expanded && project.milestones && (
-        <div className="px-5 pb-5" style={{ borderTop: `1px solid ${t.hairline}`, paddingTop: 16 }} data-testid={`schedule-${project.id}`}>
-          <div className="flex items-center gap-2" style={{ marginBottom: 12 }}>
-            <span className="text-[9px] uppercase tracking-wider font-bold" style={{ color: t.faint }}>Payment schedule</span>
-            <span className="text-[12px]" style={{ color: t.subink }}>50% hybrid — generated from your accepted estimate</span>
-          </div>
-          <div className="space-y-3">
-            {project.milestones.map((m, i) => (
-              <div key={m.id} className="rounded-xl" style={{ border: `1px solid ${t.hairline}`, padding: 16, background: t.canvas }} data-testid={`milestone-${m.id}`}>
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <span className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-[11px] font-bold" style={{ background: t.soft, color: t.subink }}>{i + 1}</span>
-                    <div className="min-w-0">
-                      <div className="text-[13.5px] font-semibold" style={{ color: t.ink }}>{m.label}</div>
-                      <div className="text-[15px] font-semibold" style={{ marginTop: 2, color: t.ink }}>{m.amount}</div>
-                      <p className="text-[11.5px]" style={{ marginTop: 4, color: t.faint, lineHeight: 1.45 }}>{m.note}</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                    <MilestoneStatus word={m.status} t={t} />
-                    {m.status === 'requested' && <CanonPill label="Pay GoodTunes®" onClick={() => {}} />}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="text-[11.5px]" style={{ marginTop: 12, color: t.faint, lineHeight: 1.5 }}>
-            You only ever pay GoodTunes®. Press names are context, never the payee — GoodTunes® releases funds to {project.press} at each milestone.
-          </p>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
 
-function ScenePayments({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
+function ScenePayments({ t, onCrumb, onJump }: { t: Theme; onCrumb: () => void; onJump: (s: SceneId) => void }) {
   const [tab, setTab] = useState('payments');
-  const [expanded, setExpanded] = useState<string | null>('lp');
+  const onTab = makeTabRouter('payments', setTab, onJump);
 
   return (
     <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
-      <ReleaseHeader activeTab={tab} t={t} onTab={setTab} onCrumb={onCrumb} />
+      <ReleaseHeader activeTab={tab} t={t} onTab={onTab} onCrumb={onCrumb} />
 
       {tab !== 'payments' ? (
         <div className="rounded-2xl flex flex-col items-center justify-center text-center" style={{ marginTop: 26, padding: '48px 24px', border: `1px solid ${t.hairline}`, background: t.card }}>
@@ -1529,7 +1533,7 @@ function ScenePayments({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
           </div>
           <div className="space-y-3" style={{ marginTop: 20 }}>
             {MOCK_PAYMENT_PROJECTS.map((p) => (
-              <ProjectRow key={p.id} project={p} expanded={expanded === p.id} onToggle={() => setExpanded((cur) => (cur === p.id ? null : p.id))} t={t} />
+              <ProjectRow key={p.id} project={p} t={t} />
             ))}
           </div>
         </>
@@ -1701,6 +1705,8 @@ function SettingsRow({
   right,
   testid,
   dimmed,
+  clickable,
+  onClick,
 }: {
   t: Theme;
   first?: boolean;
@@ -1708,16 +1714,51 @@ function SettingsRow({
   right: ReactNode;
   testid: string;
   dimmed?: boolean;
+  clickable?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <div
-      className="flex items-center justify-between gap-6"
-      style={{ padding: '14px 18px', borderTop: first ? undefined : `1px solid ${t.hairline}`, opacity: dimmed ? 0.55 : 1 }}
+      className={cn('flex items-center justify-between gap-6 transition-colors', clickable && cn('cursor-pointer', t.hoverWash))}
+      style={{ minHeight: 60, padding: '12px 18px', borderTop: first ? undefined : `1px solid ${t.hairline}`, opacity: dimmed ? 0.55 : 1 }}
       data-testid={testid}
+      onClick={clickable ? onClick : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
     >
       <div className="flex items-center gap-3 min-w-0">{left}</div>
       <div className="flex items-center gap-4 flex-shrink-0">{right}</div>
     </div>
+  );
+}
+
+// Apple Settings leading mark — a fixed 32px rounded-square icon TILE holding
+// ONLY the glyph (never a wordmark). Hairline border + subtle card fill; in dark
+// the fill lifts slightly so the mark sits naturally. Glyph centered with even
+// padding so it never squishes.
+function AppIconTile({ children, t }: { children: ReactNode; t: Theme }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center flex-shrink-0"
+      style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${t.hairline}`, background: t.soft }}
+      aria-hidden
+    >
+      {children}
+    </span>
+  );
+}
+
+// Compact canon hairline-pill secondary sized for a settings row (quiet — not a
+// filled blue; rounded-full, hairline border, subink text + chevron).
+function RowActionPill({ label, t, testid }: { label: string; t: Theme; testid: string }) {
+  return (
+    <span
+      className={cn('inline-flex items-center gap-1 rounded-full text-[12.5px] font-semibold transition-colors', t.hoverCard)}
+      style={{ padding: '5px 12px', border: `1px solid ${t.hairline}`, color: t.ink }}
+      data-testid={testid}
+    >
+      {label} <ChevronRight className="w-3.5 h-3.5" style={{ color: t.faint }} />
+    </span>
   );
 }
 
@@ -1772,34 +1813,50 @@ function SceneSettings({ t }: { t: Theme }) {
         <SettingsRow
           t={t}
           first
+          clickable
+          onClick={() => {}}
           testid="connection-shopify"
           left={
             <>
-              <span className="inline-flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32 }} aria-hidden>
-                <img src={shopifyLogo} alt="Shopify" className="h-4 w-auto" style={{ filter: WHITE_GLYPH }} />
-              </span>
-              <span className="text-[14px] font-semibold" style={{ color: t.ink }}>Shopify</span>
+              {/* Apple app-icon tile — glyph only, no wordmark. Interim glyph is
+                  the ShoppingBag lucide mark: the shopify-logo.png asset is a
+                  glyph+wordmark lockup that can't be cropped cleanly at runtime.
+                  Swap in an isolated Shopify bag glyph asset when one ships. */}
+              <AppIconTile t={t}>
+                <ShoppingBag className="w-4 h-4" style={{ color: t.ink }} strokeWidth={2} />
+              </AppIconTile>
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold" style={{ color: t.ink }}>Shopify</div>
+                <div className="text-[12px]" style={{ marginTop: 2, color: t.faint }}>Sell on your own store</div>
+              </div>
             </>
           }
           right={
             <>
               <span className="inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: t.subink }} data-testid="shopify-status">
-                <Check className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} /> Connected
+                <X className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} /> Not connected
               </span>
-              <button type="button" className="text-[13px] font-semibold transition-opacity hover:opacity-80" style={{ color: t.subink }} data-testid="button-manage-shopify">Manage</button>
+              <RowActionPill label="Connect" t={t} testid="button-connect-shopify" />
             </>
           }
         />
         <SettingsRow
           t={t}
-          dimmed
+          clickable
+          onClick={() => {}}
           testid="connection-payout"
           left={
             <>
-              <span className="inline-flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32 }} aria-hidden>
-                <CreditCard className="w-4 h-4" style={{ color: t.subink }} />
-              </span>
-              <span className="text-[14px] font-semibold" style={{ color: t.ink }}>Payout account</span>
+              {/* No Stripe asset ships in this sandbox — interim tile carries a
+                  semibold "S" initial (never a fabricated Stripe mark). Swap in
+                  the real Stripe glyph when an asset ships. */}
+              <AppIconTile t={t}>
+                <span className="text-[15px] font-semibold leading-none" style={{ color: t.ink }}>S</span>
+              </AppIconTile>
+              <div className="min-w-0">
+                <div className="text-[14px] font-semibold" style={{ color: t.ink }}>Stripe</div>
+                <div className="text-[12px]" style={{ marginTop: 2, color: t.faint }}>Payout account — where your earnings land</div>
+              </div>
             </>
           }
           right={
@@ -1807,7 +1864,7 @@ function SceneSettings({ t }: { t: Theme }) {
               <span className="inline-flex items-center gap-1.5 text-[13px] font-medium" style={{ color: t.subink }} data-testid="payout-status">
                 <X className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} /> Not set up
               </span>
-              <button type="button" className="text-[13px] font-semibold transition-opacity hover:opacity-80" style={{ color: t.subink }} data-testid="button-setup-payout">Set up</button>
+              <RowActionPill label="Set up" t={t} testid="button-setup-payout" />
             </>
           }
         />
@@ -1817,17 +1874,12 @@ function SceneSettings({ t }: { t: Theme }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// FLOW WALK CHROME — scene stepper + caption (pattern from ArtistEstimatesFlow)
+// SCENES — the six reachable surfaces. Navigation is pure click-through:
+// the rail (Releases / Reports / Settings), the wall cards (→ release), and
+// the release breadcrumb + tab bar (which crosses between Assets / Store /
+// Payments). No scene stepper.
 // ═══════════════════════════════════════════════════════════════════
 type SceneId = 'wall' | 'assets' | 'store' | 'payments' | 'reports' | 'settings';
-const SCENES: Array<{ id: SceneId; label: string; caption: string }> = [
-  { id: 'wall', label: '1 · Releases wall', caption: 'New rail order, card badges from pill states, channel glyph, money flag only where action is needed.' },
-  { id: 'assets', label: '2–3 · Assets + inheritance', caption: 'Five-tab shell, Art / Audio lanes with Master / Vinyl formats, and the inheritance primitive on 12" LP and CD art pieces.' },
-  { id: 'store', label: '4 · Store', caption: 'Channel picker (both states), share link, Shopify connect, fulfillment toggle, email appearance, Publish checklist.' },
-  { id: 'payments', label: '5 · Payments', caption: 'Two project rows and an expanded 50% hybrid milestone schedule. You only ever pay GoodTunes®.' },
-  { id: 'reports', label: '6 · Reports', caption: 'Audience / Acquisition / Buyers folded into tabs; two money ledgers side by side, never netted.' },
-  { id: 'settings', label: '7 · Settings', caption: 'Team members and Connections. Shopify appears in the rail only once connected; the Store tab still offers inline connect that deep-links here.' },
-];
 
 export function ArtistPortalRestructureFlow() {
   const [mode, setModeState] = useState<Mode>(() => {
@@ -1853,47 +1905,20 @@ export function ArtistPortalRestructureFlow() {
   const t: Theme = mode === 'dark' || (mode === 'system' && systemDark) ? THEMES.dark : THEMES.light;
 
   const [scene, setScene] = useState<SceneId>('wall');
-  const activeCaption = SCENES.find((s) => s.id === scene)?.caption ?? '';
 
-  const goRelease = () => { setScene('assets'); window.scrollTo({ top: 0 }); };
-  const goWall = () => { setScene('wall'); window.scrollTo({ top: 0 }); };
+  // Single navigation entry point — the rail, the release breadcrumb/tab bar,
+  // and the wall cards all route through this. (The old scene stepper is gone;
+  // every scene is reachable purely by clicking through the pages.)
+  const goScene = (s: SceneId) => { setScene(s); window.scrollTo({ top: 0 }); };
+  const goRelease = () => goScene('assets');
+  const goWall = () => goScene('wall');
 
   return (
-    <ArtistShell t={t} mode={mode} setMode={setMode}>
-      {/* Quiet one-off exploration banner */}
-      <div className="flex items-center gap-2.5 flex-wrap" style={{ padding: '10px 40px', background: t.soft, borderBottom: `1px solid ${t.hairline}` }} data-testid="banner-oneoff">
-        <span className="text-[9px] uppercase tracking-wider font-bold" style={{ color: t.faint }}>One-off exploration</span>
-        <span className="text-[12.5px]" style={{ color: t.subink }}>Claude restructure brief, Aug 16 2026. Nothing else changed.</span>
-      </div>
-
-      {/* Scene stepper + caption */}
-      <div className="sticky z-10" style={{ top: 0, background: t.headerBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: `1px solid ${t.hairline}` }}>
-        <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '12px 40px' }}>
-          <div className="flex items-center gap-2 overflow-x-auto" data-testid="scene-stepper">
-            {SCENES.map((s) => {
-              const active = s.id === scene;
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => { setScene(s.id); window.scrollTo({ top: 0 }); }}
-                  data-testid={`scene-${s.id}`}
-                  className="rounded-full text-[12.5px] transition-all whitespace-nowrap"
-                  style={{ padding: '7px 14px', fontWeight: active ? 600 : 500, color: active ? '#fff' : t.subink, background: active ? BLUE : t.card, border: `1px solid ${active ? BLUE : t.hairline}` }}
-                >
-                  {s.label}
-                </button>
-              );
-            })}
-          </div>
-          <p className="text-[12.5px]" style={{ marginTop: 8, color: t.subink, lineHeight: 1.45 }}>{activeCaption}</p>
-        </div>
-      </div>
-
+    <ArtistShell t={t} mode={mode} setMode={setMode} onNav={goScene}>
       {scene === 'wall' && <SceneReleasesWall t={t} onOpenRelease={goRelease} />}
-      {scene === 'assets' && <SceneFormats t={t} onCrumb={goWall} />}
-      {scene === 'store' && <SceneStore t={t} onCrumb={goWall} />}
-      {scene === 'payments' && <ScenePayments t={t} onCrumb={goWall} />}
+      {scene === 'assets' && <SceneFormats t={t} onCrumb={goWall} onJump={goScene} />}
+      {scene === 'store' && <SceneStore t={t} onCrumb={goWall} onJump={goScene} />}
+      {scene === 'payments' && <ScenePayments t={t} onCrumb={goWall} onJump={goScene} />}
       {scene === 'reports' && <SceneReports t={t} />}
       {scene === 'settings' && <SceneSettings t={t} />}
     </ArtistShell>
