@@ -34,7 +34,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
-import { RangePicker, CompareToggle } from "@/components/partner/dashboard-controls";
 import { OperatorShell } from "@/components/operator/OperatorShell";
 import { ArtistShopifyTab } from "@/components/operator/ArtistShopifyTab";
 import { modulesForRole } from "@/components/operator/registry";
@@ -177,7 +176,6 @@ function rangeFor(preset: PresetId): Range {
 
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
-  const [compare, setCompare] = useState(true);
   const [tab, setTab] = useState<"dashboard" | "catalog" | "orders" | "reports" | "referrals" | "shopify" | "settings">(() => {
     const t = new URLSearchParams(window.location.search).get("tab");
     // Task #2893 — Overview merged into Dashboard. Stale ?tab=overview deep
@@ -226,13 +224,12 @@ export function ArtistDashboard() {
   const range = useMemo(() => rangeFor(preset), [preset]);
   const qs = useMemo(() => {
     const u = new URLSearchParams({ from: range.from, to: range.to });
-    if (!compare) u.set("compare", "off");
     // Super-admin override: pass through ?personId= if the URL has it.
     const params = new URLSearchParams(window.location.search);
     const personId = params.get("personId");
     if (personId) u.set("personId", personId);
     return u.toString();
-  }, [range, compare]);
+  }, [range]);
 
   const me = useQuery<{
     personId: string; name: string; albumCount: number; songCount: number; photoUrl?: string | null;
@@ -282,9 +279,6 @@ export function ArtistDashboard() {
   const artistName = me.data?.name ?? "Your dashboard";
   const albumCount = me.data?.albumCount ?? 0;
   const songCount = me.data?.songCount ?? 0;
-  // The page header names the CURRENT section (not the artist) so it always
-  // agrees with the highlighted nav item.
-  const currentTabLabel = ARTIST_TABS.find((t) => t.id === tab)?.label ?? "";
 
   return (
     <OperatorShell
@@ -294,31 +288,19 @@ export function ArtistDashboard() {
       logoUrl={me.data?.photoUrl ?? null}
       fallbackIcon={UserIcon}
       logoShape="circle"
-      // The header names the CURRENT section (Dashboard / Overview / …) in the
-      // super-admin AdminPageHeader treatment — big title left, range picker +
-      // compare inline right, bottom hairline — so it always agrees with the
-      // highlighted nav item. The artist's identity (avatar + name) lives only
-      // in the rail + mobile top strip, so it isn't repeated as the page H1.
+      // Canon (Ruby, Aug 18 2026 — docs/apple-canon.md "Page headers"):
+      // NO boxed/filled shell header strip on any page. The two-tone
+      // heading each tab body renders in-content IS the page title, so
+      // the shell suppresses its page-header band entirely (no pageTitle,
+      // hideHeaderIdentity, no headerActions). The artist's identity
+      // (avatar + name) lives only in the rail + mobile top strip.
       //
-      // Reports renders the embedded AdminReports — it carries its OWN
-      // section header + date range — so there we suppress the shell page
-      // header entirely (no pageTitle, hideHeaderIdentity, no headerActions)
-      // to avoid a duplicate title + duplicate range control. The merged
-      // Dashboard (Task #2893) uses THIS header's range picker + compare
-      // toggle like every other section — no second picker variant.
-      // The merged Dashboard renders its OWN Apple-canon header in-content
-      // (time-of-day greeting + range pills + View payouts) per the design
-      // reference, so the shell page header is suppressed there too.
-      pageTitle={albumViewId || tab === "reports" || tab === "dashboard" ? undefined : currentTabLabel}
-      hideHeaderIdentity={!!albumViewId || tab === "reports" || tab === "dashboard" || tab === "settings"}
-      headerActions={
-        albumViewId || tab === "reports" || tab === "shopify" || tab === "dashboard" ? undefined : (
-          <>
-            <RangePicker presets={RANGE_PRESETS} value={preset} onChange={applyPreset} />
-            <CompareToggle active={compare} onToggle={setCompare} />
-          </>
-        )
-      }
+      // The date-range toolbar (RangePicker + CompareToggle) only belongs
+      // on metrics screens: Dashboard renders its own in-content range
+      // pills, and Reports (embedded AdminReports) carries its own range
+      // control — every other tab (Releases, Orders, Referrals, Shopify,
+      // Settings) has no time-series, so it gets no range toolbar.
+      hideHeaderIdentity
       tabs={ARTIST_TABS}
       activeTab={albumViewId ? "catalog" : tab}
       onTabChange={(newTab) => {
@@ -428,9 +410,19 @@ export function ArtistTabBody({
       {/* Restructure: the wall of releases IS the catalog. */}
       {tab === "catalog" && <ArtistReleasesWall qs={qs} onOpenAlbum={onOpenAlbum} />}
       {tab === "orders" && <OrdersTab qs={qs} />}
-      {tab === "referrals" && <ReferralsTab personId={personId} hideInvitePanel={operatorView} />}
+      {tab === "referrals" && (
+        <>
+          <TabPageHeading lead="Referrals." quiet="Invites and earnings." testid="referrals-page-heading" />
+          <ReferralsTab personId={personId} hideInvitePanel={operatorView} />
+        </>
+      )}
       {/* Task #2914 — same connect card as /admin/shopify, artist copy. */}
-      {tab === "shopify" && <ArtistShopifyTab personId={personId} />}
+      {tab === "shopify" && (
+        <>
+          <TabPageHeading lead="Shopify." quiet="Sell on your own store." testid="shopify-page-heading" />
+          <ArtistShopifyTab personId={personId} />
+        </>
+      )}
       {/* Restructure: Reports hub — Audience / Acquisition / Buyers as
           sub-tabs beside the Payments / Earnings ledgers. */}
       {tab === "reports" && <ArtistReportsHub qs={`?${qs}`} personId={personId} />}
@@ -1195,7 +1187,40 @@ function CatalogTab({ qs }: { qs: string }) {
 // Task #2643 — Orders tab now renders the shared PartnerOrdersTable
 // (sortable headers, album filter, authenticated Export CSV).
 function OrdersTab({ qs }: { qs: string }) {
-  return <PartnerOrdersTable base="artist" qs={qs} subtitle="Reconciles to your Stripe payouts" />;
+  // Canon: the date-range toolbar only lives on metrics screens, so the
+  // Orders list is NOT range-filtered — strip the from/to the shared qs
+  // carries and pin an explicit all-time window (the server defaults a
+  // missing `from` to the last 30 days, which would silently hide older
+  // orders now that there is no visible picker).
+  const allTimeQs = useMemo(() => {
+    const p = new URLSearchParams(qs);
+    p.set("from", new Date(2000, 0, 1).toISOString());
+    p.delete("to");
+    return p.toString();
+  }, [qs]);
+  return (
+    <>
+      <TabPageHeading lead="Orders." quiet="Every sale on your releases." testid="orders-page-heading" />
+      <PartnerOrdersTable base="artist" qs={allTimeQs} subtitle="Reconciles to your Stripe payouts" />
+    </>
+  );
+}
+
+/** Canon two-tone page heading for tabs whose body doesn't bring its own
+ * (Orders / Referrals / Shopify). Matches the restructure pages' grammar:
+ * 30px semibold, ink lead + subink clause, plain text in the content
+ * column — never inside a boxed/filled header strip. */
+function TabPageHeading({ lead, quiet, testid }: { lead: string; quiet: string; testid: string }) {
+  return (
+    <h1
+      className="font-semibold"
+      style={{ fontSize: 30, lineHeight: 1.12, letterSpacing: "-0.03em" }}
+      data-testid={testid}
+    >
+      <span className="text-[color:var(--apple-ink)]">{lead} </span>
+      <span className="text-[color:var(--apple-subink)]">{quiet}</span>
+    </h1>
+  );
 }
 
 // ─── Charts & shared primitives ───────────────────────────────────────

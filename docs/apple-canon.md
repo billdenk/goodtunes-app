@@ -82,6 +82,22 @@ accents on ~14%-alpha translucent washes — see tokens).
 - Status dots (green/gray) + short phrase for item state ("Priced — ready to
   press", "Draft — no artwork yet").
 
+## Page headers & the range toolbar (ratified 2026-08-18)
+
+- **No boxed page headers.** A page title never sits inside a bordered/filled
+  bar or box. Canon page headers are plain text in the content column: the
+  big two-tone heading ("Settings. Team and connections.") IS the page title —
+  a separate boxed title strip above it is redundant and must be removed
+  (on all pages, not just Settings). The top of a page is: breadcrumb (if
+  nested) → two-tone heading → intro line. No container around any of it.
+- **Date-range toolbar (Today / Last 7 days / … / Compare to previous period)
+  only belongs on metrics screens.** Keep it on Dashboard and Reports (and
+  analytics drill-downs under Reports). Remove it from everything else —
+  Settings, Releases, Orders, Referrals, Shopify, and all
+  catalog/component/template pages. It's a filter for time-series numbers;
+  if a screen has no time-series, the toolbar makes no sense there. The
+  range picker travels with charts, never with the shell.
+
 ## Logos
 
 - Only dark GoodTunes logo assets exist; in dark mode render white via CSS
