@@ -22,7 +22,7 @@
 // Canon: statuses are word + icon (Bill is colorblind), never color alone; real
 // GoodTunes(R) with the literal (R); "estimate" never "quote"; sentence case.
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   ChevronRight,
   ChevronDown,
@@ -35,12 +35,30 @@ import {
   ZoomIn,
   Sun,
   Moon,
+  Search,
+  Bell,
+  MessageSquarePlus,
+  LayoutDashboard,
+  Disc3,
+  ShoppingBag,
+  BarChart3,
+  Store,
+  Gift,
+  Settings,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import niinaJacket from '../assets/niina-jacket.png';
+import goodtunesLogo from '../assets/goodtunes-logo.png';
+import niinaPhoto from '../assets/niina-soleil.webp';
 
-// ─── Theme — dark artist charcoal is the canon default; light for parity. ──
+const PILL_SHADOW = '0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)';
+
+// ─── Theme — dark artist charcoal is the canon default; light for parity.
+// Tokens mirror ArtistPortalRestructureFlow so the shared top bar + left rail
+// chrome (copied locally per handoff law) renders identically here. ──
 type Theme = {
   canvas: string;
+  rail: string;
   card: string;
   soft: string;
   ink: string;
@@ -51,12 +69,15 @@ type Theme = {
   readyWash: string;
   chipBorder: string;
   hoverCard: string;
+  hoverWash: string;
   headerBg: string;
+  logoFilter: string;
 };
 
 const THEMES: Record<'light' | 'dark', Theme> = {
   light: {
     canvas: '#f5f5f7',
+    rail: '#f5f5f7',
     card: '#ffffff',
     soft: '#f0f0f2',
     ink: '#1d1d1f',
@@ -67,10 +88,13 @@ const THEMES: Record<'light' | 'dark', Theme> = {
     readyWash: '#eaf5ef',
     chipBorder: '#d9d9de',
     hoverCard: 'hover:bg-slate-100',
+    hoverWash: 'hover:bg-slate-200',
     headerBg: 'rgba(255,255,255,0.72)',
+    logoFilter: 'none',
   },
   dark: {
     canvas: '#161618',
+    rail: '#1c1c1f',
     card: '#1c1c1f',
     soft: '#2a2a2f',
     ink: '#f5f5f7',
@@ -81,7 +105,9 @@ const THEMES: Record<'light' | 'dark', Theme> = {
     readyWash: 'rgba(63,191,130,0.12)',
     chipBorder: '#3a3a40',
     hoverCard: 'hover:bg-white/10',
+    hoverWash: 'hover:bg-white/5',
     headerBg: 'rgba(22,22,24,0.72)',
+    logoFilter: 'invert(1)',
   },
 };
 
@@ -93,6 +119,23 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 // MOCK DATA — all dummy values live here (export handoff rule: no literal
 // dummy values inside JSX). Swap these for real data on the app side.
 // ═══════════════════════════════════════════════════════════════════
+
+// Account identity shown in the shared top bar (copied from the portal chrome).
+const MOCK_USER = { fullName: 'Niina Soleil', initials: 'NS' };
+
+// Left-rail nav — same groups/items/order as ArtistPortalRestructureFlow.
+// This is a release asset test page, so the highlight sits on Releases.
+// Settings is NOT in this list — per the cross-vendor rail standard (Bill) it is
+// PINNED to the bottom of the rail, with Team living inside Settings.
+type NavItem = { label: string; icon: LucideIcon; active?: boolean };
+const MOCK_NAV: NavItem[] = [
+  { label: 'Dashboard', icon: LayoutDashboard },
+  { label: 'Releases', icon: Disc3, active: true },
+  { label: 'Orders', icon: ShoppingBag },
+  { label: 'Reports', icon: BarChart3 },
+  { label: 'Shopify', icon: Store },
+  { label: 'Referrals', icon: Gift },
+];
 
 // The art being tested. The image import stays a module import (asset), but is
 // referenced through this const so the app can repoint it.
@@ -138,6 +181,91 @@ const OVERLAY_CHIPS: Array<{ id: string; label: string; hasCaret?: boolean }> = 
   { id: 'back', label: 'Back off', hasCaret: true },
 ];
 
+// ═══════════════════════════════════════════════════════════════════
+// PORTAL CHROME — top bar + left rail, copied locally from
+// ArtistPortalRestructureFlow (kept self-contained per handoff law). Same
+// groups/items, same top bar, same light/dark theming. The appearance toggle
+// lives in the top bar here (kept as a plain button so this file needs no
+// Popover dependency — react + lucide + assets only).
+// ═══════════════════════════════════════════════════════════════════
+function NavRow({ label, icon: Icon, active, t }: NavItem & { t: Theme }) {
+  return (
+    <a
+      href="#"
+      onClick={(e) => e.preventDefault()}
+      data-testid={`nav-${label.toLowerCase()}`}
+      className={cn('flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', !active && t.hoverWash)}
+      style={{ fontWeight: active ? 600 : 500, color: active ? t.ink : t.subink, backgroundColor: active ? t.soft : undefined, boxShadow: active ? PILL_SHADOW : undefined }}
+    >
+      <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? t.ink : t.faint }} />
+      <span className="truncate flex-1">{label}</span>
+    </a>
+  );
+}
+
+function ArtistShell({ children, t, mode, setMode }: { children: ReactNode; t: Theme; mode: 'light' | 'dark'; setMode: (m: 'light' | 'dark') => void }) {
+  return (
+    <div className="min-h-[100dvh] flex flex-col font-sans" style={{ backgroundColor: t.canvas, color: t.ink }}>
+      <header
+        className="h-14 flex-shrink-0 flex items-center justify-between gap-4 pl-3 pr-6 sticky top-0 z-20"
+        style={{ backgroundColor: t.headerBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: `1px solid ${t.hairline}` }}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <img src={niinaPhoto} alt={MOCK_USER.fullName} className="h-9 w-9 rounded-full object-cover flex-shrink-0 ring-1 ring-black/10" />
+          <span className="text-[15px] font-semibold whitespace-nowrap" style={{ color: t.ink }}>{MOCK_USER.fullName}</span>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button type="button" className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] transition-colors', t.hoverCard)} style={{ color: t.subink, padding: '6px 12px' }} data-testid="button-feedback">
+            <MessageSquarePlus className="w-3.5 h-3.5" /> Feedback
+          </button>
+          <button type="button" className={cn('w-8 h-8 rounded-full flex items-center justify-center transition-colors', t.hoverCard)} style={{ color: t.subink }} aria-label="Notifications" data-testid="button-notifications">
+            <Bell className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode(mode === 'dark' ? 'light' : 'dark')}
+            className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden ring-1 ring-black/10 transition-colors"
+            style={{ background: t.soft, color: t.subink }}
+            aria-label="Toggle appearance"
+            data-testid="button-appearance"
+          >
+            {mode === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+        </div>
+      </header>
+
+      <div className="flex-1 min-h-0 flex">
+        <aside className="w-60 flex-shrink-0 hidden md:flex flex-col" style={{ backgroundColor: t.rail, borderRight: `1px solid ${t.hairline}` }}>
+          <div className="px-2.5 py-2.5">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: t.faint }} />
+              <input
+                className="w-full h-9 pl-8 pr-10 rounded-full text-[12.5px] focus:outline-none"
+                style={{ border: `1px solid ${t.hairline}`, color: t.ink, backgroundColor: t.card }}
+                placeholder="Search…"
+                readOnly
+              />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-medium rounded-md" style={{ color: t.faint, background: t.soft, padding: '2px 6px' }} aria-hidden>⌘K</span>
+            </div>
+          </div>
+          <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
+            {MOCK_NAV.map((item) => <NavRow key={item.label} {...item} t={t} />)}
+          </nav>
+          <div className="px-2.5 pb-2">
+            <NavRow label="Settings" icon={Settings} t={t} />
+          </div>
+          <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${t.hairline}` }}>
+            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: t.faint }}>Powered by</span>
+            <img src={goodtunesLogo} alt="GoodTunes®" className="h-5 w-auto" style={{ filter: t.logoFilter }} />
+          </div>
+        </aside>
+
+        <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
+      </div>
+    </div>
+  );
+}
+
 export function ArtistTemplateTest() {
   const [mode, setMode] = useState<'light' | 'dark'>('dark');
   const t = THEMES[mode];
@@ -147,22 +275,8 @@ export function ArtistTemplateTest() {
   const [zoom, setZoom] = useState(100);
 
   return (
-    <div className="min-h-[100dvh]" style={{ background: t.canvas, color: t.ink }} data-testid="artist-template-test">
-      {/* Mock-only appearance toggle */}
-      <div className="fixed z-20" style={{ top: 16, right: 16 }}>
-        <button
-          type="button"
-          onClick={() => setMode(mode === 'dark' ? 'light' : 'dark')}
-          className={cn('inline-flex items-center justify-center rounded-full transition-colors', t.hoverCard)}
-          style={{ width: 36, height: 36, border: `1px solid ${t.hairline}`, background: t.card, color: t.subink }}
-          data-testid="button-appearance"
-          aria-label="Toggle appearance"
-        >
-          {mode === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-        </button>
-      </div>
-
-      <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: '32px 40px 96px' }}>
+    <ArtistShell t={t} mode={mode} setMode={setMode}>
+      <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: '32px 40px 96px' }} data-testid="artist-template-test">
         {/* 1 · Breadcrumb — back into the release Assets (artist grammar). */}
         <nav aria-label="breadcrumb" data-testid="breadcrumb">
           <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
@@ -313,7 +427,7 @@ export function ArtistTemplateTest() {
           />
         </div>
       </div>
-    </div>
+    </ArtistShell>
   );
 }
 
