@@ -84,6 +84,7 @@ import { apiRequest, authHeaders } from '@/lib/queryClient';
 import { uploadAdminDoc } from '@/lib/adminUpload';
 import { templateTestPath, certifyRunPath } from './apiPaths';
 import { useAdminDark } from '@/lib/adminAppearance';
+import { computeCropCanvasSize, PT_PER_MM } from './cropDimensions';
 
 // ─── Themes — dark = canon charcoal default; light = apple-canon ──
 type Theme = {
@@ -512,6 +513,14 @@ export default function PressTemplateLiveTest({
   const [resumeOffer, setResumeOffer] = useState<LiveTestDraft | null>(null);
   const [activeZones, setActiveZones] = useState<Set<string>>(new Set());
   const [artOpacity, setArtOpacity] = useState(1);
+  // High-DPI crop raster — re-rendered when the crop view changes so the
+  // spine/front/back don't appear blurry at the heavy magnification the CSS
+  // transform applies (e.g. ~90× for a 3.5 mm spine). null = use template.img.
+  const [cropImg, setCropImg] = useState<string | null>(null);
+  // Monotonic counter incremented every time a new template is loaded —
+  // used as a crop-effect dependency so replacing a same-size PDF still
+  // triggers a fresh high-DPI render (template dimensions alone don't change).
+  const [templateGen, setTemplateGen] = useState(0);
   // Bill, Aug 14 2026: chip on the right to view overlays by Line or by Area.
   const [viewMode, setViewMode] = useState<'line' | 'area'>('line');
   // Bill, Aug 14 2026: chips above the preview — Full Template / Back / Front /
@@ -582,6 +591,12 @@ export default function PressTemplateLiveTest({
   // (review, Aug 15 2026: the certify endpoints had no client caller, so a
   // press with "require a passing test" On could never certify).
   const artFile = useRef<File | null>(null);
+  // Keep the parsed pdf.js document alive so we can re-render a high-DPI crop
+  // whenever the operator switches to a side view (Back / Front / Spine).
+  const pdfDocRef = useRef<import('pdfjs-dist').PDFDocumentProxy | null>(null);
+  // Monotonic sequence for crop renders — a slow render must never overwrite
+  // state after a newer crop request has already landed.
+  const cropRenderSeq = useRef(0);
   const replaceTemplate = () => {
     if (template) {
       replacingName.current = template.name;
@@ -631,6 +646,12 @@ export default function PressTemplateLiveTest({
     setBusy('template'); setError(null);
     try {
       const doc = await (await loadPdfjs()).getDocument({ data: await f.arrayBuffer() }).promise;
+      pdfDocRef.current = doc; // keep alive for crop re-renders (Task #3162)
+      // Bump the generation counter BEFORE clearing cropImg so the crop effect
+      // re-runs even when the replacement template has the same dimensions as
+      // the previous one (same-size PDF replacement case).
+      setTemplateGen((g) => g + 1);
+      setCropImg(null);
       const [{ img, wMm, hMm }, { layers, layerNames }] = [await renderPage(doc, 1), await extractGtLayers(doc, 1)];
       const gt = layers.filter((l) => l.name.toUpperCase().includes('LINE') || l.name.toUpperCase().includes('AREA') || l.name.toUpperCase().startsWith('GT'));
       if (!gt.length) {
@@ -1467,6 +1488,52 @@ export default function PressTemplateLiveTest({
       ty: 0.5 * (focus.h / focus.w) * (template.wMm / template.hMm) - cy * s,
     };
   }, [template, focus, zoom, panC]);
+
+  // ── Sharp raster for crop views (Task #3162) ──────────────────────────────
+  // When the operator crops to Back / Front / Spine the CSS transform magnifies
+  // the world by viewT.s (up to ~90× for a 3.5 mm spine). The base 1400px
+  // raster goes blurry at that scale. Re-render a sub-region of the PDF at
+  // sufficient resolution to remain crisp at the highest zoom step.
+  //
+  // computeCropCanvasSize (cropDimensions.ts) constrains BOTH canvas dimensions
+  // to ≤ MAX_CROP_PX — a naive approach that only caps width produces a
+  // 140 000-px-tall canvas for a 3.5 mm × 120 mm spine (browser crash / freeze).
+  useEffect(() => {
+    if (!template || !focus || viewArea === 'full') { setCropImg(null); return; }
+    const doc = pdfDocRef.current;
+    if (!doc) return;
+    const seq = ++cropRenderSeq.current;
+    // Desired: enough pixels to look sharp at max zoom on a 1440px display.
+    const desiredPx = Math.round(1440 * ZOOMS[ZOOMS.length - 1] * (window.devicePixelRatio || 1));
+    const { targetW, targetH, scale } = computeCropCanvasSize(focus.w, focus.h, desiredPx);
+    void (async () => {
+      try {
+        const page = await doc.getPage(1);
+        const vp = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetW, targetH);
+        // Translate so that (focus.x, focus.y) in the full-page render maps to
+        // canvas (0, 0). pdf.js renders with Y=0 at the PDF page top, so the
+        // focus y offset is simply focus.y * PT_PER_MM * scale pixels from the top.
+        ctx.translate(
+          -(focus.x * PT_PER_MM * scale),
+          -(focus.y * PT_PER_MM * scale),
+        );
+        await (page.render({ canvas, canvasContext: ctx as CanvasRenderingContext2D, viewport: vp } as Parameters<typeof page.render>[0])).promise;
+        if (cropRenderSeq.current === seq) setCropImg(canvas.toDataURL('image/png'));
+      } catch {
+        // Best-effort — fall back to the base 1400px raster silently.
+      }
+    })();
+  // templateGen tracks template identity (not just dimensions) so replacing a
+  // same-size PDF still triggers a fresh crop render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewArea, templateGen, focus?.x, focus?.y, focus?.w, focus?.h]);
 
   // Viewport width as a % of the card, so a square zone reads square and the
   // spine reads as a tall strip — height stays what the full view would use.
@@ -2598,6 +2665,23 @@ export default function PressTemplateLiveTest({
                   {(!art || showTemplate) && (
                     <img src={template.img} alt="Template" className="absolute inset-0 w-full h-full" draggable={false} />
                   )}
+                  {/* High-DPI crop raster (Task #3162): overlays the low-res base image
+                      only inside the focus region so the crop view is sharp. Positioned
+                      as a % of the world div so it covers exactly the focus rectangle. */}
+                  {(!art || showTemplate) && cropImg && focus && viewArea !== 'full' && (
+                    <img
+                      src={cropImg}
+                      alt=""
+                      draggable={false}
+                      className="absolute pointer-events-none"
+                      style={{
+                        left: pct(focus.x, template.wMm),
+                        top: pct(focus.y, template.hMm),
+                        width: pct(focus.w, template.wMm),
+                        height: pct(focus.h, template.hMm),
+                      }}
+                    />
+                  )}
                   {art && artRect && art.img && (
                     <img
                       src={art.img}
@@ -2683,23 +2767,56 @@ export default function PressTemplateLiveTest({
                             />
                           </svg>
                         ) : (
-                          <div
-                            className="absolute pointer-events-none"
-                            style={{
-                              left: pct(box.xMm, template.wMm), top: pct(box.yMm, template.hMm),
-                              width: pct(box.wMm, template.wMm), height: pct(box.hMm, template.hMm),
-                              border: `1.5px ${zone === 'Bleed' || zone.includes('Safety') ? 'dashed' : 'solid'} ${c}`,
-                              boxSizing: 'border-box',
-                              borderRadius: box.round ? '50%' : undefined,
-                            }}
+                          // Non-scaling-stroke SVG (Task #3162): keeps the overlay at a
+                          // constant ~1.5px screen weight regardless of the CSS zoom/crop
+                          // transform. Using SVG rect/ellipse instead of CSS border so the
+                          // non-scaling-stroke vector-effect can apply; the dash pattern also
+                          // stays crisp in screen pixels at every zoom level.
+                          <svg
+                            className="absolute inset-0 w-full h-full pointer-events-none"
+                            viewBox={`0 0 ${template.wMm} ${template.hMm}`}
+                            preserveAspectRatio="none"
                             data-testid={`overlay-${zone.toLowerCase().replace(/\s+/g, '-')}`}
-                          />
+                          >
+                            {box.round ? (
+                              <ellipse
+                                cx={box.xMm + box.wMm / 2}
+                                cy={box.yMm + box.hMm / 2}
+                                rx={box.wMm / 2}
+                                ry={box.hMm / 2}
+                                fill="none"
+                                stroke={c}
+                                strokeWidth={1.5}
+                                vectorEffect="non-scaling-stroke"
+                                strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                              />
+                            ) : (
+                              <rect
+                                x={box.xMm}
+                                y={box.yMm}
+                                width={box.wMm}
+                                height={box.hMm}
+                                fill="none"
+                                stroke={c}
+                                strokeWidth={1.5}
+                                vectorEffect="non-scaling-stroke"
+                                strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                              />
+                            )}
+                          </svg>
                         )}
+                        {/* Label pill (Task #3162): inverse-scale cancels the world transform
+                            so the text renders at its normal UI size at any crop/zoom level.
+                            transformOrigin '0 100%' pins the bottom-left corner of the pill
+                            to the top-left corner of the zone box. */}
                         <span
                           className="absolute pointer-events-none text-[10px] font-bold px-1.5 py-0.5 rounded"
                           style={{
-                            left: pct(box.xMm, template.wMm), top: `calc(${pct(box.yMm, template.hMm)} - 18px)`,
+                            left: pct(box.xMm, template.wMm),
+                            top: pct(box.yMm, template.hMm),
                             backgroundColor: c, color: '#fff', whiteSpace: 'nowrap',
+                            transform: `scale(${(1 / viewT.s).toFixed(6)})`,
+                            transformOrigin: '0 100%',
                           }}
                         >
                           {zone} · {box.wMm.toFixed(1)} × {box.hMm.toFixed(1)} mm
