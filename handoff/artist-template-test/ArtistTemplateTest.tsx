@@ -17,7 +17,16 @@
 // Self-contained per handoff rules; the check-row + toolbar + overlay-chip
 // grammar mirrors the live page. It is a viewer, so it carries NO filled-blue
 // primary action (the live page's blue Save pill is a press-only edit action,
-// removed). Route auto-registers at #/ArtistTemplateTest. Focused sheet — no rail.
+// removed). Route auto-registers at #/ArtistTemplateTest. Renders inside the
+// shared artist chrome (top bar + left rail, copied locally).
+//
+// Aug 2026 additions (Bill): a real "Upload another file" replace affordance in
+// the checks-card footer (mirrors the press upload treatment); a "File history"
+// audit-trail card (uploads + the press download, newest first, word+icon
+// results); and a production LOCK — once the press downloads the file it locks,
+// the footer flips to a locked banner and the upload pill disables until the
+// press unlocks. A mock-only Locked/Unlocked toggle in the top bar demos both
+// states (never shipped, like the appearance toggle). Page stays zero-blue.
 //
 // Canon: statuses are word + icon (Bill is colorblind), never color alone; real
 // GoodTunes(R) with the literal (R); "estimate" never "quote"; sentence case.
@@ -31,6 +40,12 @@ import {
   BadgeCheck,
   Layers,
   Download,
+  Upload,
+  Lock,
+  Unlock,
+  ArrowLeftRight,
+  Circle,
+  History,
   PenLine,
   ZoomIn,
   Sun,
@@ -169,6 +184,32 @@ const MOCK_CHECKS: Array<{ param: string; tone: CheckTone; detail: string }> = [
   { param: 'Color & resolution', tone: 'pass', detail: 'CMYK \u2014 spot preserved, ink and image resolution both clear' },
 ];
 
+// ─── Lock state (Item 3) — when the press downloads the file for production it
+// locks; the artist can't replace it until the press unlocks. This is the
+// audit-trail guard so an artist can't claim the press used the wrong file. The
+// download details are the placeholder proof shown in the locked banner. ────
+const MOCK_LOCK = {
+  press: 'Memphis Record Pressing',
+  downloadedAt: 'Aug 17 at 9:12 AM',
+};
+
+// ─── File history (Item 2) — the upload/download audit trail, newest first. The
+// current file is marked "Current"; prior uploads show their check result; the
+// press download is logged as its own event. Word + icon on every result. ────
+type HistoryEvent = 'current' | 'passed' | 'replaced' | 'downloaded';
+const MOCK_HISTORY: Array<{
+  id: string;
+  file: string;
+  dims: string;
+  when: string;
+  event: HistoryEvent;
+}> = [
+  { id: 'dl', file: 'CALIFORNIALAND_12-JKTSG3D-100.pdf', dims: '779.4 \u00d7 539.3 mm', when: 'Aug 17 at 9:12 AM', event: 'downloaded' },
+  { id: 'v3', file: 'CALIFORNIALAND_12-JKTSG3D-100.pdf', dims: '779.4 \u00d7 539.3 mm', when: 'Aug 16 at 7:45 PM', event: 'current' },
+  { id: 'v2', file: 'CALIFORNIALAND_12-JKTSG3D-098.pdf', dims: '779.4 \u00d7 539.3 mm', when: 'Aug 14 at 2:03 PM', event: 'passed' },
+  { id: 'v1', file: 'CALIFORNIALAND_12-JKT-draft.pdf', dims: '762.0 \u00d7 528.0 mm', when: 'Aug 11 at 11:20 AM', event: 'replaced' },
+];
+
 // ─── Viewer toolbar tabs + overlay chips — mirror the live page verbatim. ────
 const VIEW_TABS = ['Full Template', 'Back', 'Front', 'Spine'] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
@@ -203,7 +244,7 @@ function NavRow({ label, icon: Icon, active, t }: NavItem & { t: Theme }) {
   );
 }
 
-function ArtistShell({ children, t, mode, setMode }: { children: ReactNode; t: Theme; mode: 'light' | 'dark'; setMode: (m: 'light' | 'dark') => void }) {
+function ArtistShell({ children, t, mode, setMode, locked, setLocked }: { children: ReactNode; t: Theme; mode: 'light' | 'dark'; setMode: (m: 'light' | 'dark') => void; locked: boolean; setLocked: (v: boolean) => void }) {
   return (
     <div className="min-h-[100dvh] flex flex-col font-sans" style={{ backgroundColor: t.canvas, color: t.ink }}>
       <header
@@ -220,6 +261,18 @@ function ArtistShell({ children, t, mode, setMode }: { children: ReactNode; t: T
           </button>
           <button type="button" className={cn('w-8 h-8 rounded-full flex items-center justify-center transition-colors', t.hoverCard)} style={{ color: t.subink }} aria-label="Notifications" data-testid="button-notifications">
             <Bell className="w-4 h-4" />
+          </button>
+          {/* Mock-only: flip the press-download lock to demo both states. */}
+          <button
+            type="button"
+            onClick={() => setLocked(!locked)}
+            className={cn('inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium transition-colors', t.hoverCard)}
+            style={{ color: t.subink, padding: '6px 11px', border: `1px dashed ${t.hairline}` }}
+            aria-label="Toggle production lock (mock only)"
+            data-testid="button-toggle-lock"
+          >
+            {locked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+            {locked ? 'Locked' : 'Unlocked'}
           </button>
           <button
             type="button"
@@ -273,9 +326,12 @@ export function ArtistTemplateTest() {
   const [view, setView] = useState<ViewTab>('Full Template');
   const [lineArea, setLineArea] = useState<'Line' | 'Area'>('Line');
   const [zoom, setZoom] = useState(100);
+  // Mock-only: flip the press-download lock to demo both states (like the
+  // appearance toggle). Not shipped — the real lock is set by the press.
+  const [locked, setLocked] = useState(false);
 
   return (
-    <ArtistShell t={t} mode={mode} setMode={setMode}>
+    <ArtistShell t={t} mode={mode} setMode={setMode} locked={locked} setLocked={setLocked}>
       <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: '32px 40px 96px' }} data-testid="artist-template-test">
         {/* 1 · Breadcrumb — back into the release Assets (artist grammar). */}
         <nav aria-label="breadcrumb" data-testid="breadcrumb">
@@ -303,7 +359,7 @@ export function ArtistTemplateTest() {
             screenshot 3. Check-circle + "Pass! All measured checks passed" +
             "5 of 5 passed" + filename; chevron to expand the rows; "Try another
             file" quiet action bottom-right when open. */}
-        <UploadCard t={t} rows={MOCK_CHECKS} fileName={MOCK_TEST_FILE} />
+        <UploadCard t={t} rows={MOCK_CHECKS} fileName={MOCK_TEST_FILE} locked={locked} />
 
         {/* 4 · Template header card — read-only facts an artist cares about.
             Press-internal lines + Cancel/Save removed. */}
@@ -319,6 +375,9 @@ export function ArtistTemplateTest() {
             {MOCK_TEMPLATE.size} &middot; {MOCK_TEMPLATE.uploaded} &middot; art: {MOCK_TEMPLATE.artFilename}
           </p>
         </div>
+
+        {/* 4b · File history — upload/download audit trail. */}
+        <HistoryCard t={t} locked={locked} />
 
         {/* 5 · Viewer toolbar — segmented view tabs left; artist-quiet actions
             right (layers view + Download test proof; press •••/Save removed). */}
@@ -432,8 +491,11 @@ export function ArtistTemplateTest() {
 }
 
 // The upload / check card. Resting state = collapsed PASS summary (screenshot 3);
-// expanding shows the check rows + "Try another file" (screenshot 1).
-function UploadCard({ t, rows, fileName }: { t: Theme; rows: typeof MOCK_CHECKS; fileName: string }) {
+// expanding shows the check rows + the "Upload another file" replace affordance
+// (mirrors the press-side upload treatment). When the press has downloaded the
+// file for production, the footer flips to a locked banner and the upload pill
+// disables (word + icon, never color alone).
+function UploadCard({ t, rows, fileName, locked }: { t: Theme; rows: typeof MOCK_CHECKS; fileName: string; locked: boolean }) {
   const [open, setOpen] = useState(false);
   const passed = rows.filter((r) => r.tone === 'pass').length;
   return (
@@ -476,11 +538,79 @@ function UploadCard({ t, rows, fileName }: { t: Theme; rows: typeof MOCK_CHECKS;
               </div>
             );
           })}
-          <div className="flex justify-end" style={{ padding: '12px 20px', borderTop: `1px solid ${t.hairline}` }}>
-            <button type="button" className="text-[13px] font-medium transition-opacity hover:opacity-80" style={{ color: t.subink }} data-testid="button-try-another">Try another file</button>
-          </div>
+          {/* Footer — replace affordance, or the locked-for-production banner
+              once the press has downloaded the file. */}
+          {locked ? (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ padding: '14px 20px', borderTop: `1px solid ${t.hairline}` }} data-testid="locked-banner">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <Lock className="w-4 h-4 flex-shrink-0" style={{ color: t.subink, marginTop: 1 }} aria-hidden />
+                <p className="text-[12.5px]" style={{ color: t.subink, lineHeight: 1.5 }}>
+                  <span className="font-semibold" style={{ color: t.ink }}>Locked for production</span>
+                  {' \u2014 '}{MOCK_LOCK.press} downloaded this file {MOCK_LOCK.downloadedAt}. Ask them to unlock it if you need to replace it.
+                </p>
+              </div>
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium flex-shrink-0"
+                style={{ padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.faint, cursor: 'not-allowed', opacity: 0.6 }}
+                aria-disabled="true"
+                data-testid="button-upload-another-disabled"
+              >
+                <Lock className="w-4 h-4 flex-shrink-0" /> Upload locked
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3" style={{ padding: '12px 20px', borderTop: `1px solid ${t.hairline}` }}>
+              <span className="text-[12px]" style={{ color: t.faint }}>Replaces the current file and re-runs the checks.</span>
+              <button
+                type="button"
+                className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium transition-colors flex-shrink-0', t.hoverCard)}
+                style={{ padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.ink }}
+                data-testid="button-upload-another"
+              >
+                <Upload className="w-4 h-4 flex-shrink-0" /> Upload another file
+              </button>
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
+
+// File history card (Item 2) — the upload/download audit trail. Canon list rows,
+// faint text, word + icon result on every row; newest first.
+function HistoryCard({ t, locked }: { t: Theme; locked: boolean }) {
+  const meta: Record<HistoryEvent, { word: string; icon: LucideIcon; color: string; fillDot?: boolean }> = {
+    current: { word: 'Current', icon: Circle, color: t.ready, fillDot: true },
+    passed: { word: 'Passed', icon: CheckCircle2, color: t.subink },
+    replaced: { word: 'Replaced', icon: ArrowLeftRight, color: t.faint },
+    downloaded: { word: 'Downloaded by press', icon: Download, color: t.subink },
+  };
+  // The press-download event only exists once the file is locked.
+  const rows = MOCK_HISTORY.filter((h) => h.event !== 'downloaded' || locked);
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ marginTop: 16, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="file-history">
+      <div className="flex items-center gap-2" style={{ padding: '14px 20px', borderBottom: `1px solid ${t.hairline}` }}>
+        <History className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
+        <h2 className="text-[14px] font-semibold" style={{ color: t.ink }}>File history</h2>
+        <span className="text-[12.5px]" style={{ color: t.faint }}>every upload and download, newest first</span>
+      </div>
+      {rows.map((h, i) => {
+        const m = meta[h.event];
+        const Icon = m.icon;
+        return (
+          <div key={h.id} className="flex items-center justify-between gap-4" style={{ padding: '12px 20px', borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`history-row-${h.id}`}>
+            <div className="min-w-0">
+              <div className="text-[13px] font-medium truncate" style={{ color: t.ink }}>{h.file}</div>
+              <div className="text-[12px]" style={{ marginTop: 2, color: t.faint }}>{h.dims} &middot; {h.when}</div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>
+              <Icon className="w-3.5 h-3.5 flex-shrink-0" style={m.fillDot ? { fill: m.color } : undefined} aria-hidden />
+              {m.word}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
