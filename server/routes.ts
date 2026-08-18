@@ -9460,6 +9460,12 @@ export async function registerRoutes(
       updates.copyrightLine = req.body.copyrightLine ? String(req.body.copyrightLine).trim() : null;
     if (req.body?.copyrightSymbol !== undefined)
       updates.copyrightSymbol = normalizeCopyrightSymbol(req.body.copyrightSymbol);
+    // Task #3178 — Catalog Number and UPC. Both trimmed; empty string or
+    // whitespace-only → null (so `"   "` stores null, not "").
+    if (req.body?.catalogNumber !== undefined)
+      updates.catalogNumber = (String(req.body.catalogNumber ?? "").trim()) || null;
+    if (req.body?.upc !== undefined)
+      updates.upc = (String(req.body.upc ?? "").trim()) || null;
     if (req.body?.primaryArtistId !== undefined)
       updates.primaryArtistId = await resolvePrimaryArtistId(req.body.primaryArtistId);
     if (req.body?.labelId !== undefined) {
@@ -35201,6 +35207,18 @@ export async function registerRoutes(
         req,
       });
       if (err) return res.status(err.status).json(err.body);
+    }
+    // Task #3178 — Catalog Number is required before going to print.
+    // Check this early (before SKU + preflight) so the operator sees the
+    // most actionable blocker first: a missing catalog number is a metadata
+    // gap, not a packaging problem.
+    {
+      const albumRow = await storage.getAlbumById(albumId, { includeHidden: true });
+      if (!albumRow?.catalogNumber?.trim()) {
+        return res.status(400).json({
+          message: "Catalog Number is required before going to print.",
+        });
+      }
     }
     // Locate the SKU the artist wants pressed. v1 picks the first
     // configured SKU with a price and a planned quantity; multi-format

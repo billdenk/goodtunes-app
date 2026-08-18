@@ -12370,6 +12370,33 @@ mirror_external_template_files_task_3154() {
 mirror_external_template_files_task_3154 dev  "${DATABASE_URL:-}"
 mirror_external_template_files_task_3154 prod "${PROD_DATABASE_URL:-}"
 
+# Task #3178 — Catalog Number and UPC fields on albums. Two nullable text
+# columns required for proper release identifiers. catalog_number is required
+# before pressing-order submission (enforced at the route layer); upc is
+# optional metadata only. Hand-apply on BOTH dev and prod so the schema-drift
+# guard stays green and the publish dev→prod diff is empty. Idempotent.
+migrate_album_catalog_number_upc() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping album catalog_number/upc migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE albums
+  ADD COLUMN IF NOT EXISTS catalog_number text,
+  ADD COLUMN IF NOT EXISTS upc            text;
+COMMIT;
+SQL
+  then
+    echo "post-merge: album catalog_number/upc migration ok on $label"
+  else
+    echo "post-merge: WARNING — album catalog_number/upc migration failed on $label (continuing)"
+  fi
+}
+migrate_album_catalog_number_upc dev  "${DATABASE_URL:-}"
+migrate_album_catalog_number_upc prod "${PROD_DATABASE_URL:-}"
+
 # ── Stamp the full-run fingerprint (see the skip block at the top) ─────────
 # Reached only on a full pass that survived to here; from now on, merges that
 # don't touch this script skip straight to the mirror sync below.

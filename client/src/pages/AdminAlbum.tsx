@@ -267,6 +267,11 @@ interface AlbumFull {
   shopifyPlusFulfillment?: boolean | null;
   physicalFormat?: AlbumPhysicalFormat | null;
   sellQuoteLockedAt?: string | null;
+  // Task #3178 — Album-level Catalog Number and UPC fields.
+  // catalogNumber is required before pressing-order submission.
+  // upc is optional metadata only.
+  catalogNumber?: string | null;
+  upc?: string | null;
   // Task #2583 — Per-side catalog number overrides keyed by VinylSide.
   // Only sides where the operator has explicitly set a value appear here;
   // unset sides fall back to the auto-generated suggestion in VinylOrderPanel.
@@ -5006,6 +5011,9 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           // EditablePanel's onSave below.
           priceCents:
             album.priceCents == null ? "" : (album.priceCents / 100).toFixed(2),
+          // Task #3178 — Catalog Number and UPC.
+          catalogNumber: album.catalogNumber,
+          upc: album.upc,
         }}
         invalidate={invalidate}
         fields={[
@@ -5092,6 +5100,19 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
             label: "Bundle Price (USD)",
             type: "currency",
             placeholder: "19.99",
+          },
+          // Task #3178 — Catalog Number (required for pressing) + UPC (optional).
+          {
+            key: "catalogNumber",
+            label: "Catalog Number",
+            type: "text",
+            placeholder: "GT-001",
+          },
+          {
+            key: "upc",
+            label: "UPC Code",
+            type: "text",
+            placeholder: "012345678901",
           },
         ]}
         onSaved={(resp) => {

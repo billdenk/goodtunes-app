@@ -31,7 +31,7 @@ import mrpLabelLogo from '@/assets/artist-portal/mrp-logo.svg';
 type PortalFormat = { id: string; kind: string; label: string; status: 'live' | 'press' | 'draft'; pressName?: string | null };
 type PortalMilestone = { id: string; label: string; amountCents: number; status: StatusWord; note: string; payUrl?: string | null };
 type PortalPayload = {
-  release: { id: string; title: string; artist: string; artworkUrl?: string | null; year: string; tracks: number; visibility: string; editing: string };
+  release: { id: string; title: string; artist: string; artworkUrl?: string | null; year: string; tracks: number; visibility: string; editing: string; catalogNumber?: string | null; upc?: string | null };
   formats: PortalFormat[];
   store: {
     sellMode: string;
@@ -245,6 +245,10 @@ function ReleaseDetails({ portal, t }: { portal: PortalPayload; t: Theme }) {
     { label: 'Format', value: primaryFormat?.label ?? '—', testid: 'detail-format' },
     { label: 'Year', value: r.year || '—', testid: 'detail-year' },
     { label: 'Tracks', value: `${r.tracks} tracks`, testid: 'detail-tracks' },
+    // Task #3178 — catalog identifiers. Catalog Number shown as-is;
+    // UPC always shown (empty state is a dash so artists know the field exists).
+    { label: 'Catalog Number', value: r.catalogNumber || '—', testid: 'detail-catalog-number' },
+    { label: 'UPC Code', value: r.upc || '—', testid: 'detail-upc' },
     {
       label: 'Visibility',
       value: (

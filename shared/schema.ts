@@ -696,6 +696,17 @@ export const albums = pgTable("albums", {
   //                   heroDefaultUrl when the purchased format matches.
   // Null / absent keys fall back to the album's cover art automatically.
   emailAppearance: jsonb("email_appearance").$type<AlbumEmailAppearance>(),
+  // Task #3178 — standard release identifiers. `catalogNumber` is the
+  // operator-assigned catalog number (e.g. "GT-001"); it is REQUIRED
+  // before a pressing order can be submitted ("go to print"). `upc` is
+  // the Universal Product Code barcode string; optional metadata only,
+  // never blocks any action. Both are nullable text (trimmed, empty →
+  // null at the PUT layer). Neither is validated against external
+  // registries — that is out of scope. Per-vinyl-side catalog number
+  // overrides (`vinylSideCatalogNumbers`) are a different, existing
+  // concept and are left unchanged.
+  catalogNumber: text("catalog_number"),
+  upc: text("upc"),
   ...softDeleteCols,
 }, (t) => ({
   legacyGogoodsIdUniq: uniqueIndex("albums_legacy_gogoods_id_uniq")
