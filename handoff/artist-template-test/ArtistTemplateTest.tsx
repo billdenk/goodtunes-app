@@ -46,6 +46,11 @@ import {
   ArrowLeftRight,
   Circle,
   History,
+  Clock,
+  Link2,
+  FileUp,
+  ImagePlus,
+  LayoutTemplate,
   PenLine,
   ZoomIn,
   Sun,
@@ -244,7 +249,7 @@ function NavRow({ label, icon: Icon, active, t }: NavItem & { t: Theme }) {
   );
 }
 
-function ArtistShell({ children, t, mode, setMode, locked, setLocked }: { children: ReactNode; t: Theme; mode: 'light' | 'dark'; setMode: (m: 'light' | 'dark') => void; locked: boolean; setLocked: (v: boolean) => void }) {
+function ArtistShell({ children, t, mode, setMode, locked, setLocked, hasArt, setHasArt }: { children: ReactNode; t: Theme; mode: 'light' | 'dark'; setMode: (m: 'light' | 'dark') => void; locked: boolean; setLocked: (v: boolean) => void; hasArt: boolean; setHasArt: (v: boolean) => void }) {
   return (
     <div className="min-h-[100dvh] flex flex-col font-sans" style={{ backgroundColor: t.canvas, color: t.ink }}>
       <header
@@ -261,6 +266,19 @@ function ArtistShell({ children, t, mode, setMode, locked, setLocked }: { childr
           </button>
           <button type="button" className={cn('w-8 h-8 rounded-full flex items-center justify-center transition-colors', t.hoverCard)} style={{ color: t.subink }} aria-label="Notifications" data-testid="button-notifications">
             <Bell className="w-4 h-4" />
+          </button>
+          {/* Mock-only: flip between "No art yet" (raw template) and the tested
+              state, to demo where a first-time artist lands. */}
+          <button
+            type="button"
+            onClick={() => setHasArt(!hasArt)}
+            className={cn('inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium transition-colors', t.hoverCard)}
+            style={{ color: t.subink, padding: '6px 11px', border: `1px dashed ${t.hairline}` }}
+            aria-label="Toggle art state (mock only)"
+            data-testid="button-toggle-art"
+          >
+            {hasArt ? <CheckCircle2 className="w-3.5 h-3.5" /> : <ImagePlus className="w-3.5 h-3.5" />}
+            {hasArt ? 'Has art' : 'No art yet'}
           </button>
           {/* Mock-only: flip the press-download lock to demo both states. */}
           <button
@@ -329,9 +347,12 @@ export function ArtistTemplateTest() {
   // Mock-only: flip the press-download lock to demo both states (like the
   // appearance toggle). Not shipped — the real lock is set by the press.
   const [locked, setLocked] = useState(false);
+  // Mock-only: "No art yet" = the raw-template landing state a first-time artist
+  // sees; true = the tested/certified state. Not shipped.
+  const [hasArt, setHasArt] = useState(true);
 
   return (
-    <ArtistShell t={t} mode={mode} setMode={setMode} locked={locked} setLocked={setLocked}>
+    <ArtistShell t={t} mode={mode} setMode={setMode} locked={locked} setLocked={setLocked} hasArt={hasArt} setHasArt={setHasArt}>
       <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: '32px 40px 96px' }} data-testid="artist-template-test">
         {/* 1 · Breadcrumb — back into the release Assets (artist grammar). */}
         <nav aria-label="breadcrumb" data-testid="breadcrumb">
@@ -359,7 +380,11 @@ export function ArtistTemplateTest() {
             screenshot 3. Check-circle + "Pass! All measured checks passed" +
             "5 of 5 passed" + filename; chevron to expand the rows; "Try another
             file" quiet action bottom-right when open. */}
-        <UploadCard t={t} rows={MOCK_CHECKS} fileName={MOCK_TEST_FILE} locked={locked} />
+        {hasArt ? (
+          <UploadCard t={t} rows={MOCK_CHECKS} fileName={MOCK_TEST_FILE} locked={locked} />
+        ) : (
+          <PendingCard t={t} />
+        )}
 
         {/* 4 · Template header card — read-only facts an artist cares about.
             Press-internal lines + Cancel/Save removed. */}
@@ -376,8 +401,9 @@ export function ArtistTemplateTest() {
           </p>
         </div>
 
-        {/* 4b · File history — upload/download audit trail. */}
-        <HistoryCard t={t} locked={locked} />
+        {/* 4b · File history — upload/download audit trail. Only once there's
+            art; a first-time artist with no uploads has no history yet. */}
+        {hasArt && <HistoryCard t={t} locked={locked} />}
 
         {/* 5 · Viewer toolbar — segmented view tabs left; artist-quiet actions
             right (layers view + Download test proof; press •••/Save removed). */}
@@ -405,10 +431,21 @@ export function ArtistTemplateTest() {
             <button type="button" className={cn('inline-flex items-center justify-center rounded-full transition-colors', t.hoverCard)} style={{ width: 34, height: 34, border: `1px solid ${t.hairline}`, color: t.subink }} data-testid="button-layers" aria-label="Layers view">
               <Layers className="w-4 h-4" />
             </button>
+            {!hasArt && (
+              <button
+                type="button"
+                className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+                style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+                data-testid="button-download-raw"
+              >
+                <LayoutTemplate className="w-4 h-4 flex-shrink-0" /> Download raw template
+              </button>
+            )}
             <button
               type="button"
               className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
-              style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+              style={{ padding: '7px 14px', color: hasArt ? t.subink : t.faint, border: `1px solid ${t.hairline}`, opacity: hasArt ? 1 : 0.55, cursor: hasArt ? 'pointer' : 'not-allowed' }}
+              aria-disabled={!hasArt}
               data-testid="button-download-proof"
             >
               <Download className="w-4 h-4 flex-shrink-0" /> Download test proof
@@ -470,20 +507,26 @@ export function ArtistTemplateTest() {
           </div>
         </div>
 
-        {/* 7 · Big white canvas — the CALIFORNIALAND jacket SPREAD (wide, not
-            square) seated in it, zoom-scaled. */}
+        {/* 7 · Big white canvas. With art: the CALIFORNIALAND jacket SPREAD
+            seated in the template, zoom-scaled. Without art: the RAW press
+            template — white with Front/Back panels and an upload overlay on
+            each so the artist drops art straight onto the layout. */}
         <div
           className="w-full overflow-hidden rounded-2xl flex items-center justify-center"
           style={{ marginTop: 14, background: '#ffffff', border: `1px solid ${t.hairline}`, padding: '56px 40px' }}
           data-testid="template-canvas"
         >
-          <img
-            src={MOCK_ART.image}
-            alt={MOCK_ART.alt}
-            className="w-full h-auto"
-            style={{ maxWidth: `${zoom}%`, transition: 'max-width 0.1s linear' }}
-            data-testid="canvas-art"
-          />
+          {hasArt ? (
+            <img
+              src={MOCK_ART.image}
+              alt={MOCK_ART.alt}
+              className="w-full h-auto"
+              style={{ maxWidth: `${zoom}%`, transition: 'max-width 0.1s linear' }}
+              data-testid="canvas-art"
+            />
+          ) : (
+            <RawTemplate zoom={zoom} />
+          )}
         </div>
       </div>
     </ArtistShell>
@@ -611,6 +654,98 @@ function HistoryCard({ t, locked }: { t: Theme; locked: boolean }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Pending card (Part B) — the pre-upload state that replaces the PASSED summary
+// when there's no art yet. Quiet, word + icon, zero blue. Mirrors the checks-card
+// shell so the two states swap cleanly in place.
+function PendingCard({ t }: { t: Theme }) {
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ marginTop: 22, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="pending-card">
+      <div className="flex items-center gap-3" style={{ padding: '16px 20px' }}>
+        <Clock className="w-5 h-5 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-semibold" style={{ color: t.ink }}>
+            Pending &mdash; not tested yet
+          </div>
+          <div className="text-[12.5px]" style={{ marginTop: 2, color: t.faint }}>
+            Drop your Front and Back art onto the template below to run the checks.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Panel upload overlay (Part B) — the dashed drop-zone that sits over each raw
+// template panel. Clicking opens a small dead-end popover with "Choose file" and
+// "Paste URL" rows — the same upload-menu affordance used elsewhere.
+function PanelUpload({ t, panel }: { t: Theme; panel: 'Front' | 'Back' }) {
+  const [menu, setMenu] = useState(false);
+  return (
+    <div className="absolute inset-3">
+      <button
+        type="button"
+        onClick={() => setMenu((v) => !v)}
+        className="w-full h-full flex flex-col items-center justify-center text-center gap-2 rounded-xl transition-colors"
+        style={{ border: '2px dashed rgba(200,60,60,0.55)', background: 'rgba(200,60,60,0.05)', color: '#7a2a2a' }}
+        data-testid={`panel-upload-${panel.toLowerCase()}`}
+      >
+        <ImagePlus className="w-7 h-7" style={{ strokeWidth: 1.5 }} aria-hidden />
+        <span className="text-[13px] font-semibold">Drag &amp; drop your {panel} art here</span>
+        <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ opacity: 0.8 }}>
+          or click to upload &middot; paste a URL
+        </span>
+      </button>
+      {menu && (
+        <div
+          className="absolute left-1/2 rounded-xl overflow-hidden"
+          style={{ top: '50%', transform: 'translate(-50%, 8px)', minWidth: 190, background: t.card, border: `1px solid ${t.hairline}`, boxShadow: '0 12px 32px rgba(0,0,0,0.28)', zIndex: 5 }}
+          data-testid={`panel-menu-${panel.toLowerCase()}`}
+        >
+          <button type="button" className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', t.hoverCard)} style={{ padding: '10px 14px', color: t.ink }} data-testid={`menu-choose-${panel.toLowerCase()}`}>
+            <FileUp className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Choose file
+          </button>
+          <button type="button" className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', t.hoverCard)} style={{ padding: '10px 14px', color: t.ink, borderTop: `1px solid ${t.hairline}` }} data-testid={`menu-url-${panel.toLowerCase()}`}>
+            <Link2 className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Paste URL
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Raw press template (Part B) — the white template the artist lands on before
+// uploading. Front + Back panels with hairline red template linework (simple
+// styled divs, no assets) and an upload overlay on each. Zoom-scaled to match
+// the seated-art canvas.
+function RawTemplate({ zoom }: { zoom: number }) {
+  const t = THEMES.light; // the canvas is always white; use light tokens for the menu
+  const RED = 'rgba(200,60,60,0.7)';
+  return (
+    <div
+      className="w-full"
+      style={{ maxWidth: `${zoom}%`, transition: 'max-width 0.1s linear' }}
+      data-testid="raw-template"
+    >
+      <div className="grid grid-cols-2" style={{ gap: 2 }}>
+        {(['Back', 'Front'] as const).map((panel) => (
+          <div key={panel} className="relative" style={{ aspectRatio: '1 / 1', background: '#ffffff', outline: `1.5px solid ${RED}`, outlineOffset: -1 }} data-testid={`raw-panel-${panel.toLowerCase()}`}>
+            {/* Bleed guide — dashed inset rectangle, press template convention. */}
+            <div className="absolute" style={{ inset: 14, border: `1px dashed ${RED}` }} aria-hidden />
+            {/* Panel label, top-left, template red. */}
+            <span className="absolute text-[11px] font-semibold" style={{ top: 6, left: 8, color: RED, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{panel}</span>
+            <PanelUpload t={t} panel={panel} />
+          </div>
+        ))}
+      </div>
+      {/* Spine strip between panels is implied by the 2px gap; a thin center
+          fold guide keeps the template read. */}
+      <div className="flex items-center justify-center" style={{ marginTop: 8 }}>
+        <span className="text-[11px]" style={{ color: RED, letterSpacing: '0.06em' }}>Raw press template &middot; art not placed yet</span>
+      </div>
     </div>
   );
 }
