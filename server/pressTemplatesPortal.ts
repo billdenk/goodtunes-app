@@ -1371,7 +1371,16 @@ export function registerPressTemplateFlowRoutes(
       // space. What it can't carry: trim/bleed boxes — so bleed is judged by
       // the frame covering the slot's full artboard (finished + bleed).
       const ctype = String(req.headers["content-type"] ?? "").toLowerCase();
-      let rasterKind = ctype.startsWith("image/jpeg") ? "jpeg" : ctype.startsWith("image/png") ? "png" : null;
+      // TIFF is the standard CMYK-capable print raster (Task #3161); PSD is
+      // accepted best-effort — flattened with ImageMagick below, then run
+      // through the exact same inspection as the other rasters.
+      let rasterKind: "jpeg" | "png" | "tiff" | "psd" | null =
+        ctype.startsWith("image/jpeg") ? "jpeg"
+        : ctype.startsWith("image/png") ? "png"
+        : ctype.startsWith("image/tiff") ? "tiff"
+        : ctype.startsWith("image/vnd.adobe.photoshop") || ctype.startsWith("application/x-photoshop") ||
+          ctype.startsWith("application/photoshop") || ctype.startsWith("image/x-psd") || ctype.startsWith("application/psd") ? "psd"
+        : null;
       // Large files can't ride through the deployment edge — it 413s big
       // request bodies before they ever reach us (gogoods' 59MB CMYK jacket
       // JPEG never arrived, Aug 16 2026; dev has no such cap, which is why it
@@ -1400,6 +1409,8 @@ export function registerPressTemplateFlowRoutes(
           rasterKind =
             oct.startsWith("image/jpeg") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? "jpeg"
             : oct.startsWith("image/png") || lower.endsWith(".png") ? "png"
+            : oct.startsWith("image/tiff") || lower.endsWith(".tif") || lower.endsWith(".tiff") ? "tiff"
+            : oct.startsWith("image/vnd.adobe.photoshop") || oct.startsWith("application/x-photoshop") || lower.endsWith(".psd") ? "psd"
             : null; // anything else falls to the PDF scanner below
         } catch (e: any) {
           console.error("[art-inspect] stored-object metadata failed:", e?.message ?? e);
@@ -1449,8 +1460,49 @@ export function registerPressTemplateFlowRoutes(
           if (!buf || buf.length === 0) {
             return res.status(422).json({ message: "Couldn't read that image — ink + PPI will be verified at prepress." });
           }
+          // PSD — sharp/libvips can't decode it; flatten the composite with
+          // ImageMagick into a CMYK-preserving TIFF (density rides along),
+          // then inspect that exactly like an uploaded TIFF. Best-effort: any
+          // failure (unsupported PSD variant, tool missing, huge layered file)
+          // answers with a clear "export TIFF or PDF" instead of a generic
+          // error (Task #3161).
+          let inspectBuf = buf;
+          if (rasterKind === "psd") {
+            const os = await import("node:os");
+            const fs = await import("node:fs/promises");
+            const path = await import("node:path");
+            const { execFile } = await import("node:child_process");
+            const dir = await fs.mkdtemp(path.join(os.tmpdir(), "art-psd-"));
+            const inPath = path.join(dir, "in.psd");
+            const outPath = path.join(dir, "flat.tif");
+            try {
+              await fs.writeFile(inPath, buf);
+              await new Promise<void>((resolve, reject) => {
+                // `[0]` = the PSD's merged composite; -flatten collapses any
+                // remaining alpha/layers. Memory/map limits + a 120s kill
+                // guard bound a hostile or enormous layered file.
+                execFile(
+                  "magick",
+                  ["-limit", "memory", "1GiB", "-limit", "map", "2GiB", `${inPath}[0]`, "-flatten", outPath],
+                  { timeout: 120_000 },
+                  (err) => (err ? reject(err) : resolve()),
+                );
+              });
+              inspectBuf = await fs.readFile(outPath);
+            } catch (e: any) {
+              console.warn("[art-inspect] psd flatten failed:", e?.message ?? e);
+              return res.status(422).json({
+                code: "psd_flatten_failed",
+                message: "Couldn't flatten that PSD (unsupported variant or too complex). Export a CMYK TIFF or a PDF from Photoshop and upload that instead.",
+              });
+            } finally {
+              await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+            }
+          }
+          // Everything below inspects the flattened composite for PSDs.
+          const effectiveKind: "jpeg" | "png" | "tiff" = rasterKind === "psd" ? "tiff" : rasterKind;
           const sharp = (await import("sharp")).default;
-          const meta = await sharp(buf, { limitInputPixels: 1_000_000_000 }).metadata();
+          const meta = await sharp(inspectBuf, { limitInputPixels: 1_000_000_000 }).metadata();
           const wPx = meta.width ?? 0;
           const hPx = meta.height ?? 0;
           if (!wPx || !hPx) {
@@ -1468,16 +1520,19 @@ export function registerPressTemplateFlowRoutes(
             if (specRow?.minPpi != null && specRow.minPpi > 0) ppiFloor = specRow.minPpi;
           }
           const rows: Array<{ param: string; tone: "pass" | "fail" | "na"; detail: string }> = [];
-          // Color — PNG cannot carry CMYK at all; JPEG can (Adobe CMYK JPEGs).
+          // Color — PNG cannot carry CMYK at all; JPEG (Adobe CMYK JPEGs) and
+          // TIFF (the standard print raster) both can; PSD is judged by its
+          // flattened composite.
           const space = String(meta.space ?? "").toLowerCase();
+          const kindLabel = rasterKind === "psd" ? "PSD (flattened)" : effectiveKind === "tiff" ? "TIFF" : effectiveKind === "jpeg" ? "JPEG" : "PNG";
           if (rasterKind === "png") {
-            rows.push({ param: "Color", tone: "fail", detail: "PNG is an RGB format — it can't carry CMYK ink. Export a CMYK JPEG or a PDF instead." });
+            rows.push({ param: "Color", tone: "fail", detail: "PNG is an RGB format — it can't carry CMYK ink. Export a CMYK TIFF, a CMYK JPEG, or a PDF instead." });
           } else if (space === "cmyk") {
-            rows.push({ param: "Color", tone: "pass", detail: "CMYK JPEG — ink is print-ready." });
+            rows.push({ param: "Color", tone: "pass", detail: `CMYK ${kindLabel} — ink is print-ready.` });
           } else if (space === "b-w" || space === "grey" || space === "gray" || meta.channels === 1) {
             rows.push({ param: "Color", tone: "pass", detail: "Grayscale — acceptable ink for print." });
           } else if (space) {
-            rows.push({ param: "Color", tone: "fail", detail: "RGB image — print art must be CMYK. Re-export from your design app as a CMYK JPEG (or PDF); we never convert color for you." });
+            rows.push({ param: "Color", tone: "fail", detail: `RGB ${kindLabel} — print art must be CMYK. Re-export from your design app as a CMYK TIFF or JPEG (or PDF); we never convert color for you.` });
           } else {
             rows.push({ param: "Color", tone: "na", detail: "Couldn't determine the color space — confirm CMYK on export." });
           }
@@ -1488,6 +1543,12 @@ export function registerPressTemplateFlowRoutes(
           // sharp's density only when it isn't the 72 default (Exif-tagged
           // files surface there).
           const embeddedPpi = (): number | null => {
+            // TIFF (and flattened PSD → TIFF): libvips reads the file's own
+            // XResolution/ResolutionUnit tags and reports density in PPI —
+            // and unlike JPEG it does NOT default an untagged file to 72
+            // (verified: untagged TIFF → density undefined). So a TIFF
+            // density is trustworthy as-is.
+            if (effectiveKind === "tiff") return meta.density && meta.density > 1 ? meta.density : null;
             try {
               if (rasterKind === "jpeg") {
                 // Scan JPEG segments for APP0 "JFIF": units 1 = dots/inch, 2 = dots/cm.
@@ -1581,8 +1642,12 @@ export function registerPressTemplateFlowRoutes(
             // 320 MP cap — real jacket art tops out well under this (30" ×
             // 600 PPI ≈ 234 MP); an unbounded decode of a crafted raster
             // could exhaust worker memory (review, Aug 16 2026).
-            const pv = await sharp(buf, { limitInputPixels: 320_000_000 })
-              .resize({ width: 2000, withoutEnlargement: true })
+            let pvPipe = sharp(inspectBuf, { limitInputPixels: 320_000_000 })
+              .resize({ width: 2000, withoutEnlargement: true });
+            // A flattened PSD/TIFF can carry an alpha channel (CMYKA) — JPEG
+            // can't; composite onto white (paper) instead of sharp's black.
+            if (meta.hasAlpha) pvPipe = pvPipe.flatten({ background: "#ffffff" });
+            const pv = await pvPipe
               .toColourspace("srgb")
               .jpeg({ quality: 78 })
               .toBuffer();
@@ -1617,7 +1682,7 @@ export function registerPressTemplateFlowRoutes(
           return res.status(422).json({ message: "Couldn't inspect that file — ink + PPI will be verified at prepress." });
         }
         if (!scan.isPdf) {
-          return res.status(422).json({ message: "That file isn't a PDF or JPEG/PNG — export one of those for ink and resolution checks." });
+          return res.status(422).json({ message: "That file isn't a PDF or JPEG/PNG/TIFF/PSD — export one of those for ink and resolution checks." });
         }
         if (scan.truncated) {
           // A partial scan must not report measured rows as authoritative.

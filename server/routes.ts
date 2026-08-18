@@ -5116,6 +5116,9 @@ export async function registerRoutes(
     "image/png": ".png",
     "image/jpeg": ".jpg",
     "image/tiff": ".tiff",
+    // Press live-test art upload accepts flattened-on-server PSDs too
+    // (Task #3161) — same admin-bearer trust level as the other doc types.
+    "image/vnd.adobe.photoshop": ".psd",
     // Press label-logo dropzone is SVG-only (recolorable vector marks).
     // Admin-bearer-gated route, same trust level as the other doc types.
     "image/svg+xml": ".svg",
@@ -5127,7 +5130,9 @@ export async function registerRoutes(
     ".png": "image/png",
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
+    ".tif": "image/tiff",
     ".tiff": "image/tiff",
+    ".psd": "image/vnd.adobe.photoshop",
     ".svg": "image/svg+xml",
   };
   app.post("/api/admin/upload-doc/sign", requireAdminBearer, async (req, res) => {
@@ -5136,7 +5141,7 @@ export async function registerRoutes(
       if (!(contentType in DOC_MIME_TO_EXT)) {
         return res
           .status(400)
-          .json({ message: "Only PDF, AI/EPS, ZIP, PNG, JPEG, or TIFF files are allowed" });
+          .json({ message: "Only PDF, AI/EPS, ZIP, PNG, JPEG, TIFF, or PSD files are allowed" });
       }
       const id = `${randomUUID()}${DOC_MIME_TO_EXT[contentType]}`;
       const { bucketName, objectName } = uploadDestination(id);

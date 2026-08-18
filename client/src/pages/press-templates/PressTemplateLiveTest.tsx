@@ -425,6 +425,12 @@ export default function PressTemplateLiveTest({
   // 'checking' while the scan streams; rows replace the Color & resolution
   // line; 'error' degrades to the old prepress note.
   const [inkChecks, setInkChecks] = useState<'checking' | 'error' | CheckRow[] | null>(null);
+  // A server-sent reason for a failed inspection (e.g. a PSD that couldn't be
+  // flattened) — shown instead of the generic "didn't finish" line so the
+  // artist knows to export TIFF/PDF rather than retrying (Task #3161).
+  const [inkErrorMsg, setInkErrorMsg] = useState<string | null>(null);
+  // Up-front format guidance for the picked art file (PNG can't be CMYK).
+  const [formatNotice, setFormatNotice] = useState<string | null>(null);
   // Upload progress for the server ink/PPI scan (0..1 while the file streams
   // up, 1 = uploaded & server measuring, null = idle). Drives the thin
   // progress bar in the verdict banner (gogoods, Aug 16 2026: "we could all
@@ -852,27 +858,47 @@ export default function PressTemplateLiveTest({
         const { layerNames } = await extractGtLayers(doc, 1);
         if (pickSeq.current !== myPick) return; // a newer pick superseded this parse
         const gtNames = layerNames.filter((n) => n.trim().toUpperCase().startsWith('GT'));
+        setFormatNotice(null);
         setArt({ name: f.name, img, wMm, hMm, pageCount: doc.numPages, gtLayerNames: gtNames });
         artFile.current = f;
         setShowTemplate(false);
         runInkInspect(f, 'application/pdf');
       } else {
-        // Raster image (JPEG/PNG) — measurable too (gogoods, Aug 16 2026: MRP
-        // wants art-only files at the proper artboard size, so a correct JPG
-        // is a legitimate final). The overlay preview stays visual (no
-        // physical size client-side), but the server check measures pixel
-        // dims + PPI tag + color space against the slot's artboard.
-        const img = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = () => reject(new Error('Could not read that image.'));
-          reader.readAsDataURL(f);
-        });
+        // Raster image (JPEG/PNG/TIFF, plus best-effort PSD) — measurable too
+        // (gogoods, Aug 16 2026: MRP wants art-only files at the proper
+        // artboard size, so a correct JPG is a legitimate final; Aug 18 2026:
+        // TIFF is the standard print raster, and PSD is flattened server-side).
+        // The overlay preview stays visual (no physical size client-side), but
+        // the server check measures pixel dims + PPI tag + color space against
+        // the slot's artboard.
+        const name = f.name.toLowerCase();
+        const contentType = f.type
+          || (name.endsWith('.tif') || name.endsWith('.tiff') ? 'image/tiff'
+            : name.endsWith('.psd') ? 'image/vnd.adobe.photoshop'
+            : 'image/jpeg');
+        // Browsers can't render TIFF/PSD in an <img> — skip the local data-URL
+        // preview for those; the server sends back a resized sRGB preview that
+        // swaps in once the inspection lands (same path CMYK JPEGs already use).
+        const browserRenders = contentType.startsWith('image/png') || contentType.startsWith('image/jpeg');
+        const img = browserRenders
+          ? await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result));
+              reader.onerror = () => reject(new Error('Could not read that image.'));
+              reader.readAsDataURL(f);
+            })
+          : '';
         if (pickSeq.current !== myPick) return; // a newer pick superseded this read
+        // PNG is structurally RGB — it can never carry CMYK ink, so the color
+        // check will always fail. Say so up front instead of a puzzling late
+        // failure (Task #3161).
+        setFormatNotice(contentType.startsWith('image/png')
+          ? 'PNG can\u2019t be CMYK, so it won\u2019t pass the color check. Export a CMYK TIFF, CMYK JPEG, or PDF for print ink.'
+          : null);
         setArt({ name: f.name, img, wMm: null, hMm: null, pageCount: null, gtLayerNames: [] });
         artFile.current = f; // server test submission still requires a PDF and skips rasters
         setShowTemplate(false);
-        runInkInspect(f, f.type || 'image/jpeg');
+        runInkInspect(f, contentType);
       }
       if (pickSeq.current !== myPick) return;
       if (markDirty) setDirty(true); // a loaded art result is unsaved work — Save persists it
@@ -894,6 +920,7 @@ export default function PressTemplateLiveTest({
 
   const runInkInspect = (f: File, contentType: string) => {
     setInkChecks('checking');
+    setInkErrorMsg(null);
     setInkProgress(0);
     let myXhr: XMLHttpRequest | null = null;
     void (async () => {
@@ -961,7 +988,14 @@ export default function PressTemplateLiveTest({
             if (xhr.status >= 200 && xhr.status < 300) {
               try { resolve(JSON.parse(xhr.responseText) as { checks: CheckRow[]; previewDataUrl?: string; pxW?: number; pxH?: number }); }
               catch { reject(new Error('bad response')); }
-            } else reject(new Error(String(xhr.status)));
+            } else {
+              // Surface the server's reason when it sent one (e.g. a PSD
+              // that couldn't be flattened → "export TIFF or PDF instead").
+              let msg = '';
+              try { msg = String((JSON.parse(xhr.responseText) as { message?: string })?.message ?? ''); } catch { /* not JSON */ }
+              if (msg && artFile.current === f) setInkErrorMsg(msg);
+              reject(new Error(String(xhr.status)));
+            }
           };
           xhr.onerror = () => reject(new Error('network'));
           xhr.onabort = () => reject(new Error('superseded'));
@@ -1053,14 +1087,17 @@ export default function PressTemplateLiveTest({
       rows.push({ param: 'Color & resolution', tone: 'na', detail: 'Measuring ink and image resolution…' });
     } else if (Array.isArray(inkChecks)) {
       rows.push(...inkChecks);
-    } else {
+    }
+    // Up-front format guidance (PNG can't be CMYK) — shows even while the
+    // server is still measuring, so the color fail is never a surprise.
+    if (formatNotice) rows.unshift({ param: 'Format', tone: 'fail', detail: formatNotice }); else {
       // A dead measurement is not a shrug — offer the retry right here
       // (gogoods, Aug 16 2026: a one-off network drop left "unavailable",
       // a Pass! header, and a blank preview until a full page refresh).
       rows.push({ param: 'Color & resolution', tone: 'na', detail: 'The ink + resolution check didn’t finish (connection hiccup). Use “Re-run measurement” below — no need to re-pick the file.' });
     }
     return rows;
-  }, [template, art, bleedBox, cutBox, inkChecks]);
+  }, [template, art, bleedBox, cutBox, inkChecks, formatNotice]);
 
   const measured = checks.filter((c) => c.tone !== 'na');
   // While the server ink/PPI scan is still in flight, the header must not
@@ -1090,8 +1127,13 @@ export default function PressTemplateLiveTest({
   const retryInkInspect = () => {
     const f = artFile.current;
     if (!f) return;
-    const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
-    runInkInspect(f, isPdf ? 'application/pdf' : f.type || 'image/jpeg');
+    const name = f.name.toLowerCase();
+    const isPdf = f.type === 'application/pdf' || name.endsWith('.pdf');
+    const rasterCt = f.type
+      || (name.endsWith('.tif') || name.endsWith('.tiff') ? 'image/tiff'
+        : name.endsWith('.psd') ? 'image/vnd.adobe.photoshop'
+        : 'image/jpeg');
+    runInkInspect(f, isPdf ? 'application/pdf' : rasterCt);
   };
 
   // Save the current art's result into the trail, then invite the next file.
@@ -1670,7 +1712,7 @@ export default function PressTemplateLiveTest({
                           ? (inkProgress !== null && inkProgress < 1
                               ? `Uploading art for ink & resolution check… ${Math.round(inkProgress * 100)}%`
                               : 'Measuring ink & resolution…')
-                          : inkFailed ? 'Measurement didn’t finish — re-run the ink & resolution check'
+                          : inkFailed ? (inkErrorMsg ?? 'Measurement didn’t finish — re-run the ink & resolution check')
                           : allPass ? 'Pass! All measured checks passed' : measured.some((c) => c.tone === 'fail') ? 'Fail! Measured checks flag issues' : 'Visual only — nothing to measure'}
                         <span className="ml-2 font-normal" style={{ color: t.subink }}>
                           {!inkPending && measured.length > 0 ? `${measured.filter((c) => c.tone === 'pass').length} of ${measured.length} passed` : ''}
@@ -2394,7 +2436,7 @@ export default function PressTemplateLiveTest({
                   {(!art || showTemplate) && (
                     <img src={template.img} alt="Template" className="absolute inset-0 w-full h-full" draggable={false} />
                   )}
-                  {art && artRect && (
+                  {art && artRect && art.img && (
                     <img
                       src={art.img}
                       alt="Art"
@@ -2532,7 +2574,7 @@ export default function PressTemplateLiveTest({
         )}
 
         <input ref={templateInput} type="file" accept="application/pdf,.pdf" className="hidden" onChange={onPickTemplate} data-testid="input-template-pdf" />
-        <input ref={artInput} type="file" accept="application/pdf,.pdf,image/png,image/jpeg" className="hidden" onChange={onPickArt} data-testid="input-art-file" />
+        <input ref={artInput} type="file" accept="application/pdf,.pdf,image/png,image/jpeg,image/tiff,.tif,.tiff,image/vnd.adobe.photoshop,.psd" className="hidden" onChange={onPickArt} data-testid="input-art-file" />
     </div>
   );
 }
