@@ -494,14 +494,13 @@ function JacketStage({
             transform: "rotateY(90deg)", transformOrigin: "left center", pointerEvents: "none",
           }} />
         )}
+        <div style={{
+          position: "absolute", bottom: -14, left: "50%", transform: "translateX(-50%)",
+          width: JS * 0.88, height: 22, borderRadius: "50%",
+          background: "radial-gradient(ellipse at 50% 40%, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0.10) 55%, transparent 80%)",
+          pointerEvents: "none", zIndex: 0, willChange: "width", transition: `width 600ms ${GATEFOLD_EASE}`,
+        }} />
       </div>
-
-      <div style={{
-        position: "absolute", bottom: -14, left: "50%", transform: "translateX(-50%)",
-        width: JS * 0.88, height: 22, borderRadius: "50%",
-        background: "radial-gradient(ellipse at 50% 40%, rgba(0,0,0,0.28) 0%, rgba(0,0,0,0.10) 55%, transparent 80%)",
-        pointerEvents: "none", zIndex: 0, willChange: "width", transition: `width 600ms ${GATEFOLD_EASE}`,
-      }} />
 
       {isDiscobag && (
         <button
