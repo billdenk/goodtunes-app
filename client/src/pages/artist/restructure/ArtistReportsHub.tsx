@@ -65,7 +65,14 @@ function LedgerCard({ kind, ledger, t }: { kind: 'owed' | 'earned'; ledger: Ledg
   );
 }
 
-export function ArtistReportsHub({ qs, personId }: { qs: string; personId: string | null }) {
+export function ArtistReportsHub({ qs, personId, rangeControl }: {
+  qs: string;
+  personId: string | null;
+  /** In-content date-range switcher (canon: the range picker travels with
+   * charts, never with the shell). Rendered right-aligned in the sub-tab
+   * row; it owns the window behind `qs` for every pane below. */
+  rangeControl?: React.ReactNode;
+}) {
   const t = useRestructureTheme();
   const [location, navigate] = useLocation();
   const search = useSearch();
@@ -109,6 +116,7 @@ export function ArtistReportsHub({ qs, personId }: { qs: string; personId: strin
             </button>
           );
         })}
+        {rangeControl && <div className="ml-auto flex-shrink-0 pl-3" style={{ paddingBottom: 6 }}>{rangeControl}</div>}
       </div>
 
       {moneyTab ? (

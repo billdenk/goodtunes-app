@@ -425,7 +425,16 @@ export function ArtistTabBody({
       )}
       {/* Restructure: Reports hub — Audience / Acquisition / Buyers as
           sub-tabs beside the Payments / Earnings ledgers. */}
-      {tab === "reports" && <ArtistReportsHub qs={`?${qs}`} personId={personId} />}
+      {tab === "reports" && (
+        <ArtistReportsHub
+          qs={`?${qs}`}
+          personId={personId}
+          // Canon: the shell header lost its toolbar, so Reports (a metrics
+          // screen) carries its own in-content range switcher — without it
+          // the panes would silently stay pinned to a hidden 30-day window.
+          rangeControl={<RangeSwitcher value={preset} onChange={onPresetChange} />}
+        />
+      )}
       {tab === "settings" && <ArtistSettingsPage personId={personId} />}
     </>
   );
