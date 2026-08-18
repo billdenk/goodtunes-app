@@ -1179,11 +1179,14 @@ export default function PressTemplateLiveTest({
     }
     // Up-front format guidance (PNG can't be CMYK) — shows even while the
     // server is still measuring, so the color fail is never a surprise.
-    if (formatNotice) rows.unshift({ param: 'Format', tone: 'fail', detail: formatNotice }); else {
+    if (formatNotice) rows.unshift({ param: 'Format', tone: 'fail', detail: formatNotice });
+    else if (inkChecks === 'error') {
       // A dead measurement is not a shrug — offer the retry right here
       // (gogoods, Aug 16 2026: a one-off network drop left "unavailable",
       // a Pass! header, and a blank preview until a full page refresh).
-      rows.push({ param: 'Color & resolution', tone: 'na', detail: 'The ink + resolution check didn’t finish (connection hiccup). Use “Re-run measurement” below — no need to re-pick the file.' });
+      // Only shown when inkChecks === 'error' so it stays in lockstep with
+      // the "Re-run measurement" button (which also gates on inkFailed).
+      rows.push({ param: 'Color & resolution', tone: 'na', detail: 'The ink + resolution check didn\u2019t finish (connection hiccup). Use \u201cRe-run measurement\u201d below \u2014 no need to re-pick the file.' });
     }
     return rows;
   }, [template, art, bleedBox, cutBox, inkChecks, formatNotice]);
