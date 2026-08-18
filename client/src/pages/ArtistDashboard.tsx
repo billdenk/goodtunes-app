@@ -41,6 +41,7 @@ import { modulesForRole } from "@/components/operator/registry";
 // five-tab release view, Reports hub, Settings.
 import { ArtistReleasesWall } from "@/pages/artist/restructure/ArtistReleasesWall";
 import { ArtistRelease } from "@/pages/artist/restructure/ArtistRelease";
+import { ArtistTemplateTest } from "@/pages/artist/ArtistTemplateTest";
 import { ArtistReportsHub, registerReportPanes } from "@/pages/artist/restructure/ArtistReportsHub";
 import { ArtistSettingsPage } from "@/pages/artist/restructure/ArtistSettingsPage";
 import { BuyerReport } from "@/components/partner/BuyerReport";
@@ -245,6 +246,10 @@ export function ArtistDashboard() {
   // controls (the album page renders its own), and route tab clicks back out to
   // the portal home so the artist can leave the album view.
   const [isAlbumView, albumRouteParams] = useRoute<{ id: string }>("/artist/albums/:id");
+  // Ruby handoff Aug 16 + gogoods Aug 18 2026 — the Template Test page also
+  // lives inside this shell (the rails must never disappear when an artist
+  // drills into an art test). The page reads its own route params.
+  const [isArtTestView] = useRoute("/artist/albums/:id/art-test/:componentId");
   const [, setLocation] = useLocation();
   const albumViewId = isAlbumView ? (albumRouteParams?.id ?? null) : null;
 
@@ -302,11 +307,11 @@ export function ArtistDashboard() {
       // Settings) has no time-series, so it gets no range toolbar.
       hideHeaderIdentity
       tabs={ARTIST_TABS}
-      activeTab={albumViewId ? "catalog" : tab}
+      activeTab={albumViewId || isArtTestView ? "catalog" : tab}
       onTabChange={(newTab) => {
         // In the embedded album view, a tab click leaves the album and lands on
         // the portal home for that tab.
-        if (albumViewId) {
+        if (albumViewId || isArtTestView) {
           setLocation(`/artist?tab=${newTab}`);
           return;
         }
@@ -321,7 +326,11 @@ export function ArtistDashboard() {
       {/* Task #2524 — embedded album view takes over the content area (Catalog
           tab active), rendering AdminAlbum without the operator /admin chrome.
           Back link returns to the portal catalog list. */}
-      {albumViewId ? (
+      {isArtTestView ? (
+        // Template Test drill-in stays inside the shell (rails never
+        // disappear); the page reads its own :id/:componentId route params.
+        <ArtistTemplateTest embedded />
+      ) : albumViewId ? (
         // Restructure: the artist release view replaces the embedded
         // AdminAlbum pathway (delete-first per the handoff contract).
         <ArtistRelease albumId={albumViewId} />

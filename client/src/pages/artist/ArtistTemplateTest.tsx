@@ -158,8 +158,16 @@ const OVERLAY_CHIPS: Array<{ id: string; label: string; hasCaret?: boolean }> = 
   { id: 'back', label: 'Back off', hasCaret: true },
 ];
 
-export function ArtistTemplateTest() {
+// `embedded` — rendered inside the artist portal's OperatorShell (rails stay
+// put; gogoods, Aug 18 2026): the page drops its own full-viewport canvas +
+// outer gutters and lets the shell own the chrome. Standalone (no prop) keeps
+// the original focused-sheet treatment.
+export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } = {}) {
   const [, params] = useRoute('/artist/albums/:id/art-test/:componentId');
+  // Embedded in the portal shell: the shell owns the canvas + gutters.
+  const wrapClass = embedded ? '' : 'min-h-[100dvh]';
+  const wrapStyle = embedded ? { color: undefined } : undefined;
+  const innerPad = embedded ? '8px 0 96px' : '32px 40px 96px';
   const albumId = params?.id ?? '';
   const componentId = params?.componentId ? decodeURIComponent(params.componentId) : '';
 
@@ -264,8 +272,8 @@ export function ArtistTemplateTest() {
         ? "This test couldn't be loaded. You may not have access to this release, or something went wrong \u2014 try again."
         : 'No test found for this art file yet.';
     return (
-      <div className="min-h-[100dvh]" style={{ background: t.canvas, color: t.ink }} data-testid="artist-template-test">
-        <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: '32px 40px 96px' }}>
+      <div className={wrapClass} style={{ background: embedded ? undefined : t.canvas, color: t.ink, ...wrapStyle }} data-testid="artist-template-test">
+        <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: innerPad }}>
           <nav aria-label="breadcrumb" data-testid="breadcrumb">
             <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
               <li className="inline-flex items-center">
@@ -282,8 +290,8 @@ export function ArtistTemplateTest() {
   }
 
   return (
-    <div className="min-h-[100dvh]" style={{ background: t.canvas, color: t.ink }} data-testid="artist-template-test">
-      <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: '32px 40px 96px' }}>
+    <div className={wrapClass} style={{ background: embedded ? undefined : t.canvas, color: t.ink, ...wrapStyle }} data-testid="artist-template-test">
+      <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: innerPad }}>
         {/* 1 · Breadcrumb — back into the release Assets (artist grammar). */}
         <nav aria-label="breadcrumb" data-testid="breadcrumb">
           <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>

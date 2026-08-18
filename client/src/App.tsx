@@ -967,11 +967,13 @@ function Router() {
         </Route>
         {/* Artist Template Test (Ruby handoff, Aug 16 2026) — the artist-side
             read-only proof view of an art file checked against the press
-            template. Focused sheet, no rail. Listed BEFORE /artist/albums/:id
-            so the deeper path wins. Entry is a temporary link on the
-            completed-art cards until the restructured Assets tab lands. */}
+            template. Renders INSIDE the artist portal shell (rails stay put —
+            gogoods, Aug 18 2026) via ArtistDashboard's route detection, like
+            the embedded album view. Listed BEFORE /artist/albums/:id so the
+            deeper path wins. Entry is a temporary link on the completed-art
+            cards until the restructured Assets tab lands. */}
         <Route path="/artist/albums/:id/art-test/:componentId">
-          <ProtectedRoute component={ArtistTemplateTest} />
+          <ProtectedRoute component={ArtistDashboard} />
         </Route>
         {/* Task #2524 — an artist opening one of their albums stays inside the
             portal shell (ArtistDashboard renders AdminAlbum embedded). Listed
