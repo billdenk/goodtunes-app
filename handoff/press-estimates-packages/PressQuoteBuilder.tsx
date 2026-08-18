@@ -35,6 +35,7 @@ import {
   EyeOff,
   Check,
   ChevronDown,
+  Info,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Boxes, Disc as NavVinyl, Square as NavJacket, CircleDot as NavLabel, FileText as NavInsert, Sticker as NavSticker, ReceiptText as NavPricing, ClipboardList as NavEstimates } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
@@ -2809,6 +2810,9 @@ const MOCK_STICKER_PRICE = { none: 0, rect: 0.30, square: 0.35, circle: 0.45, up
 // PAGE
 // ═══════════════════════════════════════════════════════════════════
 export function PressQuoteBuilder() {
+  // Format toggle (Bill, Aug 16 2026 17:24): Vinyl is the working model;
+  // CD / cassette are selectable but unpriced — quiet placeholder below.
+  const [buildFormat, setBuildFormat] = useState<'Vinyl' | 'CD' | 'Cassette'>('Vinyl');
   // ── Shared state — the record size flows through every section ──
   const [sizeId, setSizeId] = useState<SizeId>('12');
   const [discs, setDiscs] = useState<number>(1);
@@ -3070,6 +3074,52 @@ export function PressQuoteBuilder() {
             When you&rsquo;re done, the estimate saves to your catalog.
           </p>
         </div>
+
+        {/* Format — canon solid segmented pill (same family as the view toggle). */}
+        <div className="inline-flex items-center p-0.5 rounded-full" style={{ marginTop: 24, border: `1px solid ${HAIRLINE}` }} role="radiogroup" aria-label="Format">
+          {(['Vinyl', 'CD', 'Cassette'] as const).map((f) => {
+            const on = buildFormat === f;
+            return (
+              <button
+                key={f}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                onClick={() => setBuildFormat(f)}
+                className="h-8 px-3.5 rounded-full text-[12.5px] transition-colors"
+                style={{
+                  fontWeight: on ? 600 : 500,
+                  color: on ? INK : SUBINK,
+                  backgroundColor: on ? 'var(--q-card)' : 'transparent',
+                  boxShadow: on ? PILL_SHADOW : undefined,
+                }}
+                data-testid={`chip-format-${f.toLowerCase()}`}
+              >
+                {f}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Unpriced formats — word + icon placeholder, never color alone. */}
+        {buildFormat !== 'Vinyl' && (
+          <div
+            className="rounded-2xl bg-white flex flex-col items-center justify-center text-center"
+            style={{ marginTop: 28, border: `1px solid ${HAIRLINE}`, padding: '72px 32px' }}
+            data-testid="placeholder-format"
+          >
+            <Info className="w-8 h-8" style={{ color: '#a1a1a6' }} aria-hidden />
+            <div className="text-[16px] font-semibold" style={{ marginTop: 14, color: INK }}>
+              {buildFormat} pricing coming soon
+            </div>
+            <p className="text-[13px]" style={{ marginTop: 6, maxWidth: 400, color: SUBINK }}>
+              {buildFormat} components aren&rsquo;t configured yet — no pricing model exists.
+              Switch back to Vinyl to keep building.
+            </p>
+          </div>
+        )}
+
+        <div style={{ display: buildFormat === 'Vinyl' ? undefined : 'none' }}>
 
         {/* ═══ 1 · VINYL (Add your vinyl) ═══ */}
         <section style={{ marginTop: 48 }}>
@@ -4059,6 +4109,7 @@ export function PressQuoteBuilder() {
           </div>
           </Gate>
         </section>
+        </div>
       </div>
     </PressShell>
   );
