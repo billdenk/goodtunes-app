@@ -41,6 +41,31 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+
+// Tracked download (Ruby handoff Aug 2026): the POST carries the caller's
+// auth (bearer + cookie — a bare <a href> can't), logs a press download to
+// the file history (which LOCKS the slot against artist replacement; the
+// insert is fail-closed server-side), then hands back the session-served
+// assetUrl for a normal anchor download. Operator downloads never lock.
+async function trackedCompletedDownload(albumId: string, componentId: string) {
+  try {
+    const r = await apiRequest(
+      "POST",
+      `/api/admin/albums/${albumId}/completed-template/download/${encodeURIComponent(componentId)}`,
+    );
+    const { url, fileName } = (await r.json()) as { url: string; fileName: string | null };
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fileName ?? "";
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  } catch (e) {
+    console.error("[completed-art] tracked download failed", e);
+  }
+}
 import { useToast } from "@/hooks/use-toast";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import {
@@ -206,17 +231,7 @@ export function CompletedTemplatePanel({
     // browsers don't swallow the later clicks.
     suppliedFiles.forEach((c, i) => {
       setTimeout(() => {
-        const a = document.createElement("a");
-        // Tracked download (Ruby handoff Aug 2026): a press download is
-        // logged to the file history and locks the slot against artist
-        // replacement; operator downloads just stream. 302 → assetUrl.
-        a.href = `/api/admin/albums/${albumId}/completed-template/download/${encodeURIComponent(c.componentId)}`;
-        a.download = c.fileName ?? "";
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+        trackedCompletedDownload(albumId, c.componentId);
       }, i * 400);
     });
   };
@@ -945,16 +960,14 @@ export function PreviewArtDialog({
           <div className="flex items-center justify-between gap-3 pr-6">
             <DialogTitle className="text-slate-900">{title}</DialogTitle>
             {component.assetUrl && (
-              <a
-                href={`/api/admin/albums/${albumId}/completed-template/download/${encodeURIComponent(componentId)}`}
-                download={component.fileName ?? undefined}
-                target="_blank"
-                rel="noopener noreferrer"
+              <button
+                type="button"
+                onClick={() => trackedCompletedDownload(albumId, componentId)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-200 text-xs font-semibold text-[var(--brand-blue)] hover:border-slate-300 shrink-0"
                 data-testid={`button-completed-download-${componentId}`}
               >
                 <Download className="w-3.5 h-3.5" /> Download
-              </a>
+              </button>
             )}
           </div>
         </DialogHeader>

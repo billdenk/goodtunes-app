@@ -34211,7 +34211,9 @@ export async function registerRoutes(
       .select()
       .from(completedTemplateFileEvents)
       .where(eq(completedTemplateFileEvents.albumId, albumId))
-      .orderBy(desc(completedTemplateFileEvents.createdAt));
+      // id is the deterministic tie-breaker — a same-timestamp
+      // downloaded/unlocked pair must never flip the derived lock at random.
+      .orderBy(desc(completedTemplateFileEvents.createdAt), desc(completedTemplateFileEvents.id));
     return rows.map((r) => ({
       id: r.id,
       componentId: r.componentId,
@@ -34528,13 +34530,15 @@ export async function registerRoutes(
   });
 
   // Ruby handoff Aug 2026 — tracked production download of a slot's file.
-  // Any permitted caller gets the file, but a PRESS download is the lock
-  // event: it's appended to the file history ("Downloaded by press") and
-  // locks the slot against artist replacement until the press unlocks.
-  // Operator/partner downloads never lock. 302 → the persisted assetUrl
-  // (our own /objects path for direct uploads, session-served like the
-  // existing direct links).
-  app.get("/api/admin/albums/:id/completed-template/download/:componentId", requireAdminBearer, async (req, res) => {
+  // Returns JSON { url, fileName } (never a 302 — the client fetches this
+  // with its auth headers, then anchor-navigates to the returned assetUrl,
+  // which is our own session-served /objects path like the old direct
+  // links). A PRESS caller's request is the lock event: it's appended to
+  // the file history ("Downloaded by press") and locks the slot against
+  // artist replacement until the press unlocks. FAIL-CLOSED: if the audit
+  // event can't be written, the press does NOT get the file — the lock
+  // guarantee is the whole point. Operator/partner downloads never lock.
+  app.post("/api/admin/albums/:id/completed-template/download/:componentId", requireAdminBearer, async (req, res) => {
     if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
     const componentId = decodeURIComponent(req.params.componentId);
     const ctx = await resolveCompletedContext(req.params.id);
@@ -34554,10 +34558,34 @@ export async function registerRoutes(
           actorLabel: press?.name ?? "The press",
         });
       } catch (e) {
-        console.warn("[completed-art] download-event insert failed", e);
+        console.error("[completed-art] download-event insert failed — refusing the tracked download", e);
+        return res.status(500).json({ message: "Couldn't record this download — try again." });
       }
     }
-    res.redirect(302, component.assetUrl);
+    res.json({ url: component.assetUrl, fileName: component.fileName ?? null });
+  });
+
+  // Press-only unlock (Ruby handoff Aug 2026 — "only the press can unlock").
+  // The press-side UI control is a later handoff; the endpoint exists now so
+  // a locked slot has a real release path (press support can curl it, and
+  // the upcoming control wires straight in). Appends an 'unlocked' event —
+  // the trail stays append-only, nothing is deleted.
+  app.post("/api/admin/albums/:id/completed-template/unlock/:componentId", requireAdminBearer, async (req, res) => {
+    const caller = await callerIsOperatorOrPress(req.session.userId!, req.params.id);
+    if (!caller.pressId) {
+      return res.status(403).json({ message: "Only this album's press can unlock a production file." });
+    }
+    const componentId = decodeURIComponent(req.params.componentId);
+    const lock = deriveLocks(await completedFileEvents(req.params.id))[componentId];
+    if (!lock?.locked) return res.status(409).json({ message: "That file isn't locked." });
+    const press = await storage.getManufacturerById(caller.pressId);
+    await db.insert(completedTemplateFileEvents).values({
+      albumId: req.params.id,
+      componentId,
+      event: "unlocked",
+      actorLabel: press?.name ?? "The press",
+    });
+    res.json(await completedTemplatePayload(req.params.id));
   });
 
   // Remove a supplied file from a slot (correct a mistaken paste). The
