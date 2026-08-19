@@ -67,7 +67,8 @@ import {
   PaintBucket,
   ZoomIn,
   ChevronDown,
-  Layers,
+  CheckCircle2,
+  ArrowLeftRight,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
@@ -458,7 +459,11 @@ function ChannelGlyph({ channel }: { channel: Channel }) {
   }
   return (
     <span className="inline-flex items-center" data-testid="channel-goodtunes" aria-label="GoodTunes®">
-      <img src={goodtunesLogo} alt="GoodTunes®" className="h-4 w-auto" style={{ filter: WHITE_GLYPH }} />
+      {/* Optical match: the stacked GoodTunes wordmark reads smaller than the
+          wide Shopify lockup at equal height, so it gets a slightly taller
+          render (20px vs 16px). Row height is set by the text line, so this
+          doesn't move the card layout. */}
+      <img src={goodtunesLogo} alt="GoodTunes®" className="h-5 w-auto" style={{ filter: WHITE_GLYPH }} />
     </span>
   );
 }
@@ -516,12 +521,14 @@ function WallCardTile({ card, t, onOpen }: { card: WallCard; t: Theme; onOpen: (
           </div>
         )}
 
-        {/* Money flag — overlaid on the cover art, top right. Wording is
-            unambiguous: the artist pays GoodTunes for manufacturing milestones. */}
+        {/* Money flag — top-LEFT, same placement as the art-needed chip so the
+            ••• overflow (top-right) stays clear and the two chip types read
+            consistently. Wording is unambiguous: the artist pays GoodTunes for
+            manufacturing milestones. */}
         {card.moneyFlag && (
           <div
             className="absolute inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-semibold"
-            style={{ top: 10, right: 10, padding: '4px 10px', background: 'rgba(0,0,0,0.62)', border: '1px solid rgba(255,255,255,0.16)', color: '#fff', backdropFilter: 'blur(6px)' }}
+            style={{ top: 10, left: 10, padding: '4px 10px', background: 'rgba(0,0,0,0.62)', border: '1px solid rgba(255,255,255,0.16)', color: '#fff', backdropFilter: 'blur(6px)' }}
             data-testid={`money-flag-${card.id}`}
             title="You owe GoodTunes® for this release"
           >
@@ -531,8 +538,10 @@ function WallCardTile({ card, t, onOpen }: { card: WallCard; t: Theme; onOpen: (
         )}
 
         {/* Cover overflow — canon frosted circle revealed on hover, opens the
-            small white rounded-xl menu to set the cover once art exists. */}
-        {card.needsArt && (
+            small white rounded-xl menu to set the cover. Rendered on EVERY
+            card (Bill, Aug 18: consistency — covers with art can still be
+            swapped from panels or a custom thumbnail). */}
+        {(
           <div className="absolute" style={{ top: 8, right: 8 }} onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
@@ -2352,8 +2361,68 @@ function OverlayChipRow({ t, state, onToggle }: { t: Theme; state: Record<string
 const FILE_MENU: Array<{ id: string; label: string; icon: typeof ArrowRight }> = [
   { id: 'history', label: 'File history', icon: History },
   { id: 'download', label: 'Download raw template', icon: Download },
-  { id: 'replace', label: 'Replace file', icon: Upload },
 ];
+
+// File history — mock rows, newest first, reused verbatim from the artist
+// Test/Certify surface (which itself reuses the press history popover grammar).
+type HistoryEvent = 'current' | 'passed' | 'replaced';
+const MOCK_HISTORY: Array<{ id: string; file: string; dims: string; when: string; event: HistoryEvent }> = [
+  { id: 'v3', file: `${MOCK_RAW.release}_12-JKTSG3D-100.pdf`, dims: '779.4 \u00d7 539.3 mm', when: 'Aug 16 at 7:45 PM', event: 'current' },
+  { id: 'v2', file: `${MOCK_RAW.release}_12-JKTSG3D-098.pdf`, dims: '779.4 \u00d7 539.3 mm', when: 'Aug 14 at 2:03 PM', event: 'passed' },
+  { id: 'v1', file: `${MOCK_RAW.release}_12-JKT-draft.pdf`, dims: '762.0 \u00d7 528.0 mm', when: 'Aug 11 at 11:20 AM', event: 'replaced' },
+];
+const HISTORY_META: (t: Theme) => Record<HistoryEvent, { word: string; icon: LucideIcon; color: string; fillDot?: boolean }> = (t) => ({
+  current: { word: 'Current', icon: Circle, color: t.ready, fillDot: true },
+  passed: { word: 'Passed', icon: CheckCircle2, color: t.subink },
+  replaced: { word: 'Replaced', icon: ArrowLeftRight, color: t.faint },
+});
+
+// The File-history popover — SAME right-anchored panel the press / artist
+// Test-Certify surface uses (rounded-2xl, soft header band, close X, rows newest
+// first). Revealed from the toolbar layers icon or the ••• "File history" item.
+function HistoryPanel({ t, onClose }: { t: Theme; onClose: () => void }) {
+  const meta = HISTORY_META(t);
+  return (
+    <>
+      <div className="fixed inset-0 z-[70]" onClick={onClose} data-testid="file-history-backdrop" />
+      <div
+        className="absolute z-[71] rounded-2xl overflow-hidden shadow-2xl"
+        style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, top: 'calc(100% + 6px)', right: 0, width: 380 }}
+        role="dialog"
+        aria-label="File history"
+        data-testid="file-history"
+      >
+        <div className="flex items-start justify-between gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${t.hairline}`, backgroundColor: t.soft }}>
+          <div>
+            <div className="text-[15px] font-semibold tracking-[-0.01em]" style={{ color: t.ink }}>File history</div>
+            <div className="text-[12px] mt-0.5" style={{ color: t.subink }}>Every upload and download, newest first</div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${t.hairline}`, color: t.subink }} data-testid="button-close-history">
+            <X style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+        <div className="px-5 py-3 max-h-[420px] overflow-y-auto">
+          {MOCK_HISTORY.map((h, i) => {
+            const m = meta[h.event];
+            const Icon = m.icon;
+            return (
+              <div key={h.id} className="py-3 flex items-center justify-between gap-4" style={{ borderBottom: i < MOCK_HISTORY.length - 1 ? `1px solid ${t.hairline}` : undefined }} data-testid={`history-row-${h.id}`}>
+                <div className="min-w-0">
+                  <div className="text-[12.5px] font-medium truncate" style={{ color: t.ink }} title={h.file}>{h.file}</div>
+                  <div className="text-[11.5px] mt-0.5 tabular-nums" style={{ color: t.subink }}>{h.dims} &middot; {h.when}</div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold flex-shrink-0" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>
+                  <Icon className="w-3 h-3 flex-shrink-0" style={m.fillDot ? { fill: m.color } : undefined} aria-hidden />
+                  {m.word}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
 
 // The view toolbar — reused VERBATIM from the press-side Test/Certify view row:
 // a segmented view pill on the LEFT (Full Template · Back · Front · Spine, in that
@@ -2363,21 +2432,41 @@ const FILE_MENU: Array<{ id: string; label: string; icon: typeof ArrowRight }> =
 // whole-sheet view; in images mode it stays locked until all three panels have
 // art. The ••• opens the small white canon menu (File history / Download raw
 // template / Replace file). Mock actions.
-function ViewToolbar({ t, area, onArea, fullLocked, onMenu }: {
+function ViewToolbar({ t, area, onArea, fullLocked, panelsLocked, hasArt, lastMethod, onReplaceTemplate, onReplacePanel, onMenu }: {
   t: Theme;
   area: PanelId | 'all';
   onArea: (v: PanelId | 'all') => void;
   fullLocked: boolean;
+  panelsLocked: boolean;
+  hasArt: boolean;
+  lastMethod: 'template' | 'images';
+  onReplaceTemplate: () => void;
+  onReplacePanel: (p: PanelId) => void;
   onMenu: (id: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  // Replace chooser — asks what to replace (whole template vs a single panel).
+  // Default selection = the method used last time; the other stays selectable.
+  const [showReplace, setShowReplace] = useState(false);
+  const [replaceMethod, setReplaceMethod] = useState<'template' | 'images'>(lastMethod);
+  const [replacePanel, setReplacePanel] = useState<PanelId>('front');
+  const openReplace = () => { setReplaceMethod(lastMethod); setReplacePanel('front'); setShowReplace(true); };
+  const confirmReplace = () => {
+    setShowReplace(false);
+    if (replaceMethod === 'template') onReplaceTemplate();
+    else onReplacePanel(replacePanel);
+  };
   return (
     <div className="flex items-center justify-between gap-4 flex-wrap" data-testid="view-toolbar">
       {/* Left — segmented view pill, press order: Full Template · Back · Front · Spine. */}
       <div className="inline-flex items-center rounded-full p-0.5 flex-shrink-0" style={{ background: t.soft }} role="radiogroup" aria-label="Preview view" data-testid="chip-view-area">
         {([['all', 'Full Template'], ['back', 'Back'], ['front', 'Front'], ['spine', 'Spine']] as const).map(([v, label]) => {
           const on = area === v;
-          const locked = v === 'all' && fullLocked;
+          // Mirror-image locking between modes: images mode locks Full Template
+          // until all three panels have art; template mode locks the panel tabs
+          // until the full template is uploaded. Same treatment either way.
+          const locked = v === 'all' ? fullLocked : panelsLocked;
           return (
             <button
               key={v}
@@ -2396,7 +2485,7 @@ function ViewToolbar({ t, area, onArea, fullLocked, onMenu }: {
                 opacity: locked ? 0.55 : 1,
                 cursor: locked ? 'not-allowed' : 'pointer',
               }}
-              title={locked ? 'Add front, back and spine art to see the full spread' : undefined}
+              title={locked ? (v === 'all' ? 'Add front, back and spine art to see the full spread' : 'Upload the full template to view it panel by panel') : undefined}
               data-testid={`chip-area-${v}`}
             >
               {locked && <Lock className="w-3 h-3 flex-shrink-0" style={{ color: t.faint }} aria-hidden />}
@@ -2406,18 +2495,153 @@ function ViewToolbar({ t, area, onArea, fullLocked, onMenu }: {
         })}
       </div>
 
-      {/* Right — ghost circle cluster. NO Test & Certify (artists don't certify). */}
+      {/* Right — the permanent toolbar cluster (Bill: "the chrome is the room").
+          Same buttons, same positions, in every state: history circle,
+          download-proof circle, Replace pill, ••• menu. Inapplicable-until-art
+          controls are present-but-locked (faint, Lock where a pill, aria-disabled,
+          not-allowed) — never absent. Only enable/disable changes when art lands. */}
       <div className="flex items-center gap-2 flex-shrink-0">
+        {/* History circle — reveals the File history popover. Locked until art. */}
+        <div className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => { if (hasArt) setShowHistory((v) => !v); }}
+            title="File history"
+            aria-label="File history"
+            aria-haspopup="dialog"
+            aria-expanded={hasArt ? showHistory : undefined}
+            aria-disabled={!hasArt}
+            className="w-8 h-8 rounded-full inline-flex items-center justify-center transition-colors"
+            style={{ border: `1px solid ${t.hairline}`, color: hasArt ? t.subink : t.faint, background: 'transparent', opacity: hasArt ? 1 : 0.55, cursor: hasArt ? 'pointer' : 'not-allowed' }}
+            data-testid="button-show-layers"
+          >
+            <History style={{ width: 14, height: 14 }} />
+          </button>
+          {hasArt && showHistory && <HistoryPanel t={t} onClose={() => setShowHistory(false)} />}
+        </div>
+
+        {/* Download proof circle — icon-only, same 32/34px circle. Locked until art. */}
         <button
           type="button"
-          title="Layers read from the file"
-          aria-label="Layers read from the file"
-          className="w-8 h-8 rounded-full inline-flex items-center justify-center transition-colors"
-          style={{ border: `1px solid ${t.hairline}`, color: t.subink, background: 'transparent' }}
-          data-testid="button-show-layers"
+          title="Download test proof"
+          aria-label="Download test proof"
+          aria-disabled={!hasArt}
+          className="w-8 h-8 rounded-full inline-flex items-center justify-center transition-colors flex-shrink-0"
+          style={{ border: `1px solid ${t.hairline}`, color: hasArt ? t.subink : t.faint, background: 'transparent', opacity: hasArt ? 1 : 0.55, cursor: hasArt ? 'pointer' : 'not-allowed' }}
+          data-testid="button-download-proof"
         >
-          <Layers style={{ width: 14, height: 14 }} />
+          <Download style={{ width: 14, height: 14 }} />
         </button>
+
+        {/* Replace pill — opens the chooser (Full template vs a single panel).
+            Locked with a Lock icon + word until there's art to replace. */}
+        <div className="relative flex-shrink-0">
+          {hasArt ? (
+            <button
+              type="button"
+              onClick={openReplace}
+              aria-haspopup="dialog"
+              aria-expanded={showReplace}
+              className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+              style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+              data-testid="button-replace"
+            >
+              <Upload className="w-4 h-4 flex-shrink-0" /> Replace
+            </button>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium"
+              style={{ padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.faint, opacity: 0.6, cursor: 'not-allowed' }}
+              aria-disabled="true"
+              data-testid="button-replace-locked"
+            >
+              <Lock className="w-4 h-4 flex-shrink-0" /> Replace
+            </span>
+          )}
+          {showReplace && (
+            <>
+              <div className="fixed inset-0 z-[70]" onClick={() => setShowReplace(false)} data-testid="replace-chooser-backdrop" />
+              <div
+                className="absolute z-[71] rounded-2xl overflow-hidden shadow-2xl"
+                style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, top: 'calc(100% + 6px)', right: 0, width: 300 }}
+                role="dialog"
+                aria-label="Replace art"
+                data-testid="replace-chooser"
+              >
+                <div className="px-5 pt-4 pb-1">
+                  <div className="text-[14px] font-semibold tracking-[-0.01em]" style={{ color: t.ink }}>Replace art</div>
+                  <div className="text-[12px] mt-0.5" style={{ color: t.subink }}>What do you want to swap out?</div>
+                </div>
+                <div className="px-3 py-2">
+                  {([['template', 'Full template'], ['images', 'A single panel']] as const).map(([m, label]) => {
+                    const on = replaceMethod === m;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        onClick={() => setReplaceMethod(m)}
+                        className={cn('w-full flex items-center gap-2.5 rounded-xl text-left text-[13px] transition-colors', t.hoverCard)}
+                        style={{ padding: '9px 12px', color: t.ink }}
+                        data-testid={`replace-method-${m}`}
+                      >
+                        <span aria-hidden className="rounded-full flex-shrink-0 inline-flex items-center justify-center" style={{ width: 16, height: 16, border: `1.5px solid ${on ? BLUE : t.faint}` }}>
+                          {on && <span className="rounded-full" style={{ width: 8, height: 8, background: BLUE }} />}
+                        </span>
+                        {m === 'template' ? <LayoutTemplate className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> : <ImagePlus className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} />}
+                        {label}
+                      </button>
+                    );
+                  })}
+                  {/* Panel sub-picker — only when replacing a single panel. */}
+                  {replaceMethod === 'images' && (
+                    <div className="flex items-center gap-1.5 mt-1" style={{ padding: '2px 12px 6px 40px' }} role="radiogroup" aria-label="Which panel">
+                      {(['back', 'front', 'spine'] as const).map((p) => {
+                        const on = replacePanel === p;
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            role="radio"
+                            aria-checked={on}
+                            onClick={() => setReplacePanel(p)}
+                            className="h-7 px-3 rounded-full text-[12px] font-medium transition-colors capitalize"
+                            style={{ color: on ? t.ink : t.subink, background: on ? t.soft : 'transparent', border: `1px solid ${on ? t.hairline : 'transparent'}` }}
+                            data-testid={`replace-panel-${p}`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-end gap-2 px-4 py-3" style={{ borderTop: `1px solid ${t.hairline}` }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowReplace(false)}
+                    className={cn('rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+                    style={{ padding: '6px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+                    data-testid="replace-cancel"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={confirmReplace}
+                    className="inline-flex items-center gap-1.5 rounded-full text-[13px] font-semibold transition-colors"
+                    style={{ padding: '6px 16px', color: '#fff', background: BLUE, border: `1px solid ${BLUE}` }}
+                    data-testid="replace-confirm"
+                  >
+                    <Check className="w-3.5 h-3.5 flex-shrink-0" /> Continue
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
         <div className="relative flex-shrink-0">
           <button
             type="button"
@@ -2445,7 +2669,7 @@ function ViewToolbar({ t, area, onArea, fullLocked, onMenu }: {
                     key={m.id}
                     type="button"
                     role="menuitem"
-                    onClick={() => { setMenuOpen(false); onMenu(m.id); }}
+                    onClick={() => { setMenuOpen(false); if (m.id === 'history') setShowHistory(true); else onMenu(m.id); }}
                     className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', t.hoverCard)}
                     style={{ padding: '10px 14px', color: t.ink, borderTop: i === 0 ? 'none' : `1px solid ${t.hairline}` }}
                     data-testid={`file-menu-${m.id}`}
@@ -2577,20 +2801,29 @@ function SceneRawTemplate({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
   // File-header card: Save is the one act that persists — it earns its blue only
   // once there's unsaved work (something uploaded since the last Save).
   const [saved, setSaved] = useState(false);
+  // The last upload method drives the Replace chooser's default selection.
+  const [lastUploadMethod, setLastUploadMethod] = useState<'template' | 'images'>('images');
 
   const anyArt = panelArt.front || panelArt.back || panelArt.spine;
   const allArt = panelArt.front && panelArt.back && panelArt.spine;
   const hasArt = mode === 'template' ? templateArt : anyArt;
+  // The slot is "complete" once the template is uploaded OR all three panels are
+  // in. Once complete, the first-run mode toggle disappears and the page presents
+  // as the standard test view (Bill: mode is a first-run decision only).
+  const slotComplete = templateArt || allArt;
   const toggleOverlay = (id: string) => setOverlay((s) => ({ ...s, [id]: !s[id] }));
 
   // The dialog's confirm seats mock art for whichever target is uploading.
   const seatArt = () => {
     if (dialog === 'front' || dialog === 'back' || dialog === 'spine') {
       setPanelArt((s) => ({ ...s, [dialog]: true }));
+      setLastUploadMethod('images');
     } else if (dialog === 'images') {
       setPanelArt({ front: true, back: true, spine: true });
+      setLastUploadMethod('images');
     } else if (dialog === 'template') {
       setTemplateArt(true);
+      setLastUploadMethod('template');
     }
     setSaved(false); // fresh upload = unsaved work; Save earns its blue
     setDialog(null);
@@ -2640,27 +2873,31 @@ function SceneRawTemplate({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
         </div>
       </div>
 
-      {/* Toolbar — ONE canon segmented control (Upload images / Upload template)
-          on the left, quiet "Download raw template" on the right. */}
-      <div className="flex items-center justify-between gap-3 flex-wrap" style={{ marginTop: 16 }}>
-        <SegChip
-          options={[['images', 'Upload images'], ['template', 'Upload template']]}
-          value={mode}
-          onChange={(v) => setMode(v)}
-          ariaLabel="Upload mode"
-          testPrefix="raw-entry-chips"
-          t={t}
-          icons={{ images: ImagePlus, template: LayoutTemplate }}
-        />
-        <button
-          type="button"
-          className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
-          style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
-          data-testid="button-download-raw"
-        >
-          <Download className="w-4 h-4 flex-shrink-0" /> Download raw template
-        </button>
-      </div>
+      {/* First-run mode toggle (Upload images / Upload template) — a first-run
+          decision only. Once the slot has complete art it disappears and the page
+          presents as the standard test view (toolbar + tabs + overlay chips).
+          "Download raw template" also lives in the ••• menu, so it's not lost. */}
+      {!slotComplete && (
+        <div className="flex items-center justify-between gap-3 flex-wrap" style={{ marginTop: 16 }}>
+          <SegChip
+            options={[['images', 'Upload images'], ['template', 'Upload template']]}
+            value={mode}
+            onChange={(v) => setMode(v)}
+            ariaLabel="Upload mode"
+            testPrefix="raw-entry-chips"
+            t={t}
+            icons={{ images: ImagePlus, template: LayoutTemplate }}
+          />
+          <button
+            type="button"
+            className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+            style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+            data-testid="button-download-raw"
+          >
+            <Download className="w-4 h-4 flex-shrink-0" /> Download raw template
+          </button>
+        </div>
+      )}
 
       {/* View toolbar — reused press-side view row verbatim (Full Template · Back ·
           Front · Spine segmented pill + layers / ••• ghost circles), in BOTH modes.
@@ -2674,7 +2911,12 @@ function SceneRawTemplate({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
           area={area}
           onArea={setArea}
           fullLocked={mode === 'images' && !allArt}
-          onMenu={(id) => { if (id === 'replace') setDialog(mode === 'template' ? 'template' : (area === 'all' ? 'front' : area)); }}
+          panelsLocked={mode === 'template' && !templateArt}
+          hasArt={hasArt}
+          lastMethod={lastUploadMethod}
+          onReplaceTemplate={() => { setMode('template'); setArea('all'); setDialog('template'); }}
+          onReplacePanel={(p) => { setMode('images'); setArea(p); setDialog(p); }}
+          onMenu={() => { /* Download raw template — mock, dead-ends. */ }}
         />
       </div>
 
