@@ -1,0 +1,15 @@
+All five files are on main. Here's the paste-ready note for Otis:
+
+---
+
+**Otis — release-it-all push (Aug 18, 2026, evening). Three parts.**
+
+**1. Re-pull both artist handoff files — they're current now.** `handoff/artist-portal-restructure/ArtistPortalRestructureFlow.tsx` and `handoff/artist-template-test/ArtistTemplateTest.tsx` just got re-pushed with everything since the morning push: file history is now a popover opened from the toolbar clock-rewind (History icon, not Layers), Download test proof is a circular icon button that expands left on hover, a Replace pill sits in the toolbar (opens a chooser: Full template vs Front/Back/Spine, defaulting to the method used last time), tab locking is mirror-image (images mode locks Full Template until all panels; template mode locks the panels until the template lands), the toolbar is permanent architecture (same buttons every state, locked until applicable — nothing appears or moves), the Upload images/Upload template toggle disappears once the slot is complete, and the wall cards got chip/••• consistency fixes. Replace verbatim per the handoff law.
+
+**2. "Must work" checklist for the artist Test page** (everything not listed is decorative): overlay chips toggle real GT-layer overlays · Full Template/Back/Front/Spine tabs switch views with the locking above · history icon opens the File history popover · Download test proof downloads the proof · Replace opens the chooser then the upload box in one click · "Save result & upload new" saves + re-runs checks · Upload locked (Lock icon) when the press has downloaded the file.
+
+**3. Green light: build the goldenrod per-panel upload flow now.** The mock walk-through is done — build from `ArtistPortalRestructureFlow.tsx` as pushed. Also new in the repo: `handoff/nav-restructure/` (AdminRailCanon, PressRailCanon, AdminPressDetailRail) — the rail standard is released too: artist rail gets Settings pinned to the rail bottom and Shopify grouped after Reports; super-admin press detail gets the partner-scoped rail, no horizontal tab bar. Must work: every rail item navigates, groups collapse (active group opens on arrival), Settings pinned last. Questions beat inventions, as always.
+
+---
+
+Everything is out of the hangar now — nothing held on our side. Memory updated so the ledger reflects it.
