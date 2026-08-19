@@ -53,9 +53,9 @@ import {
 import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiRequest, authHeaders } from '@/lib/queryClient';
-import { uploadAdminDoc } from '@/lib/adminUpload';
+import { uploadAdminDoc, uploadAdminDocWithProgress } from '@/lib/adminUpload';
 import { saveLiveTestDraft, loadLiveTestDraft, clearLiveTestDraft, type LiveTestDraft } from './draftStore';
-import { templateTestPath, certifyRunPath } from './apiPaths';
+import { templateTestPath } from './apiPaths';
 import { useAdminDark } from '@/lib/adminAppearance';
 import { computeCropCanvasSize, PT_PER_MM } from './cropDimensions';
 import { computePdfArtRect } from './artPlacement';
@@ -198,6 +198,13 @@ export default function PressTemplateLiveTest({
   useEffect(() => () => { inkXhr.current?.abort(); }, []);
   const [busy, setBusy] = useState<'template' | 'art' | 'save' | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Task #3200 — Save's upload/persist steps show what's happening instead
+  // of a bare frozen "Saving…": stage word + upload fraction (null = no bar).
+  const [saveStage, setSaveStage] = useState<string | null>(null);
+  const [saveProgress, setSaveProgress] = useState<number | null>(null);
+  // Task #3200 — the big-art signed-PUT the ink inspection already did:
+  // Save reuses that object instead of re-pushing hundreds of MB.
+  const artUploadedPath = useRef<{ file: File; path: string } | null>(null);
   // Arrived from the Templates page with a file already in hand — nothing is
   // being uploaded, so show "Opening template" instead of the upload step
   // (Bill, Aug 15 2026).
@@ -424,7 +431,13 @@ export default function PressTemplateLiveTest({
           // Status carries over from the tile (Bill, Aug 15 2026): only a
           // certified revision brings the badge; pending arrives "Not tested".
           const fmt = (d: string) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-          const verdictWordFor = (v: string) => (v === 'pass' ? 'Pass' : v === 'unverified' ? 'Visual only' : 'Flagged');
+          const verdictWordFor = (v: string) =>
+            v === 'pass' ? 'Pass'
+            : v === 'unverified' ? 'Visual only'
+            // Task #3200 — background-scan states: in flight vs scan failure.
+            : v === 'processing' ? 'Checking…'
+            : v === 'error' ? 'Check didn\u2019t finish'
+            : 'Flagged';
           const certRev = spec.revisions.find((rv) => rv.status === 'certified' && rv.certifiedAt);
           if (certRev?.certifiedAt) {
             const lastRun = spec.runs[0]; // newest-first from the server
@@ -737,6 +750,9 @@ export default function PressTemplateLiveTest({
             xhr.send(f);
           });
           if (artFile.current !== f) return; // superseded during the upload
+          // Task #3200 — remember the uploaded object so Save can reuse it
+          // instead of re-pushing the same hundreds of MB a second time.
+          artUploadedPath.current = { file: f, path: finalPath };
           sendBody = JSON.stringify({ objectPath: finalPath });
           sendCt = 'application/json';
         }
@@ -950,13 +966,63 @@ export default function PressTemplateLiveTest({
   // itself when a finished file passes" actually does; without it a press
   // with "require a passing test before a template goes live" On could never
   // certify (review, Aug 15 2026). Raster overlays never reach here (PDF only).
+  // Task #3200 — bound a network step so Save can never freeze on a fetch
+  // that neither resolves nor errors (deployed edge kills long requests).
+  const withTimeout = async <T,>(p: Promise<T>, ms: number, what: string): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        p,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`Timed out ${what}. Check your connection and try again.`)),
+            ms,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
   const submitServerTest = async (specId: string) => {
     const f = artFile.current;
     if (!f) return;
     if (artIsViewedRun.current) return; // viewing a saved run — nothing new to test
     const isPdf = f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf');
     if (!isPdf) return;
-    const url = await uploadAdminDoc(f);
+    // Task #3200 — the ink inspection already pushed big files to object
+    // storage; reuse that object (finalize is a cheap metadata POST) instead
+    // of re-uploading hundreds of MB. Fresh upload otherwise, with progress.
+    let url: string | null = null;
+    const reuse = artUploadedPath.current;
+    if (reuse && reuse.file === f) {
+      try {
+        const finRes = await withTimeout(
+          fetch('/api/admin/upload-doc/finalize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...(authHeaders() as Record<string, string>) },
+            credentials: 'include',
+            body: JSON.stringify({ finalPath: reuse.path }),
+          }),
+          30_000,
+          'preparing the tested art file',
+        );
+        if (finRes.ok) url = ((await finRes.json()) as { url: string }).url;
+      } catch {
+        /* fall through to a fresh upload */
+      }
+    }
+    if (!url) {
+      setSaveStage('Uploading art');
+      try {
+        url = await uploadAdminDocWithProgress(f, (fr) => setSaveProgress(fr));
+        artUploadedPath.current = { file: f, path: url };
+      } finally {
+        setSaveProgress(null);
+        setSaveStage(null);
+      }
+    }
     // Thread the template's OWN bleed line (read from its GT Bleed/Cut layer
     // boxes) to the server test — templates that draw guides in GT layers
     // (not a dieline separation) have no stored line, and without one the
@@ -976,11 +1042,17 @@ export default function PressTemplateLiveTest({
     const templateCutRect = cutBox
       ? { leftIn: r3(cutBox.xMm), topIn: r3(cutBox.yMm), widthIn: r3(cutBox.wMm), heightIn: r3(cutBox.hMm) }
       : undefined;
-    const r = await apiRequest('POST', templateTestPath(pressId, specId), { url, fileName: f.name, templateBleedLineInches, templateCutRect });
-    const { run } = (await r.json()) as { run?: { id: string; verdict: string } };
-    if (run && (run.verdict === 'pass' || run.verdict === 'warn')) {
-      await apiRequest('POST', certifyRunPath(pressId, specId, run.id), {});
-    }
+    // Task #3200 — the server records the run as "processing" and answers
+    // immediately; the scan runs in the background and a pass/warn verdict
+    // certifies the live revision server-side (certifyOnPass). No more
+    // minutes-long request for the edge to kill mid-Save.
+    await withTimeout(
+      apiRequest('POST', templateTestPath(pressId, specId), {
+        url, fileName: f.name, templateBleedLineInches, templateCutRect, certifyOnPass: true,
+      }),
+      60_000,
+      'submitting the certification test',
+    );
   };
 
   // Accept & Save — persist the template + its test trail on the server,
@@ -1002,9 +1074,13 @@ export default function PressTemplateLiveTest({
         // and the old code fell through to the shelf POST and minted a
         // duplicate tile. Only the rename persists (display-name PATCH).
         if (template.name !== (initialName.current ?? '')) {
-          await apiRequest('PATCH', `/api/press/${pressId}/templates/${specRef.current}/display-name`, {
-            displayName: template.name,
-          });
+          await withTimeout(
+            apiRequest('PATCH', `/api/press/${pressId}/templates/${specRef.current}/display-name`, {
+              displayName: template.name,
+            }),
+            30_000,
+            'saving the template name',
+          );
         }
         await submitServerTest(specRef.current);
       } else if (slotTarget.current) {
@@ -1012,15 +1088,23 @@ export default function PressTemplateLiveTest({
         // attaches the PDF to the canon slot — a NEW revision is minted, the
         // previous one moves to history, it is never deleted.
         const s = slotTarget.current;
-        const fileUrl = await uploadAdminDoc(currentFile.current);
-        const r = await apiRequest('PUT', `/api/press/${pressId}/templates`, {
-          format: s.format,
-          componentKey: s.componentKey,
-          variantKey: s.variantKey,
-          discCount: s.discCount,
-          fileUrl,
-          fileName: originalName ?? currentFile.current.name,
-        });
+        setSaveStage('Uploading template');
+        let fileUrl: string;
+        try {
+          fileUrl = await uploadAdminDocWithProgress(currentFile.current, (fr) => setSaveProgress(fr));
+        } finally { setSaveProgress(null); setSaveStage(null); }
+        const r = await withTimeout(
+          apiRequest('PUT', `/api/press/${pressId}/templates`, {
+            format: s.format,
+            componentKey: s.componentKey,
+            variantKey: s.variantKey,
+            discCount: s.discCount,
+            fileUrl,
+            fileName: originalName ?? currentFile.current.name,
+          }),
+          60_000,
+          'attaching the template',
+        );
         const data = (await r.json()) as { spec: { id: string }; detectedOptions?: Array<{ key: string; label: string }> };
         // A rename made in this session rides along — for FIRST attaches too,
         // not just Replace (gogoods bug, Aug 16 2026: renaming during the
@@ -1054,31 +1138,50 @@ export default function PressTemplateLiveTest({
       } else if (liveId.current) {
         // Replace (••• menu / Index tile): the swapped-in PDF must persist on
         // the same row, or reopening the tile would serve the OLD file.
-        const replacedFile = fileReplaced.current
-          ? { fileUrl: await uploadAdminDoc(currentFile.current), fileName: originalName ?? currentFile.current.name }
-          : {};
-        await apiRequest('PATCH', `/api/press/${pressId}/templates/live/${liveId.current}`, {
-          name: template.name,
-          previewImg,
-          wMm: template.wMm,
-          hMm: template.hMm,
-          layerCount: template.layers.length,
-          tests: testsPayload,
-          ...replacedFile,
-        });
+        let replacedFile: { fileUrl?: string; fileName?: string } = {};
+        if (fileReplaced.current) {
+          setSaveStage('Uploading template');
+          try {
+            replacedFile = {
+              fileUrl: await uploadAdminDocWithProgress(currentFile.current, (fr) => setSaveProgress(fr)),
+              fileName: originalName ?? currentFile.current.name,
+            };
+          } finally { setSaveProgress(null); setSaveStage(null); }
+        }
+        await withTimeout(
+          apiRequest('PATCH', `/api/press/${pressId}/templates/live/${liveId.current}`, {
+            name: template.name,
+            previewImg,
+            wMm: template.wMm,
+            hMm: template.hMm,
+            layerCount: template.layers.length,
+            tests: testsPayload,
+            ...replacedFile,
+          }),
+          60_000,
+          'saving the template',
+        );
       } else {
-        const fileUrl = await uploadAdminDoc(currentFile.current);
-        await apiRequest('POST', `/api/press/${pressId}/templates/live`, {
-          name: template.name,
-          component: componentPill.current,
-          fileUrl,
-          fileName: originalName ?? currentFile.current.name,
-          previewImg,
-          wMm: template.wMm,
-          hMm: template.hMm,
-          layerCount: template.layers.length,
-          tests: testsPayload,
-        });
+        setSaveStage('Uploading template');
+        let fileUrl: string;
+        try {
+          fileUrl = await uploadAdminDocWithProgress(currentFile.current, (fr) => setSaveProgress(fr));
+        } finally { setSaveProgress(null); setSaveStage(null); }
+        await withTimeout(
+          apiRequest('POST', `/api/press/${pressId}/templates/live`, {
+            name: template.name,
+            component: componentPill.current,
+            fileUrl,
+            fileName: originalName ?? currentFile.current.name,
+            previewImg,
+            wMm: template.wMm,
+            hMm: template.hMm,
+            layerCount: template.layers.length,
+            tests: testsPayload,
+          }),
+          60_000,
+          'saving the template',
+        );
       }
       freshLiveSave.flag = true;
       void clearLiveTestDraft(pressId); // saved for real — the crash-safety draft has done its job
@@ -1086,7 +1189,7 @@ export default function PressTemplateLiveTest({
       onExit();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save the template.');
-    } finally { setBusy(null); }
+    } finally { setBusy(null); setSaveStage(null); setSaveProgress(null); }
   };
 
   // Answer to the detected-options question (slot mode): optionally stamp the
@@ -1096,7 +1199,11 @@ export default function PressTemplateLiveTest({
     setBusy('save');
     try {
       if (yes) {
-        await apiRequest('POST', `/api/press/${pressId}/templates/${detected.specId}/options`, { options: detected.options });
+        await withTimeout(
+          apiRequest('POST', `/api/press/${pressId}/templates/${detected.specId}/options`, { options: detected.options }),
+          30_000,
+          'saving the options note',
+        );
       }
       // The detected-options early-return skipped the direct path's server
       // test — run it here so the session's passing art still certifies.
@@ -1110,7 +1217,7 @@ export default function PressTemplateLiveTest({
       // The file is already attached — keep the dialog so the operator can
       // retry the note (re-attaching would mint a needless extra revision).
       setError(err instanceof Error ? err.message : 'Could not save the options note.');
-    } finally { setBusy(null); }
+    } finally { setBusy(null); setSaveStage(null); setSaveProgress(null); }
   };
 
   // Art placement: centered on the GT Bleed box (fallback: Cut, then full page).
@@ -1708,6 +1815,14 @@ export default function PressTemplateLiveTest({
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {busy === 'art' ? (
                     <ThinProgress label="Reading art" t={t} testid="progress-reading-art" />
+                  ) : busy === 'save' && saveStage ? (
+                    // Task #3200 — the big-art upload shows real progress
+                    // instead of a frozen "Saving…" button.
+                    <ThinProgress
+                      label={saveProgress != null ? `${saveStage} ${Math.round(saveProgress * 100)}%` : saveStage}
+                      t={t}
+                      testid="progress-save-upload"
+                    />
                   ) : (
                     <>
                       {/* Cancel only when there's unsaved work to walk away from

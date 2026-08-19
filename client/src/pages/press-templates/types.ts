@@ -36,7 +36,10 @@ export type TemplateTestRun = {
   fileUrl: string;
   fileName: string | null;
   checks: TemplateCheck[];
-  verdict: "pass" | "warn" | "fail" | "unverified";
+  // Task #3200 — the certification scan runs in the background after Save:
+  // "processing" = verdict not landed yet; "error" = the scan itself failed
+  // (readable reason in checks[0].message), distinct from a measured "fail".
+  verdict: "pass" | "warn" | "fail" | "unverified" | "processing" | "error";
   previewUrl: string | null;
   previewUrl2: string | null;
   createdAt: string;
@@ -167,7 +170,7 @@ export function templateFileNeedsReupload(spec: TemplateSpecWithHistory | undefi
 }
 
 /** Slot status derived for the index tiles. */
-export type SlotStatus = "certified" | "pending" | "failed" | "empty" | "review";
+export type SlotStatus = "certified" | "pending" | "failed" | "empty" | "review" | "checking";
 
 export function slotStatus(spec: TemplateSpecWithHistory | undefined): SlotStatus {
   if (!spec || !spec.templateFileUrl) return "empty";
@@ -186,6 +189,15 @@ export function slotStatus(spec: TemplateSpecWithHistory | undefined): SlotStatu
     (latestRun.revisionId
       ? latestRun.revisionId === live?.id
       : !live?.createdAt || latestRun.createdAt >= live.createdAt);
+  // Task #3200 — a background certification scan is still running on the
+  // current revision: the tile shows "Checking…" instead of a stale verdict.
+  if (latestRun && latestRun.verdict === "processing" && runIsCurrent) return "checking";
   if (latestRun && latestRun.verdict === "fail" && runIsCurrent) return "failed";
   return "pending";
+}
+
+/** Task #3200 — true when any run is still processing, so the shelf query
+ *  can poll until every in-flight certification scan lands. */
+export function anyRunProcessing(specs: TemplateSpecWithHistory[] | undefined): boolean {
+  return !!specs?.some((s) => s.runs.some((r) => r.verdict === "processing"));
 }

@@ -103,6 +103,31 @@ export const DOC_UPLOAD_ACCEPT = ".pdf,.zip,.ai,.png,.jpg,.jpeg,.tif,.tiff";
 // (artist art-test page; mirrors the press live-test's XHR pattern — fetch
 // can't report UPLOAD progress). Same sign → PUT → finalize flow; `onProgress`
 // receives 0..1 for the PUT leg only.
+// Task #3200 — every non-PUT leg of the progress upload (sign, finalize) is
+// bounded too: a hung finalize used to leave the live-test Save frozen on
+// "Saving…" with no feedback. Exported for its unit test.
+export async function fetchWithTimeout(
+  input: RequestInfo | URL,
+  init: RequestInit,
+  ms: number,
+  what: string,
+): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(input, { ...init, signal: ctrl.signal });
+  } catch (err) {
+    if (ctrl.signal.aborted) {
+      throw new Error(`Timed out ${what}. Check your connection and try again.`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+const UPLOAD_STEP_TIMEOUT_MS = 30_000;
+
 export async function uploadAdminDocWithProgress(
   file: File,
   onProgress: (fraction: number) => void,
@@ -119,12 +144,17 @@ export async function uploadAdminDocWithProgress(
 
   let signRes: Response;
   try {
-    signRes = await fetch("/api/admin/upload-doc/sign", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      credentials: "include",
-      body: JSON.stringify({ contentType }),
-    });
+    signRes = await fetchWithTimeout(
+      "/api/admin/upload-doc/sign",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        credentials: "include",
+        body: JSON.stringify({ contentType }),
+      },
+      UPLOAD_STEP_TIMEOUT_MS,
+      "preparing the upload",
+    );
   } catch (networkErr) {
     throw new Error(friendlyUploadError(networkErr, { noun: "file" }));
   }
@@ -157,12 +187,17 @@ export async function uploadAdminDocWithProgress(
     xhr.send(file);
   });
 
-  const finRes = await fetch("/api/admin/upload-doc/finalize", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    credentials: "include",
-    body: JSON.stringify({ finalPath }),
-  });
+  const finRes = await fetchWithTimeout(
+    "/api/admin/upload-doc/finalize",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      credentials: "include",
+      body: JSON.stringify({ finalPath }),
+    },
+    UPLOAD_STEP_TIMEOUT_MS,
+    "finishing the upload",
+  );
   if (!finRes.ok) {
     const body = await finRes.json().catch(() => ({}) as { message?: string });
     throw new Error(

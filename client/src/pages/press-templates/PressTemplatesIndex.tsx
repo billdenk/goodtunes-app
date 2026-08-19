@@ -31,6 +31,7 @@ import { useAdminDark } from "@/lib/adminAppearance";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
 import {
   slotStatus,
+  anyRunProcessing,
   templateFileNeedsReupload,
   variantOptionsNote,
   type TemplatesPayload,
@@ -139,6 +140,9 @@ const STATUS_META: Record<
   // this slot. "Needs review" is not in the status model (Ruby, Aug 15 2026)
   // — it presents as Pending; the ⓘ popover carries the why + action.
   review: { label: "Pending", tone: "warn", Icon: Clock3 },
+  // Task #3200 — a background certification scan is running on this slot's
+  // current file; the shelf polls until the verdict lands.
+  checking: { label: "Checking…", tone: "warn", Icon: Loader2 },
   // "empty" never reaches StatusChip (the empty tile renders its own affordance).
   empty: { label: "Empty", tone: "warn", Icon: Clock3 },
 };
@@ -152,7 +156,7 @@ function StatusChip({ status, t }: { status: SlotStatus; t: Theme }) {
       style={{ color }}
       data-testid={`status-${status}`}
     >
-      <Icon className="w-3.5 h-3.5" />
+      <Icon className={status === "checking" ? "w-3.5 h-3.5 animate-spin" : "w-3.5 h-3.5"} />
       {label}
     </span>
   );
@@ -688,7 +692,7 @@ function FilledTile({
               hover tooltip (Bill, Aug 16 2026). A legacy import we couldn't
               confidently match presents as Pending too; its ⓘ carries the
               review-specific why (Ruby delta 5, Aug 15 2026). */}
-          {(needsReupload || status === "pending" || status === "review" || status === "failed") && (
+          {(needsReupload || status === "pending" || status === "review" || status === "failed" || status === "checking") && (
             <span className="relative inline-flex" onClick={(e) => e.stopPropagation()}>
               <span
                 role="button"
@@ -721,7 +725,11 @@ function FilledTile({
                       ? "Imported from your earlier uploads — we couldn't confirm it matches this slot. Open to confirm it, or archive it."
                       : status === "failed"
                         ? "Last test failed — the art didn't pass the measured checks. Open to test a fixed file."
-                        : "Attached, not yet certified — it certifies itself when a finished file passes. Open to test."}
+                        : status === "checking"
+                          ? "The certification check is running on the tested art file — the verdict lands here shortly, no need to wait on the page."
+                          : spec.runs[0]?.verdict === "error"
+                            ? `The last certification check couldn't finish${spec.runs[0]?.checks?.[0]?.message ? ` — ${spec.runs[0].checks[0].message}` : ""}. Open to run the test again.`
+                            : "Attached, not yet certified — it certifies itself when a finished file passes. Open to test."}
                   </span>
                 </>
               )}
@@ -1001,6 +1009,9 @@ export function PressTemplatesIndex({
 
   const { data, isLoading, isError, error } = useQuery<TemplatesPayload>({
     queryKey: [`/api/press/${pressId}/templates`],
+    // Task #3200 — while any certification scan is still processing in the
+    // background, poll so "Checking…" flips to the verdict when it lands.
+    refetchInterval: (query) => (anyRunProcessing(query.state.data?.specs) ? 5000 : false),
   });
 
   const canEdit = data?.canEdit ?? false;

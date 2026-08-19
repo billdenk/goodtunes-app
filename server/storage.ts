@@ -1125,6 +1125,19 @@ export interface IStorage {
     createdByUserId: string | null;
   }): Promise<PressTemplateTestRun>;
   certifyPressTemplateTestRun(runId: string, when: Date): Promise<PressTemplateTestRun | null>;
+  // Task #3200 — land the async certification scan's outcome on a run row
+  // created in the "processing" state (verdict/checks/previews, plus the
+  // mirrored own-object path when the run came in as an external link).
+  updatePressTemplateTestRunResult(
+    runId: string,
+    patch: {
+      fileUrl?: string;
+      checks: unknown[];
+      verdict: string;
+      previewUrl?: string | null;
+      previewUrl2?: string | null;
+    },
+  ): Promise<PressTemplateTestRun | null>;
 
   // ---- Task #2324 — Operator-editable press AUDIO spec override ------
   // One row per press (keyed manufacturers.id). The audio preflight
@@ -6028,6 +6041,34 @@ export class DbStorage implements IStorage {
       .update(pressTemplateTestRuns)
       .set({ previewUrl, previewUrl2 })
       .where(eq(pressTemplateTestRuns.id, runId))
+      .returning();
+    return row ?? null;
+  }
+  async updatePressTemplateTestRunResult(
+    runId: string,
+    patch: {
+      fileUrl?: string;
+      checks: unknown[];
+      verdict: string;
+      previewUrl?: string | null;
+      previewUrl2?: string | null;
+    },
+  ): Promise<PressTemplateTestRun | null> {
+    const [row] = await db
+      .update(pressTemplateTestRuns)
+      .set({
+        ...(patch.fileUrl !== undefined ? { fileUrl: patch.fileUrl } : {}),
+        checks: patch.checks,
+        verdict: patch.verdict,
+        ...(patch.previewUrl !== undefined ? { previewUrl: patch.previewUrl } : {}),
+        ...(patch.previewUrl2 !== undefined ? { previewUrl2: patch.previewUrl2 } : {}),
+      })
+      // Guarded state transition: results may only land on a run that is
+      // still "processing". A scan that stalls past the deadline (or a
+      // server restart swept by the templates GET) has already recorded a
+      // terminal error — a late-resuming worker must never overwrite it
+      // (and then auto-certify off a verdict the operator was told failed).
+      .where(and(eq(pressTemplateTestRuns.id, runId), eq(pressTemplateTestRuns.verdict, "processing")))
       .returning();
     return row ?? null;
   }

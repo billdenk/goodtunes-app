@@ -135,8 +135,22 @@ const operatorGuidesSchema = z.object({
   safetyInsetInches: z.number().min(0).max(2).nullable().optional().default(null),
 });
 
+// Task #3200 — hard bound on the detached certification scan. Steps inside
+// are individually bounded (60s stream scan, 60s/page rasterize), so this is
+// belt-and-braces against a wedged storage stream leaving "processing" forever.
+const TEST_RUN_PROCESSING_TIMEOUT_MS = 10 * 60_000;
+// A run still "processing" this long after creation is orphaned (e.g. the
+// instance restarted mid-scan) — the templates GET sweeps it to a readable
+// error so the shelf never shows an eternal "Checking…".
+const TEST_RUN_STALE_MS = 15 * 60_000;
+
 const testSchema = z.object({
   url: z.string().min(1).max(2048),
+  // Task #3200 — the scan runs in the background after the route answers,
+  // so the client can't wait for the verdict and certify itself. When set,
+  // a pass/warn verdict certifies the pinned live revision server-side
+  // (same guards as the explicit certify route).
+  certifyOnPass: z.boolean().optional(),
   fileName: z.string().max(512).nullable().optional(),
   // The template's own bleed line, read by the live-test client from the
   // template PDF's GT Bleed/Cut layer boxes — templates that draw guides in
@@ -494,6 +508,27 @@ export function registerPressTemplateFlowRoutes(
       storage.listPressTemplateRevisions(specIds),
       storage.listPressTemplateTestRuns(specIds),
     ]);
+    // Task #3200 — a run orphaned in "processing" (instance restarted
+    // mid-scan) must not show an eternal "Checking…": sweep anything older
+    // than the stale bound to a readable error, in this payload and the DB.
+    const staleCutoff = Date.now() - TEST_RUN_STALE_MS;
+    for (const r of runs) {
+      if (r.verdict === "processing" && new Date(r.createdAt as any).getTime() < staleCutoff) {
+        r.verdict = "error";
+        r.checks = [
+          {
+            key: "scan",
+            label: "Certification scan",
+            status: "fail",
+            message: "The certification check was interrupted — run the test again.",
+            tier: "system",
+          },
+        ] as unknown[];
+        void storage
+          .updatePressTemplateTestRunResult(r.id, { checks: r.checks, verdict: "error" })
+          .catch((e: any) => console.error("[template-test] stale-run sweep failed:", e?.message ?? e));
+      }
+    }
     // Lazy maintenance — legacy-upload import (revision minting) plus
     // preview rasterization for spec files and legacy test runs — used to
     // run INSIDE this GET, which meant downloading + rasterizing PDFs
@@ -1237,132 +1272,239 @@ export function registerPressTemplateFlowRoutes(
           .status(400)
           .json({ message: "Upload the file or paste an https:// link." });
       }
-      let mirroredRunPath: string | null = null;
-      if (/^https:\/\//i.test(runFileUrl)) {
-        const mirrored = await mirrorExternalTemplatePdf(runFileUrl);
-        if (!mirrored.ok) return res.status(422).json({ message: mirrored.error });
-        runFileUrl = mirrored.objectPath;
-        mirroredRunPath = mirrored.objectPath;
+      // Task #3200 — the scan of a hundreds-of-MB finished-art PDF takes
+      // minutes; run synchronously it outlived the deployed edge's request
+      // timeout and the client's Save froze on a fetch that never resolved.
+      // The route now records a run in the "processing" state and answers
+      // immediately; the mirror/scan/preview/certify work happens in a
+      // detached background task that lands the final verdict (or a
+      // readable error) on the same run row for the shelf to refetch.
+      // Bleed reference (gogoods, Aug 16 2026): stored line wins; else the
+      // client-read GT-layer line fills the gap and is persisted as the
+      // measured line so future runs, art-inspect, and prepress all agree.
+      const storedLine = spec.bleedLineInches ?? spec.measuredBleedLineInches ?? null;
+      const clientLine = body.data.templateBleedLineInches ?? null;
+      const effLine =
+        ((slotSpec as any).templateBleedLineInches as number | null | undefined) ??
+        (storedLine != null && storedLine > 0 ? storedLine : null) ??
+        (clientLine != null && clientLine > 0 ? clientLine : null);
+      const slotSpecEff =
+        effLine != null && (slotSpec as any).templateBleedLineInches == null
+          ? ({ ...slotSpec, templateBleedLineInches: effLine } as typeof slotSpec)
+          : slotSpec;
+      if (storedLine == null && clientLine != null && clientLine > 0) {
+        await storage.updatePressTemplateSpecMeasured(pressId, spec.id, {
+          measuredBleedLineInches: clientLine,
+        });
       }
-      // Every run file is now an own-object path (uploads land there
-      // directly; pasted links were just mirrored) — the old external
-      // spool-for-preview branch is gone with the mirror rule.
-      try {
-        const { scan, error } = await scanTemplateUrl(runFileUrl);
-        if (!scan) {
-          await deleteMirroredTemplateObject(mirroredRunPath);
-          return res.status(422).json({ message: error ?? "Couldn't read that file." });
-        }
-        // Task #3069 — log every spot-usage fallback with its reason code.
-        logSpotUsageFallback(scan, { fileName: null, source: runFileUrl });
-        // Bleed reference (gogoods, Aug 16 2026): stored line wins; else the
-        // client-read GT-layer line fills the gap and is persisted as the
-        // measured line so future runs, art-inspect, and prepress all agree.
-        const storedLine = spec.bleedLineInches ?? spec.measuredBleedLineInches ?? null;
-        const clientLine = body.data.templateBleedLineInches ?? null;
-        const effLine =
-          ((slotSpec as any).templateBleedLineInches as number | null | undefined) ??
-          (storedLine != null && storedLine > 0 ? storedLine : null) ??
-          (clientLine != null && clientLine > 0 ? clientLine : null);
-        const slotSpecEff =
-          effLine != null && (slotSpec as any).templateBleedLineInches == null
-            ? ({ ...slotSpec, templateBleedLineInches: effLine } as typeof slotSpec)
-            : slotSpec;
-        if (storedLine == null && clientLine != null && clientLine > 0) {
+      // Aug 18 2026 (Bill's CALIFORNIALAND false-flag): persist the
+      // client-read GT-layer cut rect on the spec row so the ARTIST-side
+      // check route can pass the same trim override this route gets from
+      // its client. Client-measured geometry only — never inferred.
+      const clientCut = body.data.templateCutRect ?? null;
+      if (clientCut && clientCut.widthIn > 0 && clientCut.heightIn > 0) {
+        const stored = spec.measuredCutRectInches ?? null;
+        const next = { left: clientCut.leftIn, top: clientCut.topIn, width: clientCut.widthIn, height: clientCut.heightIn };
+        const same =
+          stored != null &&
+          Math.abs(stored.left - next.left) < 0.005 &&
+          Math.abs(stored.top - next.top) < 0.005 &&
+          Math.abs(stored.width - next.width) < 0.005 &&
+          Math.abs(stored.height - next.height) < 0.005;
+        if (!same) {
           await storage.updatePressTemplateSpecMeasured(pressId, spec.id, {
-            measuredBleedLineInches: clientLine,
+            measuredCutRectInches: next,
           });
         }
-        // Aug 18 2026 (Bill's CALIFORNIALAND false-flag): persist the
-        // client-read GT-layer cut rect on the spec row so the ARTIST-side
-        // check route can pass the same trim override this route gets from
-        // its client. Client-measured geometry only — never inferred.
-        const clientCut = body.data.templateCutRect ?? null;
-        if (clientCut && clientCut.widthIn > 0 && clientCut.heightIn > 0) {
-          const stored = spec.measuredCutRectInches ?? null;
-          const next = { left: clientCut.leftIn, top: clientCut.topIn, width: clientCut.widthIn, height: clientCut.heightIn };
-          const same =
-            stored != null &&
-            Math.abs(stored.left - next.left) < 0.005 &&
-            Math.abs(stored.top - next.top) < 0.005 &&
-            Math.abs(stored.width - next.width) < 0.005 &&
-            Math.abs(stored.height - next.height) < 0.005;
-          if (!same) {
-            await storage.updatePressTemplateSpecMeasured(pressId, spec.id, {
-              measuredCutRectInches: next,
-            });
-          }
-        }
-        // Task #3072 parity with the album-side route: when a line exists but
-        // the art carries no trustworthy PDF boxes (print-ready exports strip
-        // them), measure bleed from RENDERED content — otherwise the check
-        // fails on boxes the file never had. Best-effort; null degrades to
-        // the explicit "could not be measured" verdict.
-        let contentBleed: import("./validators/completedTemplate").ContentBleedMeasurement | null = null;
-        if (
-          effLine != null &&
-          (slotSpecEff as any).templatePageInches != null &&
-          (!hasTrustworthyBleedBoxes(scan) ||
-            (measuredBleedInches(scan) ?? 0) + 0.005 < effLine) &&
-          runFileUrl.startsWith("/objects/")
-        ) {
-          const fsp = await import("node:fs/promises");
-          const os = await import("node:os");
-          const path = await import("node:path");
-          let tmpDir: string | null = null;
-          try {
-            const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
-            const file = await new ObjectStorageService().getObjectEntityFile(runFileUrl);
-            const [meta] = await file.getMetadata();
-            const size = Number(meta?.size ?? 0);
-            if (Number.isFinite(size) && size > 0 && size <= 300 * 1024 * 1024) {
-              tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "press-test-bleed-"));
-              const pdfPath = path.join(tmpDir, "src.pdf");
-              await file.download({ destination: pdfPath });
-              const { contentBleedMeasurement } = await import("./validators/completedTemplate");
-              const cut = body.data.templateCutRect ?? null;
-              contentBleed = await contentBleedMeasurement(pdfPath, scan, slotSpecEff as any, {
-                trimRectOverrideInches: cut
-                  ? { left: cut.leftIn, top: cut.topIn, width: cut.widthIn, height: cut.heightIn }
-                  : null,
-              });
-            }
-          } catch {
-            contentBleed = null;
-          } finally {
-            if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
-          }
-        }
-        const checks: CheckResult[] = validateCompletedComponent(scan, slotSpecEff, { contentBleed });
-        const verdict = rollupStatus(checks);
-
-        // Task #3090 — rasterize the test file's first page(s) so the client
-        // can render the artwork under the TEMPLATE's zone rings. Best-effort,
-        // never blocks; no renderable image → the run row degrades to the
-        // checks list.
-        const pages = spec.componentKey === "labels" ? Math.min(scan.pageCount, 2) : 1;
-        const previews = await renderTestRunPreviews(runFileUrl, { pages });
-
-        // Pin the run to the revision that is live right now.
-        const revs = await storage.listPressTemplateRevisions([spec.id]);
-        const live = revs.find((r) => r.status === "pending" || r.status === "certified") ?? null;
-        const run = await storage.createPressTemplateTestRun({
-          specId: spec.id,
-          revisionId: live?.id ?? null,
-          fileUrl: runFileUrl,
-          fileName: body.data.fileName ?? null,
-          checks,
-          verdict,
-          previewUrl: previews.previewUrl,
-          previewUrl2: previews.previewUrl2,
-          createdByUserId: req.session.userId ?? null,
-        });
-        res.json({ run });
-      } catch (e) {
-        // The run row never landed — don't strand the mirrored object.
-        await deleteMirroredTemplateObject(mirroredRunPath);
-        throw e;
       }
+
+      // Pin the run to the revision that is live right now, mint it in the
+      // "processing" state, and answer — the client returns to the shelf
+      // immediately and the tile shows "Checking…" until the verdict lands.
+      const revs = await storage.listPressTemplateRevisions([spec.id]);
+      const live = revs.find((r) => r.status === "pending" || r.status === "certified") ?? null;
+      const run = await storage.createPressTemplateTestRun({
+        specId: spec.id,
+        revisionId: live?.id ?? null,
+        fileUrl: runFileUrl,
+        fileName: body.data.fileName ?? null,
+        checks: [],
+        verdict: "processing",
+        createdByUserId: req.session.userId ?? null,
+      });
+      res.json({ run });
+
+      const certifyOnPass = body.data.certifyOnPass === true;
+      const cutRect = body.data.templateCutRect ?? null;
+      // Detached background scan — every failure lands a READABLE error on
+      // the run row (verdict "error"); nothing here can hang the response.
+      void (async () => {
+        // All results land through this guarded transition: the storage
+        // update only applies while the run is still "processing", so a
+        // worker that stalls past the deadline (its run already swept to a
+        // terminal error) can never overwrite that error — and never
+        // certifies off a verdict the operator was told failed.
+        const landRun = async (patch: {
+          fileUrl?: string;
+          checks: unknown[];
+          verdict: string;
+          previewUrl?: string | null;
+          previewUrl2?: string | null;
+        }): Promise<boolean> => {
+          try {
+            return (await storage.updatePressTemplateTestRunResult(run.id, patch)) != null;
+          } catch (e: any) {
+            console.error("[template-test] couldn't record run result:", e?.message ?? e);
+            return false;
+          }
+        };
+        const failRun = (message: string) =>
+          landRun({
+            checks: [
+              {
+                key: "scan",
+                label: "Certification scan",
+                status: "fail",
+                message,
+                tier: "system",
+              },
+            ],
+            verdict: "error",
+          });
+        let mirroredRunPath: string | null = null;
+        let deadline: ReturnType<typeof setTimeout> | undefined;
+        let timedOut = false;
+        try {
+          // Overall bound — the individual steps are each bounded too, but a
+          // stuck object-storage stream must never leave "processing" forever.
+          const work = (async () => {
+            let fileUrl = runFileUrl;
+            if (/^https:\/\//i.test(fileUrl)) {
+              const mirrored = await mirrorExternalTemplatePdf(fileUrl);
+              if (!mirrored.ok) {
+                await failRun(mirrored.error);
+                return;
+              }
+              fileUrl = mirrored.objectPath;
+              mirroredRunPath = mirrored.objectPath;
+            }
+            const { scan, error } = await scanTemplateUrl(fileUrl);
+            if (!scan) {
+              await failRun(error ?? "Couldn't read that file.");
+              // Own failure path — the run row never references the mirror.
+              await deleteMirroredTemplateObject(mirroredRunPath);
+              mirroredRunPath = null;
+              return;
+            }
+            // Task #3069 — log every spot-usage fallback with its reason code.
+            logSpotUsageFallback(scan, { fileName: null, source: fileUrl });
+            // Task #3072 parity with the album-side route: when a line exists but
+            // the art carries no trustworthy PDF boxes (print-ready exports strip
+            // them), measure bleed from RENDERED content — otherwise the check
+            // fails on boxes the file never had. Best-effort; null degrades to
+            // the explicit "could not be measured" verdict.
+            let contentBleed: import("./validators/completedTemplate").ContentBleedMeasurement | null = null;
+            if (
+              effLine != null &&
+              (slotSpecEff as any).templatePageInches != null &&
+              (!hasTrustworthyBleedBoxes(scan) ||
+                (measuredBleedInches(scan) ?? 0) + 0.005 < effLine) &&
+              fileUrl.startsWith("/objects/")
+            ) {
+              const fsp = await import("node:fs/promises");
+              const os = await import("node:os");
+              const path = await import("node:path");
+              let tmpDir: string | null = null;
+              try {
+                const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+                const file = await new ObjectStorageService().getObjectEntityFile(fileUrl);
+                const [meta] = await file.getMetadata();
+                const size = Number(meta?.size ?? 0);
+                if (Number.isFinite(size) && size > 0 && size <= 300 * 1024 * 1024) {
+                  tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "press-test-bleed-"));
+                  const pdfPath = path.join(tmpDir, "src.pdf");
+                  await file.download({ destination: pdfPath });
+                  const { contentBleedMeasurement } = await import("./validators/completedTemplate");
+                  contentBleed = await contentBleedMeasurement(pdfPath, scan, slotSpecEff as any, {
+                    trimRectOverrideInches: cutRect
+                      ? { left: cutRect.leftIn, top: cutRect.topIn, width: cutRect.widthIn, height: cutRect.heightIn }
+                      : null,
+                  });
+                }
+              } catch {
+                contentBleed = null;
+              } finally {
+                if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+              }
+            }
+            const checks: CheckResult[] = validateCompletedComponent(scan, slotSpecEff, { contentBleed });
+            const verdict = rollupStatus(checks);
+
+            // Task #3090 — rasterize the test file's first page(s) so the client
+            // can render the artwork under the TEMPLATE's zone rings. Best-effort,
+            // never blocks; no renderable image → the run row degrades to the
+            // checks list.
+            const pages = spec.componentKey === "labels" ? Math.min(scan.pageCount, 2) : 1;
+            const previews = await renderTestRunPreviews(fileUrl, { pages });
+
+            const landed = await landRun({
+              fileUrl,
+              checks: checks as unknown[],
+              verdict,
+              previewUrl: previews.previewUrl,
+              previewUrl2: previews.previewUrl2,
+            });
+            if (!landed) {
+              // The run already carries a terminal error (deadline hit or a
+              // restart sweep) — that verdict stands. The mirror was never
+              // referenced by the row, so clean it up and stop: no certify.
+              await deleteMirroredTemplateObject(mirroredRunPath);
+              mirroredRunPath = null;
+              return;
+            }
+            mirroredRunPath = null; // the run row references it now — keep it
+
+            // Auto-certify on a clean verdict (the client used to do this
+            // after awaiting the scan; async it must happen here). Same
+            // state-machine guards as the explicit certify route: only the
+            // revision that is live RIGHT NOW may be certified by this run.
+            if (certifyOnPass && (verdict === "pass" || verdict === "warn") && run.revisionId) {
+              const specNow = await storage.getPressTemplateSpecById(pressId, spec.id);
+              const revsNow = await storage.listPressTemplateRevisions([spec.id]);
+              const liveNow =
+                revsNow.find((r) => r.status === "pending" || r.status === "certified") ?? null;
+              if (specNow?.templateFileUrl && liveNow && liveNow.id === run.revisionId) {
+                const when = new Date();
+                await storage.certifyPressTemplateTestRun(run.id, when);
+                await storage.setPressTemplateRevisionStatus(liveNow.id, "certified", when);
+              }
+            }
+          })();
+          await Promise.race([
+            work,
+            new Promise<never>((_, reject) => {
+              deadline = setTimeout(() => {
+                timedOut = true;
+                reject(new Error("The certification check timed out — run the test again."));
+              }, TEST_RUN_PROCESSING_TIMEOUT_MS);
+            }),
+          ]);
+        } catch (e: any) {
+          console.error("[template-test] background run failed:", e?.message ?? e);
+          await failRun(
+            e?.message
+              ? `The certification check didn't finish: ${e.message}`
+              : "The certification check didn't finish — run the test again.",
+          );
+          // On a deadline hit the work promise is still running and may yet
+          // read the mirrored file — its own guarded landing cleans up when
+          // it eventually settles. Delete here only when the work itself
+          // threw (nothing can still be using the object).
+          if (!timedOut) await deleteMirroredTemplateObject(mirroredRunPath);
+        } finally {
+          clearTimeout(deadline);
+        }
+      })();
     },
   );
 
