@@ -804,10 +804,47 @@ export async function opsHealth(ctx: AdminReportContext) {
       lte(checkoutFailureEvents.occurredAt, ctx.to),
     ))
     .orderBy(desc(checkoutFailureEvents.occurredAt));
+  // Task #3206 — recovery detection: a failure is "recovered" when the same
+  // buyer (matched by customer_id or, failing that, buyer email
+  // case-insensitively) later placed a paid non-QA order for the SAME album
+  // at or after the failure timestamp. One set-based lateral query over the
+  // windowed failure rows — no per-row lookups.
+  const recoveryRows = await db.execute<{ id: string; order_created_at: string }>(sql`
+    SELECT f.id, o.created_at AS order_created_at
+    FROM checkout_failure_events f
+    JOIN LATERAL (
+      SELECT o.created_at
+      FROM orders o
+      WHERE o.status IN ('paid', 'shipped', 'complete', 'completed', 'external_paid')
+        AND o.origin IS DISTINCT FROM 'qa:test'
+        AND o.album_id = f.album_id
+        AND o.created_at >= f.occurred_at
+        AND (
+          (f.customer_id IS NOT NULL AND o.customer_id = f.customer_id)
+          OR (f.buyer_email IS NOT NULL AND LOWER(o.buyer_email) = LOWER(f.buyer_email))
+        )
+      ORDER BY o.created_at ASC
+      LIMIT 1
+    ) o ON true
+    WHERE f.is_qa = false
+      AND f.album_id IS NOT NULL
+      AND f.occurred_at >= ${ctx.from}
+      AND f.occurred_at <= ${ctx.to}
+  `);
+  const recoveredAtByFailureId = new Map<string, string>(
+    ((recoveryRows as any).rows ?? []).map((r: any) => [String(r.id), new Date(r.order_created_at).toISOString()]),
+  );
   const failedRowsShaped = failureRows.map((r) => ({
     ...r,
     reasonLabel: checkoutFailureReasonLabel(r.kind, r.failureCode, r.failureMessage),
+    recovered: recoveredAtByFailureId.has(r.id),
+    recoveredAt: recoveredAtByFailureId.get(r.id) ?? null,
   }));
+  const recoveredCount = failedRowsShaped.filter((r) => r.recovered).length;
+  const unrecoveredCount = failedRowsShaped.length - recoveredCount;
+  const unrecoveredAmountCents = failedRowsShaped
+    .filter((r) => !r.recovered)
+    .reduce((sum, r) => sum + (r.amountCents ?? 0), 0);
 
   // Pending-orders proxy — kept as a SEPARATE "abandoned" signal: orders
   // with status='pending' that never advanced to paid (a session was
@@ -853,6 +890,9 @@ export async function opsHealth(ctx: AdminReportContext) {
     },
     failedCheckouts: {
       count: failedRowsShaped.length,
+      recoveredCount,
+      unrecoveredCount,
+      unrecoveredAmountCents,
       last24hCount: failed24h,
       last7dCount: failed7d,
       rows: failedRowsShaped.slice(0, 100),

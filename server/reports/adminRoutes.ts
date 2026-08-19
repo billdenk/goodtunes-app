@@ -190,8 +190,12 @@ export function registerAdminReportRoutes(app: Express) {
         albumTitle: r.albumTitle ?? "",
         albumId: r.albumId ?? "",
         occurredAt: r.occurredAt ? new Date(r.occurredAt).toISOString() : "",
+        // Task #3206 — did the buyer later complete a paid order for the
+        // same album? Actionable losses are the "no" rows.
+        recovered: r.recovered ? "yes" : "no",
+        recoveredAt: r.recoveredAt ? new Date(r.recoveredAt).toISOString() : "",
       })),
-      ["eventId", "kind", "reason", "buyer", "buyerEmail", "amountDollars", "albumTitle", "albumId", "occurredAt"],
+      ["eventId", "kind", "reason", "buyer", "buyerEmail", "amountDollars", "albumTitle", "albumId", "occurredAt", "recovered", "recoveredAt"],
     ));
   }));
   app.get("/api/admin/reports/ops/pending.csv", adminGuard, wrap(async (req, res) => {

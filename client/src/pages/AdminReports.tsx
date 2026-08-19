@@ -1728,8 +1728,15 @@ function OpsTab({ qs }: { qs: string }) {
     queryKey: ["/api/admin/reports/ops", qs],
     queryFn: () => fetchJson(`/api/admin/reports/ops?${qs}`),
   });
+  // Task #3206 — the actionable rows are the failures the buyer never came
+  // back from (no later paid order, any card). Default to showing ONLY those;
+  // the recovered rows are noise an operator can opt into.
+  const [showRecovered, setShowRecovered] = useState(false);
   if (isError) return <ErrorState error={error} onRetry={() => refetch()} />;
   if (isLoading || !data) return <LoadingState />;
+  const failedRowsVisible = showRecovered
+    ? data.failedCheckouts.rows
+    : data.failedCheckouts.rows.filter((r: any) => !r.recovered);
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -1775,23 +1782,51 @@ function OpsTab({ qs }: { qs: string }) {
       <Card>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-[var(--apple-ink)]">Failed checkouts (declines &amp; expired sessions)</h3>
-          <ExportLink href={`/api/admin/reports/ops/failed.csv?${qs}`} label="CSV" />
+          <div className="flex items-center gap-3">
+            {(data.failedCheckouts.recoveredCount ?? 0) > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowRecovered((v) => !v)}
+                className="text-xs font-medium text-[var(--apple-subink)] hover:text-[var(--apple-ink)] underline underline-offset-2 transition-colors"
+                data-testid="button-toggle-recovered"
+              >
+                {showRecovered ? "Hide recovered" : `Show ${data.failedCheckouts.recoveredCount} recovered`}
+              </button>
+            )}
+            <ExportLink href={`/api/admin/reports/ops/failed.csv?${qs}`} label="CSV" />
+          </div>
         </div>
         {data.failedCheckouts.rows.length === 0 ? (
           <EmptyState message="No failed checkout attempts in this range." />
         ) : (
-          <table className="w-full text-sm" data-testid="table-failed-checkouts">
+          <>
+            {/* Task #3206 — recovery summary: the actionable number is
+                UNRECOVERED failures (real lost revenue), so surface the
+                split above the table. */}
+            <p className="text-sm text-[var(--apple-subink)] mb-3" data-testid="text-failed-checkouts-summary">
+              <span className="font-semibold text-[var(--apple-ink)]">{data.failedCheckouts.count.toLocaleString()}</span>{" "}
+              {data.failedCheckouts.count === 1 ? "failure" : "failures"}
+              {" · "}
+              <span className="font-semibold text-[var(--apple-ink)]">{(data.failedCheckouts.recoveredCount ?? 0).toLocaleString()}</span> recovered
+              {" · "}
+              <span className="font-semibold text-[var(--apple-ink)]">~{fmtUsd(data.failedCheckouts.unrecoveredAmountCents ?? 0)}</span> unrecovered
+            </p>
+            {failedRowsVisible.length === 0 ? (
+              <EmptyState message="Every failure in this range recovered — the buyer completed the purchase later." />
+            ) : (
+            <table className="w-full text-sm" data-testid="table-failed-checkouts">
             <thead>
               <tr className="text-left text-[11px] uppercase tracking-wider text-[var(--apple-subink)] border-b border-[var(--apple-hairline)]">
                 <th className="py-2 font-bold">Buyer</th>
                 <th className="py-2 font-bold">Album</th>
                 <th className="py-2 font-bold">Reason</th>
+                <th className="py-2 font-bold">Recovery</th>
                 <th className="py-2 font-bold text-right">Amount</th>
                 <th className="py-2 font-bold text-right">When</th>
               </tr>
             </thead>
             <tbody>
-              {data.failedCheckouts.rows.map((r: any) => (
+              {failedRowsVisible.map((r: any) => (
                 <tr key={r.id} className="border-b border-[var(--apple-hairline)]" data-testid={`row-failed-${r.id}`}>
                   <td className="py-2.5 text-[var(--apple-ink)]">{r.buyerName || r.buyerEmail || "—"}</td>
                   <td className="py-2.5 text-[var(--apple-ink)]">{r.albumTitle || (r.albumId ? r.albumId.slice(0, 8) : "—")}</td>
@@ -1800,12 +1835,32 @@ function OpsTab({ qs }: { qs: string }) {
                       {r.reasonLabel || (r.kind === "session_expired" ? "Checkout expired" : "Payment failed")}
                     </span>
                   </td>
+                  <td className="py-2.5">
+                    {r.recovered ? (
+                      <span
+                        className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wide text-[var(--apple-success,#1a7f37)] bg-[var(--apple-success-wash,rgba(26,127,55,0.12))]"
+                        title={r.recoveredAt ? `Paid order on ${new Date(r.recoveredAt).toLocaleDateString()}` : undefined}
+                        data-testid={`badge-recovered-${r.id}`}
+                      >
+                        Recovered
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold uppercase tracking-wide text-[var(--apple-subink)] bg-[var(--apple-chip)]"
+                        data-testid={`badge-unrecovered-${r.id}`}
+                      >
+                        Unrecovered
+                      </span>
+                    )}
+                  </td>
                   <td className="py-2.5 text-[var(--apple-ink)] text-right tabular-nums font-medium">{r.amountCents != null ? fmtUsd(r.amountCents) : "—"}</td>
                   <td className="py-2.5 text-[var(--apple-subink)] text-right tabular-nums">{r.occurredAt ? new Date(r.occurredAt).toLocaleDateString() : "—"}</td>
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+            )}
+          </>
         )}
         <p className="text-[11px] text-[var(--apple-faint)] mt-3">
           {data.failedCheckouts.note || "Real Stripe failure events — card declines and expired Checkout Sessions. Never counted as orders."}
