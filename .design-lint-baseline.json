@@ -25447,7 +25447,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: '#a1a1a6' }}>{s.note}</div>"
+    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: '#a1a1a6' }}>{unavailable ? 'Not offered' : s.note}</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -25947,7 +25947,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: '#a1a1a6' }}>{s.note}</div>"
+    "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: '#a1a1a6' }}>{unavailable ? 'Not offered' : s.note}</div>"
   },
   {
     "rule": "hardcoded-font-size",

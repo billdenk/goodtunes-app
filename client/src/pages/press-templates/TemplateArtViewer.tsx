@@ -17,6 +17,7 @@ import type * as pdfjs from 'pdfjs-dist';
 import { zoneColor, shapePath, type GtLayer } from './gtOverlayEngine';
 import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, type SideName, type FamilyGroup } from './sidePillGroups';
 import { computeCropCanvasSize, PT_PER_MM } from './cropDimensions';
+import { computePdfArtRect } from './artPlacement';
 
 export type ViewerTemplate = { img: string; wMm: number; hMm: number; layers: GtLayer[] };
 export type ViewerArt = {
@@ -114,9 +115,9 @@ export function TemplateArtViewer({
       if (art.pxAspect > boxAspect) h = w / art.pxAspect; else w = h * art.pxAspect;
       return { xMm: box.xMm + (box.wMm - w) / 2, yMm: box.yMm + (box.hMm - h) / 2, wMm: w, hMm: h };
     }
-    const cx = anchor2.xMm + anchor2.wMm / 2;
-    const cy = anchor2.yMm + anchor2.hMm / 2;
-    return { xMm: cx - art.wMm / 2, yMm: cy - art.hMm / 2, wMm: art.wMm, hMm: art.hMm };
+    // PDF with real physical dims: full-artboard exports seat edge-to-edge,
+    // everything else centers on the anchor (shared decision, Task #3189).
+    return computePdfArtRect(template, anchor, { wMm: art.wMm, hMm: art.hMm });
   }, [template, art, anchor]);
 
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(3)}%`;

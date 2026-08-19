@@ -58,6 +58,7 @@ import { saveLiveTestDraft, loadLiveTestDraft, clearLiveTestDraft, type LiveTest
 import { templateTestPath, certifyRunPath } from './apiPaths';
 import { useAdminDark } from '@/lib/adminAppearance';
 import { computeCropCanvasSize, PT_PER_MM } from './cropDimensions';
+import { computePdfArtRect } from './artPlacement';
 // ZONE_ORDER/zoneSort + side grouping live in sidePillGroups.ts (Task #3163)
 // so the consolidation rule is testable without jsdom.
 import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, type SideName, type FamilyGroup } from './sidePillGroups';
@@ -1145,10 +1146,9 @@ export default function PressTemplateLiveTest({
       if (art.pxAspect > boxAspect) h = w / art.pxAspect; else w = h * art.pxAspect;
       return { xMm: box.xMm + (box.wMm - w) / 2, yMm: box.yMm + (box.hMm - h) / 2, wMm: w, hMm: h };
     }
-    // Orientation-aware: if rotated match, still center on anchor with real dims.
-    const cx = anchor2.xMm + anchor2.wMm / 2;
-    const cy = anchor2.yMm + anchor2.hMm / 2;
-    return { xMm: cx - art.wMm / 2, yMm: cy - art.hMm / 2, wMm: art.wMm, hMm: art.hMm };
+    // PDF with real physical dims: full-artboard exports seat edge-to-edge,
+    // everything else centers on the anchor (shared decision, Task #3189).
+    return computePdfArtRect(template, anchor, { wMm: art.wMm, hMm: art.hMm });
   }, [template, art, anchor]);
 
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(3)}%`;
