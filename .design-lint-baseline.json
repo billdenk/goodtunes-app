@@ -21552,12 +21552,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<p className=\"text-[15px] font-semibold\" style={{ color: t.ink }}>{headline}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<p className=\"text-[13px]\" style={{ marginTop: 3, color: t.subink }}>"
+    "snippet": "<p className=\"text-[13px]\" style={{ color: t.subink }}>"
   },
   {
     "rule": "hardcoded-font-size",

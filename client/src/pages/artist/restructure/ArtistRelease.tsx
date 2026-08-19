@@ -127,15 +127,9 @@ function ReleaseDashboard({ portal, albumId, t, onOpenFormat }: { portal: Portal
     { label: 'Certified GoodDeeds\u00AE', value: (lifetime.units ?? 0).toLocaleString('en-US'), delta: 'One per copy sold', testid: 'stat-gooddeeds' },
   ];
 
-  // Next-thing band — driven by real payments state: a requested milestone
-  // carries the ONE filled blue pill; otherwise a quiet status headline.
+  // Balance-due band — only rendered when a payment milestone is actually
+  // requested; otherwise the Dashboard starts with the format heartbeat rows.
   const requested = portal.payments.flatMap((p) => p.milestones ?? []).find((m) => m.status === 'requested');
-  const pressFormat = portal.formats.find((f) => f.status === 'press');
-  const headline = pressFormat
-    ? `${pressFormat.label} is at press${pressFormat.pressName ? ` — ${pressFormat.pressName}` : ''}.`
-    : portal.formats.some((f) => f.status === 'live')
-      ? `${portal.release.title} is live for fans.`
-      : 'This release is still in draft.';
 
   const activity = (summary.data?.activity ?? [])
     .filter((a) => a.title?.toLowerCase().includes(portal.release.title.toLowerCase()) || a.detail?.toLowerCase().includes(portal.release.title.toLowerCase()))
@@ -143,33 +137,29 @@ function ReleaseDashboard({ portal, albumId, t, onOpenFormat }: { portal: Portal
 
   return (
     <div style={{ marginTop: 26 }} data-testid="release-dashboard">
-      {/* 1 · Next-thing band. The release's single most important state, with the
-          one actionable item (balance due) carrying the ONE filled blue pill. */}
-      <div
-        className="flex items-center justify-between gap-6 rounded-2xl flex-wrap"
-        style={{ padding: '18px 20px', border: `1px solid ${t.hairline}`, background: t.card }}
-        data-testid="dashboard-nextthing"
-      >
-        <div className="flex items-start gap-3 min-w-0">
-          <Clock className="w-5 h-5 flex-shrink-0" style={{ color: t.subink, marginTop: 1 }} aria-hidden />
-          <div className="min-w-0">
-            <p className="text-[15px] font-semibold" style={{ color: t.ink }}>{headline}</p>
-            {requested && (
-              <p className="text-[13px]" style={{ marginTop: 3, color: t.subink }}>
-                {requested.label} &mdash; {fmtDollars(requested.amountCents)} to GoodTunes&reg;.
-              </p>
-            )}
+      {/* 1 · Balance-due band. Rendered ONLY when a milestone is requested; the
+          one actionable item (balance due) carries the ONE filled blue pill.
+          No status banner otherwise — the format rows' status pills cover it. */}
+      {requested && (
+        <div
+          className="flex items-center justify-between gap-6 rounded-2xl flex-wrap"
+          style={{ padding: '18px 20px', border: `1px solid ${t.hairline}`, background: t.card, marginBottom: 18 }}
+          data-testid="dashboard-nextthing"
+        >
+          <div className="flex items-start gap-3 min-w-0">
+            <Clock className="w-5 h-5 flex-shrink-0" style={{ color: t.subink, marginTop: 1 }} aria-hidden />
+            <p className="text-[13px]" style={{ color: t.subink }}>
+              {requested.label} &mdash; {fmtDollars(requested.amountCents)} to GoodTunes&reg;.
+            </p>
           </div>
-        </div>
-        {requested && (
           <CanonPill label="Pay balance" onClick={() => { if (requested.payUrl) window.open(requested.payUrl, '_blank', 'noopener'); }} />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* 2 · Per-format heartbeat. Each row hints (chevron) it jumps to that format
           in Assets. */}
       {portal.formats.length > 0 && (
-        <div className="rounded-2xl overflow-hidden" style={{ marginTop: 18, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="dashboard-formats">
+        <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid="dashboard-formats">
           {portal.formats.map((f, i) => (
             <button
               key={f.id}
