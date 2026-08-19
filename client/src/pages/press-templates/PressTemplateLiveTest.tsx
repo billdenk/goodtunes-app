@@ -2417,6 +2417,13 @@ export default function PressTemplateLiveTest({
                     // (~8%) so on/off state is unmistakable at a glance while
                     // underlying template linework remains readable through the wash.
                     const areaAlpha = dark ? '30' : '40';
+                    // Scale-aware stroke (Task #3195): non-scaling-stroke only cancels the
+                    // SVG's own viewBox scaling — the CSS `transform: scale(viewT.s)` on the
+                    // whole canvas (up to ~90× for a skinny spine crop) still multiplies the
+                    // rendered stroke and dash pattern. Divide both by the effective view
+                    // scale so the on-screen weight stays a constant ~1.5px at every crop/zoom.
+                    const sw = 1.5 / viewT.s;
+                    const dash = `${5 / viewT.s} ${4 / viewT.s}`;
                     return (
                       <div key={zone}>
                         {viewMode === 'area' && area && (
@@ -2469,9 +2476,9 @@ export default function PressTemplateLiveTest({
                               d={box.pathMm}
                               fill="none"
                               stroke={c}
-                              strokeWidth={1.5}
+                              strokeWidth={sw}
                               vectorEffect="non-scaling-stroke"
-                              strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                              strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? dash : undefined}
                             />
                           </svg>
                         ) : (
@@ -2494,9 +2501,9 @@ export default function PressTemplateLiveTest({
                                 ry={box.hMm / 2}
                                 fill="none"
                                 stroke={c}
-                                strokeWidth={1.5}
+                                strokeWidth={sw}
                                 vectorEffect="non-scaling-stroke"
-                                strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                                strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? dash : undefined}
                               />
                             ) : (
                               <rect
@@ -2506,9 +2513,9 @@ export default function PressTemplateLiveTest({
                                 height={box.hMm}
                                 fill="none"
                                 stroke={c}
-                                strokeWidth={1.5}
+                                strokeWidth={sw}
                                 vectorEffect="non-scaling-stroke"
-                                strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                                strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? dash : undefined}
                               />
                             )}
                           </svg>

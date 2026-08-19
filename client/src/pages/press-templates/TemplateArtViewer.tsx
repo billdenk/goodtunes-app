@@ -807,6 +807,12 @@ export function TemplateArtViewer({
               if (!box) return null;
               const c = zoneColor(zone);
               const areaAlpha = dark ? '30' : '40';
+              // Scale-aware stroke (Task #3195): non-scaling-stroke only cancels the SVG's
+              // internal viewBox scaling — the CSS scale on the canvas still multiplies the
+              // stroke and dash pattern. Divide both by the effective view scale so lines
+              // stay hairline (~1.5px on screen) at every crop/zoom.
+              const sw = 1.5 / viewT.s;
+              const dash = `${5 / viewT.s} ${4 / viewT.s}`;
               return (
                 <div key={zone}>
                   {viewMode === 'area' && area && (
@@ -853,9 +859,9 @@ export function TemplateArtViewer({
                         d={box.pathMm}
                         fill="none"
                         stroke={c}
-                        strokeWidth={1.5}
+                        strokeWidth={sw}
                         vectorEffect="non-scaling-stroke"
-                        strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                        strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? dash : undefined}
                       />
                     </svg>
                   ) : (
@@ -873,9 +879,9 @@ export function TemplateArtViewer({
                           ry={box.hMm / 2}
                           fill="none"
                           stroke={c}
-                          strokeWidth={1.5}
+                          strokeWidth={sw}
                           vectorEffect="non-scaling-stroke"
-                          strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                          strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? dash : undefined}
                         />
                       ) : (
                         <rect
@@ -885,9 +891,9 @@ export function TemplateArtViewer({
                           height={box.hMm}
                           fill="none"
                           stroke={c}
-                          strokeWidth={1.5}
+                          strokeWidth={sw}
                           vectorEffect="non-scaling-stroke"
-                          strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                          strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? dash : undefined}
                         />
                       )}
                     </svg>
