@@ -1776,8 +1776,10 @@ export function registerPressTemplateFlowRoutes(
         if (scan.imageDimsPx.length === 0) {
           rows.push({
             param: "Image resolution (min 300 PPI)",
-            tone: "na",
-            detail: "No embedded raster images found — vector-only art has no resolution floor.",
+            // Viryl, Aug 18 2026: vector-only art PASSES — pixels aren't
+            // required, so there is nothing to hold to a resolution floor.
+            tone: "pass",
+            detail: "No embedded raster images — vector-only art passes (no resolution floor applies).",
           });
         } else if (!page) {
           rows.push({

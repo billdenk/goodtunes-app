@@ -34355,6 +34355,39 @@ export async function registerRoutes(
     res.json(await completedTemplatePayload(req.params.id));
   });
 
+  // Authed master download for the Press panel (Aug 18 2026 — Andrew's
+  // 0-byte FLACs): masters are PRIVATE objects, so the old bare <a href>
+  // straight at /objects/... 404'd (no ACL) and saved empty files. This
+  // route authenticates (operator or the album's press/partners via
+  // requireOperatorOrAlbumPress) and streams the master with a download
+  // disposition; the client fetches it with auth headers into a blob.
+  app.get("/api/admin/albums/:id/masters/:songId/download", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const song = await storage.getSongById(req.params.songId);
+    if (!song || song.albumId !== req.params.id) return res.status(404).json({ message: "Song not found on this album." });
+    if (!song.audioUrl || !song.audioUrl.startsWith("/objects/")) {
+      return res.status(404).json({ message: "No master file on this track." });
+    }
+    try {
+      const file = await objectStorage.getObjectEntityFile(song.audioUrl);
+      const [meta] = await file.getMetadata();
+      const ext = (song.audioUrl.match(/\.[a-zA-Z0-9]+$/)?.[0] ?? "").toLowerCase();
+      const name = `${String(song.trackNumber ?? 0).padStart(2, "0")} ${song.title}${ext}`.replace(/[\r\n"\\/]+/g, " ");
+      res.setHeader("Content-Type", (meta?.contentType as string) || "application/octet-stream");
+      if (meta?.size) res.setHeader("Content-Length", String(meta.size));
+      res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+      file.createReadStream().on("error", (e) => {
+        console.error("[masters-download] stream error", e);
+        if (!res.headersSent) res.status(500).end();
+        else res.end();
+      }).pipe(res);
+    } catch (e) {
+      if (e instanceof ObjectNotFoundError) return res.status(404).json({ message: "Master file not found in storage." });
+      console.error("[masters-download] failed", e);
+      return res.status(500).json({ message: "Couldn't stream that master — try again." });
+    }
+  });
+
   // (The per-album vendor + package-config POST route is gone — Bill's
   // rework derives the configuration from the Sell tab's SKUs instead.)
 
@@ -34545,7 +34578,16 @@ export async function registerRoutes(
           const pdfPath = path.join(tmpDir, "src.pdf");
           await file.download({ destination: pdfPath });
           if (wantsEdgeBand) edgeBand = await edgeBandContent(pdfPath, scan);
-          if (wantsContentBleed) contentBleed = await contentBleedMeasurement(pdfPath, scan, spec);
+          if (wantsContentBleed) {
+            // Cut-rect parity with the press live-test (CALIFORNIALAND fix,
+            // Aug 18 2026): full-artboard exports (Trim==Bleed) need the
+            // press-persisted GT-layer cut rect or bleed measures ≈0. Server
+            // spec rect ONLY — client-supplied rects were review-rejected
+            // (artists could forge an inset rect to fake sufficient bleed).
+            contentBleed = await contentBleedMeasurement(pdfPath, scan, spec, {
+              trimRectOverrideInches: spec.templateCutRectInches ?? null,
+            });
+          }
         }
       } catch {
         edgeBand = null;

@@ -21,7 +21,7 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
 import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Check, X, AudioLines, Palette, Truck } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, fetchBlob } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, resolveVendorIdForPress, isGenericVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -397,26 +397,38 @@ export function PressPanel({
       toast({ title: "Preflight failed", description: e?.message ?? "Unknown error", variant: "destructive" }),
   });
 
-  function downloadAll() {
+  // Aug 18 2026 — masters are PRIVATE objects; a bare <a href> at the
+  // /objects/... path carried no auth, 404'd, and saved 0-byte files
+  // (Andrew's FLACs). Fetch through the authed download route into a blob.
+  async function downloadOne(s: { id: string; title: string; trackNumber: number | null; audioUrl?: string | null }) {
+    const ext = urlExt(s.audioUrl) ?? ".mp3";
+    const blob = await fetchBlob(`/api/admin/albums/${albumId}/masters/${s.id}/download`);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${String(s.trackNumber ?? 0).padStart(2, "0")} ${s.title}${ext}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+
+  async function downloadAll() {
     if (withMaster.length === 0) {
       toast({ title: "No masters to download", description: "Upload masters on the Tracks tab first." });
       return;
     }
-    withMaster.forEach((s, i) => {
-      setTimeout(() => {
-        const a = document.createElement("a");
-        a.href = s.audioUrl!;
-        const ext = urlExt(s.audioUrl) ?? ".mp3";
-        a.download = `${String(s.trackNumber).padStart(2, "0")} ${s.title}${ext}`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }, i * 250);
-    });
     toast({
       title: `Downloading ${withMaster.length} master${withMaster.length === 1 ? "" : "s"}`,
       description: "Your browser will save each file.",
     });
+    for (const s of withMaster) {
+      try {
+        await downloadOne(s);
+      } catch (e: any) {
+        toast({ title: `Couldn't download "${s.title}"`, description: e?.message ?? "Unknown error", variant: "destructive" });
+      }
+    }
   }
 
   // Task #2701 — the "Send the order to GoodTunes" card (all states) is
@@ -1071,14 +1083,18 @@ export function PressPanel({
                         </td>
                         <td className="px-3 py-2 text-right">
                           {present ? (
-                            <a
-                              href={s.audioUrl!}
-                              download={`${String(s.trackNumber).padStart(2, "0")} ${s.title}${urlExt(s.audioUrl) ?? ""}`}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                downloadOne(s).catch((e: any) =>
+                                  toast({ title: `Couldn't download "${s.title}"`, description: e?.message ?? "Unknown error", variant: "destructive" }),
+                                )
+                              }
                               className="inline-flex items-center gap-1 text-[var(--brand-blue)] hover:underline opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 transition-opacity"
                               data-testid={`link-download-master-${s.id}`}
                             >
                               <Download className="w-3 h-3" /> download
-                            </a>
+                            </button>
                           ) : (
                             <span className="text-slate-400">—</span>
                           )}

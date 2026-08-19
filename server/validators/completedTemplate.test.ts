@@ -216,9 +216,10 @@ describe("validateCompletedComponent", () => {
     assert.notEqual(rollupStatus(checks.filter((x) => x.key !== "tmpl.bleed")), "fail");
   });
 
-  test("min-PPI: no measurable images warns, spec without minPpi skips the check", () => {
+  test("min-PPI: vector-only (no raster images) passes, spec without minPpi skips the check", () => {
+    // Aug 18 2026 (Viryl) — vector-only art has no resolution floor: PASS.
     const none = validateCompletedComponent(rectPdf([]), RECT_SPEC);
-    assert.equal(none.find((x) => x.key === "tmpl.min_ppi")!.status, "warn");
+    assert.equal(none.find((x) => x.key === "tmpl.min_ppi")!.status, "pass");
     const off = validateCompletedComponent(rectPdf([{ w: 100, h: 100 }]), {
       ...RECT_SPEC,
       minPpi: undefined,

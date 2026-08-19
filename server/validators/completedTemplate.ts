@@ -1904,8 +1904,10 @@ export function validateCompletedComponent(
       checks.push({
         key: "tmpl.min_ppi",
         label: `Image resolution (min ${minPpi} PPI)`,
-        status: "warn",
-        message: `Couldn't measure any embedded images — verify placed images are at least ${minPpi} PPI.`,
+        // Vector-only art passes — no raster images means nothing to hold
+        // to a resolution floor (Viryl live-test, Aug 18 2026).
+        status: "pass",
+        message: `No embedded raster images — vector-only art passes (no ${minPpi} PPI floor applies).`,
       });
     } else {
       const best = bestPpiEstimate(dims);
