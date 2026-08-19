@@ -92,6 +92,27 @@ function urlExt(url: string | null | undefined): string | null {
   const m = url.match(/\.(\w+)(?:\?|$)/);
   return m ? `.${m[1].toLowerCase()}` : null;
 }
+// Task #3197 — mirrors server/mastersHealth.ts source preference: press
+// downloads deliver the artist's ORIGINAL upload (audioSourceUrl, e.g. the
+// untouched 24-bit WAV) when it's a live /objects/ file, falling back to
+// the served playback copy. Used for the expected download extension and
+// the per-row "original / playback copy" indicator.
+function isObjectPtr(u: string | null | undefined): boolean {
+  return !!u && u.trim().startsWith("/objects/");
+}
+function preferredMasterUrl(s: { audioUrl?: string | null; audioSourceUrl?: string | null }): string | null {
+  if (isObjectPtr(s.audioSourceUrl)) return s.audioSourceUrl!.trim();
+  if (isObjectPtr(s.audioUrl)) return s.audioUrl!.trim();
+  return null;
+}
+// Pointer-level status the client can derive without probing storage:
+// "usable" (has a live-looking /objects/ pointer), "external" (only an
+// un-mirrored external URL), or "none" (no master uploaded).
+function masterPtrStatus(s: { audioUrl?: string | null; audioSourceUrl?: string | null }): "usable" | "external" | "none" {
+  if (preferredMasterUrl(s)) return "usable";
+  if ((s.audioSourceUrl ?? "").trim() || (s.audioUrl ?? "").trim()) return "external";
+  return "none";
+}
 function fmtDur(s: number | null | undefined): string {
   if (s == null || !Number.isFinite(s) || s <= 0) return "—";
   const m = Math.floor(s / 60);
@@ -242,8 +263,11 @@ export function PressPanel({
     !!physicalFormat && physicalFormat !== "cassette" && physicalFormat !== "cd";
   const { toast } = useToast();
   const sorted = [...songs].sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0));
-  const withMaster = sorted.filter((s) => !!s.audioUrl);
-  const missing = sorted.filter((s) => !s.audioUrl);
+  // Task #3197 — "has a master" now means "has a downloadable /objects/
+  // pointer" (original OR served); tracks whose only pointer is an
+  // un-mirrored external URL are flagged as broken, not downloadable.
+  const withMaster = sorted.filter((s) => masterPtrStatus(s) === "usable");
+  const missing = sorted.filter((s) => masterPtrStatus(s) !== "usable");
   // Task #337 — a master with NULL format / sample rate / bit depth is
   // the only thing that makes `validateAudioFromSpecs` emit a "couldn't
   // read…" warn. Surface those rows up here so the operator can
@@ -400,8 +424,11 @@ export function PressPanel({
   // Aug 18 2026 — masters are PRIVATE objects; a bare <a href> at the
   // /objects/... path carried no auth, 404'd, and saved 0-byte files
   // (Andrew's FLACs). Fetch through the authed download route into a blob.
-  async function downloadOne(s: { id: string; title: string; trackNumber: number | null; audioUrl?: string | null }) {
-    const ext = urlExt(s.audioUrl) ?? ".mp3";
+  async function downloadOne(s: { id: string; title: string; trackNumber: number | null; audioUrl?: string | null; audioSourceUrl?: string | null }) {
+    // Task #3197 — the route streams the ORIGINAL upload (audioSourceUrl)
+    // when it exists, so the expected filename extension mirrors the same
+    // source preference (server/mastersHealth.ts).
+    const ext = urlExt(preferredMasterUrl(s) ?? s.audioUrl) ?? ".mp3";
     const blob = await fetchBlob(`/api/admin/albums/${albumId}/masters/${s.id}/download`);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -414,15 +441,22 @@ export function PressPanel({
   }
 
   async function downloadAll() {
-    if (withMaster.length === 0) {
+    // Task #3197 — skip rows the pre-flight already knows are gone from
+    // storage (they'd only 404); everything else downloads, continuing
+    // past per-track failures.
+    const downloadable = withMaster.filter((s) => healthBySong.get(s.id) !== "missing_object");
+    const skipped = withMaster.length - downloadable.length;
+    if (downloadable.length === 0) {
       toast({ title: "No masters to download", description: "Upload masters on the Tracks tab first." });
       return;
     }
     toast({
-      title: `Downloading ${withMaster.length} master${withMaster.length === 1 ? "" : "s"}`,
-      description: "Your browser will save each file.",
+      title: `Downloading ${downloadable.length} master${downloadable.length === 1 ? "" : "s"}`,
+      description: skipped > 0
+        ? `Your browser will save each file. Skipping ${skipped} track${skipped === 1 ? "" : "s"} whose master file is missing from storage.`
+        : "Your browser will save each file.",
     });
-    for (const s of withMaster) {
+    for (const s of downloadable) {
       try {
         await downloadOne(s);
       } catch (e: any) {
@@ -477,6 +511,29 @@ export function PressPanel({
     return audioRows.find((r) => (r.fileName ?? "").startsWith(`${padded} `));
   }
   const [mastersOpen, setMastersOpen] = useState(false);
+
+  // Task #3197 — server-side masters pre-flight: probes storage for each
+  // track's pointers (off the click path) so the dialog can flag "file
+  // missing from storage" rows BEFORE a press hits download, and shows
+  // whether a track will download as the original upload vs the playback
+  // copy. Pointer-level problems (no master / external link) are derived
+  // client-side; this catches the pointer-to-missing-object class.
+  const { data: mastersHealth } = useQuery<{ tracks: Array<{ songId: string; status: string }> }>({
+    queryKey: ["/api/admin/albums", albumId, "masters", "health"],
+    staleTime: 60_000,
+  });
+  const healthBySong = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const t of mastersHealth?.tracks ?? []) m.set(t.songId, t.status);
+    return m;
+  }, [mastersHealth]);
+  // Broken = anything a press can't (or shouldn't) pull: no master, only an
+  // external link, or a pointer whose object is gone from storage.
+  const brokenMasters = sorted.filter((s) => {
+    const ptr = masterPtrStatus(s);
+    if (ptr !== "usable") return true;
+    return healthBySong.get(s.id) === "missing_object";
+  });
 
   // Task #2701 — right-aligned "Press:" readout on the sub-tab row.
   const pressReadoutName =
@@ -571,6 +628,20 @@ export function PressPanel({
               <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
                 <h2 className="text-[15px] font-semibold text-slate-900">Side Breaks</h2>
                 <div className="flex items-center gap-2">
+                  {/* Task #3197 — up-front flag when any track has no usable
+                      master (no upload, un-mirrored external link, or file
+                      missing from storage), so the press sees it before
+                      clicking download. Details per-row in View Masters. */}
+                  {brokenMasters.length > 0 && (
+                    <span
+                      className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-rose-50 text-rose-700 border-rose-200"
+                      title="Some tracks can't be downloaded — open View Masters for the per-track reason."
+                      data-testid="chip-broken-masters"
+                    >
+                      <AlertTriangle className="w-3 h-3" />
+                      {brokenMasters.length} master{brokenMasters.length === 1 ? "" : "s"} unusable
+                    </span>
+                  )}
                   {preflightChip}
                   <button
                     type="button"
@@ -1036,7 +1107,16 @@ export function PressPanel({
                 </thead>
                 <tbody>
                   {sorted.map((s, i) => {
-                    const present = !!s.audioUrl;
+                    // Task #3197 — three usability states: usable pointer
+                    // (downloadable — original preferred), external-only
+                    // pointer (never mirrored), no pointer. The storage
+                    // probe additionally catches pointers whose object is
+                    // gone ("missing_object").
+                    const ptr = masterPtrStatus(s);
+                    const storageMissing = ptr === "usable" && healthBySong.get(s.id) === "missing_object";
+                    const present = ptr === "usable";
+                    const downloadable = present && !storageMissing;
+                    const isOriginal = isObjectPtr(s.audioSourceUrl);
                     const vRow = rowForSong(s);
                     return (
                       <tr
@@ -1049,7 +1129,11 @@ export function PressPanel({
                         </td>
                         <td className="px-3 py-2 text-slate-800 font-medium">{s.title}</td>
                         <td className="px-3 py-2 text-slate-700 font-mono tabular-nums">
-                          {present ? fmtFmt(s.audioFormat, s.audioContainerExt, s.audioUrl) : (
+                          {present ? fmtFmt(s.audioFormat, s.audioContainerExt, preferredMasterUrl(s)) : ptr === "external" ? (
+                            <span className="inline-flex items-center gap-1 text-rose-700" title="This track's master is an external link that was never mirrored into storage — re-upload it on the Tracks tab.">
+                              <AlertTriangle className="w-3 h-3" /> external link
+                            </span>
+                          ) : (
                             <span className="inline-flex items-center gap-1 text-rose-700">
                               <AlertTriangle className="w-3 h-3" /> missing
                             </span>
@@ -1082,19 +1166,38 @@ export function PressPanel({
                           )}
                         </td>
                         <td className="px-3 py-2 text-right">
-                          {present ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                downloadOne(s).catch((e: any) =>
-                                  toast({ title: `Couldn't download "${s.title}"`, description: e?.message ?? "Unknown error", variant: "destructive" }),
-                                )
-                              }
-                              className="inline-flex items-center gap-1 text-[var(--brand-blue)] hover:underline opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 transition-opacity"
-                              data-testid={`link-download-master-${s.id}`}
+                          {storageMissing ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-rose-700"
+                              title="This track's master file is missing from storage — re-upload it on the Tracks tab."
+                              data-testid={`flag-master-storage-missing-${s.id}`}
                             >
-                              <Download className="w-3 h-3" /> download
-                            </button>
+                              <AlertTriangle className="w-3 h-3" /> file missing
+                            </span>
+                          ) : downloadable ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span
+                                className="text-xs uppercase tracking-wide text-slate-400"
+                                title={isOriginal
+                                  ? "Downloads the artist's original upload (highest resolution we hold)."
+                                  : "No separate original on file — downloads the served file (lossless when the pipeline made it)."}
+                                data-testid={`text-master-source-${s.id}`}
+                              >
+                                {isOriginal ? "original" : "served"}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  downloadOne(s).catch((e: any) =>
+                                    toast({ title: `Couldn't download "${s.title}"`, description: e?.message ?? "Unknown error", variant: "destructive" }),
+                                  )
+                                }
+                                className="inline-flex items-center gap-1 text-[var(--brand-blue)] hover:underline opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 transition-opacity"
+                                data-testid={`link-download-master-${s.id}`}
+                              >
+                                <Download className="w-3 h-3" /> download
+                              </button>
+                            </span>
                           ) : (
                             <span className="text-slate-400">—</span>
                           )}

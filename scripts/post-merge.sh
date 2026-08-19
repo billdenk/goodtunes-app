@@ -12410,6 +12410,33 @@ SQL
 migrate_album_catalog_number_upc dev  "${DATABASE_URL:-}"
 migrate_album_catalog_number_upc prod "${PROD_DATABASE_URL:-}"
 
+# Task #3197 — ONE-TIME repair pass for press masters: mirror the remaining
+# legacy external (Dropbox) audio_url masters on PROD into our own bucket via
+# the existing scripts/rehost-dropbox-masters-prod.ts (idempotent — it only
+# touches rows whose audio_url still starts with http(s)://; the Aug 2026
+# audit found exactly 4 such rows, all Nightbirde tracks on Love/Brave).
+# Marker-guarded so later merges never re-fetch; bounded so a slow Dropbox
+# can't blow the post-merge budget. Dev carries only synthetic test-fixture
+# externals, so the repair targets prod only.
+rehost_task_3197_dropbox_masters() {
+  local url="${PROD_DATABASE_URL:-}"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-3197 dropbox masters rehost (no PROD_DATABASE_URL)"
+    return 0
+  fi
+  if [ "$(psql "$url" -tAc "SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_3197_rehost_dropbox_masters'" 2>/dev/null)" = "1" ]; then
+    echo "post-merge: task-3197 dropbox masters rehost already applied — skipping"
+    return 0
+  fi
+  if timeout --kill-after=10 240 env PROD_DATABASE_URL="$url" npx tsx scripts/rehost-dropbox-masters-prod.ts; then
+    psql "$url" -v ON_ERROR_STOP=1 -c "INSERT INTO post_merge_data_backfills (name) VALUES ('task_3197_rehost_dropbox_masters') ON CONFLICT DO NOTHING" >/dev/null 2>&1 || true
+    echo "post-merge: task-3197 dropbox masters rehost ok"
+  else
+    echo "post-merge: WARNING — task-3197 dropbox masters rehost failed/timed out (continuing; will retry next merge)"
+  fi
+}
+rehost_task_3197_dropbox_masters
+
 # ── Stamp the full-run fingerprint (see the skip block at the top) ─────────
 # Reached only on a full pass that survived to here; from now on, merges that
 # don't touch this script skip straight to the mirror sync below.

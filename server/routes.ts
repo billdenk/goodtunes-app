@@ -33,6 +33,7 @@ import {
   revokePlaceholderIfUnused,
 } from "./partnerInvites";
 import { pgArray } from "./lib/pgArray";
+import { masterCandidates, classifySongMaster, MASTER_FAILURE_MESSAGES, getMastersSweepCache, runMastersSweep, startMastersHealthSweep } from "./mastersHealth";
 import { resolvePressIdFromCandidates } from "./lib/pressPlaceholders";
 import { findChorusStartMs, findChorusCueIndex } from "./lib/chorusFinder";
 import { planAutoGoodSyncUpdates, decideInstrumental } from "./lib/autoGoodSyncPolicy";
@@ -34433,32 +34434,108 @@ export async function registerRoutes(
   // route authenticates (operator or the album's press/partners via
   // requireOperatorOrAlbumPress) and streams the master with a download
   // disposition; the client fetches it with auth headers into a blob.
+  // Task #3197 — press masters must deliver the artist's ORIGINAL upload
+  // (audioSourceUrl, e.g. the untouched 24-bit WAV) when it exists; the
+  // served playback file (audioUrl) is only a fallback (still lossless when
+  // it's a pipeline-made FLAC). Failure reasons are distinguished (no master
+  // uploaded / un-mirrored external link / file missing from storage) so the
+  // per-track toast is actionable. Shared classification: server/mastersHealth.ts.
   app.get("/api/admin/albums/:id/masters/:songId/download", requireAdminBearer, async (req, res) => {
     if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
     const song = await storage.getSongById(req.params.songId);
     if (!song || song.albumId !== req.params.id) return res.status(404).json({ message: "Song not found on this album." });
-    if (!song.audioUrl || !song.audioUrl.startsWith("/objects/")) {
-      return res.status(404).json({ message: "No master file on this track." });
-    }
     try {
-      const file = await objectStorage.getObjectEntityFile(song.audioUrl);
-      const [meta] = await file.getMetadata();
-      const ext = (song.audioUrl.match(/\.[a-zA-Z0-9]+$/)?.[0] ?? "").toLowerCase();
+      const candidates = masterCandidates(song).filter((c) => c.cls === "object");
+      const all = masterCandidates(song);
+      if (all.length === 0) {
+        return res.status(404).json({ code: "no_master", message: MASTER_FAILURE_MESSAGES.no_master });
+      }
+      if (candidates.length === 0) {
+        return res.status(422).json({ code: "external", message: MASTER_FAILURE_MESSAGES.external });
+      }
+      let resolved: { file: any; url: string; source: "original" | "served" } | null = null;
+      for (const c of candidates) {
+        try {
+          const file = await objectStorage.getObjectEntityFile(c.url);
+          resolved = { file, url: c.url, source: c.source };
+          break;
+        } catch (e) {
+          if (e instanceof ObjectNotFoundError) continue; // try the next candidate
+          throw e;
+        }
+      }
+      if (!resolved) {
+        return res.status(404).json({ code: "missing_object", message: MASTER_FAILURE_MESSAGES.missing_object });
+      }
+      const [meta] = await resolved.file.getMetadata();
+      // Extension/content type follow the file actually streamed.
+      const ext = (resolved.url.match(/\.[a-zA-Z0-9]+$/)?.[0] ?? "").toLowerCase();
       const name = `${String(song.trackNumber ?? 0).padStart(2, "0")} ${song.title}${ext}`.replace(/[\r\n"\\/]+/g, " ");
-      res.setHeader("Content-Type", (meta?.contentType as string) || "application/octet-stream");
+      res.setHeader("Content-Type", (meta?.contentType as string) || AUDIO_MIME_BY_EXT[ext] || "application/octet-stream");
       if (meta?.size) res.setHeader("Content-Length", String(meta.size));
       res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
-      file.createReadStream().on("error", (e) => {
+      res.setHeader("X-Master-Source", resolved.source);
+      resolved.file.createReadStream().on("error", (e: any) => {
         console.error("[masters-download] stream error", e);
         if (!res.headersSent) res.status(500).end();
         else res.end();
       }).pipe(res);
     } catch (e) {
-      if (e instanceof ObjectNotFoundError) return res.status(404).json({ message: "Master file not found in storage." });
       console.error("[masters-download] failed", e);
       return res.status(500).json({ message: "Couldn't stream that master — try again." });
     }
   });
+
+  // Task #3197 — per-album masters pre-flight for the Press panel: classify
+  // each track's master (ok_original / ok_served / no_master / external /
+  // missing_object, probing storage for /objects/ pointers) so broken rows
+  // are flagged BEFORE a plant clicks download. Same gate as the download.
+  app.get("/api/admin/albums/:id/masters/health", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    try {
+      const albumSongs = await storage.getSongsByAlbum(req.params.id);
+      const probe = async (p: string) => {
+        try {
+          await objectStorage.getObjectEntityFile(p);
+          return true;
+        } catch (e) {
+          if (e instanceof ObjectNotFoundError) return false;
+          throw e;
+        }
+      };
+      const tracks = [] as Array<{ songId: string; status: string }>;
+      for (const s of albumSongs) {
+        const { status } = await classifySongMaster(s as any, probe);
+        tracks.push({ songId: s.id, status });
+      }
+      res.json({ tracks });
+    } catch (e) {
+      console.error("[masters-health] album probe failed", e);
+      res.status(500).json({ message: "Couldn't check masters health." });
+    }
+  });
+
+  // Task #3197 — catalog-wide masters health for operators: last background
+  // sweep (storage probed off the request path). `?refresh=1` forces a
+  // fresh sweep. Operator-only — this is a whole-catalog view, and
+  // requireAdminBearer alone admits partner accounts.
+  app.get("/api/admin/masters/health", requireAdminBearer, async (req, res) => {
+    const role = (await getUserRole(req.session.userId!))?.role;
+    if (role !== "super_admin" && role !== "admin") {
+      return res.status(403).json({ message: "Operators only." });
+    }
+    try {
+      let sweep = getMastersSweepCache();
+      if (!sweep || req.query.refresh === "1") sweep = await runMastersSweep();
+      res.json(sweep);
+    } catch (e) {
+      console.error("[masters-health] sweep failed", e);
+      res.status(500).json({ message: "Masters health sweep failed." });
+    }
+  });
+
+  // Kick off the periodic catalog-wide masters sweep (no-op under tests).
+  startMastersHealthSweep();
 
   // (The per-album vendor + package-config POST route is gone — Bill's
   // rework derives the configuration from the Sell tab's SKUs instead.)
