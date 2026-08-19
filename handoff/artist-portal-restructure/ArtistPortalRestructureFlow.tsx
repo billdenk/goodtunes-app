@@ -69,6 +69,7 @@ import {
   ChevronDown,
   CheckCircle2,
   ArrowLeftRight,
+  CircleDashed,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
@@ -263,11 +264,11 @@ function UserMenu({ t, mode, setMode }: { t: Theme; mode: Mode; setMode: (m: Mod
                   aria-label={label}
                   title={label}
                   onClick={() => setMode(id)}
-                  className="w-8 h-7 rounded-full inline-flex items-center justify-center transition-all"
-                  style={{ background: active ? t.card : 'transparent', boxShadow: active ? PILL_SHADOW : undefined, color: active ? t.ink : t.faint }}
+                  className="h-7 px-3 rounded-full inline-flex items-center justify-center transition-all text-[12px]"
+                  style={{ background: active ? t.card : 'transparent', boxShadow: active ? PILL_SHADOW : undefined, color: active ? t.ink : t.faint, fontWeight: active ? 600 : 400 }}
                   data-testid={`appearance-${id}`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  {label}
                 </button>
               );
             })}
@@ -584,10 +585,8 @@ function WallCardTile({ card, t, onOpen }: { card: WallCard; t: Theme; onOpen: (
         )}
       </div>
       <div className="flex flex-col" style={{ padding: '13px 16px 15px' }}>
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-[15.5px] font-semibold truncate min-w-0" style={{ color: t.ink, letterSpacing: '-0.015em' }}>{card.name}</h3>
-          <ChevronRight className="w-4 h-4 flex-shrink-0 transition-opacity" style={{ color: t.faint, opacity: hover ? 1 : 0 }} aria-hidden />
-        </div>
+        {/* No hover chevron (Bill, Aug 18) — the whole card is the affordance. */}
+        <h3 className="text-[15.5px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.015em' }}>{card.name}</h3>
         {/* Derived per-format status line, directly under the title */}
         <div className="text-[12px] truncate" style={{ marginTop: 6, color: t.subink, lineHeight: 1.4 }} data-testid={`badge-${card.id}`}>{card.badge}</div>
         {/* Bottom row — year on the left, channel glyph (logo only) on the right */}
@@ -1892,10 +1891,11 @@ function TemplateDropBox({ onUpload, title, testid }: { onUpload: () => void; ti
 // Right side: quiet Cancel + Save that OBEYS confirm-earns-its-blue — a gray
 // hairline-outline pill until something's changed/uploaded, filled blue once
 // earned. Mock actions.
-function FileHeaderCard({ t, uploaded, dirty, onCancel, onSave }: {
+function FileHeaderCard({ t, uploaded, dirty, panelComplete, onCancel, onSave }: {
   t: Theme;
   uploaded: boolean;
   dirty: boolean;
+  panelComplete: boolean;
   onCancel: () => void;
   onSave: () => void;
 }) {
@@ -1908,7 +1908,15 @@ function FileHeaderCard({ t, uploaded, dirty, onCancel, onSave }: {
             <div className="text-[18px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={MOCK_RAW.headerTitle}>
               {MOCK_RAW.headerTitle}
             </div>
-            {uploaded ? (
+            {panelComplete ? (
+              /* Per-panel completed slot — honest, calm, word + icon. Neutral
+                 dashed-circle, not a green "Passed": the panels are seated but
+                 nothing has been measured against the press spec yet. */
+              <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-medium ml-1.5" style={{ color: t.subink }} data-testid="chip-file-status">
+                <CircleDashed style={{ width: 13, height: 13 }} />
+                Art seated &middot; not yet measured
+              </span>
+            ) : uploaded ? (
               <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-medium ml-1.5" style={{ color: t.faint }} data-testid="chip-file-status">
                 <History style={{ width: 13, height: 13 }} />
                 Not tested
@@ -2856,22 +2864,62 @@ function SceneRawTemplate({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
         {MOCK_RAW.release} doesn&rsquo;t have print art yet. Add your front, back and spine art below, or drop the full {MOCK_RAW.templateName} &mdash; we&rsquo;ll check it against the press spec the moment it lands.
       </p>
 
-      {/* Status — word + icon, quiet, never color alone. Reflects mock state. */}
-      <div className="rounded-2xl" style={{ marginTop: 22, padding: '16px 20px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="raw-pending">
-        <div className="flex items-center gap-3">
-          {anyArt ? (
-            <BadgeCheck className="w-5 h-5 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
-          ) : (
-            <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 16, height: 16, border: `2px solid ${t.subink}` }} />
-          )}
-          <div className="min-w-0 flex-1">
-            <div className="text-[14px] font-semibold" style={{ color: t.ink }}>
-              {allArt ? 'Art placed — see the full spread' : anyArt ? 'Art started — some panels still pending' : 'Pending — no art uploaded yet'}
+      {/* Status card. The per-panel Upload-images path can't be measured against
+          the press spec — measured checks run on ONE print-ready template file,
+          and three separate panel images can't be composited/checked without a
+          server step that doesn't exist yet. So when all three panels are seated
+          in images mode we show an HONEST, CALM intermediate: a neutral (not red,
+          not amber) "Not tested against press spec" chip, calm grammar, and one
+          quiet forward path into the template flow where checks CAN run. Every
+          other state keeps the original word + icon pending/started grammar. */}
+      {mode === 'images' && allArt ? (
+        <div className="rounded-2xl" style={{ marginTop: 22, padding: '18px 20px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="raw-not-measured">
+          {/* Honest status chip — neutral gray, word + icon, never color alone.
+              This is a fact about where the file is, not an error. */}
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-semibold"
+            style={{ padding: '3px 10px', border: `1px solid ${t.hairline}`, color: t.subink, background: t.soft }}
+            data-testid="chip-not-measured"
+          >
+            <CircleDashed className="w-3.5 h-3.5 flex-shrink-0" aria-hidden /> Not tested against press spec
+          </span>
+          <div className="text-[15px] font-semibold" style={{ marginTop: 12, color: t.ink, letterSpacing: '-0.01em' }}>
+            Looks right. Not yet measured.
+          </div>
+          <p className="text-[12.5px]" style={{ marginTop: 4, color: t.subink, maxWidth: 560, lineHeight: 1.55 }}>
+            Measured checks run on a single print-ready template file. Your panels are seated visually &mdash; the press will run the full check when your proof is made.
+          </p>
+          <div className="text-[12.5px]" style={{ marginTop: 12, color: t.faint, lineHeight: 1.55 }}>
+            Want it measured now? Download the template, place your art, and upload it as one file.
+          </div>
+          <button
+            type="button"
+            onClick={() => { setMode('template'); setArea('all'); }}
+            className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+            style={{ marginTop: 10, padding: '6px 13px', border: `1px solid ${t.hairline}`, color: t.ink }}
+            data-testid="button-switch-to-template"
+          >
+            <LayoutTemplate className="w-4 h-4 flex-shrink-0" aria-hidden /> Switch to the template path
+            <ArrowRight className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-2xl" style={{ marginTop: 22, padding: '16px 20px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="raw-pending">
+          <div className="flex items-center gap-3">
+            {anyArt ? (
+              <BadgeCheck className="w-5 h-5 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
+            ) : (
+              <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 16, height: 16, border: `2px solid ${t.subink}` }} />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="text-[14px] font-semibold" style={{ color: t.ink }}>
+                {templateArt ? 'Template placed — we\u2019ll check it against the press spec' : anyArt ? 'Art started — some panels still pending' : 'Pending — no art uploaded yet'}
+              </div>
+              <div className="text-[12.5px]" style={{ marginTop: 2, color: t.faint }}>{MOCK_RAW.spec}</div>
             </div>
-            <div className="text-[12.5px]" style={{ marginTop: 2, color: t.faint }}>{MOCK_RAW.spec}</div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* First-run mode toggle (Upload images / Upload template) — a first-run
           decision only. Once the slot has complete art it disappears and the page
@@ -2954,6 +3002,7 @@ function SceneRawTemplate({ t, onCrumb }: { t: Theme; onCrumb: () => void }) {
           t={t}
           uploaded={anyUpload}
           dirty={anyUpload && !saved}
+          panelComplete={mode === 'images' && allArt}
           onCancel={() => { setPanelArt({ front: false, back: false, spine: false }); setTemplateArt(false); setSaved(false); }}
           onSave={() => setSaved(true)}
         />
