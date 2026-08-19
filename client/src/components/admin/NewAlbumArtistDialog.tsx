@@ -305,7 +305,14 @@ export function NewAlbumArtistDialog({
   // (punctuation preserved); "corroborated" = punctuation-stripped name match
   // backed by a shared release title. Null = no confident match (never link,
   // never fall back to iTunes' first result).
-  const [appleMatchLevel, setAppleMatchLevel] = useState<"exact" | "corroborated" | null>(null);
+  // "operator" (Task #3192) = no confident automatic match, but the operator
+  // hand-picked the profile from the returned candidates — their
+  // confirmation is the identity signal (name/photo still stay Spotify's).
+  const [appleMatchLevel, setAppleMatchLevel] = useState<"exact" | "corroborated" | "operator" | null>(null);
+  // Task #3192 — when the lookup found candidates but none passed the
+  // strong-match check, keep them around so the operator can hand-pick the
+  // right profile from the confirm card instead of linking later.
+  const [appleUnmatched, setAppleUnmatched] = useState<AppleCandidate[]>([]);
   const [appleLooked, setAppleLooked] = useState(false);
   const [appleErrored, setAppleErrored] = useState(false);
   const [linkApple, setLinkApple] = useState(true);
@@ -336,6 +343,7 @@ export function NewAlbumArtistDialog({
       setPicked(null);
       setAppleCandidate(null);
       setAppleMatchLevel(null);
+      setAppleUnmatched([]);
       setAppleLooked(false);
       setAppleErrored(false);
       setLinkApple(true);
@@ -655,6 +663,7 @@ export function NewAlbumArtistDialog({
     setAppleErrored(false);
     setAppleCandidate(null);
     setAppleMatchLevel(null);
+    setAppleUnmatched([]);
     // Apple-sourced candidates already carry their Apple identity — no
     // need to re-resolve via the Apple search endpoint. Short-circuit
     // straight to "looked" with the candidate we have.
@@ -691,9 +700,11 @@ export function NewAlbumArtistDialog({
         // there is no fall-back-to-first-result anymore, because that path
         // silently imported the wrong artist's name and photo.
         const resolved = pickAppleCandidate(c.name, json.candidates);
+        let linked = false;
         if (resolved && resolved.level === "exact") {
           setAppleCandidate(resolved.candidate);
           setAppleMatchLevel("exact");
+          linked = true;
         } else if (resolved && resolved.level === "loose" && c.latestRelease) {
           try {
             const scr = await scrapeMut.mutateAsync(resolved.candidate.appleMusicUrl);
@@ -705,11 +716,19 @@ export function NewAlbumArtistDialog({
             if (corroborated) {
               setAppleCandidate(resolved.candidate);
               setAppleMatchLevel("corroborated");
+              linked = true;
             }
           } catch {
             if (appleLookupSeqRef.current !== mySeq) return;
             /* corroboration scrape failed → stay unlinked (fail safe) */
           }
+        }
+        // Task #3192 — no confident match, but the lookup DID return
+        // candidates: keep them so the operator can hand-pick the right
+        // profile on the confirm card (explicit confirmation is the
+        // identity signal). Unpicked = current safe skip behavior.
+        if (!linked && json.candidates.length > 0) {
+          setAppleUnmatched(json.candidates);
         }
       } else {
         setAppleErrored(true);
@@ -1496,6 +1515,22 @@ export function NewAlbumArtistDialog({
                       catalog so fans see every release. Uncheck if this isn't
                       the same artist.
                     </div>
+                    {/* Task #3192 — an operator hand-pick can be undone back
+                        to the candidate list (not just unchecked). */}
+                    {appleMatchLevel === "operator" && appleUnmatched.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setAppleCandidate(null);
+                          setAppleMatchLevel(null);
+                        }}
+                        className="mt-1 text-[11.5px] font-semibold text-[var(--brand-blue)] hover:underline"
+                        data-testid="button-apple-change-pick"
+                      >
+                        Choose a different profile
+                      </button>
+                    )}
                   </div>
                 </label>
               ) : appleErrored ? (
@@ -1504,9 +1539,64 @@ export function NewAlbumArtistDialog({
                   Apple Music lookup failed — you can link it later.
                 </div>
               ) : (
-                <div className="text-[12.5px] text-slate-500 flex items-center gap-1.5" data-testid="text-apple-no-match">
-                  <SiApplemusic className="w-3.5 h-3.5 text-slate-300" />
-                  No confident Apple Music match — we'll use the {picked.source === "spotify" ? "Spotify" : "picked"} name and photo. You can link Apple later.
+                <div className="space-y-2">
+                  <div className="text-[12.5px] text-slate-500 flex items-center gap-1.5" data-testid="text-apple-no-match">
+                    <SiApplemusic className="w-3.5 h-3.5 text-slate-300" />
+                    No confident Apple Music match — we'll use the {picked.source === "spotify" ? "Spotify" : "picked"} name and photo. You can link Apple later.
+                  </div>
+                  {/* Task #3192 — the lookup DID return candidates; let the
+                      operator hand-pick the right profile here instead of
+                      linking it later from the person editor. Picking one
+                      links explicitly; leaving it unpicked skips as before. */}
+                  {appleUnmatched.length > 0 && (
+                    <div className="pt-1 border-t border-slate-100" data-testid="section-apple-choose">
+                      <div className="text-[11.5px] font-semibold text-slate-600 mb-1">
+                        Same artist under a different name? Choose an Apple Music profile:
+                      </div>
+                      <div className="space-y-1 max-h-40 overflow-y-auto">
+                        {appleUnmatched.map((a) => (
+                          <div
+                            key={a.artistId}
+                            className="flex items-center gap-2 rounded-md border border-slate-200 px-2 py-1.5"
+                            data-testid={`row-apple-candidate-${a.artistId}`}
+                          >
+                            <SiApplemusic className="w-3.5 h-3.5 text-[#FA243C] flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[12.5px] font-medium text-slate-800 truncate block">
+                                {a.name}
+                                {a.primaryGenre && (
+                                  <span className="text-slate-400 font-normal"> · {a.primaryGenre}</span>
+                                )}
+                              </span>
+                            </div>
+                            <a
+                              href={a.appleMusicUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex-shrink-0 inline-flex items-center text-slate-400 hover:text-[#FA243C]"
+                              aria-label={`Open ${a.name} on Apple Music`}
+                              title="Open on Apple Music"
+                              data-testid={`link-apple-candidate-${a.artistId}`}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAppleCandidate(a);
+                                setAppleMatchLevel("operator");
+                                setLinkApple(true);
+                              }}
+                              className="flex-shrink-0 h-6 px-2 rounded-md border border-slate-300 bg-white text-[11.5px] font-semibold text-slate-700 hover:bg-slate-50"
+                              data-testid={`button-apple-pick-${a.artistId}`}
+                            >
+                              Link
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

@@ -87,7 +87,8 @@ export function pickAppleCandidate<T extends { name: string }>(
  *    the picked identity).
  *  • Spotify picks keep the Spotify name unless the Apple match was an
  *    EXACT raw-name match (in which case Apple's canonical casing is
- *    fine); a loose/corroborated match must never rewrite the name.
+ *    fine); a loose/corroborated/operator-picked match must never rewrite
+ *    the name.
  *  • Spotify's portrait wins whenever present; Apple's only fills a gap.
  *  • With no linked Apple result the Spotify identity passes through
  *    untouched.
@@ -97,7 +98,10 @@ export function mergeArtistIdentity(opts: {
   pickedPhotoUrl: string | null;
   pickedSource: "spotify" | "apple";
   apple: { name: string | null; photoUrl: string | null } | null;
-  appleMatchLevel: "exact" | "corroborated" | null;
+  // "operator" — Task #3192: the operator hand-picked the Apple profile on
+  // the confirm card (their confirmation IS the identity signal), but it
+  // still must not rewrite the picked name/photo.
+  appleMatchLevel: "exact" | "corroborated" | "operator" | null;
 }): { name: string; photoUrl: string | null } {
   const { pickedName, pickedPhotoUrl, pickedSource, apple, appleMatchLevel } = opts;
   if (!apple) return { name: pickedName, photoUrl: pickedPhotoUrl ?? null };

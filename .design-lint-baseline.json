@@ -11042,12 +11042,32 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "className=\"mt-1 text-[11.5px] font-semibold text-[var(--brand-blue)] hover:underline\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
     "snippet": "<div className=\"text-[12.5px] text-slate-500 flex items-center gap-1.5\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
     "snippet": "<div className=\"text-[12.5px] text-slate-500 flex items-center gap-1.5\" data-testid=\"text-apple-no-match\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "<div className=\"text-[11.5px] font-semibold text-slate-600 mb-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "<span className=\"text-[12.5px] font-medium text-slate-800 truncate block\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "className=\"flex-shrink-0 h-6 px-2 rounded-md border border-slate-300 bg-white text-[11.5px] font-semibold text-slate-700 hover:bg-slate-50\""
   },
   {
     "rule": "hardcoded-font-size",

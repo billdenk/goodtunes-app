@@ -94,6 +94,18 @@ test("corroborated (loose) Apple match NEVER rewrites the Spotify name; Spotify 
   assert.equal(out.photoUrl, "https://spotify.example/how.jpg");
 });
 
+test("operator hand-pick (Task #3192) NEVER rewrites the Spotify name; Spotify photo wins", () => {
+  const out = mergeArtistIdentity({
+    pickedName: "How???",
+    pickedPhotoUrl: "https://spotify.example/how.jpg",
+    pickedSource: "spotify",
+    apple: { name: "$how", photoUrl: "https://apple.example/showdollar.jpg" },
+    appleMatchLevel: "operator",
+  });
+  assert.equal(out.name, "How???");
+  assert.equal(out.photoUrl, "https://spotify.example/how.jpg");
+});
+
 test("apple-sourced picks keep preferring Apple canonical data", () => {
   const out = mergeArtistIdentity({
     pickedName: "how (from url)",
