@@ -632,6 +632,20 @@ export function NewAlbumArtistDialog({
     if (mode === "person" && creativeRoles.length > 0) body.roles = creativeRoles;
     try {
       const person = await createPersonMut.mutateAsync(body);
+      // Task #3207 — the server dedupes by Spotify URL and may return an
+      // EXISTING person (reused:true) instead of creating one. Hand off to
+      // the opener's existing-person flow (which scope-checks and offers
+      // the claim prompt in press portals) instead of treating it as a
+      // fresh create.
+      if ((person as any).reused) {
+        if (onExistingPerson) {
+          onExistingPerson(person);
+          return;
+        }
+        toast({ title: "Already in your catalog", description: `Opening ${person.name}.` });
+        onSelect({ name: person.name, id: person.id });
+        return;
+      }
       toast({ title: `Added ${person.name}` });
       onSelect({ name: person.name, id: person.id });
     } catch (e: any) {
@@ -812,6 +826,21 @@ export function NewAlbumArtistDialog({
       // via the streaming/confirm flow too (not just manual entry).
       if (mode === "person" && creativeRoles.length > 0) personBody.roles = creativeRoles;
       const person = await createPersonMut.mutateAsync(personBody);
+
+      // Task #3207 — server-side Spotify-URL dedupe: reused:true means an
+      // existing person came back, not a fresh create. Skip the discography
+      // backfill + "Added" toast and route through the existing-person
+      // handler (press portals scope-check + offer the claim prompt).
+      if ((person as any).reused) {
+        setCreating(false);
+        if (onExistingPerson) {
+          onExistingPerson(person);
+          return;
+        }
+        toast({ title: "Already in your catalog", description: `Opening ${person.name}.` });
+        onSelect({ name: person.name, id: person.id });
+        return;
+      }
 
       // 3) Fire-and-forget discography PUT — fan side reads it lazily, so the
       //    album editor doesn't have to wait. Errors are non-blocking.

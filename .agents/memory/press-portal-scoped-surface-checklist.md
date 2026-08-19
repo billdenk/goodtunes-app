@@ -47,3 +47,6 @@ and nearly built a duplicate — the fix was a one-prop change to the shared
 PressPanel. Note: `isGenericVendor(vendorId)` can only be true when a press name
 is set but unmatched, so a resolved press name is always present alongside it
 (generic badge + any press-name-dependent note co-appear, never one alone).
+
+## Dedupe/reuse responses cross a scope boundary (Aug 19 2026, press Add-artist)
+When a scoped route dedupes to an EXISTING entity that may belong to another tenant, the response must be a whitelisted candidate shape (id/name/photo + reused/needsClaim flags), never a spread of the DB row — contact/shipping/invite/home fields leak cross-press otherwise. And homing/ownership stamps for genuinely-new rows must be set atomically in the INSERT, not a post-create UPDATE (a concurrent claim in the window would be silently overwritten). Both were completion-review rejections.

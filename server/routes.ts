@@ -73,6 +73,7 @@ import { ALBUM_FORMATS, type AlbumFormat, EMAIL_HERO_FORMAT_KINDS } from "@share
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { SHARE_LINK_HOST } from "@shared/shareSlug";
 import { normalizeAudioUrl } from "@shared/audioUrl";
+import { sqlPersonInPressScopeFor } from "./pressPortal";
 import {
   evaluateAutoSyncRun,
   ALERT_LOOKBACK_DAYS,
@@ -17499,11 +17500,62 @@ export async function registerRoutes(
       const b = req.body ?? {};
       if (!b.name) return res.status(400).json({ message: "name is required" });
       const opt = (v: any) => (v ? String(v) : null);
+
+      // Task #3207 — safe dedupe reuse. storage.createPerson recovers the
+      // people_spotify_url_active_uniq 23505 by returning the EXISTING active
+      // person; if we then blindly stamp default_press_id we'd silently
+      // re-home an artist that may belong to another press, bypassing the
+      // scope-checked claim flow the catalog-match path uses. So: fast-path
+      // lookup by spotifyUrl first, and detect the in-create race by minting
+      // our own id — if the returned id differs, the dedupe fired.
+      const spotifyUrlIn = opt(b.spotifyUrl);
+      const findActiveBySpotifyUrl = async () => {
+        if (!spotifyUrlIn) return undefined;
+        const [row] = await db
+          .select()
+          .from(peopleTable)
+          .where(and(eq(peopleTable.spotifyUrl, spotifyUrlIn), isNull(peopleTable.deletedAt)));
+        return row;
+      };
+      const respondReused = async (existing: any) => {
+        const scoped = await db.execute<any>(
+          sql`SELECT ${sqlPersonInPressScopeFor(pressId, String(existing.id))} AS ok`,
+        );
+        const inScope = Boolean((scoped as any).rows?.[0]?.ok);
+        // NEVER stamp default_press_id here. In scope → reuse in place
+        // ("already in your roster"); out of scope → the client routes
+        // through the explicit claim / re-home prompt (POST .../claim),
+        // which does its own homed-elsewhere 409 check.
+        //
+        // PII boundary: the existing row may belong to ANOTHER press, and the
+        // scoped person GET would 404 it — so never spread the DB row here
+        // (contact email/phone, shipping address, invite/home stamps would
+        // leak cross-press). Whitelist only the claim-candidate fields the
+        // client's existing-person flow needs.
+        return res.status(200).json({
+          id: existing.id,
+          name: existing.name,
+          photoUrl: existing.photoUrl ?? null,
+          itunesArtistId: existing.itunesArtistId ?? null,
+          reused: true,
+          needsClaim: !inScope,
+        });
+      };
+
+      const preExisting = await findActiveBySpotifyUrl();
+      if (preExisting) return respondReused(preExisting);
+
       let photoUrl = opt(b.photoUrl);
       if (!photoUrl && b.contactEmail) {
         photoUrl = await tryGravatarRehost(String(b.contactEmail));
       }
+      const mintedId = randomUUID();
       const p = await storage.createPerson({
+        id: mintedId,
+        // Home the genuinely NEW person atomically at insert. A separate
+        // post-create UPDATE would race the claim route: a second press
+        // could claim the briefly-unhomed row and be silently overwritten.
+        defaultPressId: pressId,
         name: String(b.name),
         photoUrl,
         coverUrl: opt(b.coverUrl),
@@ -17528,11 +17580,11 @@ export async function registerRoutes(
         groupKind: opt(b.groupKind),
         roles: sanitizeRoles(b.roles),
       } as any);
-      // Home the new person to this press so it appears in scope immediately.
-      await db.execute(
-        sql`UPDATE people SET default_press_id = ${pressId} WHERE id = ${p.id}`,
-      );
-      return res.status(201).json({ ...p, defaultPressId: pressId });
+      // Race-safe reuse detection: if createPerson's 23505 recovery fired,
+      // the returned person is a pre-existing row (id ≠ the one we minted).
+      // Treat exactly like the fast-path — no silent re-homing.
+      if (p.id !== mintedId) return respondReused(p);
+      return res.status(201).json({ ...p, reused: false });
     },
   );
   app.put("/api/admin/people/:id", requireAdmin, async (req, res) => {

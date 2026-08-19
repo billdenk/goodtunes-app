@@ -151,6 +151,40 @@ export function sqlEarmarkedCentsForAlbum(albumId: string): SQL {
 
 // Per-album masters-prep threshold from the picked tier (and per-press MAX
 // fallback when the tier no longer exists).
+// Canonical "is this person in this press's scope?" predicate. Module-level
+// export so the press Add-artist route in routes.ts can reuse the SAME
+// definition for its dedupe-reuse scope check (Task #3207) instead of
+// re-deriving it. A person is "in scope" for a press when they're homed to
+// it (people.default_press_id = :id), OR they're the primary artist on an
+// album awarded to it (pressing_order_requests package snapshot pressId), OR
+// they're one of the press's own Staff contacts (entity_contacts).
+export function sqlPersonInPressScopeFor(pressId: string, personId: string): SQL {
+  return sql`
+    (
+      EXISTS (SELECT 1 FROM people pp WHERE pp.id = ${personId}
+                AND pp.deleted_at IS NULL AND pp.default_press_id = ${pressId})
+      OR EXISTS (
+        SELECT 1 FROM albums a
+        JOIN pressing_order_requests por ON por.album_id = a.id
+          AND por.status <> 'cancelled'
+          AND por.package_snapshot ->> 'pressId' = ${pressId}
+        WHERE a.deleted_at IS NULL AND a.primary_artist_id = ${personId}
+      )
+      -- The press's own Staff contacts (Settings → Staff) are in scope too:
+      -- the Contacts panel deep-links each row to the scoped Person page,
+      -- which 404'd before this branch because contacts are neither homed
+      -- nor primary artists on awarded albums.
+      OR EXISTS (
+        SELECT 1 FROM entity_contacts ec
+        JOIN people pp ON pp.id = ec.person_id AND pp.deleted_at IS NULL
+        WHERE ec.entity_kind = 'manufacturer'
+          AND ec.entity_id = ${pressId}
+          AND ec.person_id = ${personId}
+      )
+    )
+  `;
+}
+
 export function sqlMastersThresholdForAlbum(albumId: string, pressId: string): SQL {
   return sql`
     SELECT pct.masters_prep_cost_cents::int AS m
@@ -1144,30 +1178,10 @@ export function registerPressPortalRoutes(
   // they're homed to it (people.default_press_id = :id) OR they're the
   // primary artist on an album awarded to it (pressing_order_requests
   // package snapshot pressId = :id).
-  const sqlPersonInPressScope = (pressId: string, personId: string): SQL => sql`
-    (
-      EXISTS (SELECT 1 FROM people pp WHERE pp.id = ${personId}
-                AND pp.deleted_at IS NULL AND pp.default_press_id = ${pressId})
-      OR EXISTS (
-        SELECT 1 FROM albums a
-        JOIN pressing_order_requests por ON por.album_id = a.id
-          AND por.status <> 'cancelled'
-          AND por.package_snapshot ->> 'pressId' = ${pressId}
-        WHERE a.deleted_at IS NULL AND a.primary_artist_id = ${personId}
-      )
-      -- The press's own Staff contacts (Settings → Staff) are in scope too:
-      -- the Contacts panel deep-links each row to the scoped Person page,
-      -- which 404'd before this branch because contacts are neither homed
-      -- nor primary artists on awarded albums.
-      OR EXISTS (
-        SELECT 1 FROM entity_contacts ec
-        JOIN people pp ON pp.id = ec.person_id AND pp.deleted_at IS NULL
-        WHERE ec.entity_kind = 'manufacturer'
-          AND ec.entity_id = ${pressId}
-          AND ec.person_id = ${personId}
-      )
-    )
-  `;
+  // (Task #3207) The predicate itself now lives at module level as
+  // sqlPersonInPressScopeFor so routes.ts's press Add-artist dedupe path
+  // can reuse the same definition; this alias keeps local call sites terse.
+  const sqlPersonInPressScope = sqlPersonInPressScopeFor;
 
   // GET /api/press/:id/albums — GoodTunes releases assigned to this plant.
   // Includes both:
