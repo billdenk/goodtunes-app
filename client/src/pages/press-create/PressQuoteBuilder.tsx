@@ -3869,14 +3869,27 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                                 if (!sendEarned) return;
                                 const chosen = pendingClient.name;
                                 try {
-                                  const row = await persistEstimate('Sent', chosen);
+                                  // Save the configuration WITHOUT flipping status — /send is the
+                                  // single authoritative Draft→Sent transition (it mints the share
+                                  // token server-side). Persisting 'Sent' first left a Sent row with
+                                  // no link/mail if the send call never reached the server.
+                                  const row = await persistEstimate('Draft', chosen);
                                   const estId = row?.id ?? rowIdRef.current;
-                                  if (estId) {
-                                    const res = await apiRequest('POST', `/api/press/${pressId}/estimates/${estId}/send`, {
-                                      artistName: chosen,
-                                      recipients: sendRecipients.map((r) => ({ name: r.name, email: r.email })),
-                                    });
-                                    await res.json();
+                                  if (!estId) {
+                                    setSaveError('Couldn’t send — check your connection and try again.');
+                                    return;
+                                  }
+                                  const res = await apiRequest('POST', `/api/press/${pressId}/estimates/${estId}/send`, {
+                                    artistName: chosen,
+                                    recipients: sendRecipients.map((r) => ({ name: r.name, email: r.email })),
+                                  });
+                                  const sent = await res.json() as { sentCount?: number; attempted?: number };
+                                  queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/estimates?kind=estimate`] });
+                                  if ((sent.sentCount ?? 0) === 0) {
+                                    // Row is Sent + private link minted, but no email was delivered —
+                                    // say so instead of quietly claiming success.
+                                    setSaveError('Estimate saved and its private link created, but the email couldn’t be delivered — check the address and send again.');
+                                    return; // stay in the modal; saveError shows below
                                   }
                                 } catch {
                                   setSaveError('Couldn’t send — check your connection and try again.');
