@@ -327,6 +327,27 @@ function VinylDisc({
             aria-hidden
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.13)' }}
           />
+          {/* Press center label — same treatment as the catalog color-setup
+              page (PressVinylColors), which always stamps the press's label
+              over swatch photos. Skipped only when the caller provides its
+              own custom label content. */}
+          {!labelOverlay && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: size * LABEL_RATIO,
+                height: size * LABEL_RATIO,
+                borderRadius: '50%',
+                backgroundColor: PRESS_LABEL_BG,
+                overflow: 'hidden',
+              }}
+            >
+              <DiscLabelArt size={size * LABEL_RATIO} />
+            </div>
+          )}
           {labelOverlay}
         </div>
         {/* Fixed sheen — same non-rotating highlight pass as the layered render */}
@@ -391,7 +412,9 @@ function VinylDisc({
             overflow: 'hidden',
           }}
         >
-          {size >= 70 && <DiscLabelArt size={size * LABEL_RATIO} />}
+          {/* Logo at every size (catalog color-setup parity) — arc text
+              inside DiscLabelArt still gates itself to large discs. */}
+          <DiscLabelArt size={size * LABEL_RATIO} />
         </div>
         {labelOverlay}
 
@@ -592,7 +615,10 @@ function ColorBallCard({ swatch, active, onSelect }: { swatch: QuoteSwatch; acti
       style={{ padding: '16px 12px', border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: 'center' }}
     >
       <div className="flex justify-center" style={{ marginBottom: 10 }}>
-        <ColorBall color={swatch.base} size={40} />
+        {/* Mini vinyl with the press's label — same "already done" treatment
+            as the catalog color-setup page, instead of a flat color dot
+            (which rendered as a plain dark ball for photo-only colors). */}
+        <VinylDisc size={40} swatch={swatch} />
       </div>
       <div className="text-[12.5px] font-semibold leading-tight" style={{ color: active ? BLUE : INK }}>
         {swatch.name}
