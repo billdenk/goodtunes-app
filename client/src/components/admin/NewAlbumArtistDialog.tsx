@@ -12,6 +12,11 @@ import {
 import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { RolePicker } from "@/components/admin/RolePicker";
+import {
+  mergeArtistIdentity,
+  pickAppleCandidate,
+  releasesCorroborate,
+} from "@/lib/appleArtistMatch";
 
 /**
  * "Who's the artist?" dialog — the entry point for `+ New album`.
@@ -48,7 +53,7 @@ import { RolePicker } from "@/components/admin/RolePicker";
  * treatment as the People grid.
  */
 
-interface PersonLite {
+export interface PersonLite {
   id: string;
   name: string;
   photoUrl?: string | null;
@@ -179,6 +184,16 @@ export interface NewAlbumArtistDialogProps {
    * DB server-side instead of pre-loading the entire catalog client-side.
    */
   globalSearchApiBase?: string;
+  /**
+   * Task #3191 — invoked instead of the default "toast + onSelect" when a
+   * duplicate guard finds an existing catalog person. The Press portal uses
+   * this to handle people who exist in the global catalog but are NOT in the
+   * press's scope (the default navigate would land on a 404 "Person not
+   * found" dead-end): it checks scope and offers to bring the person into
+   * the press. When absent, the classic behavior (toast "Already in your
+   * catalog" + open) is kept.
+   */
+  onExistingPerson?: (p: PersonLite) => void;
 }
 
 type Stage = "intro" | "streaming" | "confirm";
@@ -255,6 +270,7 @@ export function NewAlbumArtistDialog({
   invalidateOnCreate,
   localPeopleApiBase = "/api/people",
   globalSearchApiBase,
+  onExistingPerson,
 }: NewAlbumArtistDialogProps) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -285,6 +301,11 @@ export function NewAlbumArtistDialog({
   const [spotifyError, setSpotifyError] = useState<"configured" | "failed" | null>(null);
   const [picked, setPicked] = useState<SpotifyCandidate | null>(null);
   const [appleCandidate, setAppleCandidate] = useState<AppleCandidate | null>(null);
+  // Task #3191 — how confident the Apple link is. "exact" = raw-name match
+  // (punctuation preserved); "corroborated" = punctuation-stripped name match
+  // backed by a shared release title. Null = no confident match (never link,
+  // never fall back to iTunes' first result).
+  const [appleMatchLevel, setAppleMatchLevel] = useState<"exact" | "corroborated" | null>(null);
   const [appleLooked, setAppleLooked] = useState(false);
   const [appleErrored, setAppleErrored] = useState(false);
   const [linkApple, setLinkApple] = useState(true);
@@ -314,6 +335,7 @@ export function NewAlbumArtistDialog({
       setSpotifyError(null);
       setPicked(null);
       setAppleCandidate(null);
+      setAppleMatchLevel(null);
       setAppleLooked(false);
       setAppleErrored(false);
       setLinkApple(true);
@@ -493,6 +515,15 @@ export function NewAlbumArtistDialog({
 
   // ---------- Action: pick local ----------
   const pickLocal = (p: PersonLite) => {
+    // Task #3191 — in scoped portals the "local" match list is really the
+    // GLOBAL catalog search, so a picked row may be out of the caller's
+    // scope. Hand off to the opener (which scope-checks and, if needed,
+    // offers to bring the person into the press) instead of navigating
+    // straight to a possibly-404 person page.
+    if (onExistingPerson) {
+      onExistingPerson(p);
+      return;
+    }
     onSelect({ name: p.name, id: p.id });
   };
 
@@ -559,6 +590,10 @@ export function NewAlbumArtistDialog({
       (p) => p.name.trim().toLowerCase() === scrapedName.toLowerCase(),
     );
     if (existing) {
+      if (onExistingPerson) {
+        onExistingPerson(existing);
+        return;
+      }
       toast({
         title: `Already in your catalog`,
         description: `Opening ${existing.name}.`,
@@ -619,6 +654,7 @@ export function NewAlbumArtistDialog({
     setAppleLooked(false);
     setAppleErrored(false);
     setAppleCandidate(null);
+    setAppleMatchLevel(null);
     // Apple-sourced candidates already carry their Apple identity — no
     // need to re-resolve via the Apple search endpoint. Short-circuit
     // straight to "looked" with the candidate we have.
@@ -629,6 +665,7 @@ export function NewAlbumArtistDialog({
         appleMusicUrl: c.appleMusicUrl,
         primaryGenre: c.genres[0] ?? null,
       });
+      setAppleMatchLevel("exact");
       setAppleLooked(true);
       return;
     }
@@ -647,9 +684,33 @@ export function NewAlbumArtistDialog({
       if (res.ok) {
         const json = (await res.json()) as { candidates: AppleCandidate[] };
         if (appleLookupSeqRef.current !== mySeq) return;
-        const wanted = c.name.trim().toLowerCase();
-        const exact = json.candidates.find((a) => a.name.trim().toLowerCase() === wanted);
-        setAppleCandidate(exact ?? json.candidates[0] ?? null);
+        // Task #3191 — strong-identity match only. A raw-name (punctuation-
+        // preserving) match links immediately; a punctuation-stripped
+        // collision ("How???" vs "$how") must be corroborated by a shared
+        // release title before it's trusted; anything else stays UNLINKED —
+        // there is no fall-back-to-first-result anymore, because that path
+        // silently imported the wrong artist's name and photo.
+        const resolved = pickAppleCandidate(c.name, json.candidates);
+        if (resolved && resolved.level === "exact") {
+          setAppleCandidate(resolved.candidate);
+          setAppleMatchLevel("exact");
+        } else if (resolved && resolved.level === "loose" && c.latestRelease) {
+          try {
+            const scr = await scrapeMut.mutateAsync(resolved.candidate.appleMusicUrl);
+            if (appleLookupSeqRef.current !== mySeq) return;
+            const corroborated = releasesCorroborate(
+              c.latestRelease,
+              (scr.albums ?? []).map((a) => a.name),
+            );
+            if (corroborated) {
+              setAppleCandidate(resolved.candidate);
+              setAppleMatchLevel("corroborated");
+            }
+          } catch {
+            if (appleLookupSeqRef.current !== mySeq) return;
+            /* corroboration scrape failed → stay unlinked (fail safe) */
+          }
+        }
       } else {
         setAppleErrored(true);
       }
@@ -682,14 +743,32 @@ export function NewAlbumArtistDialog({
       //     Apple's canonical name now matches a local row, treat as
       //     "open existing" instead of creating a duplicate. This is the
       //     guard the old `NewPersonSheet` used to do post-scrape.
-      const scrapedItunesId = apple?.itunesArtistId || appleCandidate?.artistId || null;
-      const scrapedName = (apple?.name || picked.name).trim().toLowerCase();
+      const scrapedItunesId = apple?.itunesArtistId || (linkApple ? appleCandidate?.artistId : null) || null;
+      // Task #3191 — the identity that will actually be persisted: a
+      // mismatched/unlinked Apple result never replaces the Spotify
+      // name/photo (only an EXACT raw-name match may supply canonical
+      // casing; Spotify's portrait always wins when present).
+      const identity = mergeArtistIdentity({
+        pickedName: picked.name,
+        pickedPhotoUrl: picked.photoUrl,
+        pickedSource: picked.source,
+        apple: apple ? { name: apple.name, photoUrl: apple.photoUrl } : null,
+        appleMatchLevel,
+      });
+      const scrapedName = identity.name.trim().toLowerCase();
       const existing = people.find(
         (p) =>
           (scrapedItunesId && p.itunesArtistId && p.itunesArtistId === scrapedItunesId) ||
           p.name.trim().toLowerCase() === scrapedName,
       );
       if (existing) {
+        // Task #3191 — let the opener take over duplicate handling (the
+        // Press portal offers to bring an out-of-scope person into the
+        // press instead of navigating to a 404 dead-end).
+        if (onExistingPerson) {
+          onExistingPerson(existing);
+          return;
+        }
         toast({
           title: `Already in your catalog`,
           description: `Opening ${existing.name}.`,
@@ -698,17 +777,17 @@ export function NewAlbumArtistDialog({
         return;
       }
 
-      // 2) Create Person, preferring Apple's canonical name when present
+      // 2) Create Person from the merged identity
       const personBody: Record<string, unknown> = {
-        name: apple?.name || picked.name,
-        photoUrl: apple?.photoUrl || picked.photoUrl || null,
+        name: identity.name,
+        photoUrl: identity.photoUrl,
         bio: apple?.bio || null,
         // Only set spotifyUrl when the pick actually came from Spotify.
         // Apple-fallback picks have no Spotify identity yet — admin can
         // match later via the bulk Spotify-match tool.
         spotifyUrl: picked.source === "spotify" ? (picked.spotifyUrl ?? null) : null,
-        appleMusicUrl: apple?.appleMusicUrl || appleCandidate?.appleMusicUrl || null,
-        itunesArtistId: apple?.itunesArtistId || appleCandidate?.artistId || null,
+        appleMusicUrl: apple?.appleMusicUrl || (linkApple ? appleCandidate?.appleMusicUrl : null) || null,
+        itunesArtistId: scrapedItunesId,
       };
       // Task #824 — carry the picked creative credits onto a person added
       // via the streaming/confirm flow too (not just manual entry).
@@ -1390,13 +1469,32 @@ export function NewAlbumArtistDialog({
                     data-testid="checkbox-link-apple"
                   />
                   <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-slate-900 flex items-center gap-1.5">
-                      <SiApplemusic className="w-3.5 h-3.5 text-[#FA243C]" />
-                      Found on Apple Music
+                    <div className="text-[13px] font-semibold text-slate-900 flex items-center gap-1.5 min-w-0">
+                      <SiApplemusic className="w-3.5 h-3.5 text-[#FA243C] flex-shrink-0" />
+                      {/* Task #3191 — show WHICH Apple Music profile will be
+                          linked so the operator can spot (and uncheck) a
+                          wrong match before creating. */}
+                      <span className="truncate" data-testid="text-apple-match-name">
+                        Link "{appleCandidate.name}" on Apple Music
+                      </span>
+                      <a
+                        href={appleCandidate.appleMusicUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="flex-shrink-0 inline-flex items-center text-slate-400 hover:text-[#FA243C]"
+                        aria-label={`Open ${appleCandidate.name} on Apple Music`}
+                        title="Open on Apple Music"
+                        data-testid="link-apple-match"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
                     </div>
                     <div className="text-[11.5px] text-slate-500 leading-snug mt-0.5">
-                      We'll link the profile and pull their full Apple Music
-                      catalog so fans see every release on the artist page.
+                      {appleCandidate.primaryGenre ? `${appleCandidate.primaryGenre} · ` : ""}
+                      We'll link this profile and pull their full Apple Music
+                      catalog so fans see every release. Uncheck if this isn't
+                      the same artist.
                     </div>
                   </div>
                 </label>
@@ -1406,9 +1504,9 @@ export function NewAlbumArtistDialog({
                   Apple Music lookup failed — you can link it later.
                 </div>
               ) : (
-                <div className="text-[12.5px] text-slate-500 flex items-center gap-1.5">
+                <div className="text-[12.5px] text-slate-500 flex items-center gap-1.5" data-testid="text-apple-no-match">
                   <SiApplemusic className="w-3.5 h-3.5 text-slate-300" />
-                  Not found on Apple Music — you can add it later.
+                  No confident Apple Music match — we'll use the {picked.source === "spotify" ? "Spotify" : "picked"} name and photo. You can link Apple later.
                 </div>
               )}
             </div>

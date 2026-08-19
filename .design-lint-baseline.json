@@ -11032,7 +11032,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
-    "snippet": "<div className=\"text-[13px] font-semibold text-slate-900 flex items-center gap-1.5\">"
+    "snippet": "<div className=\"text-[13px] font-semibold text-slate-900 flex items-center gap-1.5 min-w-0\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -11043,6 +11043,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
     "snippet": "<div className=\"text-[12.5px] text-slate-500 flex items-center gap-1.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/NewAlbumArtistDialog.tsx",
+    "snippet": "<div className=\"text-[12.5px] text-slate-500 flex items-center gap-1.5\" data-testid=\"text-apple-no-match\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -28078,6 +28083,16 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "className=\"w-48 bg-transparent text-[12.5px] text-[color:var(--apple-ink)] placeholder:text-[color:var(--apple-faint)] focus:outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<DialogTitle className=\"text-[17px] font-semibold text-slate-900\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPortal.tsx",
+    "snippet": "<DialogDescription className=\"text-[12.5px] text-slate-500\">"
   },
   {
     "rule": "hardcoded-font-size",

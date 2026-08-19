@@ -912,12 +912,52 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
 // profile (remove-from-press, invite, releases, etc.).
 
 function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPerson: (id: string) => void }) {
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [view, setView] = useViewMode("press-people");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [addOpen, setAddOpen] = useState(false);
   const [labelInviteOpen, setLabelInviteOpen] = useState(false);
+  // Task #3191 — an existing catalog person surfaced by the Add dialog's
+  // duplicate guard who is NOT in this press's scope. Navigating to their
+  // detail page would 404 ("Person not found or not in your press scope"),
+  // so we prompt to bring them into the press instead.
+  const [adoptCandidate, setAdoptCandidate] = useState<{ id: string; name: string } | null>(null);
+  const [adoptBusy, setAdoptBusy] = useState(false);
+
+  // Duplicate-guard hand-off from the Add dialog. In-scope person → keep
+  // the classic "Already in your catalog" toast + open; out-of-scope →
+  // offer to add them to this press (the re-home prompt).
+  const handleExistingPerson = async (p: { id: string; name: string }) => {
+    setAddOpen(false);
+    try {
+      await apiRequest("GET", `/api/press/${pressId}/people/${p.id}`);
+      toast({ title: "Already in your catalog", description: `Opening ${p.name}.` });
+      onOpenPerson(p.id);
+    } catch {
+      // 404 = exists in GoodTunes but not in this press's scope.
+      setAdoptCandidate({ id: p.id, name: p.name });
+    }
+  };
+
+  const handleAdopt = async () => {
+    if (!adoptCandidate) return;
+    setAdoptBusy(true);
+    try {
+      await apiRequest("POST", `/api/press/${pressId}/people/${adoptCandidate.id}/claim`);
+      queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/people`] });
+      toast({ title: `Added ${adoptCandidate.name} to your press.` });
+      const openId = adoptCandidate.id;
+      setAdoptCandidate(null);
+      onOpenPerson(openId);
+    } catch (e: any) {
+      const msg = e?.message?.match(/"message"\s*:\s*"([^"]+)"/)?.[1] || e?.message || "";
+      toast({ title: "Couldn't add to your press", description: msg, variant: "destructive" });
+    } finally {
+      setAdoptBusy(false);
+    }
+  };
 
   const { data: people = [], isLoading } = useQuery<PersonLite[]>({
     queryKey: [`/api/press/${pressId}/people`],
@@ -1099,6 +1139,7 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
           globalSearchApiBase={`/api/press/${pressId}/people/search`}
           invalidateOnCreate={[[`/api/press/${pressId}/people`]]}
           onSkip={() => setAddOpen(false)}
+          onExistingPerson={handleExistingPerson}
           onSelect={({ id }) => {
             setAddOpen(false);
             queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/people`] });
@@ -1106,6 +1147,39 @@ function PressPeopleTab({ pressId, onOpenPerson }: { pressId: string; onOpenPers
           }}
         />
       )}
+
+      {/* Task #3191 — re-home prompt for an existing out-of-scope person. */}
+      <Dialog open={!!adoptCandidate} onOpenChange={(o) => { if (!o && !adoptBusy) setAdoptCandidate(null); }}>
+        <DialogContent className="sm:max-w-[420px] bg-white" data-testid="dialog-adopt-person">
+          <DialogHeader>
+            <DialogTitle className="text-[17px] font-semibold text-slate-900">
+              Add {adoptCandidate?.name} to your press?
+            </DialogTitle>
+            <DialogDescription className="text-[12.5px] text-slate-500">
+              {adoptCandidate?.name} is already in the GoodTunes catalog but isn't part of your
+              press. Add them to bring their profile into your People roster.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={adoptBusy}
+              onClick={() => setAdoptCandidate(null)}
+              data-testid="button-adopt-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={adoptBusy}
+              onClick={handleAdopt}
+              data-testid="button-adopt-confirm"
+            >
+              {adoptBusy ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : null}
+              Add to my press
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {canEdit && (
         <LabelInviteDialog open={labelInviteOpen} onOpenChange={setLabelInviteOpen} pressId={pressId} />

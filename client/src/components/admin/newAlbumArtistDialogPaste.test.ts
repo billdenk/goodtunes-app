@@ -155,7 +155,7 @@ const h = React.createElement;
 
 // Seed an empty People catalog so the local typeahead has no matches —
 // that's the state where a plain name shows the streaming-search row.
-function makeClient() {
+function makeClient(people: any[] = []) {
   const qc = new QueryClient({
     defaultOptions: {
       queries: {
@@ -167,7 +167,7 @@ function makeClient() {
       },
     },
   });
-  qc.setQueryData(["/api/people"], []);
+  qc.setQueryData(["/api/people"], people);
   return qc;
 }
 
@@ -180,7 +180,7 @@ function setInputValue(el: HTMLInputElement, value: string) {
   el.dispatchEvent(new window.Event("input", { bubbles: true }));
 }
 
-async function mount() {
+async function mount(opts: { people?: any[]; props?: Record<string, unknown> } = {}) {
   const container = document.createElement("div");
   document.body.appendChild(container);
   let root: any;
@@ -189,12 +189,13 @@ async function mount() {
     root.render(
       h(
         QueryClientProvider,
-        { client: makeClient() },
+        { client: makeClient(opts.people ?? []) },
         h(NewAlbumArtistDialog, {
           open: true,
           onOpenChange: () => {},
           onSelect: () => {},
           onSkip: () => {},
+          ...(opts.props ?? {}),
         }),
       ),
     );
@@ -245,6 +246,60 @@ test("pasting an http(s) URL swaps in the Resolve-this-link button", async () =>
       null,
       "a pasted URL must NOT render the Spotify search row",
     );
+  } finally {
+    await teardown();
+  }
+});
+
+// Task #3191 — the re-add dead-end regression. In scoped portals (press),
+// the dialog's catalog list is the GLOBAL people search, so a clicked
+// match may be OUT of the caller's scope; navigating straight to it 404s
+// ("Person not found or not in your press scope"). When the opener
+// supplies `onExistingPerson`, picking a catalog row must hand off there
+// (the press portal scope-checks and offers the claim/adopt prompt)
+// instead of calling `onSelect`.
+test("clicking a catalog match routes through onExistingPerson when supplied (re-add dead-end)", async () => {
+  const person = { id: "p-how", name: "How???", photoUrl: null };
+  const existingCalls: any[] = [];
+  const selectCalls: any[] = [];
+  const { q, type, teardown } = await mount({
+    people: [person],
+    props: {
+      onExistingPerson: (p: any) => existingCalls.push(p),
+      onSelect: (s: any) => selectCalls.push(s),
+    },
+  });
+  try {
+    await type("How???");
+    const row = q("option-local-p-how");
+    assert.ok(row, "the catalog match row renders");
+    await act(async () => {
+      row!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    assert.equal(existingCalls.length, 1, "the handoff fired exactly once");
+    assert.equal(existingCalls[0].id, "p-how");
+    assert.equal(selectCalls.length, 0, "onSelect (direct navigate) must NOT fire");
+  } finally {
+    await teardown();
+  }
+});
+
+test("without onExistingPerson, clicking a catalog match keeps the classic onSelect navigate", async () => {
+  const person = { id: "p-how", name: "How???", photoUrl: null };
+  const selectCalls: any[] = [];
+  const { q, type, teardown } = await mount({
+    people: [person],
+    props: { onSelect: (s: any) => selectCalls.push(s) },
+  });
+  try {
+    await type("How???");
+    const row = q("option-local-p-how");
+    assert.ok(row, "the catalog match row renders");
+    await act(async () => {
+      row!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+    });
+    assert.equal(selectCalls.length, 1, "default behavior selects/navigates");
+    assert.equal(selectCalls[0].id, "p-how");
   } finally {
     await teardown();
   }

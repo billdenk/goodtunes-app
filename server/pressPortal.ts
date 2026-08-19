@@ -1602,6 +1602,59 @@ export function registerPressPortalRoutes(
     res.json({ ok: true, unhomed });
   });
 
+  // Task #3191 — POST /api/press/:id/people/:personId/claim — bring an
+  // EXISTING catalog person into this press's scope (home them here).
+  // Closes the re-add dead-end: after "remove from press" (which only
+  // un-homes), re-adding the same artist hit the duplicate guard, which
+  // navigated to a person page that 404s out-of-scope. The client now
+  // offers "add them to your press" and calls this instead.
+  //
+  // Rules:
+  //   • person must exist (not soft-deleted) → else 404;
+  //   • already homed HERE → truthful no-op ({ alreadyHomed: true });
+  //   • homed at ANOTHER press → 409 (a press can never grab another
+  //     press's client; that flow stays operator-mediated);
+  //   • un-homed → stamp default_press_id and record press_switch_history
+  //     (mirrors the remove endpoint's history semantics).
+  app.post("/api/press/:id/people/:personId/claim", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const personId = String(req.params.personId);
+    const cur = await db.execute<{ default_press_id: string | null }>(sql`
+      SELECT default_press_id FROM people WHERE id = ${personId} AND deleted_at IS NULL
+    `);
+    const row = ((cur as any).rows ?? [])[0];
+    if (!row) return res.status(404).json({ message: "Person not found" });
+    if (row.default_press_id === pressId) {
+      return res.json({ ok: true, homed: true, alreadyHomed: true });
+    }
+    if (row.default_press_id) {
+      return res.status(409).json({
+        message: "This artist is currently represented by another press. Contact GoodTunes to move them.",
+      });
+    }
+    // Race-safe: only stamp when still un-homed (a concurrent claim or
+    // invite-accept may have homed them since the read above).
+    const upd = await db.execute<{ id: string }>(sql`
+      UPDATE people SET default_press_id = ${pressId}
+       WHERE id = ${personId} AND default_press_id IS NULL AND deleted_at IS NULL
+       RETURNING id
+    `);
+    const homedNow = (((upd as any).rows ?? []) as any[]).length > 0;
+    if (!homedNow) {
+      return res.status(409).json({
+        message: "This artist was just claimed by another press. Try again.",
+      });
+    }
+    await db.insert(pressSwitchHistory).values({
+      customerKind: "artist",
+      customerId: personId,
+      fromPressId: null,
+      toPressId: pressId,
+      reason: "added_by_press",
+    });
+    res.json({ ok: true, homed: true, alreadyHomed: false });
+  });
+
   // POST /api/press/:id/invite — thin wrapper that delegates into the
   // existing admin-invite handler logic via storage.createAdminInvite,
   // adding the press's defaultPressId stamp. We re-use the same

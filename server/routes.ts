@@ -17891,8 +17891,13 @@ export async function registerRoutes(
       }).finally(() => clearTimeout(t));
       if (!r.ok) return res.json({ query: q, candidates: [] });
       const json = (await r.json()) as { results?: any[] };
-      const norm = (s: string) =>
-        s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+      // Task #3191 — rank RAW (punctuation-preserving) exact matches ahead
+      // of punctuation-stripped ones: "How???" must outrank "$how" for a
+      // query of "How???" (both collapse to "how" under the loose key).
+      const rawNorm = (s: string) =>
+        s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+      const norm = (s: string) => rawNorm(s).replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim();
+      const wantedRaw = rawNorm(q);
       const wanted = norm(q);
       const candidates = (json.results ?? [])
         .filter((r) => r?.wrapperType === "artist" && r?.artistLinkUrl)
@@ -17903,9 +17908,9 @@ export async function registerRoutes(
           primaryGenre: r.primaryGenreName ? String(r.primaryGenreName) : null,
         }))
         .sort((a, b) => {
-          const ax = norm(a.name) === wanted ? 1 : 0;
-          const bx = norm(b.name) === wanted ? 1 : 0;
-          return bx - ax;
+          const score = (c: { name: string }) =>
+            rawNorm(c.name) === wantedRaw ? 2 : norm(c.name) === wanted ? 1 : 0;
+          return score(b) - score(a);
         });
       return res.json({ query: q, candidates });
     } catch {

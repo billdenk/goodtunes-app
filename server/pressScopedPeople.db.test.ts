@@ -385,6 +385,73 @@ test("remove does NOT clear the home of a person homed at another press", async 
   assert.equal((hist as any).rows?.length ?? 0, 0, "no history row when nothing was un-homed");
 });
 
+// ─── POST /api/press/:id/people/:personId/claim (Task #3191) ─────────
+//
+// The re-add dead-end: after remove (un-home), re-adding via the Add dialog
+// hit the duplicate guard and navigated to a person page that 404s
+// out-of-scope. The claim endpoint brings an existing UN-HOMED catalog
+// person into the press; a person homed at another press is refused.
+
+test("claim homes an un-homed catalog person to this press and the detail page works", async () => {
+  const unhomedId = await seedPerson({ name: "t2256 Unhomed Catalog", defaultPressId: null });
+
+  // Pre-condition: out of scope → detail 404s (the dead-end).
+  const before = await getJson(`/api/press/${ownPressId}/people/${unhomedId}`);
+  assert.equal(before.status, 404, "an un-homed catalog person starts out of scope");
+
+  const client = await makeSessionClient(pressUserId, pressToken);
+  const res = await client.post(`/api/press/${ownPressId}/people/${unhomedId}/claim`, {});
+  assert.equal(res.status, 200);
+  assert.equal(res.json.homed, true, "the person is homed to this press");
+  assert.equal(res.json.alreadyHomed, false);
+
+  const row = (await exec(
+    sql`SELECT default_press_id FROM people WHERE id = ${unhomedId}`,
+  ) as any).rows?.[0];
+  assert.equal(row.default_press_id, ownPressId, "default_press_id stamped");
+
+  const hist = await exec(sql`
+    SELECT 1 FROM press_switch_history
+    WHERE customer_id = ${unhomedId} AND to_press_id = ${ownPressId}
+      AND from_press_id IS NULL AND reason = 'added_by_press'
+  `);
+  assert.equal((hist as any).rows?.length, 1, "a press_switch_history row was written");
+
+  // The dead-end is gone: the scoped detail page now loads.
+  const after = await getJson(`/api/press/${ownPressId}/people/${unhomedId}`);
+  assert.equal(after.status, 200, "the person page opens after claiming");
+});
+
+test("claim is a truthful no-op for a person already homed here", async () => {
+  const minePersonId = await seedPerson({ name: "t2256 Already Mine", defaultPressId: ownPressId });
+  const client = await makeSessionClient(pressUserId, pressToken);
+  const res = await client.post(`/api/press/${ownPressId}/people/${minePersonId}/claim`, {});
+  assert.equal(res.status, 200);
+  assert.equal(res.json.alreadyHomed, true, "already-homed short-circuit");
+});
+
+test("claim refuses (409) a person homed at ANOTHER press and leaves them untouched", async () => {
+  const theirsId = await seedPerson({ name: "t2256 Theirs", defaultPressId: otherPressId });
+  const client = await makeSessionClient(pressUserId, pressToken);
+  const res = await client.post(`/api/press/${ownPressId}/people/${theirsId}/claim`, {});
+  assert.equal(res.status, 409, "a press can never grab another press's client");
+
+  const row = (await exec(
+    sql`SELECT default_press_id FROM people WHERE id = ${theirsId}`,
+  ) as any).rows?.[0];
+  assert.equal(row.default_press_id, otherPressId, "the other press's home stamp is intact");
+  const hist = await exec(
+    sql`SELECT 1 FROM press_switch_history WHERE customer_id = ${theirsId}`,
+  );
+  assert.equal((hist as any).rows?.length ?? 0, 0, "no history row on refusal");
+});
+
+test("claim 404s a person that doesn't exist", async () => {
+  const client = await makeSessionClient(pressUserId, pressToken);
+  const res = await client.post(`/api/press/${ownPressId}/people/${randomUUID()}/claim`, {});
+  assert.equal(res.status, 404);
+});
+
 after(async () => {
   try {
     if (httpServer) await new Promise<void>((resolve) => httpServer!.close(() => resolve()));
