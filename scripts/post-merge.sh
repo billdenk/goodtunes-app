@@ -12383,6 +12383,20 @@ mirror_external_template_files_task_3154() {
 mirror_external_template_files_task_3154 dev  "${DATABASE_URL:-}"
 mirror_external_template_files_task_3154 prod "${PROD_DATABASE_URL:-}"
 
+# Task #3196 — one-time square center-crop of non-square person avatar photos
+# so every avatar circle renders true (egg-shaped avatars on the People grid).
+# The TS script handles BOTH DBs itself (needs sharp + object storage), is
+# marker-guarded per DB (square_person_photos_v1), and only stamps its marker
+# on a zero-failure pass so transient fetch errors retry on the next full run.
+backfill_square_person_photos_task_3196() {
+  if timeout 900 npx tsx scripts/backfill-square-person-photos.ts; then
+    echo "post-merge: task-3196 square person photos backfill ok"
+  else
+    echo "post-merge: WARNING — task-3196 square person photos backfill failed (continuing)"
+  fi
+}
+backfill_square_person_photos_task_3196
+
 # Task #3178 — Catalog Number and UPC fields on albums. Two nullable text
 # columns required for proper release identifiers. catalog_number is required
 # before pressing-order submission (enforced at the route layer); upc is

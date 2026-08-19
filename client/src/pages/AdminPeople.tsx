@@ -470,7 +470,11 @@ export function PersonCard({
       data-testid={`card-person-${person.id}`}
     >
       <div className="relative w-full aspect-square">
-        <div className="gt-avatar-initials w-full h-full rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-[var(--apple-hairline)] shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
+        {/* absolute inset-0 (not w-full h-full): the aspect-square box is a
+            flex item, so a non-square <img> child could stretch it into an
+            egg — absolutizing the avatar keeps the tile a true circle no
+            matter the photo's natural aspect ratio (Task #3196). */}
+        <div className="gt-avatar-initials absolute inset-0 rounded-full overflow-hidden bg-[var(--brand-blue)] ring-1 ring-[var(--apple-hairline)] shadow-sm group-hover:shadow-md group-hover:ring-[var(--brand-blue)]/30 transition-all">
           {person.photoUrl ? (
             <img
               src={person.photoUrl}

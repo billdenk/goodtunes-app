@@ -7389,6 +7389,61 @@ export async function registerRoutes(
     return await uploadBufferToObjectStorage(buf, mime);
   }
 
+  // Task #3196 — person avatar photos must persist SQUARE. Every avatar
+  // surface renders a circle, so a non-square stored photo shows up as an
+  // egg-shaped/oversized tile. This normalizes a person photo URL at the
+  // save boundary:
+  //   - external https URL → fetch (SSRF-safe), center-crop to square if
+  //     needed, and mirror into object storage (external-links mirror rule),
+  //   - /objects/uploads/<id> → read the stored bytes and, only when the
+  //     image is non-square, write a square center-cropped sibling and
+  //     return its URL,
+  //   - anything else (local static path, empty) → returned unchanged.
+  // Fail-open: on any fetch/decode error the original URL is returned so a
+  // photo save never breaks because of normalization.
+  async function squarePersonPhotoUrl(rawUrl: string | null): Promise<string | null> {
+    if (!rawUrl) return rawUrl;
+    const url = rawUrl.trim();
+    try {
+      let buf: Buffer | null = null;
+      let mime = "";
+      let isExternal = false;
+      if (/^https:\/\//i.test(url)) {
+        isExternal = true;
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 10_000);
+        const r = await safeFetch(url, {
+          signal: ctrl.signal,
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0)" },
+        }).finally(() => clearTimeout(t));
+        if (!r.ok) throw new Error(`image fetch ${r.status}`);
+        mime = (r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+        if (!IMAGE_MIME_TO_EXT[mime]) throw new Error(`unsupported image mime: ${mime || "unknown"}`);
+        buf = Buffer.from(await r.arrayBuffer());
+        if (buf.byteLength > 8 * 1024 * 1024) throw new Error("image larger than 8MB");
+      } else if (url.startsWith("/objects/uploads/")) {
+        const file = await objectStorage.getObjectEntityFile(url);
+        const [metadata] = await file.getMetadata();
+        mime = String(metadata.contentType || "").split(";")[0].trim().toLowerCase();
+        const [bytes] = await file.download();
+        buf = Buffer.from(bytes);
+      } else {
+        return rawUrl;
+      }
+      const { squareCropImage } = await import("./imageProcessing");
+      const cropped = await squareCropImage(buf, mime);
+      if (!cropped) {
+        // Already square (or not croppable). External sources still get
+        // mirrored so the URL is ours and stable.
+        return isExternal ? await uploadBufferToObjectStorage(buf, mime) : rawUrl;
+      }
+      return await uploadBufferToObjectStorage(cropped.buffer, cropped.mime);
+    } catch (err) {
+      console.warn("[person-photo] square normalize failed, keeping original URL", url.slice(0, 120), (err as Error)?.message);
+      return rawUrl;
+    }
+  }
+
   app.post("/api/admin/instruments/scrape", requireAdminBearer, async (req, res) => {
     const url = String(req.body?.url ?? "").trim();
     if (!url || !/^https?:\/\//i.test(url)) {
@@ -14361,9 +14416,15 @@ export async function registerRoutes(
           try {
             const lookup = await searchArtistForImport(created.name, 3);
             if (lookup.status === "matched") {
+              // Task #3196 — mirror the Spotify CDN portrait into object
+              // storage and square center-crop it before persisting, so the
+              // avatar circle isn't at the mercy of a non-square source.
+              const importedPhotoUrl = lookup.match.photoUrl
+                ? await squarePersonPhotoUrl(lookup.match.photoUrl)
+                : null;
               await storage.updatePerson(created.id, {
                 spotifyUrl: lookup.match.spotifyUrl,
-                ...(lookup.match.photoUrl ? { photoUrl: lookup.match.photoUrl } : {}),
+                ...(importedPhotoUrl ? { photoUrl: importedPhotoUrl } : {}),
               } as any);
               spotifyReport.push({
                 personId: created.id,
@@ -17447,6 +17508,8 @@ export async function registerRoutes(
     if (!photoUrl && b.contactEmail) {
       photoUrl = await tryGravatarRehost(String(b.contactEmail));
     }
+    // Task #3196 — avatars render as circles; persist a square center-crop.
+    photoUrl = await squarePersonPhotoUrl(photoUrl);
     const p = await storage.createPerson({
       name: String(b.name),
       photoUrl,
@@ -17550,6 +17613,8 @@ export async function registerRoutes(
         photoUrl = await tryGravatarRehost(String(b.contactEmail));
       }
       const mintedId = randomUUID();
+      // Task #3196 — avatars render as circles; persist a square center-crop.
+      photoUrl = await squarePersonPhotoUrl(photoUrl);
       const p = await storage.createPerson({
         id: mintedId,
         // Home the genuinely NEW person atomically at insert. A separate
@@ -17612,7 +17677,8 @@ export async function registerRoutes(
     const updates: any = {};
     const opt = (v: any) => (v ? String(v) : null);
     if (b.name !== undefined) updates.name = String(b.name);
-    if (b.photoUrl !== undefined) updates.photoUrl = opt(b.photoUrl);
+    // Task #3196 — avatars render as circles; persist a square center-crop.
+    if (b.photoUrl !== undefined) updates.photoUrl = await squarePersonPhotoUrl(opt(b.photoUrl));
     if (b.coverUrl !== undefined) updates.coverUrl = opt(b.coverUrl);
     // Defense at the save path — strip the Apple Music boilerplate so a
     // boilerplate-only bio collapses to empty instead of being persisted.
@@ -17738,13 +17804,9 @@ export async function registerRoutes(
             console.log(`[people] auto-spotify-photo: no portrait returned for person ${id}`);
             return;
           }
-          let finalUrl = result.photoUrl;
-          try {
-            const hosted = await rehostRemoteImage(result.photoUrl);
-            if (hosted) finalUrl = hosted;
-          } catch {
-            /* fall through with the Spotify URL if rehost fails */
-          }
+          // Task #3196 — mirror + square center-crop before persisting
+          // (fail-open: keeps the Spotify URL if fetch/crop fails).
+          const finalUrl = (await squarePersonPhotoUrl(result.photoUrl)) ?? result.photoUrl;
           // Re-check right before writing — an admin may have uploaded a
           // photo or locked it while we were fetching.
           const fresh = await storage.getPersonById(id);
@@ -17811,16 +17873,11 @@ export async function registerRoutes(
             message: "Spotify didn't return a portrait for this artist.",
           });
         }
-        // Rehost into object storage so the URL is stable. The Spotify
-        // CDN rotates image hosts and we'd rather not have a fan-side
-        // 404 a month later when the rotation moves.
-        let finalUrl = result.photoUrl;
-        try {
-          const hosted = await rehostRemoteImage(result.photoUrl);
-          if (hosted) finalUrl = hosted;
-        } catch {
-          /* fall through with the Spotify URL if rehost fails */
-        }
+        // Rehost into object storage so the URL is stable (the Spotify CDN
+        // rotates image hosts) AND square center-crop so the avatar circle
+        // isn't at the mercy of a non-square portrait (Task #3196).
+        // Fail-open: keeps the Spotify URL if fetch/crop fails.
+        const finalUrl = (await squarePersonPhotoUrl(result.photoUrl)) ?? result.photoUrl;
         const updated = await storage.updatePerson(id, { photoUrl: finalUrl } as any);
         return res.json({
           photoUrl: finalUrl,

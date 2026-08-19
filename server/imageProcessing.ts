@@ -342,6 +342,48 @@ export async function makeDisplayDerivative(
   };
 }
 
+// Task #3196 — square center-crop for person avatar photos. Every avatar
+// surface renders a circle; a non-square source stored as-is makes the tile
+// follow the photo's natural aspect ratio ("egg" avatars). Center-crop to the
+// short edge via libvips (memory-safe, shrink-on-load, matches the existing
+// sharp usage above). Returns null when nothing needs doing or when the input
+// can't be safely processed — callers then keep the original bytes/URL:
+//   - already square (±1px), non-processable mime (svg/pdf/…), animated gif,
+//     unreadable header, or beyond the safe-downscale ceiling.
+export async function squareCropImage(
+  buf: Buffer,
+  mime: string,
+): Promise<DisplayDerivative | null> {
+  if (!isProcessableImage(mime)) return null;
+  // Animated GIFs would lose their animation through a single-frame crop;
+  // leave them alone (the circle mask still shows them, just letterboxed).
+  if (mime === "image/gif") return null;
+  const dims = sniffImageDimensions(buf);
+  if (!dims) return null;
+  if (Math.abs(dims.width - dims.height) <= 1) return null;
+  if (dims.width * dims.height > MAX_SAFE_DOWNSCALE_PIXELS) return null;
+  const edge = Math.min(dims.width, dims.height, DISPLAY_MAX_EDGE);
+  const outFormat = outFormatForMime(mime);
+  try {
+    const sharp = await loadSharp();
+    let pipeline = sharp(buf, {
+      limitInputPixels: MAX_SAFE_DOWNSCALE_PIXELS,
+      failOn: "none",
+    })
+      // Honor EXIF orientation before cropping so a rotated phone photo
+      // crops around its VISUAL center, not the sensor's.
+      .rotate()
+      .resize({ width: edge, height: edge, fit: "cover", position: "centre" });
+    if (outFormat === "png") pipeline = pipeline.png();
+    else if (outFormat === "webp") pipeline = pipeline.webp({ quality: 88 });
+    else pipeline = pipeline.jpeg({ quality: 88 });
+    const out = await pipeline.toBuffer();
+    return { buffer: out, mime: mimeForOutFormat(outFormat) };
+  } catch {
+    return null;
+  }
+}
+
 // Return a buffer that's safe to hand to a renderer (PDFKit `doc.image` or
 // @napi-rs/canvas `loadImage`): always PNG or JPEG bytes, always bounded to
 // `maxEdge` on the long side. Returns null when the source is too large to
