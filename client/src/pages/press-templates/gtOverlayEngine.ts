@@ -81,7 +81,7 @@ export function zoneFromName(raw: string): { zone: string; kind: 'line' | 'area'
   return { zone, kind };
 }
 
-export async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: number): Promise<{ layers: GtLayer[]; layerNames: string[] }> {
+export async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: number): Promise<{ layers: GtLayer[]; layerNames: string[]; paintedLayerNames: string[] }> {
   const oc = await doc.getOptionalContentConfig();
   const names: Record<string, string> = {};
   const order = (oc.getOrder() ?? []) as Array<string | { order?: unknown[] }>;
@@ -274,7 +274,11 @@ export async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: numb
     }
     layers.push(layer);
   }
-  return { layers, layerNames: Object.values(names) };
+  // paintedLayerNames = layers that actually PAINT content on this page.
+  // Viryl false-positive (Aug 18 2026): Illustrator flattens can leave GT
+  // guide layers behind as empty OCG *definitions* with zero geometry —
+  // hygiene must key off painted layers, not defined names.
+  return { layers, layerNames: Object.values(names), paintedLayerNames: Object.keys(boxes) };
 }
 
 export async function renderPage(doc: pdfjs.PDFDocumentProxy, pageNum: number, targetWidth = 1400): Promise<{ img: string; wMm: number; hMm: number }> {

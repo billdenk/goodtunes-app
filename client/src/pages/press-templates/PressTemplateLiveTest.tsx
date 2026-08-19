@@ -141,7 +141,8 @@ type ArtState = {
   name: string; img: string;
   wMm: number | null; hMm: number | null; // null = raster image, no physical size
   pageCount: number | null;
-  gtLayerNames: string[]; // GT layers left inside the art file (hygiene)
+  gtLayerNames: string[]; // GT layers with real painted content left in the art file (hygiene fail)
+  emptyGtLayerNames: string[]; // leftover empty GT layer entries (flatten residue — ignored, noted only)
   pxAspect?: number; // raster only — pixel w/h from the server scan, keeps the overlay unsquished
 };
 
@@ -630,11 +631,16 @@ export default function PressTemplateLiveTest({
       if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
         const doc = await (await loadPdfjs()).getDocument({ data: await f.arrayBuffer() }).promise;
         const { img, wMm, hMm } = await renderPage(doc, 1);
-        const { layerNames } = await extractGtLayers(doc, 1);
+        const { layerNames, paintedLayerNames } = await extractGtLayers(doc, 1);
         if (pickSeq.current !== myPick) return; // a newer pick superseded this parse
-        const gtNames = layerNames.filter((n) => n.trim().toUpperCase().startsWith('GT'));
+        // Viryl false-positive (Aug 18 2026): flattened exports keep GT guide
+        // layers as EMPTY definitions — only GT layers that actually paint
+        // content fail hygiene; empty leftovers are noted, never failed.
+        const isGt = (n: string) => n.trim().toUpperCase().startsWith('GT');
+        const gtNames = paintedLayerNames.filter(isGt);
+        const emptyGtNames = layerNames.filter((n) => isGt(n) && !paintedLayerNames.includes(n));
         setFormatNotice(null);
-        setArt({ name: f.name, img, wMm, hMm, pageCount: doc.numPages, gtLayerNames: gtNames });
+        setArt({ name: f.name, img, wMm, hMm, pageCount: doc.numPages, gtLayerNames: gtNames, emptyGtLayerNames: emptyGtNames });
         artFile.current = f;
         setShowTemplate(false);
         runInkInspect(f, 'application/pdf');
@@ -670,7 +676,7 @@ export default function PressTemplateLiveTest({
         setFormatNotice(contentType.startsWith('image/png')
           ? 'PNG can\u2019t be CMYK, so it won\u2019t pass the color check. Export a CMYK TIFF, CMYK JPEG, or PDF for print ink.'
           : null);
-        setArt({ name: f.name, img, wMm: null, hMm: null, pageCount: null, gtLayerNames: [] });
+        setArt({ name: f.name, img, wMm: null, hMm: null, pageCount: null, gtLayerNames: [], emptyGtLayerNames: [] });
         artFile.current = f; // server test submission still requires a PDF and skips rasters
         setShowTemplate(false);
         runInkInspect(f, contentType);
@@ -857,8 +863,14 @@ export default function PressTemplateLiveTest({
         : { param: 'Pages', tone: 'fail', detail: `${art.pageCount} pages — a jacket spread is 1 page` });
     }
     rows.push(art.gtLayerNames.length === 0
-      ? { param: 'File hygiene', tone: 'pass', detail: art.wMm === null ? 'Raster image — flat pixels can’t carry template layers, so the file is clean by definition' : 'No GT template layers left inside the art file' }
-      : { param: 'File hygiene', tone: 'fail', detail: `Template layers still present in the art file: ${art.gtLayerNames.join(', ')} — delete them before handoff` });
+      ? {
+          param: 'File hygiene', tone: 'pass',
+          detail: art.wMm === null
+            ? 'Raster image — flat pixels can’t carry template layers, so the file is clean by definition'
+            : art.emptyGtLayerNames.length > 0
+              ? `No GT template content in the art file (${art.emptyGtLayerNames.length} empty leftover layer ${art.emptyGtLayerNames.length === 1 ? 'entry' : 'entries'} from flattening — nothing on ${art.emptyGtLayerNames.length === 1 ? 'it' : 'them'}, ignored)`
+              : 'No GT template layers left inside the art file' }
+      : { param: 'File hygiene', tone: 'fail', detail: `Template layers still carry content in the art file: ${art.gtLayerNames.join(', ')} — delete them before handoff` });
     // No "Safety — Not measured" filler row (gogoods, Aug 16 2026): safety is
     // a human eyeball check, and it lives in the overlay toggles below — the
     // checklist holds only what the system actually measures.
