@@ -1,0 +1,15 @@
+error: duplicate key value violates unique constraint "people_spotify_url_active_uniq"
+  File "/home/runner/workspace/dist/index.cjs", line 59
+  File "/home/runner/workspace/dist/index.cjs", line 59
+  File "/home/runner/workspace/dist/index.cjs", line 59
+  File "/home/runner/workspace/dist/index.cjs", line 58, in oH.queryWithCache
+  File "/home/runner/workspace/dist/index.cjs", line 59
+...
+(3 additional frame(s) were not displayed)
+
+Error: Failed query: insert into "people" ("id", "name", "photo_url", "cover_url", "photo_locked", "cover_locked", "bio", "label_id", "manager_id", "apple_music_url", "spotify_url", "tidal_url", "qobuz_url", "deezer_url", "pandora_url", "spotify_has_match", "itunes_artist_id", "instagram_url", "tiktok_url", "twitter_url", "bluesky_url", "facebook_url", "website_url", "linkedin_url", "muso_id", "contact_email", "contact_phone", "is_artist_promoted", "referred_by_person_id", "referred_by_org_id", "referrer_per_unit_cents", "earns_referral_payout", "invited_by_press_id", "default_press_id", "press_mode", "can_invite_ambassadors", "is_group", "group_kind", "roles", "shipping_address", "shipping_address_struct", "legacy_gogoods_id", "artist_share_slug", "deleted_at", "deleted_by_user_id", "deleted_via_parent_id") values (default, $1, $2, $3, default, default, $4, $5, $6, $7, $8, $9, $10, $11, $12, default, $13, $14, $15, $16, $17, $18, $19, $20, default, default, default, default, default, default, default, default, default, default, default, default, $21, $22, $23, default, default, default, default, default, default, default) returning "id", "name", "photo_url", "cover_url", "photo_locked", "cover_locked", "bio", "label_id", "manager_id", "apple_music_url", "spotify_url", "tidal_url", "qobuz_url", "deezer_url", "pandora_url", "spotify_has_match", "itunes_artist_id", "instagram_url", "tiktok_url", "twitter_url", "bluesky_url", "facebook_url", "website_url", "linkedin_url", "muso_id", "contact_email", "contact_phone", "is_artist_promoted", "referred_by_person_id", "referred_by_org_id", "referrer_per_unit_cents", "earns_referral_payout", "invited_by_press_id", "default_press_id", "press_mode", "can_invite_ambassadors", "is_group", "group_kind", "roles", "shipping_address", "shipping_address_struct", "legacy_gogoods_id", "artist_share_slug", "deleted_at", "deleted_by_user_id", "deleted_via_parent_id"
+params: How???,https://i.scdn.co/image/ab6761610000e5eb3c7d5a998b44f6e7041b245a,,,,,,https://open.spotify.com/artist/3W3LYQz0DJcC9ThOyCq3gD,,,,,,,,,,,,,false,,{"Artist","Producer"}
+  File "/home/runner/workspace/dist/index.cjs", line 58, in oH.queryWithCache
+  File "/home/runner/workspace/dist/index.cjs", line 59
+  File "/home/runner/workspace/dist/index.cjs", line 3561, in NP.createPerson
+  File "/home/runner/workspace/dist/index.cjs", line 5442

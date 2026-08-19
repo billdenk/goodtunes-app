@@ -1,0 +1,10 @@
+{
+  "ranAt": "2026-08-19T22:19:40.709Z",
+  "target": "PROD_DATABASE_URL",
+  "task": "#345 — re-host Dropbox masters into object storage",
+  "scanned": 15,
+  "rehosted": 15,
+  "probed": 15,
+  "needsReSupply": [],
+  "errored": []
+}
