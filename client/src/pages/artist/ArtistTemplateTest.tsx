@@ -231,6 +231,10 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   const ART = {
     title: component?.label ?? spec?.label ?? 'Art file',
     image: component?.previewUrl ?? null,
+    // Center labels render TWO faces (Side A / Side B) — the server stores a
+    // second trim-square raster for page 2 (gogoods, Aug 18 2026: "only
+    // showing one of two of the labels").
+    image2: component?.previewUrl2 ?? null,
     alt: `${component?.label ?? 'Art'} seated in the press template`,
   };
 
@@ -448,13 +452,24 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
           data-testid="template-canvas"
         >
           {ART.image ? (
-            <img
-              src={ART.image}
-              alt={ART.alt}
-              className="w-full h-auto"
-              style={{ maxWidth: `${zoom}%`, transition: 'max-width 0.1s linear' }}
-              data-testid="canvas-art"
-            />
+            <div className="w-full flex flex-col items-center" style={{ gap: 32 }}>
+              <img
+                src={ART.image}
+                alt={ART.alt}
+                className="w-full h-auto"
+                style={{ maxWidth: `${zoom}%`, transition: 'max-width 0.1s linear' }}
+                data-testid="canvas-art"
+              />
+              {ART.image2 && (
+                <img
+                  src={ART.image2}
+                  alt={`${ART.alt} — second face`}
+                  className="w-full h-auto"
+                  style={{ maxWidth: `${zoom}%`, transition: 'max-width 0.1s linear' }}
+                  data-testid="canvas-art-face-2"
+                />
+              )}
+            </div>
           ) : (
             <p className="text-[13px]" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid="canvas-no-preview">
               No preview could be generated for this file.
