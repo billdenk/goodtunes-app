@@ -1,0 +1,29 @@
+All nine files are up on `main` (200/201s). Here's the paste-ready note for Otis:
+
+---
+
+**Ruby's Aug 19 bundle — six new/updated surfaces + canon. Replace verbatim, wire data only. Questions beat inventions.**
+
+**New files:**
+- `handoff/press-client-estimate/PressClientEstimate.tsx` — the artist-facing estimate page (private link, no account to view).
+- `handoff/press-estimate-send/PressEstimateSend.tsx` — the delivery loop: send pane → the email → received view. The email is triggered by the system behind the scenes; the estimate stays in the system.
+- `handoff/press-packages/PressPackagesIndex.tsx` + `PressPackageBuilder.tsx` — the package catalog and the one-scroll builder with edit mode (`?pkg=id`), stats band, and the "How artists will see it" card designer. **This also delivers the page bodies your STATUS.md deferred for the format-first Components/Packages restructure** — the rail plumbing you parked can now land against these.
+- `handoff/press-estimates/PressEstimatesIndex.tsx` — quiet CTA + canon rail sweep.
+- `handoff/white-label/PressWhiteLabelSettings.tsx` — Settings → White Label (replaces the "Soon" chip).
+- `handoff/artist-package-rail/ArtistReleasePackageTemplates.tsx` — the artist-side package rail the builder's preview mirrors.
+
+**Updated files:**
+- `handoff/artist-portal-restructure/ArtistPortalRestructureFlow.tsx` — **the per-panel ending you left as a dead-end now exists.** Per-panel completed state shows the honest card: chip "Not tested against press spec" (word + icon, neutral gray — a fact, not an error), headline "Looks right. Not yet measured.", quiet switch-to-template path; slot pill reads "Art seated · not yet measured". Wire it exactly — never a green Passed on the panel path.
+- `handoff/style-guide/apple-canon.md` — two new rules: appearance switcher is **worded Light / Dark / System under an APPEARANCE eyebrow, never icon-only sun/moon/monitor** (sweep all portals); segmented controls are shaded track, no outline.
+
+**Pricing law (new, applies wherever packages surface):** every package has a press-set minimum run; all artist-facing prices read "From $X.XX / unit at {min}". Disabled run tiers render visibly dead (~0.35 opacity + tooltip with the reason).
+
+**Must work — PressClientEstimate:** Share → name/email sheet → "Sent to ‹name›" · Ask a question → message to rep → confirmation · Start this project → confirm → **create account** (name/email pre-filled, blue earned by password) → project created · $0-out-of-pocket line → explainer card · every sheet dismisses via circled × only.
+**Must work — PressEstimateSend:** artist association is REQUIRED before send · send triggers the email · email's one button opens the estimate · login appears only at Start this project.
+**Must work — PressPackagesIndex:** card click → "How artists see it" preview → Edit in builder · hover ••• → Edit / Archive (has sales) / Delete-with-confirm (no sales) · save in builder returns here with the blue perimeter-draw + Saved chip on that card.
+**Must work — PressPackageBuilder:** `?pkg=id` opens every section pre-seated + stats band · create mode names the package in the card-designer section · Minimum run re-anchors all math live · cover picker: presets / Logo / Magic Background (derived from vinyl) / Upload sheet (drag-drop + link + size rule) · "Save to catalog"/"Save changes" is the page's only blue.
+**Must work — PressWhiteLabelSettings:** domain tier flips the preview's link + email from-line · accent recolors both previews keystroke-live with contrast check · Save earns blue only when dirty. Anything not listed above is decorative.
+
+---
+
+One flag from his status for you, Bill: he noted the press-detail rail has no phone-width fallback nav and needs a republish to go live — nothing in this bundle changes that, but the republish will carry these files' groundwork too.
