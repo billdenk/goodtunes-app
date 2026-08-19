@@ -2645,11 +2645,14 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   };
 
   // ── Derived options per size ──
-  const { colors: pressColors, types: pressColorTypes } = usePressCatalogSwatches();
+  const { colors: pressColors, types: pressColorTypes, fromCatalog, resolved: catalogResolved } = usePressCatalogSwatches();
   const colors = pressColors.filter((c) => c.sizes.includes(sizeId));
 
-  // Snap a stale/foreign selection onto this press's catalog once it arrives.
+  // Snap a stale/foreign selection onto this press's catalog — only after
+  // BOTH the saved estimate has hydrated and the catalog fetch has settled,
+  // or a slow fetch would clobber a valid saved color with the demo fallback.
   useEffect(() => {
+    if (!catalogResolved || (estimateId != null && !hydrated)) return;
     if (pressColors.length === 0) return;
     const current = pressColors.find((c) => c.id === colorId);
     if (!current) {
@@ -2660,7 +2663,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
       setColorKind(current.kind);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pressColors, colorId, colorKind, sizeId]);
+  }, [catalogResolved, hydrated, pressColors, colorId, colorKind, sizeId]);
   const color = colors.find((c) => c.id === colorId) ?? colors[0];
 
   const jacketOptions = JACKET_CATALOG[sizeId] ?? JACKET_CATALOG['12'];
@@ -3014,18 +3017,22 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                   <div style={{ marginTop: 18, display: 'flex', gap: 12 }}>
                     {VINYL_SIZES.map((s) => {
                       const active = picked('size') && s.id === sizeId;
+                      // A real catalog with zero colors for this size = the press
+                      // doesn't offer it — word + disabled state, never color alone.
+                      const unavailable = fromCatalog && !pressColors.some((c) => c.sizes.includes(s.id));
                       return (
                         <button
                           key={s.id}
                           type="button"
-                          onClick={() => selectSize(s.id)}
+                          onClick={unavailable ? undefined : () => selectSize(s.id)}
+                          disabled={unavailable}
                           aria-pressed={active}
                           data-testid={`size-${s.id}`}
                           className="rounded-2xl bg-white transition-all hover:-translate-y-px focus:outline-none"
-                          style={{ flex: 1, padding: '16px 12px', border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: 'center', cursor: 'pointer' }}
+                          style={{ flex: 1, padding: '16px 12px', border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: 'center', cursor: unavailable ? 'not-allowed' : 'pointer', opacity: unavailable ? 0.45 : 1 }}
                         >
                           <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK }}>{s.label}</div>
-                          <div className="text-[11px]" style={{ marginTop: 3, color: '#a1a1a6' }}>{s.note}</div>
+                          <div className="text-[11px]" style={{ marginTop: 3, color: '#a1a1a6' }}>{unavailable ? 'Not offered' : s.note}</div>
                         </button>
                       );
                     })}

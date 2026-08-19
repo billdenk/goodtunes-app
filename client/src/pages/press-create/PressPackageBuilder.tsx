@@ -602,46 +602,56 @@ const slugKind = (name: string): SwatchKind => name.trim().toLowerCase().replace
 const KIND_PRICE: Record<string, number> = { black: 1.8, translucent: 2.3, opaque: 2.4, splatter: 3.2 };
 const formatSize = (format: string): SizeId => (format.includes('7') ? '7' : format.includes('10') ? '10' : '12');
 
-export function usePressCatalogSwatches(): { colors: QuoteSwatch[]; types: { id: SwatchKind; name: string }[] } {
+/** Pure: relational catalog formats → builder swatches + type cards. */
+export function swatchesFromCatalogFormats(formats: CatalogFormat[] | null | undefined): { colors: QuoteSwatch[]; types: { id: SwatchKind; name: string }[]; fromCatalog: boolean } {
+  const types: { id: SwatchKind; name: string }[] = [];
+  const byColor = new Map<string, QuoteSwatch>();
+  for (const f of formats ?? []) {
+    if (f.hidden) continue;
+    const size = formatSize(f.format);
+    for (const tier of f.tiers ?? []) {
+      const kind = slugKind(tier.name);
+      if (!types.some((t) => t.id === kind)) types.push({ id: kind, name: tier.name });
+      for (const c of tier.colors ?? []) {
+        const existing = byColor.get(c.id);
+        if (existing) {
+          if (!existing.sizes.includes(size)) existing.sizes.push(size);
+          continue;
+        }
+        byColor.set(c.id, {
+          id: c.id,
+          name: c.name,
+          kind,
+          kindNote: tier.name,
+          base: c.swatchHex ?? '#111114',
+          photo: c.swatchImageUrl ?? c.swatchThumbUrl ?? undefined,
+          sizes: [size],
+          price: KIND_PRICE[kind] ?? 2.6,
+        });
+      }
+    }
+  }
+  const colors = Array.from(byColor.values());
+  if (colors.length === 0) return { colors: CATALOG_COLORS, types: COLOR_TYPES, fromCatalog: false };
+  return { colors, types, fromCatalog: true };
+}
+
+export function usePressCatalogSwatches(): { colors: QuoteSwatch[]; types: { id: SwatchKind; name: string }[]; fromCatalog: boolean; resolved: boolean } {
   const { pressId, catalogFormats } = usePressBrand();
-  const { data } = useQuery<{ formats?: CatalogFormat[] }>({
+  const { data, isFetched } = useQuery<{ formats?: CatalogFormat[] }>({
     queryKey: [`/api/admin/manufacturers/${pressId}/catalog`],
     enabled: Boolean(pressId) && !catalogFormats,
     staleTime: 60_000,
   });
   const formats = catalogFormats ?? data?.formats;
-  return useMemo(() => {
-    const types: { id: SwatchKind; name: string }[] = [];
-    const byColor = new Map<string, QuoteSwatch>();
-    for (const f of formats ?? []) {
-      if (f.hidden) continue;
-      const size = formatSize(f.format);
-      for (const tier of f.tiers ?? []) {
-        const kind = slugKind(tier.name);
-        if (!types.some((t) => t.id === kind)) types.push({ id: kind, name: tier.name });
-        for (const c of tier.colors ?? []) {
-          const existing = byColor.get(c.id);
-          if (existing) {
-            if (!existing.sizes.includes(size)) existing.sizes.push(size);
-            continue;
-          }
-          byColor.set(c.id, {
-            id: c.id,
-            name: c.name,
-            kind,
-            kindNote: tier.name,
-            base: c.swatchHex ?? '#111114',
-            photo: c.swatchImageUrl ?? c.swatchThumbUrl ?? undefined,
-            sizes: [size],
-            price: KIND_PRICE[kind] ?? 2.6,
-          });
-        }
-      }
-    }
-    const colors = Array.from(byColor.values());
-    if (colors.length === 0) return { colors: CATALOG_COLORS, types: COLOR_TYPES };
-    return { colors, types };
-  }, [formats]);
+  // resolved = safe to act on `colors` (snap effects wait for this): either
+  // the catalog came in through context, there's no press to fetch for, or
+  // the fetch has settled (success OR error — error falls back to the demo set).
+  const resolved = Boolean(catalogFormats) || !pressId || isFetched;
+  return useMemo(
+    () => ({ ...swatchesFromCatalogFormats(formats), resolved }),
+    [formats, resolved],
+  );
 }
 
 // Type card — mini disc + name + color count (mirrors the color-setup type row).
@@ -2971,13 +2981,16 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
   };
 
   // ── Derived options per size ── (colors come from the press's own catalog)
-  const { colors: pressColors, types: pressColorTypes } = usePressCatalogSwatches();
+  const { colors: pressColors, types: pressColorTypes, fromCatalog, resolved: catalogResolved } = usePressCatalogSwatches();
   const colors = pressColors.filter((c) => c.sizes.includes(sizeId));
   const color = colors.find((c) => c.id === colorId) ?? colors[0] ?? pressColors[0] ?? CATALOG_COLORS[0];
 
   // Snap a stale/foreign selection (e.g. the old MRP demo ids) onto this
-  // press's catalog once it arrives.
+  // press's catalog — but ONLY after both the saved state has hydrated and
+  // the catalog fetch has settled, or a slow fetch would clobber a valid
+  // saved color with the demo fallback (and vice versa).
   useEffect(() => {
+    if (!catalogResolved || !hydratedRef.current) return;
     if (pressColors.length === 0) return;
     const current = pressColors.find((c) => c.id === colorId);
     if (!current) {
@@ -2988,7 +3001,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
       setColorKind(current.kind);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pressColors, colorId, colorKind, sizeId]);
+  }, [catalogResolved, pressColors, colorId, colorKind, sizeId]);
 
   const jacketOptions = JACKET_CATALOG[sizeId] ?? JACKET_CATALOG['12'];
   const jacketType = jacketOptions.find((j) => j.id === jacketId) ?? jacketOptions[0];
@@ -3358,18 +3371,22 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                   <div style={{ marginTop: 18, display: 'flex', gap: 12 }}>
                     {VINYL_SIZES.map((s) => {
                       const active = picked('size') && s.id === sizeId;
+                      // A real catalog with zero colors for this size = the press
+                      // doesn't offer it — word + disabled state, never color alone.
+                      const unavailable = fromCatalog && !pressColors.some((c) => c.sizes.includes(s.id));
                       return (
                         <button
                           key={s.id}
                           type="button"
-                          onClick={() => selectSize(s.id)}
+                          onClick={unavailable ? undefined : () => selectSize(s.id)}
+                          disabled={unavailable}
                           aria-pressed={active}
                           data-testid={`size-${s.id}`}
                           className="rounded-2xl bg-white transition-all hover:-translate-y-px focus:outline-none"
-                          style={{ flex: 1, padding: '16px 12px', border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: 'center', cursor: 'pointer' }}
+                          style={{ flex: 1, padding: '16px 12px', border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: 'center', cursor: unavailable ? 'not-allowed' : 'pointer', opacity: unavailable ? 0.45 : 1 }}
                         >
                           <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK }}>{s.label}</div>
-                          <div className="text-[11px]" style={{ marginTop: 3, color: '#a1a1a6' }}>{s.note}</div>
+                          <div className="text-[11px]" style={{ marginTop: 3, color: '#a1a1a6' }}>{unavailable ? 'Not offered' : s.note}</div>
                         </button>
                       );
                     })}

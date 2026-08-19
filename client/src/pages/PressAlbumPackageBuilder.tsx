@@ -57,6 +57,7 @@ import type { PressTemplate } from "@/components/admin/PressTemplateDownloads";
 // package art to what the press designed.
 import {
   CATALOG_COLORS as PKG_SWATCHES,
+  swatchesFromCatalogFormats,
   type CatalogFormat,
   VinylDisc as PkgRailDisc,
   PPB_COVERS,
@@ -999,15 +1000,16 @@ function railSwatch(pkg: RailPkg, catalog?: typeof PKG_SWATCHES) {
   );
 }
 
-function StartPackageCard({ pkg, pressName, selected, onSelect }: {
+function StartPackageCard({ pkg, pressName, selected, onSelect, catalogSwatches }: {
   pkg: RailPkg;
   pressName: string;
   selected: boolean;
   onSelect: () => void;
+  catalogSwatches?: typeof PKG_SWATCHES;
 }) {
   const [hover, setHover] = useState(false);
   const p = pkg.payload ?? {};
-  const swatch = railSwatch(pkg);
+  const swatch = railSwatch(pkg, catalogSwatches);
   const cover = PPB_COVERS.find((c) => c.id === String(p.coverId ?? "match"));
   const CoverAd = cover?.ad;
   const minRun = Number(p.minRun ?? p.builderState?.qty ?? DEFAULT_KIND_MIN_QTY[swatch.kind] ?? 300) || 300;
@@ -1165,6 +1167,14 @@ export function PressAlbumPackageBuilder({
     );
   }, [invited]);
 
+  // The press's real colors as builder swatches — drives the "Start from a
+  // package" rail cards + the name-based color prefill (never the demo set
+  // when the press has a real catalog).
+  const catalogSwatches = useMemo(
+    () => swatchesFromCatalogFormats((invited?.catalog?.formats as CatalogFormat[] | undefined) ?? null).colors,
+    [invited],
+  );
+
   // ── Decision state (seeded once from the saved SKU/addon) ──────────
   const [format, setFormat] = useState<AlbumFormat | null>(null);
   const [tierSel, setTierSel] = useState<Record<string, string>>({}); // format → tierId
@@ -1242,7 +1252,7 @@ export function PressAlbumPackageBuilder({
     const minRun = Number(pkg.payload?.minRun ?? bs.qty ?? 0) || null;
     setRunQty(minRun);
     // Match the package's vinyl color by NAME against this press's catalog.
-    const swatchName = railSwatch(pkg).name.trim().toLowerCase();
+    const swatchName = railSwatch(pkg, catalogSwatches).name.trim().toLowerCase();
     let matchedTier: CatalogTier | null = null;
     let matchedColor: CatalogColor | null = null;
     for (const t of row.tiers) {
@@ -1534,6 +1544,7 @@ export function PressAlbumPackageBuilder({
                       pressName={press?.name ?? "Press"}
                       selected={startPkgId === p.id}
                       onSelect={() => applyStartPackage(p)}
+                      catalogSwatches={catalogSwatches}
                     />
                   ))}
                 </div>
