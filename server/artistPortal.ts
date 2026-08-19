@@ -119,6 +119,19 @@ async function wallHandler(req: Request, res: Response) {
     pendingAlbumIds = new Set(((pr as any).rows ?? []).map((r: any) => r.album_id));
   }
 
+  // Art flag: a vinyl release with no completed-art upload on record yet
+  // (completed_template_checks row absent or components empty) still needs
+  // print-ready art (Ruby's Aug 19 restructure handoff, GOLDENROD).
+  let artAlbumIds = new Set<string>();
+  if (albums.length) {
+    const tc: any = await db.execute(sql`
+      SELECT album_id FROM completed_template_checks
+      WHERE album_id = ANY(${pgArray(albums.map((a: any) => a.id))})
+        AND jsonb_array_length(COALESCE(components, '[]'::jsonb)) > 0
+    `);
+    artAlbumIds = new Set(((tc as any).rows ?? []).map((r: any) => r.album_id));
+  }
+
   const cards = albums.map((a: any) => {
     const formats = shapeFormats(a, skuMap.get(a.id) ?? []);
     const anyLive = formats.some((f) => f.status === "live");
@@ -141,6 +154,8 @@ async function wallHandler(req: Request, res: Response) {
       formats,
       channel,
       moneyFlag: pendingAlbumIds.has(a.id) ? "Payment requested" : null,
+      needsArt:
+        formats.some((f) => f.kind === "vinyl") && !artAlbumIds.has(a.id),
       dimmed: !!a.is_hidden,
       visibility: a.is_hidden ? "Hidden" : a.is_prepping ? "Preview" : "Live",
     };
