@@ -52,6 +52,16 @@ import {
   type CatalogFormat as CatalogFormatRow,
 } from "./AdminManufacturer";
 import type { PressTemplate } from "@/components/admin/PressTemplateDownloads";
+// "Start from a package" rail (Ruby handoff, Aug 19 2026) — the card face
+// reuses the press builder's own renderers so the artist sees pixel-identical
+// package art to what the press designed.
+import {
+  CATALOG_COLORS as PKG_SWATCHES,
+  VinylDisc as PkgRailDisc,
+  PPB_COVERS,
+  matchVinylBackground,
+  DEFAULT_KIND_MIN_QTY,
+} from "./press-create/PressPackageBuilder";
 import { useAdminDark } from "@/lib/adminAppearance";
 import { resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
 
@@ -211,6 +221,27 @@ type InvitedPressResponse = {
     vinylPlaceholderUrl?: string | null;
   } | null;
   templates?: PressTemplate[];
+  // Ruby handoff (Aug 19 2026) — the press's LIVE saved packages ("Start
+  // from a package" rail). payload mirrors the press builder's save body.
+  packages?: {
+    id: string;
+    title: string;
+    payload?: {
+      builderState?: {
+        sizeId?: string;
+        discs?: number;
+        qty?: number;
+        colorId?: string;
+        colorKind?: string;
+      } | null;
+      summary?: string;
+      sell?: string;
+      coverId?: string;
+      minRun?: number;
+      minPerUnitCents?: number;
+      perUnitCents?: number;
+    } | null;
+  }[];
 };
 type SellResponse = { skus: AlbumSku[]; addons: AlbumAddon[] };
 type EditAccess = { canEdit: boolean; missingPermissions: string[] };
@@ -946,6 +977,107 @@ const DEED_TAKE_RATE = 0.25;
 const PLACEHOLDER_ART = "/album-placeholder.svg";
 const PMP_ICON = "/pmp-icon.png";
 
+// ─── "Start from a package" rail (Ruby handoff, Aug 19 2026) ─────────────
+// Apple-Music-wide cards: the ENTIRE card face is the jacket cover with the
+// press-designed vinyl disc arcing up from the bottom edge. Rendered with the
+// press builder's own cover/disc renderers so the art is pixel-identical to
+// what the press saved. Word + icon everywhere; quiet price line; the blue
+// "Start from this package" affordance earns full opacity on hover/selected.
+type RailPkg = NonNullable<InvitedPressResponse["packages"]>[number];
+
+function railSwatch(pkg: RailPkg) {
+  const bs = pkg.payload?.builderState ?? {};
+  return PKG_SWATCHES.find((c) => c.id === bs.colorId) ?? PKG_SWATCHES[0];
+}
+
+function StartPackageCard({ pkg, pressName, selected, onSelect }: {
+  pkg: RailPkg;
+  pressName: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const [hover, setHover] = useState(false);
+  const p = pkg.payload ?? {};
+  const swatch = railSwatch(pkg);
+  const cover = PPB_COVERS.find((c) => c.id === String(p.coverId ?? "match"));
+  const CoverAd = cover?.ad;
+  const minRun = Number(p.minRun ?? p.builderState?.qty ?? DEFAULT_KIND_MIN_QTY[swatch.kind] ?? 300) || 300;
+  const perUnitCents = Number(p.minPerUnitCents ?? p.perUnitCents ?? 0) || 0;
+  const sell = String(p.sell ?? "").trim();
+
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      onFocus={() => setHover(true)}
+      onBlur={() => setHover(false)}
+      aria-pressed={selected}
+      style={{ width: 460, flexShrink: 0, background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer", color: INK }}
+      data-testid={`start-package-${pkg.id}`}
+    >
+      {/* eyebrow + title + subtitle above the image (Apple Music order) */}
+      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: FAINT }}>
+        {pressName} package
+      </div>
+      <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.2, marginTop: 4, color: INK }}>
+        {pkg.title}
+      </div>
+      <div style={{ fontSize: 13, color: SUBINK, marginTop: 2, lineHeight: 1.35, minHeight: 18, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {String(p.summary ?? "")}
+      </div>
+
+      {/* WIDE card face — the cover IS the card, vinyl rising from the bottom */}
+      <div
+        style={{
+          position: "relative", marginTop: 12, height: 260, borderRadius: 14, overflow: "hidden",
+          border: selected ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+          transition: "transform 0.25s ease, box-shadow 0.25s ease",
+          transform: hover ? "translateY(-3px)" : "none",
+          boxShadow: hover ? "0 14px 34px rgba(0,0,0,0.5)" : "0 4px 14px rgba(0,0,0,0.35)",
+        }}
+      >
+        {!CoverAd || String(p.coverId ?? "match") === "match" ? (
+          <div style={{ position: "absolute", inset: 0, background: matchVinylBackground(swatch.base) }} />
+        ) : (
+          <CoverAd />
+        )}
+        <div
+          aria-hidden
+          style={{ position: "absolute", left: "50%", top: 78, transform: "translateX(-50%)", filter: "drop-shadow(0 -6px 22px rgba(0,0,0,0.45))" }}
+        >
+          <PkgRailDisc size={330} swatch={swatch} />
+        </div>
+        {selected && (
+          <span style={{ position: "absolute", top: 10, right: 10, zIndex: 3, display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px", borderRadius: 999, background: "rgba(11,11,12,0.82)", color: "#f5f5f7", fontSize: 11, fontWeight: 600 }}>
+            <Check className="w-3 h-3" style={{ color: BLUE }} strokeWidth={3} />
+            Selected
+          </span>
+        )}
+        {/* sell line lives in the TOP area of the cover, over a top scrim */}
+        <div aria-hidden style={{ position: "absolute", left: 0, right: 0, top: 0, height: 92, background: "linear-gradient(180deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0) 100%)" }} />
+        <div style={{ position: "absolute", left: 16, right: 100, top: 14, zIndex: 2, fontSize: 15, fontWeight: 600, color: "#fff", lineHeight: 1.3, letterSpacing: -0.1, textShadow: "0 1px 3px rgba(0,0,0,0.5)", opacity: sell ? 1 : 0.55 }}>
+          {sell || "Everything a first pressing needs."}
+        </div>
+      </div>
+
+      {/* quiet price line */}
+      {perUnitCents > 0 && (
+        <div style={{ fontSize: 12, color: SUBINK, marginTop: 10 }}>
+          From {money(perUnitCents)} / unit at {minRun.toLocaleString()}
+        </div>
+      )}
+
+      {/* quiet affordance — earns opacity on hover/selected */}
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 5, marginTop: 4, fontSize: 12.5, fontWeight: 600, color: BLUE, opacity: hover || selected ? 1 : 0.35, transition: "opacity 0.2s ease" }}>
+        Start from this package
+        <ChevronRight className="w-3.5 h-3.5" />
+      </div>
+    </button>
+  );
+}
+
 export function PressAlbumPackageBuilder({
   albumId,
   albumTitle,
@@ -1071,6 +1203,56 @@ export function PressAlbumPackageBuilder({
       }
     }
   }, [sell, invited, catalogFormats, savedSku, signedAddon]);
+
+  // ── "Start from a package" rail (Ruby handoff, Aug 19 2026) ─────────
+  // The invited press's LIVE packages ride the invited-press payload. Only
+  // the true invited press's rail shows — effectivePress fallbacks carry no
+  // packages array, so the section quietly stays hidden.
+  const railPackages = useMemo<RailPkg[]>(() => invited?.packages ?? [], [invited]);
+  const [startPkgId, setStartPkgId] = useState<string | null>(null);
+
+  // Prefill the builder from the press's saved package — best-effort mapping
+  // from the press builder's state onto THIS album's catalog choices:
+  //   size → catalog format (7" / LP / double by disc count), run → min run,
+  //   vinyl color → the catalog color whose name matches the package swatch.
+  // Anything that doesn't resolve is left alone; the artist keeps tuning.
+  // Client-local prefill only — like every other picker on this page it stays
+  // interactive for read-only viewers; Save alone is canEdit-gated (and the
+  // server gates writes regardless).
+  const applyStartPackage = (pkg: RailPkg) => {
+    if (startPkgId === pkg.id) { setStartPkgId(null); return; } // toggle off — deselect only, keep tuned state
+    const bs = pkg.payload?.builderState ?? {};
+    const wantFormat: AlbumFormat =
+      String(bs.sizeId ?? "12") === "7" ? "7_inch" : (bs.discs ?? 1) >= 2 ? "12_double" : "12_lp";
+    const row =
+      catalogFormats.find((r) => r.format === wantFormat) ??
+      catalogFormats.find((r) => r.format === "12_lp") ??
+      catalogFormats[0];
+    if (!row) return;
+    setFormat(row.format);
+    const minRun = Number(pkg.payload?.minRun ?? bs.qty ?? 0) || null;
+    setRunQty(minRun);
+    // Match the package's vinyl color by NAME against this press's catalog.
+    const swatchName = railSwatch(pkg).name.trim().toLowerCase();
+    let matchedTier: CatalogTier | null = null;
+    let matchedColor: CatalogColor | null = null;
+    for (const t of row.tiers) {
+      const c = t.colors.find((c) => c.name.trim().toLowerCase() === swatchName);
+      if (c) { matchedTier = t; matchedColor = c; break; }
+    }
+    if (matchedTier) {
+      setTierSel((p) => ({ ...p, [row.format]: matchedTier!.id }));
+      if (matchedColor) setColorSel((p) => ({ ...p, [matchedTier!.id]: matchedColor!.id }));
+    }
+    setStartPkgId(pkg.id);
+    setDirty(true);
+    toast({
+      title: `Prefilled from ${pkg.title}`,
+      description: matchedTier
+        ? "Size, run and color are set — keep tuning below."
+        : "Size and run are set — pick the vinyl color below.",
+    });
+  };
 
   const fmtRow = useMemo(
     () => catalogFormats.find((r) => r.format === format) ?? null,
@@ -1313,6 +1495,37 @@ export function PressAlbumPackageBuilder({
 
           {/* RIGHT — the decisions. Above the sliding jacket, opaque canvas bg. */}
           <div className="min-w-0" style={{ position: "relative", zIndex: 2, backgroundColor: CANVAS }}>
+            {/* Start from a package (Ruby handoff, Aug 19 2026) — only when
+                the invited press has LIVE packages; otherwise the builder
+                opens on Pick-a-size exactly as before. */}
+            {railPackages.length > 0 && (
+              <section data-testid="section-start-packages" style={{ marginBottom: 40 }}>
+                <TwoTone lead="Start from a package." rest="Or build your own below." />
+                <p style={{ fontSize: 13, color: SUBINK, marginTop: 8, maxWidth: 620, lineHeight: 1.45 }}>
+                  Ready builds from {press?.name ?? "your press"} — pick one to prefill your
+                  record, then keep tuning.
+                </p>
+                <div
+                  style={{ marginTop: 20, display: "flex", gap: 20, overflowX: "auto", paddingBottom: 8, scrollbarWidth: "thin" }}
+                  data-testid="rail-start-packages"
+                >
+                  {railPackages.map((p) => (
+                    <StartPackageCard
+                      key={p.id}
+                      pkg={p}
+                      pressName={press?.name ?? "Press"}
+                      selected={startPkgId === p.id}
+                      onSelect={() => applyStartPackage(p)}
+                    />
+                  ))}
+                </div>
+                <div className="inline-flex items-center gap-1.5" style={{ marginTop: 6, fontSize: 12.5, color: FAINT }}>
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Prefer to start clean? The builder below is yours from scratch.
+                </div>
+              </section>
+            )}
+
             {/* Pick a size */}
             <TwoTone lead="Pick a size." rest="Prices follow the record." />
             <SizeCards

@@ -26,6 +26,7 @@ import {
   organizations,
   payoutFormatCosts,
   pressFormatCosts,
+  pressEstimates,
   orders,
   orderItems,
   orderCopies,
@@ -1941,6 +1942,29 @@ export function registerCommerceRoutes(app: Express) {
           discCount: t.discCount,
           templateFileUrl: t.templateFileUrl,
         })),
+      // Ruby handoff (Aug 19 2026) — the press's LIVE saved packages feed the
+      // artist builder's "Start from a package" rail. Embedded here (like
+      // catalog/templates) because /api/press/:id/estimates is press-scoped
+      // and blocks artists. Live rows only — drafts/archived never surface
+      // to artists. payload carries builderState + the card fields the rail
+      // renders (sell/coverId/minRun/minPerUnitCents).
+      packages: await (async () => {
+        try {
+          const rows = await db
+            .select({
+              id: pressEstimates.id,
+              title: pressEstimates.title,
+              payload: pressEstimates.payload,
+              updatedAt: pressEstimates.updatedAt,
+            })
+            .from(pressEstimates)
+            .where(and(eq(pressEstimates.pressId, pressId), eq(pressEstimates.kind, "package"), eq(pressEstimates.status, "live")))
+            .orderBy(sql`${pressEstimates.updatedAt} DESC`);
+          return rows;
+        } catch {
+          return [];
+        }
+      })(),
     });
   });
   // Sku-press summary for InvitedByPressPanel: when no explicit plant is
