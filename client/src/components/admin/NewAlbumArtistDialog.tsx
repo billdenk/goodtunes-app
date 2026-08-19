@@ -193,12 +193,15 @@ function formatFollowers(n: number): string {
 // candidate is the exact-name match (the most-likely pick). Spotify ranks
 // exact matches first, but with popularity=0 across obscure candidates the
 // operator still needs a visible "this is the one you typed" cue.
+// Folds case/diacritics and collapses whitespace but KEEPS punctuation
+// and symbols — stripping them made "How???" and "$how" identical, which
+// badged (and visually endorsed) the wrong artist as the "Exact match".
 function normalizeName(s: string): string {
   return s
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 

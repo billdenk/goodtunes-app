@@ -166,6 +166,20 @@ function normalize(s: string): string {
     .trim();
 }
 
+// Strict variant used for the "is this THE artist they asked for?"
+// decision. Folds case/diacritics and collapses whitespace but KEEPS
+// punctuation and symbols — "How???" and "$how" both loose-normalize to
+// "how", which once auto-matched the wrong artist. Loose normalize()
+// stays for ranking/pooling only.
+function normalizeStrict(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Search Spotify for an artist by name and return the best match.
 // Returns null when not configured, on transport error, or when there is
 // no plausible hit — callers should treat this as "leave the field
@@ -215,7 +229,10 @@ export async function searchArtist(rawName: string): Promise<SpotifyArtistMatch 
   if (items.length === 0) return null;
 
   const wanted = normalize(name);
-  const exact = items.filter((a) => normalize(a.name) === wanted);
+  const wantedStrict = normalizeStrict(name);
+  const strictExact = items.filter((a) => normalizeStrict(a.name) === wantedStrict);
+  const looseExact = items.filter((a) => normalize(a.name) === wanted);
+  const exact = strictExact.length > 0 ? strictExact : looseExact;
   const pool = exact.length > 0 ? exact : items;
   // Within the pool, pick the most popular (Spotify's `popularity` is
   // 0-100; ties are rare). Without an exact match we still return the
@@ -233,7 +250,7 @@ export async function searchArtist(rawName: string): Promise<SpotifyArtistMatch 
   // Person row. Callers treat non-confident matches as "leave empty"
   // today; if we later want to surface them for manual review, the
   // popularity + photo are still on the return value.
-  const confident = exact.length === 1;
+  const confident = strictExact.length === 1;
 
   return {
     id: best.id,
@@ -317,8 +334,7 @@ export async function searchArtistForImport(
 ): Promise<SpotifyImportLookup> {
   const all = await searchArtistCandidates(rawName, Math.max(candidateLimit, 5));
   if (all.length === 0) return { status: "none", candidates: [] };
-  const wanted = normalize(rawName);
-  const exact = all.filter((a) => normalize(a.name) === wanted);
+  const exact = all.filter((a) => normalizeStrict(a.name) === normalizeStrict(rawName));
   const candidates = all.slice(0, candidateLimit);
   if (exact.length === 1) {
     return { status: "matched", match: exact[0], candidates };
