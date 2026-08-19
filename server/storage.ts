@@ -2051,8 +2051,26 @@ export class DbStorage implements IStorage {
     if (typeof values.bio === "string") {
       values.bio = stripAppleMusicBoilerplate(values.bio) || null;
     }
-    const [p] = await db.insert(people).values(values).returning();
-    return p;
+    try {
+      const [p] = await db.insert(people).values(values).returning();
+      return p;
+    } catch (err: any) {
+      // Race-safe Spotify dedupe (people_spotify_url_active_uniq): a
+      // conflicting insert for an already-catalogued Spotify artist must
+      // return the existing active Person, not surface a raw 23505 —
+      // multiple create paths (admin people POST, press add-artist,
+      // credits import) all funnel through here.
+      const code = err?.cause?.code ?? err?.code;
+      const constraint = err?.cause?.constraint ?? err?.constraint;
+      if (code === "23505" && constraint === "people_spotify_url_active_uniq" && values.spotifyUrl) {
+        const [existing] = await db
+          .select()
+          .from(people)
+          .where(and(eq(people.spotifyUrl, values.spotifyUrl), isNull(people.deletedAt)));
+        if (existing) return existing;
+      }
+      throw err;
+    }
   }
   async updatePerson(id: string, data: Partial<Person>): Promise<Person | undefined> {
     const { id: _i, ...rest } = data as any;
