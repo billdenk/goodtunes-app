@@ -17,14 +17,19 @@
 // - The mock-only Sun/Moon appearance toggle was removed per the handoff
 //   README ("Otis uses its own theming") — mode reads the operator
 //   Light/Dark/System preference via useAdminDark().
-// - Overlay chips / layers button / Download test proof / Try another file
-//   remain decorative this round (flagged, next wiring pass drives them off
-//   the press live-test overlay engine per the README).
+// - Task #3184: the viewer is now REAL — the matched press template PDF is
+//   fetched (artist-scoped route), rendered client-side via the shared
+//   gtOverlayEngine + TemplateArtViewer (the same pdf.js + GT-layer engine the
+//   press live-test page uses), and the artist's checked art is seated at its
+//   measured placement with working view tabs, zone chips, Line/Area, zoom,
+//   layers popover, and a functional Download test proof. Uploads report real
+//   XHR progress (thin determinate bar → "Measuring…"), matching press canon.
 //
 // Canon: statuses are word + icon (Bill is colorblind), never color alone; real
 // GoodTunes(R) with the literal (R); "estimate" never "quote"; sentence case.
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type * as pdfjsTypes from 'pdfjs-dist';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useRoute } from 'wouter';
 import {
@@ -33,10 +38,7 @@ import {
   CheckCircle2,
   MinusCircle,
   BadgeCheck,
-  Layers,
   Download,
-  PenLine,
-  ZoomIn,
   Upload,
   Lock,
   Circle,
@@ -45,7 +47,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { queryClient, apiRequest } from '@/lib/queryClient';
-import { uploadAdminDoc } from '@/lib/adminUpload';
+import { uploadAdminDocWithProgress } from '@/lib/adminUpload';
+import { loadPdfjs, renderPage, extractGtLayers } from '@/pages/press-templates/gtOverlayEngine';
+import { TemplateArtViewer, type ViewerTemplate, type ViewerArt } from '@/pages/press-templates/TemplateArtViewer';
 import { useToast } from '@/hooks/use-toast';
 import { useAdminDark } from '@/lib/adminAppearance';
 import { VENDOR_SPECS, type VendorId, type CompletedTemplateConfig, type FinishedComponentSpec } from '@shared/vendorSpecs';
@@ -65,6 +69,7 @@ type Theme = {
   chipBorder: string;
   hoverCard: string;
   headerBg: string;
+  blue: string;
 };
 
 const THEMES: Record<'light' | 'dark', Theme> = {
@@ -81,6 +86,7 @@ const THEMES: Record<'light' | 'dark', Theme> = {
     chipBorder: '#d9d9de',
     hoverCard: 'hover:bg-slate-100',
     headerBg: 'rgba(255,255,255,0.72)',
+    blue: '#0071e3',
   },
   dark: {
     canvas: '#161618',
@@ -95,6 +101,7 @@ const THEMES: Record<'light' | 'dark', Theme> = {
     chipBorder: '#3a3a40',
     hoverCard: 'hover:bg-white/10',
     headerBg: 'rgba(22,22,24,0.72)',
+    blue: '#319ed8',
   },
 };
 
@@ -146,17 +153,8 @@ function fmtDate(iso: string | null | undefined): string {
   }
 }
 
-// ─── Viewer toolbar tabs + overlay chips — mirror the live page verbatim. ────
-const VIEW_TABS = ['Full Template', 'Back', 'Front', 'Spine'] as const;
-type ViewTab = (typeof VIEW_TABS)[number];
-const OVERLAY_CHIPS: Array<{ id: string; label: string; hasCaret?: boolean }> = [
-  { id: 'template', label: 'Template off' },
-  { id: 'bleed', label: 'Bleed off' },
-  { id: 'cut', label: 'Cut off' },
-  { id: 'spine', label: 'Spine off' },
-  { id: 'front', label: 'Front off', hasCaret: true },
-  { id: 'back', label: 'Back off', hasCaret: true },
-];
+// (The decorative VIEW_TABS/OVERLAY_CHIPS consts are gone — the viewer's
+// controls are now driven by the template's real measured layers, Task #3184.)
 
 // `embedded` — rendered inside the artist portal's OperatorShell (rails stay
 // put; gogoods, Aug 18 2026): the page drops its own full-viewport canvas +
@@ -175,10 +173,6 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   const mode: 'light' | 'dark' = dark ? 'dark' : 'light';
   const t = THEMES[mode];
 
-  const [view, setView] = useState<ViewTab>('Full Template');
-  const [lineArea, setLineArea] = useState<'Line' | 'Area'>('Line');
-  const [zoom, setZoom] = useState(100);
-
   const scan = useQuery<ScanResponse>({
     queryKey: ['/api/admin/albums', albumId, 'completed-template'],
     enabled: !!albumId,
@@ -189,6 +183,9 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   // object storage, then the same measured-check run the press panel uses;
   // a fresh checks card + a new "File history" row come back in the payload.
   const [uploading, setUploading] = useState(false);
+  // Real upload progress (0..1) for the thin determinate bar — null when no
+  // upload is in flight (Task #3184; press live-test canon).
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
   const check = useMutation({
     mutationFn: async (vars: { url: string; fileName: string }) => {
       const r = await apiRequest('POST', `/api/admin/albums/${albumId}/completed-template/check`, {
@@ -207,13 +204,15 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   const handleReplaceFile = async (file: File | undefined) => {
     if (!file || uploading || check.isPending) return;
     setUploading(true);
+    setUploadPct(0);
     try {
-      const url = await uploadAdminDoc(file);
+      const url = await uploadAdminDocWithProgress(file, (f) => setUploadPct(f));
       check.mutate({ url, fileName: file.name });
     } catch (e: any) {
       toast({ title: e?.message || 'Upload failed', variant: 'destructive' });
     } finally {
       setUploading(false);
+      setUploadPct(null);
     }
   };
 
@@ -227,14 +226,93 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   const spec = scan.data?.requiredComponents.find((s) => s.id === componentId) ?? null;
   const vendorLabel = scan.data?.vendorId ? (VENDOR_SPECS[scan.data.vendorId]?.label ?? scan.data.vendorId.toUpperCase()) : '';
 
+  // ── Task #3184: load the matched press template PDF (artist-scoped server
+  // route — the componentId only resolves within THIS album's own specs) and
+  // measure its GT layers client-side, exactly like the press live-test page.
+  const [tpl, setTpl] = useState<{ template: ViewerTemplate; doc: pdfjsTypes.PDFDocumentProxy; blob: Blob } | null>(null);
+  const [tplState, setTplState] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [tplError, setTplError] = useState<string | null>(null);
+  const hasTemplateFile = !!spec?.templateFileUrl;
+  useEffect(() => {
+    if (!albumId || !componentId || !hasTemplateFile) { setTpl(null); setTplState('idle'); return; }
+    let cancelled = false;
+    setTplState('loading'); setTplError(null);
+    void (async () => {
+      try {
+        const r = await apiRequest('GET', `/api/admin/albums/${albumId}/completed-template/template-file/${encodeURIComponent(componentId)}`);
+        const blob = await r.blob();
+        const doc = await (await loadPdfjs()).getDocument({ data: await blob.arrayBuffer() }).promise;
+        const [{ img, wMm, hMm }, { layers }] = [await renderPage(doc, 1), await extractGtLayers(doc, 1)];
+        if (cancelled) return;
+        setTpl({ template: { img, wMm, hMm, layers }, doc, blob });
+        setTplState('ready');
+      } catch (e: any) {
+        if (cancelled) return;
+        setTpl(null);
+        setTplState('error');
+        // apiRequest throws "422: {json}" — surface the honest message.
+        const raw = typeof e?.message === 'string' ? e.message : '';
+        const m = raw.match(/"message"\s*:\s*"([^"]+)"/);
+        setTplError(m?.[1] ?? "The press template couldn't be loaded right now.");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [albumId, componentId, hasTemplateFile]);
+
+  // Download the template the artist is designing into (task: "view AND
+  // download"). Served from the already-fetched blob so auth headers never
+  // matter for the anchor.
+  const downloadTemplate = () => {
+    if (!tpl) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(tpl.blob);
+    a.download = `${(spec?.label ?? 'press-template').replace(/[^\w\- ]+/g, '')}.pdf`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 30_000);
+  };
+
+  // ── The artist's checked art, at real measured size where possible: own
+  // stored PDF → pdf.js render with mm; otherwise the server preview raster
+  // (contain-fit by pixel aspect); otherwise an honest "no preview".
+  const [art, setArt] = useState<ViewerArt>(null);
+  const assetUrl = component?.assetUrl ?? null;
+  const previewUrl = component?.previewUrl ?? null;
+  const artFileName = component?.fileName ?? null;
+  useEffect(() => {
+    let cancelled = false;
+    setArt(null);
+    void (async () => {
+      if (assetUrl && /^\/objects\//.test(assetUrl) && /\.pdf(\?|$)/i.test(assetUrl)) {
+        try {
+          const r = await fetch(assetUrl, { credentials: 'include' });
+          if (r.ok) {
+            const doc = await (await loadPdfjs()).getDocument({ data: await r.arrayBuffer() }).promise;
+            const { img, wMm, hMm } = await renderPage(doc, 1);
+            if (!cancelled) setArt({ name: artFileName ?? 'Art', img, wMm, hMm });
+            return;
+          }
+        } catch {
+          // fall through to the server preview raster
+        }
+      }
+      if (previewUrl) {
+        const image = new Image();
+        image.onload = () => {
+          if (!cancelled) setArt({ name: artFileName ?? 'Art', img: previewUrl, wMm: null, hMm: null, pxAspect: image.naturalWidth / Math.max(1, image.naturalHeight) });
+        };
+        image.onerror = () => {
+          if (!cancelled) setArt({ name: artFileName ?? 'Art', img: previewUrl, wMm: null, hMm: null });
+        };
+        image.src = previewUrl;
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [assetUrl, previewUrl, artFileName]);
+
   // MOCK_ART equivalent — breadcrumb label, art image, alt.
   const ART = {
     title: component?.label ?? spec?.label ?? 'Art file',
     image: component?.previewUrl ?? null,
-    // Center labels render TWO faces (Side A / Side B) — the server stores a
-    // second trim-square raster for page 2 (gogoods, Aug 18 2026: "only
-    // showing one of two of the labels").
-    image2: component?.previewUrl2 ?? null,
     alt: `${component?.label ?? 'Art'} seated in the press template`,
   };
 
@@ -242,7 +320,7 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   const TEMPLATE = {
     name: spec?.label ? `${vendorLabel ? `${vendorLabel} \u00b7 ` : ''}${spec.label}` : vendorLabel || 'Press template',
     certifiedDate: fmtDate(scan.data?.updatedAt),
-    size: null as string | null, // template artboard size not in the scan payload — omitted, never faked
+    size: tpl ? `${tpl.template.wMm.toFixed(1)} × ${tpl.template.hMm.toFixed(1)} mm` : null, // measured live off the template PDF — never faked
     uploaded: scan.data?.updatedAt ? `checked ${fmtDate(scan.data.updatedAt)}` : '',
     artFilename: component?.fileName ?? '',
   };
@@ -329,6 +407,8 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
           allPass={allPass}
           lock={lock}
           busy={uploading || check.isPending}
+          uploadPct={uploadPct}
+          measuring={check.isPending}
           onReplaceFile={handleReplaceFile}
         />
 
@@ -340,6 +420,17 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
         <div className="rounded-2xl" style={{ marginTop: 16, padding: '18px 20px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="template-header">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h2 className="text-[16px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{TEMPLATE.name}</h2>
+            {tpl && (
+              <button
+                type="button"
+                onClick={downloadTemplate}
+                className={cn('inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium transition-colors', t.hoverCard)}
+                style={{ padding: '4px 12px', border: `1px solid ${t.hairline}`, color: t.subink }}
+                data-testid="button-download-template"
+              >
+                <Download className="w-3.5 h-3.5 flex-shrink-0" /> Download template
+              </button>
+            )}
             {allPass && (
               <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: t.ready }} data-testid="badge-certified">
                 <BadgeCheck className="w-4 h-4" /> Certified
@@ -352,130 +443,50 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
           </p>
         </div>
 
-        {/* 5 · Viewer toolbar — segmented view tabs left; artist-quiet actions
-            right (layers view + Download test proof; press •••/Save removed). */}
-        <div className="flex items-center justify-between gap-4 flex-wrap" style={{ marginTop: 16 }}>
-          <div className="inline-flex items-center rounded-full p-0.5" style={{ background: t.soft, border: `1px solid ${t.hairline}` }} data-testid="view-tabs" role="tablist">
-            {VIEW_TABS.map((tab) => {
-              const active = tab === view;
-              return (
-                <button
-                  key={tab}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setView(tab)}
-                  className="h-8 px-3.5 rounded-full text-[12.5px] font-medium transition-colors whitespace-nowrap"
-                  style={{ color: active ? t.ink : t.subink, background: active ? t.card : 'transparent', boxShadow: active ? '0 1px 2px rgba(0,0,0,0.18)' : undefined }}
-                  data-testid={`view-tab-${tab.toLowerCase().replace(/\s+/g, '-')}`}
-                >
-                  {tab}
-                </button>
-              );
-            })}
+        {/* 5–7 · The REAL viewer (Task #3184) — press template + art + GT
+            overlays via the shared TemplateArtViewer (same engine as the press
+            live-test page). Honest states when the template can't load. */}
+        {tplState === 'loading' && (
+          <p className="text-[13px]" style={{ marginTop: 20, color: t.faint }} data-testid="template-loading">
+            Loading the press template&hellip;
+          </p>
+        )}
+        {tplState === 'error' && (
+          <p className="text-[13px]" style={{ marginTop: 20, color: t.subink }} data-testid="template-error">
+            {tplError}
+          </p>
+        )}
+        {tplState === 'idle' && !hasTemplateFile && (
+          <p className="text-[13px]" style={{ marginTop: 20, color: t.subink }} data-testid="template-missing">
+            The press hasn&rsquo;t attached a template file for this piece yet &mdash; the checks above still ran against its measured specs.
+          </p>
+        )}
+        {tpl ? (
+          <TemplateArtViewer
+            template={tpl.template}
+            pdfDoc={tpl.doc}
+            art={art}
+            dark={mode === 'dark'}
+            t={{ card: t.card, soft: t.soft, hairline: t.hairline, ink: t.ink, subink: t.subink, faint: t.faint, blue: t.blue }}
+            proofName={component.fileName ?? spec?.label ?? 'art-test'}
+          />
+        ) : (
+          /* No template PDF to seat the art in — show the art raster alone
+             (previous behavior), or the honest no-preview message. */
+          <div
+            className="w-full overflow-hidden rounded-2xl flex items-center justify-center"
+            style={{ marginTop: 14, background: '#ffffff', border: `1px solid ${t.hairline}`, padding: '56px 40px' }}
+            data-testid="template-canvas"
+          >
+            {ART.image ? (
+              <img src={ART.image} alt={ART.alt} className="w-full h-auto" data-testid="canvas-art" />
+            ) : (
+              <p className="text-[13px]" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid="canvas-no-preview">
+                No preview could be generated for this file.
+              </p>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <button type="button" className={cn('inline-flex items-center justify-center rounded-full transition-colors', t.hoverCard)} style={{ width: 34, height: 34, border: `1px solid ${t.hairline}`, color: t.subink }} data-testid="button-layers" aria-label="Layers view">
-              <Layers className="w-4 h-4" />
-            </button>
-            <button
-              type="button"
-              className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
-              style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
-              data-testid="button-download-proof"
-            >
-              <Download className="w-4 h-4 flex-shrink-0" /> Download test proof
-            </button>
-          </div>
-        </div>
-
-        {/* 6 · Overlay-chip row — toggle chips left; Line|Area seg + zoom right.
-            Matches the live page (this replaces the invented slider UI). */}
-        <div className="flex items-center justify-between gap-4 flex-wrap" style={{ marginTop: 14 }}>
-          <div className="flex items-center gap-2 flex-wrap" data-testid="overlay-chips">
-            {OVERLAY_CHIPS.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className={cn('inline-flex items-center gap-1.5 h-7 rounded-full text-[12px] font-medium transition-colors', t.hoverCard)}
-                style={{ padding: c.hasCaret ? '0 8px 0 10px' : '0 12px', color: t.subink, border: `1px solid ${t.chipBorder}` }}
-                data-testid={`overlay-${c.id}`}
-              >
-                <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 6, height: 6, border: `1.5px solid ${t.faint}` }} />
-                {c.label}
-                {c.hasCaret && <ChevronDown className="w-3.5 h-3.5" style={{ color: t.faint }} />}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-2">
-            {/* Line | Area segmented */}
-            <div className="inline-flex items-center rounded-full p-0.5" style={{ background: t.soft, border: `1px solid ${t.hairline}` }} data-testid="line-area">
-              {(['Line', 'Area'] as const).map((opt) => {
-                const active = opt === lineArea;
-                return (
-                  <button
-                    key={opt}
-                    type="button"
-                    onClick={() => setLineArea(opt)}
-                    className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[12px] font-medium transition-colors"
-                    style={{ color: active ? t.ink : t.subink, background: active ? t.card : 'transparent', boxShadow: active ? '0 1px 2px rgba(0,0,0,0.18)' : undefined }}
-                    data-testid={`la-${opt.toLowerCase()}`}
-                  >
-                    {opt === 'Line' && <PenLine className="w-3.5 h-3.5" />}
-                    {opt === 'Area' && <Layers className="w-3.5 h-3.5" />}
-                    {opt}
-                  </button>
-                );
-              })}
-            </div>
-            {/* Zoom − 100% + */}
-            <div className="inline-flex items-center gap-1 rounded-full" style={{ padding: '0 4px', border: `1px solid ${t.hairline}` }} data-testid="zoom">
-              <button type="button" onClick={() => setZoom((z) => Math.max(50, z - 10))} className={cn('inline-flex items-center justify-center rounded-full transition-colors', t.hoverCard)} style={{ width: 28, height: 28, color: t.subink }} data-testid="button-zoom-out" aria-label="Zoom out">
-                <span className="text-[16px] leading-none" style={{ marginTop: -1 }}>&minus;</span>
-              </button>
-              <span className="inline-flex items-center gap-1 text-[12.5px] font-medium tabular-nums" style={{ color: t.subink, minWidth: 52, justifyContent: 'center' }}>
-                <ZoomIn className="w-3.5 h-3.5" style={{ color: t.faint }} /> {zoom}%
-              </span>
-              <button type="button" onClick={() => setZoom((z) => Math.min(200, z + 10))} className={cn('inline-flex items-center justify-center rounded-full transition-colors', t.hoverCard)} style={{ width: 28, height: 28, color: t.subink }} data-testid="button-zoom-in" aria-label="Zoom in">
-                <span className="text-[15px] leading-none">+</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* 7 · Big white canvas — the art seated in it (wide, not square),
-            zoom-scaled. Server first-page raster when one exists — honest
-            empty canvas otherwise, never a fake. */}
-        <div
-          className="w-full overflow-hidden rounded-2xl flex items-center justify-center"
-          style={{ marginTop: 14, background: '#ffffff', border: `1px solid ${t.hairline}`, padding: '56px 40px' }}
-          data-testid="template-canvas"
-        >
-          {ART.image ? (
-            <div className="w-full flex flex-col items-center" style={{ gap: 32 }}>
-              <img
-                src={ART.image}
-                alt={ART.alt}
-                className="w-full h-auto"
-                style={{ maxWidth: `${zoom}%`, transition: 'max-width 0.1s linear' }}
-                data-testid="canvas-art"
-              />
-              {ART.image2 && (
-                <img
-                  src={ART.image2}
-                  alt={`${ART.alt} — second face`}
-                  className="w-full h-auto"
-                  style={{ maxWidth: `${zoom}%`, transition: 'max-width 0.1s linear' }}
-                  data-testid="canvas-art-face-2"
-                />
-              )}
-            </div>
-          ) : (
-            <p className="text-[13px]" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid="canvas-no-preview">
-              No preview could be generated for this file.
-            </p>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
@@ -493,6 +504,8 @@ function UploadCard({
   allPass,
   lock,
   busy,
+  uploadPct,
+  measuring,
   onReplaceFile,
 }: {
   t: Theme;
@@ -501,6 +514,10 @@ function UploadCard({
   allPass: boolean;
   lock: LockState;
   busy: boolean;
+  /** 0..1 while the file's bytes stream up; null otherwise (Task #3184). */
+  uploadPct: number | null;
+  /** True while the server measures the uploaded file. */
+  measuring: boolean;
   onReplaceFile: (file: File | undefined) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -572,7 +589,30 @@ function UploadCard({
             </div>
           ) : (
             <div className="flex items-center justify-between gap-3" style={{ padding: '12px 20px', borderTop: `1px solid ${t.hairline}` }}>
-              <span className="text-[12px]" style={{ color: t.faint }}>Replaces the current file and re-runs the checks.</span>
+              {busy ? (
+                /* Apple-canon thin progress (press live-test treatment):
+                   determinate while the bytes stream up, gentle pulse while
+                   the server measures — never a bare "Checking…" button. */
+                <span className="min-w-0 flex-1" data-testid="upload-progress">
+                  <style>{`@keyframes gt-ink-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }`}</style>
+                  <span className="block text-[12px] font-medium" style={{ color: t.subink, animation: measuring && uploadPct === null ? 'gt-ink-pulse 1.4s ease-in-out infinite' : undefined }}>
+                    {uploadPct !== null ? `Uploading\u2026 ${Math.round(uploadPct * 100)}%` : 'Measuring\u2026'}
+                  </span>
+                  <span className="block rounded-full overflow-hidden" style={{ marginTop: 6, height: 3, backgroundColor: t.soft }}>
+                    <span
+                      className="block h-full rounded-full"
+                      style={{
+                        backgroundColor: t.blue,
+                        width: uploadPct !== null ? `${Math.round(uploadPct * 100)}%` : '100%',
+                        transition: 'width 160ms ease-out',
+                        animation: uploadPct === null ? 'gt-ink-pulse 1.4s ease-in-out infinite' : undefined,
+                      }}
+                    />
+                  </span>
+                </span>
+              ) : (
+                <span className="text-[12px]" style={{ color: t.faint }}>Replaces the current file and re-runs the checks.</span>
+              )}
               <input
                 ref={fileRef}
                 type="file"
@@ -589,7 +629,7 @@ function UploadCard({
                 style={{ padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.ink, opacity: busy ? 0.6 : undefined }}
                 data-testid="button-upload-another"
               >
-                <Upload className="w-4 h-4 flex-shrink-0" /> {busy ? 'Checking\u2026' : 'Upload another file'}
+                <Upload className="w-4 h-4 flex-shrink-0" /> {busy ? (uploadPct !== null ? 'Uploading\u2026' : 'Measuring\u2026') : 'Upload another file'}
               </button>
             </div>
           )}

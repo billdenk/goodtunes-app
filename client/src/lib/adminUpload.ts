@@ -98,6 +98,81 @@ const DOC_CONTENT_TYPES: Record<string, string> = {
 
 export const DOC_UPLOAD_ACCEPT = ".pdf,.zip,.ai,.png,.jpg,.jpeg,.tif,.tiff";
 
+// Task #3184 — progress-reporting variant of `uploadAdminDoc` for surfaces
+// that show the Apple-canon thin determinate bar while the bytes stream up
+// (artist art-test page; mirrors the press live-test's XHR pattern — fetch
+// can't report UPLOAD progress). Same sign → PUT → finalize flow; `onProgress`
+// receives 0..1 for the PUT leg only.
+export async function uploadAdminDocWithProgress(
+  file: File,
+  onProgress: (fraction: number) => void,
+): Promise<string> {
+  const token = getAuthToken();
+  if (!token) {
+    throw new Error("Sign out and back in — your session token is missing.");
+  }
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const contentType = file.type || DOC_CONTENT_TYPES[ext];
+  if (!contentType || !Object.values(DOC_CONTENT_TYPES).includes(contentType)) {
+    throw new Error("Use a PDF, AI/EPS, ZIP, PNG, JPEG, or TIFF file.");
+  }
+
+  let signRes: Response;
+  try {
+    signRes = await fetch("/api/admin/upload-doc/sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      credentials: "include",
+      body: JSON.stringify({ contentType }),
+    });
+  } catch (networkErr) {
+    throw new Error(friendlyUploadError(networkErr, { noun: "file" }));
+  }
+  if (!signRes.ok) {
+    const body = await signRes.json().catch(() => ({}) as { message?: string });
+    throw new Error(
+      friendlyUploadError(`${signRes.status}: ${body?.message ?? ""}`, { noun: "file" }),
+    );
+  }
+  const { uploadUrl, finalPath } = (await signRes.json()) as {
+    uploadUrl: string;
+    finalPath: string;
+  };
+
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", uploadUrl);
+    xhr.setRequestHeader("Content-Type", contentType);
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable) onProgress(Math.min(ev.loaded / ev.total, 1));
+    };
+    xhr.upload.onload = () => onProgress(1);
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(friendlyUploadError(`${xhr.status}: upload failed`, { noun: "file" })));
+    xhr.onerror = () => reject(new Error(friendlyUploadError("network", { noun: "file" })));
+    xhr.timeout = 6 * 60_000;
+    xhr.ontimeout = () => reject(new Error(friendlyUploadError("timeout", { noun: "file" })));
+    xhr.send(file);
+  });
+
+  const finRes = await fetch("/api/admin/upload-doc/finalize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    credentials: "include",
+    body: JSON.stringify({ finalPath }),
+  });
+  if (!finRes.ok) {
+    const body = await finRes.json().catch(() => ({}) as { message?: string });
+    throw new Error(
+      friendlyUploadError(`${finRes.status}: ${body?.message ?? ""}`, { noun: "file" }),
+    );
+  }
+  const { url } = (await finRes.json()) as { url: string };
+  return url;
+}
+
 export async function uploadAdminDoc(file: File): Promise<string> {
   const token = getAuthToken();
   if (!token) {

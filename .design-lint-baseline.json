@@ -21085,6 +21085,11 @@
     "snippet": "<span className=\"text-fan-secondary uppercase tracking-[0.1em] text-[10px]\">DEV</span>"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "blue: '#319ed8',"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<ol className=\"flex flex-wrap items-center gap-2 text-[13px]\" style={{ color: t.faint }}>"
@@ -21107,6 +21112,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className={cn('inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium transition-colors', t.hoverCard)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[13px] font-semibold\" style={{ color: t.ready }} data-testid=\"badge-certified\">"
   },
   {
@@ -21122,37 +21132,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "className=\"h-8 px-3.5 rounded-full text-[12.5px] font-medium transition-colors whitespace-nowrap\""
+    "snippet": "<p className=\"text-[13px]\" style={{ marginTop: 20, color: t.faint }} data-testid=\"template-loading\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}"
+    "snippet": "<p className=\"text-[13px]\" style={{ marginTop: 20, color: t.subink }} data-testid=\"template-error\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "className={cn('inline-flex items-center gap-1.5 h-7 rounded-full text-[12px] font-medium transition-colors', t.hoverCard)}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1.5 h-7 px-3 rounded-full text-[12px] font-medium transition-colors\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<span className=\"text-[16px] leading-none\" style={{ marginTop: -1 }}>&minus;</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<span className=\"inline-flex items-center gap-1 text-[12.5px] font-medium tabular-nums\" style={{ color: t.subink, minWidth: 52, justifyContent: 'center' }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<span className=\"text-[15px] leading-none\">+</span>"
+    "snippet": "<p className=\"text-[13px]\" style={{ marginTop: 20, color: t.subink }} data-testid=\"template-missing\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21197,6 +21187,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"block text-[12px] font-medium\" style={{ color: t.subink, animation: measuring && uploadPct === null ? 'gt-ink-pulse 1.4s ease-in-out infinite' : undefined }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<span className=\"text-[12px]\" style={{ color: t.faint }}>Replaces the current file and re-runs the checks.</span>"
   },
   {
@@ -21228,11 +21223,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0\" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>"
-  },
-  {
-    "rule": "naked-icon-button",
-    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<button type=\"button\" className={cn('inline-flex items-center justify-center rounded-full transition-colors', t.hoverCard)} style={{ width: 34, height: 34, border: `1px solid ${t.hairline}`, color: t."
   },
   {
     "rule": "hardcoded-font-size",
@@ -25786,6 +25776,11 @@
   },
   {
     "rule": "brand-hex-literal",
+    "file": "client/src/pages/press-templates/gtOverlayEngine.ts",
+    "snippet": "Bleed: '#e0245e', Cut: '#319ED8', Spine: '#b07ce8', 'Front Cover': '#f5a623', 'Back Cover': '#f5a623',"
+  },
+  {
+    "rule": "brand-hex-literal",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
     "snippet": "ink: '#1d1d1f', subink: '#6e6e73', faint: '#a1a1a6', blue: '#319ED8',"
   },
@@ -25793,11 +25788,6 @@
     "rule": "brand-hex-literal",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
     "snippet": "ink: '#f5f5f7', subink: '#98989d', faint: '#6e6e73', blue: '#319ED8',"
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
-    "snippet": "Bleed: '#e0245e', Cut: '#319ED8', Spine: '#b07ce8', 'Front Cover': '#f5a623', 'Back Cover': '#f5a623',"
   },
   {
     "rule": "hardcoded-font-size",
@@ -26388,6 +26378,101 @@
     "rule": "naked-icon-button",
     "file": "client/src/pages/press-templates/PressTemplatesIndex.tsx",
     "snippet": "<button type=\"button\" className={cn(\"w-8 h-8 -mr-2 rounded-full flex items-center justify-center transition-colors flex-shrink-0\", t.hoverWash)} style={{ color: t.subink }} aria-label=\"Close\" onClick="
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "className=\"h-8 px-3.5 rounded-full text-[12.5px] font-medium transition-colors whitespace-nowrap\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "<div className=\"px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide\" style={{ color: t.faint, borderBottom: `1px solid ${t.hairline}` }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "className=\"w-full flex items-center justify-between gap-3 px-4 py-2 text-[12.5px] text-left\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "<span className=\"text-[10px] font-semibold\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "className=\"inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors disabled:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-full pl-2.5 pr-1.5 text-[11px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "<label className=\"block text-[11px] font-semibold\" style={{ color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "<div className=\"mt-1.5 text-[10.5px]\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-[11px] font-medium transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "className=\"w-full flex items-center justify-between gap-3 px-3.5 py-2 text-[12px] font-medium text-left\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "className=\"h-6 px-2.5 rounded-full text-[11px] font-semibold transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "className=\"h-full px-2 text-[13px] font-semibold disabled:opacity-40\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 px-1 h-full text-[11px] font-semibold tabular-nums\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "className=\"absolute pointer-events-none text-[10px] font-bold px-1.5 py-0.5 rounded\""
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "<span className=\"w-2.5 h-2.5 rounded-full flex-shrink-0\" style={{ backgroundColor: zoneColor(zone) }} />"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "<span className=\"w-2 h-2 rounded-full flex-shrink-0\" style={{ backgroundColor: showTemplate ? t.subink : t.faint }} />"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "<span className=\"w-2 h-2 rounded-full flex-shrink-0\" style={{ backgroundColor: on ? c : t.faint }} />"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "<span className=\"w-2 h-2 rounded-full flex-shrink-0\" style={{ backgroundColor: anyOn ? c : t.faint }} />"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
+    "snippet": "<span className=\"w-2 h-2 rounded-full flex-shrink-0\" style={{ backgroundColor: on ? zoneColor(p) : t.faint }} />"
   },
   {
     "rule": "brand-hex-literal",

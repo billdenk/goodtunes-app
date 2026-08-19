@@ -34358,6 +34358,57 @@ export async function registerRoutes(
   // (The per-album vendor + package-config POST route is gone — Bill's
   // rework derives the configuration from the Sell tab's SKUs instead.)
 
+  // Task #3184 — same-origin download of the matched press template PDF for
+  // a required slot, so the ARTIST art-test page can render the template +
+  // its GT-layer geometry client-side (same pdf.js pipeline as the press
+  // live-test page). Scoping is inherent: the componentId only resolves
+  // within THIS album's own resolved specs, and requireOperatorOrAlbumPress
+  // already limits callers to operators, the album's press, and the album's
+  // own artist/label partners — no cross-press template exposure. Stored
+  // /objects/ files redirect (same-origin); external https links are proxied
+  // through the SSRF-guarded fetcher, mirroring the press portal's
+  // /templates/:specId/file route (a direct browser fetch would die on CORS).
+  app.get("/api/admin/albums/:id/completed-template/template-file/:componentId", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const ctx = await resolveCompletedContext(req.params.id);
+    if (!ctx) return res.status(404).json({ message: "No vinyl configuration on this album yet." });
+    const required = await resolveRequired(ctx.vendorId, ctx.config);
+    const spec = required.find((r) => r.id === decodeURIComponent(req.params.componentId));
+    if (!spec) return res.status(404).json({ message: "That component isn't required for this configuration." });
+    if (!spec.templateFileUrl) return res.status(404).json({ message: "No template file on this slot." });
+    const url = spec.templateFileUrl;
+    if (url.startsWith("/")) return res.redirect(url);
+    if (!/^https:\/\//i.test(url)) return res.status(409).json({ message: "This template's link can't be fetched." });
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const fs = await import("node:fs");
+    const { fetchAndScanPdf: fetchTpl } = await import("./validators/completedTemplate");
+    const tmp = path.join(os.tmpdir(), `artist-template-${spec.id.replace(/[^a-zA-Z0-9._-]+/g, "_")}-${Date.now()}.pdf`);
+    try {
+      const fetched = await fetchTpl(url, { spoolTo: tmp });
+      if (!fetched.ok) {
+        // A dead/unreachable external link is CLIENT state (legacy pasted
+        // link whose host stopped serving), not a server fault — 422 with
+        // the same code the press Templates UI maps to "needs re-upload".
+        return res.status(422).json({
+          code: "template_link_dead",
+          message: `${fetched.error} Ask the press to re-attach the template file to this slot.`,
+        });
+      }
+      if (fetched.spooled !== true) {
+        return res.status(502).json({ message: "Couldn't spool the template file." });
+      }
+      res.setHeader("Content-Type", "application/pdf");
+      const stream = fs.createReadStream(tmp);
+      stream.on("close", () => fs.unlink(tmp, () => {}));
+      stream.on("error", () => { fs.unlink(tmp, () => {}); if (!res.headersSent) res.status(500).end(); else res.end(); });
+      stream.pipe(res);
+    } catch (e: any) {
+      fs.unlink(tmp, () => {});
+      if (!res.headersSent) res.status(502).json({ message: e?.message ?? "Couldn't fetch the template file." });
+    }
+  });
+
   // Match a pasted (Dropbox/etc.) print-ready PDF URL to a required slot,
   // stream-scan it, run the finished-template checks, and persist the
   // result. Re-checking a slot clears any prior override (new file).
@@ -34372,19 +34423,6 @@ export async function registerRoutes(
         // Task #2705 — the original file name for direct uploads (the
         // /objects path itself is an opaque uuid).
         fileName: z.string().trim().max(300).optional(),
-        // Aug 18 2026 — the template's GT-layer cut rect, when the CLIENT
-        // has parsed the template file (same contract as the press
-        // live-test route). Used only for this check's content-bleed trim
-        // override; never persisted from this route (the press live-test
-        // is the trusted persist site).
-        templateCutRect: z
-          .object({
-            leftIn: z.number().finite().min(0),
-            topIn: z.number().finite().min(0),
-            widthIn: z.number().finite().positive(),
-            heightIn: z.number().finite().positive(),
-          })
-          .nullish(),
       })
       .safeParse(req.body);
     if (!body.success) return res.status(400).json({ message: body.error.message });
@@ -34432,7 +34470,7 @@ export async function registerRoutes(
     let fileName: string | null;
     let previewUrl: string | null = null;
     let previewUrl2: string | null = null;
-    const isOwnObject = /^\/objects\/uploads\/[a-zA-Z0-9._-]+$/.test(body.data.url);
+    let isOwnObject = /^\/objects\/uploads\/[a-zA-Z0-9._-]+$/.test(body.data.url);
     if (isOwnObject) {
       try {
         scan = await scanObjectPdf(body.data.url);
@@ -34452,19 +34490,30 @@ export async function registerRoutes(
       previewUrl = previews.previewUrl;
       previewUrl2 = previews.previewUrl2;
     } else {
-      // Standing mirror rule (Aug 2026): pasted https links are downloaded
-      // into OUR object storage at save — never persisted as external URLs.
-      // Mirroring also means pasted files get a real trim-area preview
-      // (before this, press-pasted links showed "No preview could be
-      // generated" on the artist Test page — Niina's blank viewer, Aug 18).
+      // Task #3184 — pasted external links are MIRRORED into our object
+      // storage at check time (standing rule: external file links never
+      // persist as external URLs), which also makes the trim-area preview
+      // + edge-band measurements possible for pasted submissions — the
+      // artist Test page can show the art seated in the template instead
+      // of "no preview". Mirror failure falls back to the old streamed
+      // scan (still checked, honestly no preview) so oversized-but-valid
+      // files aren't regressed.
       const mirrored = await mirrorExternalTemplatePdf(body.data.url);
-      if (!mirrored.ok) return res.status(422).json({ message: mirrored.error });
-      scan = mirrored.scan;
-      assetUrl = mirrored.objectPath;
-      fileName = body.data.fileName || body.data.url.split("/").pop()?.split("?")[0] || null;
-      const previews = await generateCompletedPreview(mirrored.objectPath, spec);
-      previewUrl = previews.previewUrl;
-      previewUrl2 = previews.previewUrl2;
+      if (mirrored.ok) {
+        scan = mirrored.scan;
+        assetUrl = mirrored.objectPath;
+        isOwnObject = true;
+        fileName = body.data.fileName || decodeURIComponent(body.data.url.split("?")[0].split("/").pop() ?? "") || null;
+        const previews = await generateCompletedPreview(mirrored.objectPath, spec);
+        previewUrl = previews.previewUrl;
+        previewUrl2 = previews.previewUrl2;
+      } else {
+        const fetched = await fetchAndScanPdf(body.data.url);
+        if (!fetched.ok) return res.status(400).json({ message: fetched.error });
+        scan = fetched.scan;
+        assetUrl = fetched.finalUrl;
+        fileName = fetched.fileName;
+      }
     }
 
     // Task #3012 — edge-band bleed-content heuristic (advisory only).
@@ -34496,27 +34545,7 @@ export async function registerRoutes(
           const pdfPath = path.join(tmpDir, "src.pdf");
           await file.download({ destination: pdfPath });
           if (wantsEdgeBand) edgeBand = await edgeBandContent(pdfPath, scan);
-          // Aug 18 2026 (Bill's CALIFORNIALAND false-flag): pass the
-          // template's GT-layer cut rect (persisted on the spec row at press
-          // live-test time) so this path measures content bleed with the
-          // SAME trim override the press live-test gets from its client.
-          // Without it, full-artboard exports (Trim==Bleed boxes) false-flag
-          // "Bleed ≈0" + a low full-artboard PPI estimate.
-          if (wantsContentBleed) {
-            // Trust order (code review, Aug 18 2026): the press-persisted
-            // spec rect is authoritative; a body-supplied rect is honored
-            // ONLY from operators/press (an artist could otherwise forge an
-            // inset rect that makes inadequate bleed look sufficient).
-            const bodyCut =
-              (caller.operator || caller.pressId) ? (body.data.templateCutRect ?? null) : null;
-            contentBleed = await contentBleedMeasurement(pdfPath, scan, spec, {
-              trimRectOverrideInches:
-                spec.templateCutRectInches ??
-                (bodyCut
-                  ? { left: bodyCut.leftIn, top: bodyCut.topIn, width: bodyCut.widthIn, height: bodyCut.heightIn }
-                  : null),
-            });
-          }
+          if (wantsContentBleed) contentBleed = await contentBleedMeasurement(pdfPath, scan, spec);
         }
       } catch {
         edgeBand = null;

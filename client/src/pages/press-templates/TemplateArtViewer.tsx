@@ -1,0 +1,896 @@
+// TemplateArtViewer — the shared template/art composite viewer (Task #3184).
+//
+// The press live-test page (PressTemplateLiveTest.tsx) proved this overlay
+// model: the template PDF's own GT layers (measured in mm by gtOverlayEngine)
+// drive zone chips, side/family pills, Line/Area rendering, view crops
+// (Full Template / Back / Front / Spine), a stepper zoom with pan-drag, a
+// hi-DPI crop re-render, and the art seated at its real measured placement.
+// This component packages that exact model for the ARTIST art-test page so
+// artists see their checked art in the template the same way the press does.
+// The press page keeps its own inline JSX (press flow unchanged by design);
+// the view math here mirrors it line-for-line.
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, PenLine, PaintBucket, ZoomIn, Download } from 'lucide-react';
+import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
+import type * as pdfjs from 'pdfjs-dist';
+import { zoneColor, shapePath, type GtLayer } from './gtOverlayEngine';
+import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, type SideName, type FamilyGroup } from './sidePillGroups';
+import { computeCropCanvasSize, PT_PER_MM } from './cropDimensions';
+
+export type ViewerTemplate = { img: string; wMm: number; hMm: number; layers: GtLayer[] };
+export type ViewerArt = {
+  name: string;
+  img: string; // data URL / hosted preview; '' = none renderable
+  wMm: number | null; // real measured mm for PDF art; null for rasters
+  hMm: number | null;
+  pxAspect?: number; // raster aspect (w/h) when known — drives contain-fit
+} | null;
+
+export type ViewerTheme = {
+  card: string; soft: string; hairline: string;
+  ink: string; subink: string; faint: string; blue: string;
+};
+
+function cn(...parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(' ');
+}
+
+const ZOOMS = [0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4];
+
+export function TemplateArtViewer({
+  template,
+  pdfDoc,
+  art,
+  dark,
+  t,
+  proofName,
+}: {
+  template: ViewerTemplate;
+  /** Kept alive for hi-DPI crop re-renders; crops fall back to the base raster without it. */
+  pdfDoc?: pdfjs.PDFDocumentProxy | null;
+  art: ViewerArt;
+  dark: boolean;
+  t: ViewerTheme;
+  /** Base name for the "Download test proof" PNG; omitting hides the button. */
+  proofName?: string;
+}) {
+  const [activeZones, setActiveZones] = useState<Set<string>>(new Set());
+  const [viewMode, setViewMode] = useState<'line' | 'area'>('line');
+  const [viewArea, setViewArea] = useState<'full' | SideName>('full');
+  const [zoom, setZoom] = useState(1);
+  const [panC, setPanC] = useState<{ x: number; y: number } | null>(null);
+  // Artist default: the template IS the point — arrive with it on under the art.
+  const [showTemplate, setShowTemplate] = useState(true);
+  const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
+  const [artOpacity, setArtOpacity] = useState(1);
+  const [showLayers, setShowLayers] = useState(false);
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [cropImg, setCropImg] = useState<string | null>(null);
+  const cropRenderSeq = useRef(0);
+  const dragRef = useRef<{ px: number; py: number; cx: number; cy: number; w: number; h: number } | null>(null);
+
+  // Zones present in the template, grouped LINE + AREA (press page verbatim).
+  const zones = useMemo(() => {
+    const byZone = new Map<string, { zone: string; line?: GtLayer; area?: GtLayer }>();
+    for (const l of template.layers) {
+      const entry = byZone.get(l.zone) ?? { zone: l.zone };
+      if (l.kind === 'line') entry.line = l;
+      else entry.area = entry.area ?? l;
+      byZone.set(l.zone, entry);
+    }
+    return Array.from(byZone.values()).sort((a, b) => zoneSort(a.zone, b.zone));
+  }, [template]);
+
+  const sideGroups = useMemo(() => groupZonesForPills(template.layers), [template]);
+  const { familyGrouped, familyGroups } = sideGroups;
+
+  const bleed = zones.find((z) => z.zone === 'Bleed');
+  const cut = zones.find((z) => z.zone === 'Cut');
+  const bleedBox = bleed?.line ?? bleed?.area;
+  const cutBox = cut?.line ?? cut?.area;
+
+  // Art placement: centered on the GT Bleed box (fallback: Cut, then full page).
+  const anchor = bleedBox ?? cutBox ?? null;
+  const artRect = useMemo(() => {
+    if (!art) return null;
+    const anchor2 = anchor ?? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm };
+    if (art.wMm === null || art.hMm === null) {
+      if (!art.pxAspect) return anchor2;
+      const pageAspect = template.wMm / template.hMm;
+      const pageErr = Math.abs(art.pxAspect / pageAspect - 1);
+      const anchorErr = Math.abs(art.pxAspect / (anchor2.wMm / anchor2.hMm) - 1);
+      const box = pageErr <= 0.02 && pageErr < anchorErr
+        ? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm }
+        : anchor2;
+      const boxAspect = box.wMm / box.hMm;
+      let w = box.wMm, h = box.hMm;
+      if (art.pxAspect > boxAspect) h = w / art.pxAspect; else w = h * art.pxAspect;
+      return { xMm: box.xMm + (box.wMm - w) / 2, yMm: box.yMm + (box.hMm - h) / 2, wMm: w, hMm: h };
+    }
+    const cx = anchor2.xMm + anchor2.wMm / 2;
+    const cy = anchor2.yMm + anchor2.hMm / 2;
+    return { xMm: cx - art.wMm / 2, yMm: cy - art.hMm / 2, wMm: art.wMm, hMm: art.hMm };
+  }, [template, art, anchor]);
+
+  const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(3)}%`;
+
+  // ── View focus: Full Template, or crop to a GT zone (Back/Front/Spine). ──
+  const focus = useMemo(() => {
+    let r = { x: 0, y: 0, w: template.wMm, h: template.hMm };
+    if (viewArea !== 'full') {
+      const measurable = zones.filter((zz) => zz.line || zz.area).map((zz) => zz.zone);
+      const pick = pickSideFocusZone(measurable, viewArea);
+      const z = pick ? zones.find((zz) => zz.zone === pick) : undefined;
+      const b = z?.line ?? z?.area;
+      if (b) {
+        const pad = Math.max(b.wMm, b.hMm) * 0.04;
+        r = { x: b.xMm - pad, y: b.yMm - pad, w: b.wMm + pad * 2, h: b.hMm + pad * 2 };
+      }
+    }
+    return r;
+  }, [template, zones, viewArea]);
+
+  const viewT = useMemo(() => {
+    if (!focus) return { s: 1, tx: 0, ty: 0 };
+    let s = template.wMm / focus.w;
+    s *= zoom;
+    const cx = panC ? panC.x : (focus.x + focus.w / 2) / template.wMm;
+    const cy = panC ? panC.y : (focus.y + focus.h / 2) / template.hMm;
+    return {
+      s,
+      tx: 0.5 - cx * s,
+      ty: 0.5 * (focus.h / focus.w) * (template.wMm / template.hMm) - cy * s,
+    };
+  }, [template, focus, zoom, panC]);
+
+  // Sharp raster for crop views — re-render the focus sub-region from the PDF.
+  useEffect(() => {
+    if (!focus || viewArea === 'full') { setCropImg(null); return; }
+    const doc = pdfDoc;
+    if (!doc) return;
+    const seq = ++cropRenderSeq.current;
+    const desiredPx = Math.round(1440 * ZOOMS[ZOOMS.length - 1] * (window.devicePixelRatio || 1));
+    const { targetW, targetH, scale } = computeCropCanvasSize(focus.w, focus.h, desiredPx);
+    void (async () => {
+      try {
+        const page = await doc.getPage(1);
+        const vp = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetW, targetH);
+        ctx.translate(-(focus.x * PT_PER_MM * scale), -(focus.y * PT_PER_MM * scale));
+        await (page.render({ canvas, canvasContext: ctx as CanvasRenderingContext2D, viewport: vp } as Parameters<typeof page.render>[0])).promise;
+        if (cropRenderSeq.current === seq) setCropImg(canvas.toDataURL('image/png'));
+      } catch {
+        // Best-effort — fall back to the base raster silently.
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewArea, pdfDoc, focus?.x, focus?.y, focus?.w, focus?.h]);
+
+  const viewportPct = useMemo(() => {
+    if (!focus) return 100;
+    return Math.min(100, ((focus.w / focus.h) / (template.wMm / template.hMm)) * 100);
+  }, [template, focus]);
+
+  const zoneRelevant = (zone: string) => {
+    if (viewArea === 'full') return true;
+    if (zone === 'Bleed' || zone === 'Cut') return true;
+    if (viewArea === 'Spine') return zone === 'Spine' || zone.startsWith('Spine ');
+    return zone.includes(viewArea) || zoneSide(zone) === viewArea;
+  };
+
+  const pickView = (v: typeof viewArea) => { setViewArea(v); setPanC(null); setZoom(1); };
+  const stepZoom = (dir: 1 | -1) => setZoom((z) => {
+    const i = ZOOMS.indexOf(z);
+    const next = ZOOMS[Math.min(ZOOMS.length - 1, Math.max(0, (i === -1 ? 2 : i) + dir))];
+    if (next === 1) setPanC(null);
+    return next;
+  });
+  const toggleZone = (z: string) => setActiveZones((prev) => {
+    const next = new Set(prev);
+    if (next.has(z)) next.delete(z); else next.add(z);
+    return next;
+  });
+
+  // Sides that actually resolve to a measurable focus zone in THIS template.
+  const availableSides = useMemo(() => {
+    const measurable = zones.filter((zz) => zz.line || zz.area).map((zz) => zz.zone);
+    return SIDE_NAMES.filter((s) => !!pickSideFocusZone(measurable, s));
+  }, [zones]);
+
+  // ── Download test proof — a real PNG composite of exactly what's on screen
+  // at Full Template: template raster (when shown), art at its measured
+  // placement, and the toggled GT overlays. ──
+  const [proofBusy, setProofBusy] = useState(false);
+  const downloadProof = async () => {
+    if (proofBusy) return;
+    setProofBusy(true);
+    try {
+      const loadImg = (src: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('image'));
+        img.src = src;
+      });
+      const W = 1600;
+      const H = Math.round((W * template.hMm) / template.wMm);
+      const canvas = document.createElement('canvas');
+      canvas.width = W; canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+      const s = W / template.wMm; // mm → px
+      if ((!art || showTemplate) && template.img) {
+        try { ctx.drawImage(await loadImg(template.img), 0, 0, W, H); } catch { /* keep going */ }
+      }
+      if (art && artRect && art.img) {
+        try {
+          ctx.globalAlpha = artOpacity;
+          ctx.drawImage(await loadImg(art.img), artRect.xMm * s, artRect.yMm * s, artRect.wMm * s, artRect.hMm * s);
+          ctx.globalAlpha = 1;
+        } catch { /* keep going */ }
+      }
+      const areaAlpha = dark ? 0.19 : 0.25;
+      for (const { zone, line, area } of zones) {
+        if (!activeZones.has(zone)) continue;
+        const box = viewMode === 'line' ? (line ?? area) : (area ?? line);
+        if (!box) continue;
+        const c = zoneColor(zone);
+        ctx.save();
+        ctx.scale(s, s);
+        if (viewMode === 'area' && area) {
+          ctx.fillStyle = c;
+          ctx.globalAlpha = areaAlpha;
+          const d = area.pathMm
+            ? area.pathMm
+            : area.inWMm
+              ? `${shapePath(area.xMm, area.yMm, area.wMm, area.hMm, area.round)} ${shapePath(area.inXMm!, area.inYMm!, area.inWMm!, area.inHMm!, area.round)}`
+              : shapePath(area.xMm, area.yMm, area.wMm, area.hMm, area.round);
+          ctx.fill(new Path2D(d), 'evenodd');
+          ctx.globalAlpha = 1;
+        }
+        ctx.strokeStyle = c;
+        ctx.lineWidth = 2 / s;
+        if (zone === 'Bleed' || zone.includes('Safety')) ctx.setLineDash([5 / s, 4 / s]);
+        ctx.stroke(new Path2D(box.pathMm ?? shapePath(box.xMm, box.yMm, box.wMm, box.hMm, box.round)));
+        ctx.restore();
+        // Label pill — same grammar as the on-screen overlay label.
+        const label = `${zone} · ${box.wMm.toFixed(1)} × ${box.hMm.toFixed(1)} mm`;
+        ctx.font = '600 18px system-ui, -apple-system, sans-serif';
+        const tw = ctx.measureText(label).width;
+        const lx = box.xMm * s, ly = Math.max(0, box.yMm * s - 26);
+        ctx.fillStyle = c;
+        ctx.fillRect(lx, ly, tw + 14, 26);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, lx + 7, ly + 19);
+      }
+      const a = document.createElement('a');
+      a.href = canvas.toDataURL('image/png');
+      a.download = `${(proofName ?? 'test-proof').replace(/\.[a-z0-9]+$/i, '')} — test proof.png`;
+      a.click();
+    } finally {
+      setProofBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      {/* View chips (Full Template / sides with a measurable zone) + layers + proof */}
+      <div className="flex items-center justify-between gap-4 flex-wrap" style={{ marginTop: 16 }}>
+        <div className="inline-flex items-center rounded-full p-0.5" style={{ background: t.soft, border: `1px solid ${t.hairline}` }} data-testid="view-tabs" role="tablist">
+          {(['full', ...availableSides] as Array<'full' | SideName>).map((v) => {
+            const label = v === 'full' ? 'Full Template' : v;
+            const active = v === viewArea;
+            return (
+              <button
+                key={v}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => pickView(v)}
+                className="h-8 px-3.5 rounded-full text-[12.5px] font-medium transition-colors whitespace-nowrap"
+                style={{ color: active ? t.ink : t.subink, background: active ? t.card : 'transparent', boxShadow: active ? '0 1px 2px rgba(0,0,0,0.18)' : undefined }}
+                data-testid={`view-tab-${label.toLowerCase().replace(/\s+/g, '-')}`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowLayers((v) => !v)}
+              aria-expanded={showLayers}
+              className="inline-flex items-center justify-center rounded-full transition-colors"
+              style={{ width: 34, height: 34, border: `1px solid ${showLayers ? t.blue : t.hairline}`, color: showLayers ? t.blue : t.subink }}
+              data-testid="button-layers"
+              aria-label="Layers view"
+            >
+              <NavLayers className="w-4 h-4" />
+            </button>
+            {showLayers && (
+              <>
+                <div className="fixed inset-0 z-[60]" onClick={() => setShowLayers(false)} />
+                <div
+                  className="absolute right-0 z-[61] rounded-xl shadow-2xl overflow-hidden"
+                  style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, top: 'calc(100% + 6px)', minWidth: 280 }}
+                  role="dialog"
+                  aria-label="Template layers"
+                  data-testid="popover-layers"
+                >
+                  <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: t.faint, borderBottom: `1px solid ${t.hairline}` }}>
+                    Measured template layers
+                  </div>
+                  {zones.map(({ zone, line, area }) => {
+                    const box = line ?? area;
+                    if (!box) return null;
+                    return (
+                      <button
+                        key={zone}
+                        type="button"
+                        onClick={() => toggleZone(zone)}
+                        className="w-full flex items-center justify-between gap-3 px-4 py-2 text-[12.5px] text-left"
+                        style={{ color: t.ink }}
+                        data-testid={`layer-row-${zone.toLowerCase().replace(/\s+/g, '-')}`}
+                      >
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: zoneColor(zone) }} />
+                          <span className="truncate">{zone}</span>
+                          <span className="text-[10px] font-semibold" style={{ color: t.faint }}>
+                            {line && 'LINE'}{line && area && ' + '}{area && 'AREA'}
+                          </span>
+                        </span>
+                        <span className="tabular-nums flex-shrink-0" style={{ color: activeZones.has(zone) ? t.blue : t.faint }}>
+                          {box.wMm.toFixed(1)} × {box.hMm.toFixed(1)} mm
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+          {proofName !== undefined && (
+            <button
+              type="button"
+              onClick={() => void downloadProof()}
+              disabled={proofBusy}
+              className="inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors disabled:opacity-60"
+              style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+              data-testid="button-download-proof"
+            >
+              <Download className="w-4 h-4 flex-shrink-0" /> {proofBusy ? 'Preparing…' : 'Download test proof'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Zone toggles + Line/Area + zoom (press-page composite toolbar) */}
+      <div className="flex items-center justify-between gap-3 flex-wrap" style={{ marginTop: 14 }}>
+        <div className="flex flex-wrap items-center gap-2">
+          {art && (
+            <div className="relative flex-shrink-0">
+              <span
+                className="inline-flex items-center h-6 rounded-full overflow-hidden transition-colors"
+                style={{
+                  border: `1px solid ${showTemplate ? t.subink : t.hairline}`,
+                  backgroundColor: showTemplate ? t.soft : 'transparent',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setShowTemplate((v) => {
+                    const on = !v;
+                    if (on) setArtOpacity(1);
+                    return on;
+                  })}
+                  className="inline-flex items-center gap-1.5 h-full pl-2.5 pr-1.5 text-[11px] font-medium"
+                  style={{ color: showTemplate ? t.ink : t.faint }}
+                  data-testid="chip-template-underlay"
+                >
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: showTemplate ? t.subink : t.faint }} />
+                  Template
+                  <span style={{ color: t.faint }}>{showTemplate ? 'on' : 'off'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTemplatePanelOpen((v) => !v)}
+                  aria-label="Template display options"
+                  aria-expanded={templatePanelOpen}
+                  className="h-full pr-2 pl-0.5 inline-flex items-center"
+                  style={{ color: t.faint }}
+                  data-testid="button-template-options"
+                >
+                  <ChevronDown style={{ width: 12, height: 12, transform: templatePanelOpen ? 'rotate(180deg)' : undefined, transition: 'transform 120ms' }} />
+                </button>
+              </span>
+              {templatePanelOpen && (
+                <>
+                  <div className="fixed inset-0 z-[60]" onClick={() => setTemplatePanelOpen(false)} />
+                  <div
+                    className="absolute z-[61] rounded-xl shadow-2xl px-4 py-3"
+                    style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, top: 'calc(100% + 6px)', left: 0, width: 210 }}
+                    role="dialog"
+                    aria-label="Template display options"
+                    data-testid="popover-template-options"
+                  >
+                    <style>{`
+                      .gt-slider { -webkit-appearance: none; appearance: none; height: 20px; background: transparent; cursor: pointer; }
+                      .gt-slider::-webkit-slider-runnable-track { height: 3px; border-radius: 2px; background: ${t.hairline}; }
+                      .gt-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 0.5px solid rgba(0,0,0,0.18); box-shadow: 0 1px 4px rgba(0,0,0,0.35); margin-top: -6.5px; }
+                      .gt-slider::-moz-range-track { height: 3px; border-radius: 2px; background: ${t.hairline}; }
+                      .gt-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 0.5px solid rgba(0,0,0,0.18); box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
+                    `}</style>
+                    <label className="block text-[11px] font-semibold" style={{ color: t.subink }}>
+                      Art opacity
+                      <input
+                        type="range" min={0} max={100} value={Math.round(artOpacity * 100)}
+                        onChange={(e) => setArtOpacity(Number(e.target.value) / 100)}
+                        className="gt-slider block w-full mt-2"
+                        data-testid="slider-art-opacity"
+                      />
+                    </label>
+                    <div className="mt-1.5 text-[10.5px]" style={{ color: t.faint }}>
+                      Lower it to see the template through your art.
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          {zones.filter((z) => !sideGroups.grouped.has(z.zone) && !familyGrouped.has(z.zone) && zoneRelevant(z.zone)).map(({ zone }) => {
+            const on = activeZones.has(zone);
+            const c = zoneColor(zone);
+            return (
+              <button
+                key={zone}
+                type="button"
+                onClick={() => toggleZone(zone)}
+                className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-full text-[11px] font-medium transition-colors"
+                style={{
+                  border: `1px solid ${on ? c : t.hairline}`,
+                  color: on ? t.ink : t.faint,
+                  backgroundColor: on ? `${c}1f` : 'transparent',
+                }}
+                data-testid={`chip-zone-${zone.toLowerCase().replace(/\s+/g, '-')}`}
+              >
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: on ? c : t.faint }} />
+                {zone}
+                <span style={{ color: t.faint }}>{on ? 'on' : 'off'}</span>
+              </button>
+            );
+          })}
+          {SIDE_NAMES.map((side) => {
+            const group = sideGroups.groups.find((g) => g.side === side);
+            if (!group) return null;
+            const entries = group.entries.filter((e) => zoneRelevant(e.zone));
+            if (entries.length === 0) return null;
+            const parts = entries.map((e) => e.zone);
+            const partLabel = (p: string) => group.entries.find((e) => e.zone === p)?.label ?? p;
+            const onParts = parts.filter((p) => activeZones.has(p));
+            const anyOn = onParts.length > 0;
+            const c = zoneColor(side === 'Spine' ? 'Spine' : `${side} Cover`);
+            const status = anyOn ? onParts.map(partLabel).join(' + ') : 'off';
+            return (
+              <div key={side} className="relative">
+                <div
+                  className="inline-flex items-center h-6 rounded-full overflow-hidden"
+                  style={{
+                    border: `1px solid ${anyOn ? c : t.hairline}`,
+                    backgroundColor: anyOn ? `${c}1f` : 'transparent',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveZones((prev) => {
+                        const next = new Set(prev);
+                        if (onParts.length > 0) parts.forEach((p) => next.delete(p));
+                        else parts.forEach((p) => next.add(p));
+                        return next;
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 h-full pl-2.5 pr-1.5 text-[11px] font-medium"
+                    style={{ color: anyOn ? t.ink : t.faint }}
+                    data-testid={`chip-zone-${side.toLowerCase()}`}
+                  >
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: anyOn ? c : t.faint }} />
+                    {side}
+                    <span style={{ color: t.faint }}>{status}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOpenGroup((g) => (g === side ? null : side))}
+                    aria-label={`${side} options`}
+                    className="h-full pl-1 pr-2 inline-flex items-center"
+                    style={{ color: t.subink, borderLeft: `1px solid ${anyOn ? `${c}55` : t.hairline}` }}
+                    data-testid={`chip-zone-${side.toLowerCase()}-menu`}
+                  >
+                    <NavChevron style={{ width: 13, height: 13 }} />
+                  </button>
+                </div>
+                {openGroup === side && (
+                  <>
+                    <div className="fixed inset-0 z-[65]" onClick={() => setOpenGroup(null)} />
+                    <div
+                      className="absolute z-[66] mt-1.5 rounded-xl overflow-hidden shadow-xl"
+                      style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, minWidth: 148 }}
+                      data-testid={`menu-zone-${side.toLowerCase()}`}
+                    >
+                      {parts.map((p) => {
+                        const on = activeZones.has(p);
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => toggleZone(p)}
+                            className="w-full flex items-center justify-between gap-3 px-3.5 py-2 text-[12px] font-medium text-left"
+                            style={{ color: t.ink }}
+                            data-testid={`menu-zone-${p.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: on ? zoneColor(p) : t.faint }} />
+                              {partLabel(p)}
+                            </span>
+                            <span style={{ color: on ? t.blue : t.faint }}>{on ? 'on' : 'off'}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+          {familyGroups.map((family: FamilyGroup) => {
+            const entries = family.entries.filter((e) => zoneRelevant(e.zone));
+            if (entries.length === 0) return null;
+            const parts = entries.map((e) => e.zone);
+            const partLabel = (p: string) => family.entries.find((e) => e.zone === p)?.label ?? p;
+            const onParts = parts.filter((p) => activeZones.has(p));
+            const anyOn = onParts.length > 0;
+            const c = zoneColor(family.prefix);
+            const status = anyOn ? onParts.map(partLabel).join(' + ') : 'off';
+            const testKey = family.prefix.toLowerCase().replace(/\s+/g, '-');
+            return (
+              <div key={family.prefix} className="relative">
+                <div
+                  className="inline-flex items-center h-6 rounded-full overflow-hidden"
+                  style={{
+                    border: `1px solid ${anyOn ? c : t.hairline}`,
+                    backgroundColor: anyOn ? `${c}1f` : 'transparent',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveZones((prev) => {
+                        const next = new Set(prev);
+                        if (onParts.length > 0) parts.forEach((p) => next.delete(p));
+                        else parts.forEach((p) => next.add(p));
+                        return next;
+                      });
+                    }}
+                    className="inline-flex items-center gap-1.5 h-full pl-2.5 pr-1.5 text-[11px] font-medium"
+                    style={{ color: anyOn ? t.ink : t.faint }}
+                    data-testid={`chip-zone-${testKey}`}
+                  >
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: anyOn ? c : t.faint }} />
+                    {family.prefix}
+                    <span style={{ color: t.faint }}>{status}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOpenGroup((g) => (g === family.prefix ? null : family.prefix))}
+                    aria-label={`${family.prefix} options`}
+                    className="h-full pl-1 pr-2 inline-flex items-center"
+                    style={{ color: t.subink, borderLeft: `1px solid ${anyOn ? `${c}55` : t.hairline}` }}
+                    data-testid={`chip-zone-${testKey}-menu`}
+                  >
+                    <NavChevron style={{ width: 13, height: 13 }} />
+                  </button>
+                </div>
+                {openGroup === family.prefix && (
+                  <>
+                    <div className="fixed inset-0 z-[65]" onClick={() => setOpenGroup(null)} />
+                    <div
+                      className="absolute z-[66] mt-1.5 rounded-xl overflow-hidden shadow-xl"
+                      style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, minWidth: 148 }}
+                      data-testid={`menu-zone-${testKey}`}
+                    >
+                      {parts.map((p) => {
+                        const on = activeZones.has(p);
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => toggleZone(p)}
+                            className="w-full flex items-center justify-between gap-3 px-3.5 py-2 text-[12px] font-medium text-left"
+                            style={{ color: t.ink }}
+                            data-testid={`menu-zone-${p.toLowerCase().replace(/\s+/g, '-')}`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: on ? zoneColor(p) : t.faint }} />
+                              {partLabel(p)}
+                            </span>
+                            <span style={{ color: on ? t.blue : t.faint }}>{on ? 'on' : 'off'}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div
+            className="inline-flex items-center rounded-full p-0.5"
+            style={{ backgroundColor: t.soft }}
+            role="group"
+            aria-label="Overlay view"
+            data-testid="chip-view-mode"
+          >
+            {(['line', 'area'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setViewMode(m)}
+                className="h-6 px-2.5 rounded-full text-[11px] font-semibold transition-colors"
+                style={{
+                  backgroundColor: viewMode === m ? t.card : 'transparent',
+                  color: viewMode === m ? t.ink : t.subink,
+                  boxShadow: viewMode === m ? '0 1px 3px rgba(0,0,0,0.18)' : 'none',
+                }}
+                data-testid={`chip-view-${m}`}
+              >
+                <span className="inline-flex items-center gap-1.5">
+                  {m === 'line'
+                    ? <PenLine style={{ width: 12, height: 12 }} />
+                    : <PaintBucket style={{ width: 12, height: 12 }} />}
+                  {m === 'line' ? 'Line' : 'Area'}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div
+            className="inline-flex items-center h-6 rounded-full overflow-hidden"
+            style={{ border: `1px solid ${zoom !== 1 ? t.blue : t.hairline}` }}
+            data-testid="control-zoom"
+          >
+            <button
+              type="button"
+              onClick={() => stepZoom(-1)}
+              disabled={zoom <= ZOOMS[0]}
+              aria-label="Zoom out"
+              className="h-full px-2 text-[13px] font-semibold disabled:opacity-40"
+              style={{ color: t.subink }}
+              data-testid="button-zoom-out"
+            >
+              −
+            </button>
+            <button
+              type="button"
+              onClick={() => { setZoom(1); setPanC(null); }}
+              disabled={zoom === 1}
+              title="Reset to 100%"
+              aria-label="Reset zoom to 100%"
+              className="inline-flex items-center gap-1 px-1 h-full text-[11px] font-semibold tabular-nums"
+              style={{ color: zoom !== 1 ? t.blue : t.subink, minWidth: 52, justifyContent: 'center', cursor: zoom !== 1 ? 'pointer' : 'default' }}
+              data-testid="text-zoom-level"
+            >
+              <ZoomIn style={{ width: 12, height: 12 }} />
+              {Math.round(zoom * 100)}%
+            </button>
+            <button
+              type="button"
+              onClick={() => stepZoom(1)}
+              disabled={zoom >= ZOOMS[ZOOMS.length - 1]}
+              aria-label="Zoom in"
+              className="h-full px-2 text-[13px] font-semibold disabled:opacity-40"
+              style={{ color: t.subink }}
+              data-testid="button-zoom-in"
+            >
+              +
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* The composite: template raster · art · GT overlays */}
+      <div className="flex justify-center" style={{ marginTop: 14 }}>
+        <div
+          className="relative overflow-hidden rounded-lg"
+          style={{
+            width: `${viewportPct.toFixed(3)}%`,
+            minWidth: 96,
+            aspectRatio: focus ? `${focus.w} / ${focus.h}` : `${template.wMm} / ${template.hMm}`,
+            backgroundColor: '#ffffff',
+            border: `1px solid ${t.hairline}`,
+            cursor: zoom !== 1 ? (dragRef.current ? 'grabbing' : 'grab') : 'default',
+            touchAction: zoom !== 1 ? 'none' : 'auto',
+          }}
+          data-testid="preview-composite"
+          onPointerDown={(e) => {
+            if (zoom === 1 || !focus) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const cx = panC ? panC.x : (focus.x + focus.w / 2) / template.wMm;
+            const cy = panC ? panC.y : (focus.y + focus.h / 2) / template.hMm;
+            dragRef.current = { px: e.clientX, py: e.clientY, cx, cy, w: rect.width, h: rect.height };
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }}
+          onPointerMove={(e) => {
+            const d = dragRef.current;
+            if (!d) return;
+            setPanC({
+              x: d.cx - (e.clientX - d.px) / d.w / viewT.s,
+              y: d.cy - (e.clientY - d.py) / (d.w * (template.hMm / template.wMm)) / viewT.s,
+            });
+          }}
+          onPointerUp={() => { dragRef.current = null; }}
+          onPointerCancel={() => { dragRef.current = null; }}
+        >
+          <div
+            className="absolute top-0 left-0 w-full"
+            style={{
+              aspectRatio: `${template.wMm} / ${template.hMm}`,
+              transform: `translate(${(viewT.tx * 100).toFixed(3)}%, ${(viewT.ty * 100).toFixed(3)}%) scale(${viewT.s.toFixed(4)})`,
+              transformOrigin: '0 0',
+            }}
+          >
+            {(!art || showTemplate) && (
+              <img src={template.img} alt="Template" className="absolute inset-0 w-full h-full" draggable={false} />
+            )}
+            {(!art || showTemplate) && cropImg && focus && viewArea !== 'full' && (
+              <img
+                src={cropImg}
+                alt=""
+                draggable={false}
+                className="absolute pointer-events-none"
+                style={{
+                  left: pct(focus.x, template.wMm),
+                  top: pct(focus.y, template.hMm),
+                  width: pct(focus.w, template.wMm),
+                  height: pct(focus.h, template.hMm),
+                }}
+              />
+            )}
+            {art && artRect && art.img && (
+              <img
+                src={art.img}
+                alt="Art"
+                draggable={false}
+                className="absolute"
+                style={{
+                  left: pct(artRect.xMm, template.wMm),
+                  top: pct(artRect.yMm, template.hMm),
+                  width: pct(artRect.wMm, template.wMm),
+                  height: pct(artRect.hMm, template.hMm),
+                  opacity: artOpacity,
+                }}
+                data-testid="img-art-overlay"
+              />
+            )}
+            {zones.filter((z) => activeZones.has(z.zone) && zoneRelevant(z.zone)).map(({ zone, line, area }) => {
+              const box = viewMode === 'line' ? (line ?? area) : (area ?? line);
+              if (!box) return null;
+              const c = zoneColor(zone);
+              const areaAlpha = dark ? '30' : '40';
+              return (
+                <div key={zone}>
+                  {viewMode === 'area' && area && (
+                    area.pathMm ? (
+                      <svg
+                        className="absolute inset-0 w-full h-full pointer-events-none"
+                        viewBox={`0 0 ${template.wMm} ${template.hMm}`}
+                        preserveAspectRatio="none"
+                      >
+                        <path d={area.pathMm} fill={`${c}${areaAlpha}`} fillRule="evenodd" />
+                      </svg>
+                    ) : area.inWMm ? (
+                      <svg
+                        className="absolute inset-0 w-full h-full pointer-events-none"
+                        viewBox={`0 0 ${template.wMm} ${template.hMm}`}
+                        preserveAspectRatio="none"
+                      >
+                        <path
+                          d={`${shapePath(area.xMm, area.yMm, area.wMm, area.hMm, area.round)} ${shapePath(area.inXMm!, area.inYMm!, area.inWMm!, area.inHMm!, area.round)}`}
+                          fill={`${c}${areaAlpha}`}
+                          fillRule="evenodd"
+                        />
+                      </svg>
+                    ) : (
+                      <div
+                        className="absolute pointer-events-none"
+                        style={{
+                          left: pct(area.xMm, template.wMm), top: pct(area.yMm, template.hMm),
+                          width: pct(area.wMm, template.wMm), height: pct(area.hMm, template.hMm),
+                          backgroundColor: `${c}${areaAlpha}`,
+                          borderRadius: area.round ? '50%' : undefined,
+                        }}
+                      />
+                    )
+                  )}
+                  {box.pathMm ? (
+                    <svg
+                      className="absolute inset-0 w-full h-full pointer-events-none"
+                      viewBox={`0 0 ${template.wMm} ${template.hMm}`}
+                      preserveAspectRatio="none"
+                      data-testid={`overlay-${zone.toLowerCase().replace(/\s+/g, '-')}`}
+                    >
+                      <path
+                        d={box.pathMm}
+                        fill="none"
+                        stroke={c}
+                        strokeWidth={1.5}
+                        vectorEffect="non-scaling-stroke"
+                        strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                      />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="absolute inset-0 w-full h-full pointer-events-none"
+                      viewBox={`0 0 ${template.wMm} ${template.hMm}`}
+                      preserveAspectRatio="none"
+                      data-testid={`overlay-${zone.toLowerCase().replace(/\s+/g, '-')}`}
+                    >
+                      {box.round ? (
+                        <ellipse
+                          cx={box.xMm + box.wMm / 2}
+                          cy={box.yMm + box.hMm / 2}
+                          rx={box.wMm / 2}
+                          ry={box.hMm / 2}
+                          fill="none"
+                          stroke={c}
+                          strokeWidth={1.5}
+                          vectorEffect="non-scaling-stroke"
+                          strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                        />
+                      ) : (
+                        <rect
+                          x={box.xMm}
+                          y={box.yMm}
+                          width={box.wMm}
+                          height={box.hMm}
+                          fill="none"
+                          stroke={c}
+                          strokeWidth={1.5}
+                          vectorEffect="non-scaling-stroke"
+                          strokeDasharray={zone === 'Bleed' || zone.includes('Safety') ? '5 4' : undefined}
+                        />
+                      )}
+                    </svg>
+                  )}
+                  <span
+                    className="absolute pointer-events-none text-[10px] font-bold px-1.5 py-0.5 rounded"
+                    style={{
+                      left: pct(box.xMm, template.wMm),
+                      top: pct(box.yMm, template.hMm),
+                      backgroundColor: c, color: '#fff', whiteSpace: 'nowrap',
+                      transform: `scale(${(1 / viewT.s).toFixed(6)})`,
+                      transformOrigin: '0 100%',
+                    }}
+                  >
+                    {zone} · {box.wMm.toFixed(1)} × {box.hMm.toFixed(1)} mm
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default TemplateArtViewer;
