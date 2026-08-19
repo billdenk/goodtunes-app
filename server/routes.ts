@@ -81,7 +81,7 @@ import {
 } from "@shared/jobAlerts";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics";
-import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, resolveSpotifyAlbumUrl, resolveSpotifyAlbumUrlsForReleases, type SpotifyArtistCandidate } from "./lib/spotify";
+import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, namesMatchStrict, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, resolveSpotifyAlbumUrl, resolveSpotifyAlbumUrlsForReleases, type SpotifyArtistCandidate } from "./lib/spotify";
 import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink, appleCollectionIdFromUrl, appleCountryFromUrl } from "./lib/streamingLinks";
 import { adminLoginPasswordOk, isLinkableEmail, isProviderVerifiedEmailForLink } from "./auth/identityLink";
 import { applyAppleFirstAuthName } from "./auth/appleName";
@@ -17782,7 +17782,9 @@ export async function registerRoutes(
     },
   );
   // Spotify candidate picker. The auto-enrichment on credits-commit only
-  // writes a Spotify URL when there is exactly one normalized-name hit;
+  // writes a Spotify URL when there is exactly one STRICT-name hit
+  // (punctuation-preserving compare — "How???" never matches "$how";
+  // see decideImportMatch in server/lib/spotify.ts, Task #3193);
   // for ambiguous names (or for People rows the admin wants to override)
   // this endpoint returns the top candidates so the admin can pick one
   // from a sheet. `q` lets the admin search by something other than the
@@ -17961,10 +17963,19 @@ export async function registerRoutes(
     // row (searched-with-matches vs searched-no-match) without needing
     // to re-scan on every page load. Fire-and-forget per person — a
     // single write failure mustn't fail the whole scan response.
+    //
+    // Task #3193 — the persisted flag is a strong-identity claim, so it
+    // must NOT be set off a name-only candidate list: "$how" coming back
+    // for a person named "How???" is a suggestion, not a match. Only a
+    // strict (punctuation-preserving) name hit persists `true`; loose-only
+    // candidates persist `false` (searched, no confident match) but still
+    // ride the response so the operator walk-through can suggest them.
     await Promise.all(
       results.map((r) =>
         storage
-          .updatePerson(r.id, { spotifyHasMatch: r.candidates.length > 0 })
+          .updatePerson(r.id, {
+            spotifyHasMatch: r.candidates.some((c) => namesMatchStrict(c.name, r.name)),
+          })
           .catch(() => undefined),
       ),
     );

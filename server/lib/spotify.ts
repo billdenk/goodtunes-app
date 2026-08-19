@@ -180,6 +180,15 @@ function normalizeStrict(s: string): string {
     .trim();
 }
 
+// Task #3193 — shared strong-identity check for any server-side site that
+// wants to persist something off a name-only Spotify lookup WITHOUT an
+// operator confirming the candidate. Mirrors the "exact" rule in
+// client/src/lib/appleArtistMatch.ts: case/diacritic-insensitive with
+// punctuation PRESERVED, so "How???" never equals "$how".
+export function namesMatchStrict(a: string, b: string): boolean {
+  return normalizeStrict(a) === normalizeStrict(b);
+}
+
 // Search Spotify for an artist by name and return the best match.
 // Returns null when not configured, on transport error, or when there is
 // no plausible hit — callers should treat this as "leave the field
@@ -332,9 +341,26 @@ export async function searchArtistForImport(
   rawName: string,
   candidateLimit = 3,
 ): Promise<SpotifyImportLookup> {
-  const all = await searchArtistCandidates(rawName, Math.max(candidateLimit, 5));
+  // Task #3193 — widen the decision pool to 10 so a second artist whose
+  // strict name also equals the query (several "John Williams"es) can't
+  // fall off a 5-row pool and fake a confident single hit.
+  const all = await searchArtistCandidates(rawName, Math.max(candidateLimit, 10));
+  return decideImportMatch(rawName, all, candidateLimit);
+}
+
+// Pure decision half of `searchArtistForImport`, split out so it's unit
+// testable without a Spotify token. "matched" (safe to auto-write a link)
+// requires EXACTLY ONE candidate whose strict — punctuation-preserving —
+// name equals the requested name. A loose (punctuation-stripped) collision
+// like "$how" for "How???" is never a match: it lands in "ambiguous" and
+// the operator picks from candidates.
+export function decideImportMatch(
+  rawName: string,
+  all: SpotifyArtistCandidate[],
+  candidateLimit = 3,
+): SpotifyImportLookup {
   if (all.length === 0) return { status: "none", candidates: [] };
-  const exact = all.filter((a) => normalizeStrict(a.name) === normalizeStrict(rawName));
+  const exact = all.filter((a) => namesMatchStrict(a.name, rawName));
   const candidates = all.slice(0, candidateLimit);
   if (exact.length === 1) {
     return { status: "matched", match: exact[0], candidates };
@@ -514,10 +540,16 @@ export async function searchArtistCandidatesDetailed(
     genres: a.genres ?? [],
     latestRelease: null,
   }));
+  // Task #3193 — strict (punctuation-preserving) exact matches outrank
+  // loose (punctuation-stripped) ones: for a query of "How???" the artist
+  // "How???" must sort ahead of "$how" even when the latter is more
+  // popular. Loose matches still outrank non-matches for the pickers.
+  const wantedStrict = normalizeStrict(name);
   rows.sort((a, b) => {
-    const ax = normalize(a.name) === wanted ? 1 : 0;
-    const bx = normalize(b.name) === wanted ? 1 : 0;
-    if (ax !== bx) return bx - ax;
+    const score = (c: SpotifyArtistCandidate) =>
+      normalizeStrict(c.name) === wantedStrict ? 2 : normalize(c.name) === wanted ? 1 : 0;
+    const d = score(b) - score(a);
+    if (d !== 0) return d;
     return b.popularity - a.popularity;
   });
   const top = rows.slice(0, limit);
