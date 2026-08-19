@@ -34452,11 +34452,19 @@ export async function registerRoutes(
       previewUrl = previews.previewUrl;
       previewUrl2 = previews.previewUrl2;
     } else {
-      const fetched = await fetchAndScanPdf(body.data.url);
-      if (!fetched.ok) return res.status(400).json({ message: fetched.error });
-      scan = fetched.scan;
-      assetUrl = fetched.finalUrl;
-      fileName = fetched.fileName;
+      // Standing mirror rule (Aug 2026): pasted https links are downloaded
+      // into OUR object storage at save — never persisted as external URLs.
+      // Mirroring also means pasted files get a real trim-area preview
+      // (before this, press-pasted links showed "No preview could be
+      // generated" on the artist Test page — Niina's blank viewer, Aug 18).
+      const mirrored = await mirrorExternalTemplatePdf(body.data.url);
+      if (!mirrored.ok) return res.status(422).json({ message: mirrored.error });
+      scan = mirrored.scan;
+      assetUrl = mirrored.objectPath;
+      fileName = body.data.fileName || body.data.url.split("/").pop()?.split("?")[0] || null;
+      const previews = await generateCompletedPreview(mirrored.objectPath, spec);
+      previewUrl = previews.previewUrl;
+      previewUrl2 = previews.previewUrl2;
     }
 
     // Task #3012 — edge-band bleed-content heuristic (advisory only).
