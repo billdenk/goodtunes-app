@@ -2268,6 +2268,30 @@ export async function registerRoutes(
     );
   });
 
+  // ─── Press economics calculator standalone page ───────────────────
+  // Self-contained HTML calculator (built externally by Bill), shared by
+  // direct URL only — same serving pattern as /investors above (unlinked,
+  // noindex, no-store, wins over the SPA fallback on every host, e.g.
+  // get.goodtunes.music/press-calculator).
+  app.get("/press-calculator", async (_req, res) => {
+    const path = await import("path");
+    res.sendFile(
+      path.join(process.cwd(), "server", "assets", "press-calculator.html"),
+      {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "X-Robots-Tag": "noindex, nofollow",
+          "Cache-Control": "no-store, must-revalidate",
+        },
+      },
+      (err?: Error) => {
+        if (err && !res.headersSent) {
+          res.status(404).type("text/plain").send("press calculator page is not available");
+        }
+      },
+    );
+  });
+
   // ─── OAuth: Google + Apple ─────────────────────────────────────────
   // Start endpoints redirect to the provider; callback endpoints come
   // back here. The `kind` (admin | customer) is taken from the host on
