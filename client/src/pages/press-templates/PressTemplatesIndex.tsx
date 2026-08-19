@@ -459,16 +459,21 @@ function CustomSlotActions({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button
-        type="button"
-        aria-label="Template actions"
-        onClick={() => setOpen((v) => !v)}
-        className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full inline-flex items-center justify-center hover:opacity-80 z-10"
-        style={{ backgroundColor: t.overlayBtn }}
-        data-testid={`button-slot-actions-${slot.id}`}
-      >
-        <MoreHorizontal className="w-4 h-4" style={{ color: t.ink }} />
-      </button>
+      {/* Wrapped in a positioned div so the tile wrapper's [&>button] stretch
+          selector can't match this trigger (it would balloon into a tile-wide
+          oval). Mirrors how TileOverflow avoids the same selector. */}
+      <div className="absolute top-2.5 right-2.5 z-10">
+        <button
+          type="button"
+          aria-label="Template actions"
+          onClick={() => setOpen((v) => !v)}
+          className="w-7 h-7 rounded-full inline-flex items-center justify-center hover:opacity-80"
+          style={{ backgroundColor: t.overlayBtn }}
+          data-testid={`button-slot-actions-${slot.id}`}
+        >
+          <MoreHorizontal className="w-4 h-4" style={{ color: t.ink }} />
+        </button>
+      </div>
       {open && (
         <div
           className="absolute z-20 rounded-xl py-1.5 text-left"
