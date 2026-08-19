@@ -46,7 +46,7 @@ const PRESS_ACCENT = '#D6A63F';
 // Press name shown in body copy ("N weights available from …") — verbatim
 // from the handoff. Lived on the deleted shell; kept here as the body still
 // references it. (Per-press white-label; MRP's name for now.)
-const PARTNER_NAME = 'Memphis Record Pressing';
+// PARTNER_NAME removed (gogoods, Aug 19 2026) — prose uses the brand context now.
 // Theme-aware via CSS variables (Bill, Aug 16 2026: canon press shell, dark
 // default). Values are set in Q_THEME_CSS below; product visuals (jackets,
 // sleeves, discs) keep their real hex colors — vinyl is vinyl in any theme.
@@ -2533,7 +2533,7 @@ function priceOverlay(components: PressComponentsPayload | undefined): PricingTa
 // PAGE
 // ═══════════════════════════════════════════════════════════════════
 export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pressId: string; estimateId: string | null; canEdit: boolean; onExit: (dest?: "estimates" | "packages") => void }) {
-  const pressBrandShort = usePressBrand().shortName;
+  const { shortName: pressBrandShort, name: pressBrandName } = usePressBrand();
   // Dark mode rides the portal's body.gt-admin-dark (useAdminDark) — the mock's
   // per-mount html[data-gt-dark] chrome is gone. Subscribing keeps token-driven
   // inline values (frosted shadows, disc rims) in step with the operator toggle.
@@ -3052,7 +3052,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                 <section id="step-weight" style={{ scrollMarginTop: 120 }}>
                   <StepHeading lead="Pick a weight." rest="How heavy it presses." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
-                    {VINYL_WEIGHTS.length} weights available from {PARTNER_NAME}.
+                    {VINYL_WEIGHTS.length} weights available from {pressBrandName}.
                   </p>
                   <div style={{ marginTop: 18, display: 'flex', gap: 12 }}>
                     {VINYL_WEIGHTS.map((w) => {
@@ -3193,7 +3193,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
               <>
                 <StepHeading lead="Pick a jacket." rest="How it&rsquo;s built." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
-                  {jacketOptions.length} styles available from {PARTNER_NAME} for {sizeLabel} records.
+                  {jacketOptions.length} styles available from {pressBrandName} for {sizeLabel} records.
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {jacketOptions.map((j) => (
@@ -3241,7 +3241,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
               <>
                 <StepHeading lead="Pick an inner sleeve." rest="Printed, unprinted, or polylined." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
-                  {SLEEVE_OPTIONS.length} inner sleeve styles available from {PARTNER_NAME}.
+                  {SLEEVE_OPTIONS.length} inner sleeve styles available from {pressBrandName}.
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {SLEEVE_OPTIONS.map((s) => (
@@ -3375,7 +3375,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                 <StepHeading lead="Add an insert." rest="Optional — or skip it." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {insertsAvailable
-                    ? `${visibleInserts.length - 1} insert styles available from ${PARTNER_NAME} — or skip it.`
+                    ? `${visibleInserts.length - 1} insert styles available from ${pressBrandName} — or skip it.`
                     : 'No insert styles press for 7" — this record ships without one.'}
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -3552,13 +3552,13 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                       <img src={californialandCover} alt="Artist cover" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center" style={{ background: '#111112' }}>
-                        <PressLogoImg  alt="Memphis Record Pressing" style={{ width: '52%', height: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.92 }} />
+                        <PressLogoImg  alt={pressBrandName} style={{ width: '52%', height: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.92 }} />
                       </div>
                     )}
                   </div>
                 </div>
                 <p className="text-[12px] text-center" style={{ marginTop: 6, maxWidth: 360, color: '#a1a1a6' }}>
-                  {useArtistArt ? 'Artist temp artwork for this quote' : 'Memphis house artwork by default'} — hover to slide the sleeve and record out.
+                  {useArtistArt ? 'Artist temp artwork for this quote' : `${pressBrandName} house artwork by default`} — hover to slide the sleeve and record out.
                 </p>
                 {/* Swap-in point (Bill, Aug 16 2026): a press can drop in the
                     artist's temp artwork, sleeve, and label for the quote;
@@ -3571,7 +3571,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                   style={{ marginTop: 10, padding: '6px 14px', border: `1px solid ${HAIRLINE}`, color: SUBINK, background: 'transparent', cursor: 'pointer' }}
                   data-testid="qty-swap-artwork"
                 >
-                  {useArtistArt ? 'Back to Memphis house artwork' : 'Use the artist\u2019s artwork instead\u2026'}
+                  {useArtistArt ? `Back to ${pressBrandName} house artwork` : 'Use the artist\u2019s artwork instead\u2026'}
                 </button>
               </>
             }
