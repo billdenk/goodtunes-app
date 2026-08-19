@@ -3,10 +3,15 @@ import { formatUsdCents } from "@shared/money";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeft,
   Award,
   BadgeCheck,
+  BarChart3,
   ChevronDown,
   ChevronRight,
+  Circle,
+  Contact,
+  Info,
   Disc,
   Disc3,
   Download,
@@ -279,28 +284,43 @@ export function AdminManufacturer() {
     enabled: !!user?.isAdmin && !!params?.id,
   });
 
-  // Build the top strip from the press registry: flat modules become tabs,
-  // consecutive sectioned modules collapse into one group tab (Create /
-  // Product Specs / Components) whose children render as a sub-pill row.
-  type StripEntry =
-    | { kind: "tab"; id: string; label: string; soon?: boolean }
-    | { kind: "group"; section: OperatorSectionId; label: string; children: { id: string; label: string }[] };
-  const strip: StripEntry[] = [];
+  // Rail standard (Ruby nav-restructure handoff, Aug 19 2026) — the
+  // horizontal tab strip is gone. The super-admin press page renders a
+  // partner-scoped LEFT RAIL mirroring the press portal's own rail
+  // (registry-driven, same groups), passed to AdminFrame as a sidebar
+  // override. Groups collapse one-at-a-time; the active group opens on
+  // arrival; Settings pins to the rail bottom; operator-only extras
+  // (Overview / Contacts / Analytics — no "Admin" group label per Bill
+  // round 2) sit after a quiet hairline.
+  type RailEntry =
+    | { kind: "tab"; id: string; label: string; icon?: any; soon?: boolean; soonLabel?: string }
+    | { kind: "group"; section: OperatorSectionId; label: string; children: { id: string; label: string; icon?: any; soon?: boolean; soonLabel?: string }[] };
+  const rail: RailEntry[] = [];
+  let settingsEntry: Extract<RailEntry, { kind: "tab" }> | null = null;
   for (const mod of modulesForRole("press")) {
     if (mod.section) {
-      const last = strip[strip.length - 1];
+      const last = rail[rail.length - 1];
       if (last && last.kind === "group" && last.section === mod.section) {
-        last.children.push({ id: mod.id, label: mod.label });
+        last.children.push({ id: mod.id, label: mod.label, icon: mod.icon, soon: mod.soon, soonLabel: mod.soonLabel });
       } else {
-        strip.push({ kind: "group", section: mod.section, label: SECTION_LABELS[mod.section], children: [{ id: mod.id, label: mod.label }] });
+        rail.push({ kind: "group", section: mod.section, label: SECTION_LABELS[mod.section], children: [{ id: mod.id, label: mod.label, icon: mod.icon, soon: mod.soon, soonLabel: mod.soonLabel }] });
       }
+    } else if (mod.id === "settings") {
+      // Pinned to the rail bottom — hoisted out of the scrollable nav.
+      settingsEntry = { kind: "tab", id: mod.id, label: mod.label, icon: mod.icon, soon: mod.soon, soonLabel: mod.soonLabel };
     } else {
-      strip.push({ kind: "tab", id: mod.id, label: mod.label, soon: mod.soon });
+      rail.push({ kind: "tab", id: mod.id, label: mod.label, icon: mod.icon, soon: mod.soon, soonLabel: mod.soonLabel });
     }
   }
-  const activeGroup = strip.find(
-    (e): e is Extract<StripEntry, { kind: "group" }> => e.kind === "group" && e.children.some((c) => c.id === tab),
+  const activeGroup = rail.find(
+    (e): e is Extract<RailEntry, { kind: "group" }> => e.kind === "group" && e.children.some((c) => c.id === tab),
   );
+  // One group open at a time; the group containing the active tab opens on
+  // arrival (and follows the active tab as it moves between groups).
+  const [openSection, setOpenSection] = useState<OperatorSectionId | null>(activeGroup?.section ?? null);
+  useEffect(() => {
+    if (activeGroup) setOpenSection(activeGroup.section);
+  }, [activeGroup?.section]);
   const isExtraTab = (ADMIN_EXTRA_TABS as readonly string[]).includes(tab);
 
   const { data: m, isLoading } = useQuery<Manufacturer>({
@@ -436,29 +456,74 @@ export function AdminManufacturer() {
     );
   }
 
-  return (
-    <AdminFrame active="manufacturers" contentWidth="wide">
-      <div className="space-y-6">
-        {/* BREADCRUMB */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium min-w-0">
-            <Link href="/admin/manufacturers" className="hover:text-[color:var(--brand-blue)] hover:underline underline-offset-2 transition-colors flex-shrink-0" data-testid="link-breadcrumb-presses">
-              Presses
-            </Link>
-            <ChevronRight className="w-3 h-3 flex-shrink-0" />
-            <span className="text-slate-700 font-semibold truncate max-w-[420px]">{m.name}</span>
-          </div>
-          <ViewAsPartnerButton role="manufacturer" scopeId={id} label={m.name} />
+  // Partner-scoped rail (sidebar override for AdminFrame). Mirrors the
+  // press portal's own rail exactly — same registry modules, same
+  // grouping — with a back link + identity block on top and the
+  // operator-only extras after a quiet hairline (no "Admin" group label,
+  // Bill round 2). Settings pins to the rail bottom.
+  const railRow = (entry: { id: string; label: string; icon?: any; soon?: boolean; soonLabel?: string }, indent = false) => {
+    const Glyph = entry.icon ?? Circle;
+    if (entry.soon) {
+      return (
+        <div
+          key={entry.id}
+          aria-disabled="true"
+          data-testid={`nav-${entry.id}`}
+          className={`w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] font-medium text-[var(--apple-faint)] select-none ${indent ? "ml-3 w-[calc(100%-0.75rem)]" : ""}`}
+        >
+          <Glyph className="w-4 h-4 flex-shrink-0 text-[var(--apple-faint)] opacity-70" />
+          <span className="flex-1 text-left truncate">{entry.label}</span>
+          <span className="ml-auto flex-shrink-0 px-2 h-[18px] rounded-full text-[10px] font-semibold tracking-wide flex items-center text-[var(--apple-subink)] bg-[var(--apple-card-soft,rgba(0,0,0,0.04))] border border-[var(--apple-hairline)]">
+            Soon
+          </span>
         </div>
+      );
+    }
+    const active = tab === entry.id;
+    return (
+      <button
+        key={entry.id}
+        type="button"
+        onClick={() => handleTabChange(entry.id)}
+        className={[
+          "w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] font-medium transition-colors text-left",
+          indent ? "ml-3 w-[calc(100%-0.75rem)]" : "",
+          active
+            ? "bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]"
+            : "text-[var(--apple-subink)] hover:bg-slate-100",
+        ].join(" ")}
+        data-testid={`nav-${entry.id}`}
+      >
+        <Glyph className={`w-4 h-4 flex-shrink-0 ${active ? "text-[var(--brand-blue)]" : "text-[var(--apple-faint)]"}`} />
+        <span className="flex-1 truncate">{entry.label}</span>
+      </button>
+    );
+  };
+  const pressRail = (
+    <aside
+      className="w-64 flex-shrink-0 bg-[var(--apple-rail)] hidden md:flex md:flex-col"
+      data-testid="rail-admin-press"
+    >
+      <nav className="flex-1 px-2.5 pt-3 pb-3 space-y-0.5 overflow-y-auto border-r border-[var(--apple-hairline)]">
+        {/* Back to the presses index. */}
+        <Link
+          href="/admin/manufacturers"
+          className="w-full flex items-center gap-2 h-8 px-2.5 rounded-lg text-[12.5px] font-medium text-[var(--apple-faint)] hover:text-[var(--apple-subink)] hover:bg-slate-100 transition-colors"
+          data-testid="link-breadcrumb-presses"
+        >
+          <ArrowLeft className="w-3.5 h-3.5 flex-shrink-0" />
+          Presses
+        </Link>
 
-        {/* HEADER — logo tile + domain eyebrow + name + Visit link */}
-        <div className="flex items-start gap-4 sm:gap-5">
+        {/* Identity block — logo tile (click to edit), name, domain,
+            View-as pill. Replaces the old in-content page header. */}
+        <div className="px-2.5 pt-3 pb-4 space-y-2.5">
           <button
             type="button"
             onClick={() => setLogoEditorOpen(true)}
             className={[
-              "group relative w-20 h-20 sm:w-24 sm:h-24 rounded-xl overflow-hidden shadow-sm flex-shrink-0 flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2",
-              m.logoUrl ? (invertHeaderLogo ? "ring-1 ring-slate-700" : "") : "bg-white ring-1 ring-slate-200",
+              "group relative w-14 h-14 rounded-xl overflow-hidden shadow-sm flex items-center justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]",
+              m.logoUrl ? (invertHeaderLogo ? "ring-1 ring-slate-700" : "bg-white ring-1 ring-slate-200") : "bg-white ring-1 ring-slate-200",
             ].join(" ")}
             aria-label="Edit press logo"
             data-testid="button-edit-press-logo"
@@ -467,22 +532,20 @@ export function AdminManufacturer() {
               <img
                 src={m.logoUrl}
                 alt={m.name}
-                className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
+                className="w-full h-full object-cover"
                 style={invertHeaderLogo ? { filter: "invert(1) brightness(1.7)" } : undefined}
                 data-testid="img-press-logo"
               />
             ) : (
-              <Factory className="w-10 h-10 text-slate-300" strokeWidth={1.5} />
+              <Factory className="w-7 h-7 text-slate-300" strokeWidth={1.5} />
             )}
-            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 transition-colors" />
-            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-              <span className="w-9 h-9 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow-lg ring-1 ring-black/5">
-                <Pencil className="w-4 h-4" />
+            <span className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
+            <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 inline-flex items-center justify-center shadow ring-1 ring-black/5">
+                <Pencil className="w-3.5 h-3.5" />
               </span>
             </span>
-            {/* Identity icon chip (logo policy Aug 10 2026) — small avatar
-                circle overlaid on the logo tile's corner. Click opens its own
-                editor; stops propagation so it doesn't open the logo dialog. */}
+            {/* Identity icon chip (logo policy Aug 10 2026). */}
             <span
               role="button"
               tabIndex={0}
@@ -492,7 +555,7 @@ export function AdminManufacturer() {
                   e.preventDefault(); e.stopPropagation(); setIdentityIconEditorOpen(true);
                 }
               }}
-              className="absolute bottom-1 right-1 w-7 h-7 rounded-full bg-white border border-slate-200 shadow-sm overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-[var(--brand-blue)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]"
+              className="absolute bottom-0.5 right-0.5 w-5 h-5 rounded-full bg-white border border-slate-200 shadow-sm overflow-hidden flex items-center justify-center hover:ring-2 hover:ring-[var(--brand-blue)]/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]"
               aria-label="Edit identity icon"
               title="Identity icon — shown next to the press name in lists and feeds"
               data-testid="button-edit-press-identity-icon"
@@ -500,10 +563,93 @@ export function AdminManufacturer() {
               {(m as any).identityIconUrl ? (
                 <img src={(m as any).identityIconUrl} alt="" className="w-full h-full object-cover" />
               ) : (
-                <Pencil className="w-3 h-3 text-slate-400" />
+                <Pencil className="w-2.5 h-2.5 text-slate-400" />
               )}
             </span>
           </button>
+          <div className="min-w-0">
+            <div className="text-[15px] font-semibold text-[var(--apple-ink)] leading-tight truncate" data-testid="heading-manufacturer-name">
+              {m.name}
+            </div>
+            {(m.websiteUrl || m.domain) && (
+              <a
+                href={m.websiteUrl || `https://${m.domain}`}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-0.5 inline-flex items-center gap-1 text-[11.5px] text-[var(--brand-blue)] hover:underline underline-offset-2 max-w-full"
+                data-testid="link-press-website"
+              >
+                <span className="truncate">{(m.domain || m.websiteUrl)!.replace(/^https?:\/\//, "")}</span>
+                <ExternalLink className="w-3 h-3 flex-shrink-0" />
+              </a>
+            )}
+          </div>
+          <ViewAsPartnerButton role="manufacturer" scopeId={id} label={m.name} />
+        </div>
+
+        {/* The press's own rail, mirrored exactly (registry-driven). */}
+        {rail.map((e) => {
+          if (e.kind === "group") {
+            const expanded = openSection === e.section;
+            const containsActive = e.children.some((c) => c.id === tab);
+            return (
+              <div key={`section-${e.section}`}>
+                <button
+                  type="button"
+                  onClick={() => setOpenSection((s) => (s === e.section ? null : e.section))}
+                  className={[
+                    "w-full flex items-center gap-2 h-9 px-2.5 rounded-lg text-[13.5px] font-medium transition-colors",
+                    containsActive ? "text-[var(--apple-ink)]" : "text-[var(--apple-subink)] hover:bg-slate-100",
+                  ].join(" ")}
+                  aria-expanded={expanded}
+                  data-testid={`nav-section-${e.section}`}
+                >
+                  {expanded ? (
+                    <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-[var(--apple-faint)]" />
+                  ) : (
+                    <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-[var(--apple-faint)]" />
+                  )}
+                  <span className="flex-1 text-left truncate">{e.label}</span>
+                </button>
+                {expanded && e.children.map((c) => railRow(c, true))}
+              </div>
+            );
+          }
+          return railRow(e);
+        })}
+
+        {/* Operator-only extras — no group label (Bill round 2), just a
+            quiet hairline. Surfaces with no press-portal equivalent. */}
+        <div className="my-2 border-t border-[var(--apple-hairline)]" />
+        {railRow({ id: "overview", label: "Overview", icon: Info })}
+        {railRow({ id: "contacts", label: "Contacts", icon: Contact })}
+        {railRow({ id: "analytics", label: "Analytics", icon: BarChart3 })}
+      </nav>
+
+      {/* Settings — pinned to the rail bottom (rail standard). */}
+      {settingsEntry && (
+        <div className="flex-shrink-0 border-t border-r border-[var(--apple-hairline)] px-2.5 py-2">
+          {railRow(settingsEntry)}
+        </div>
+      )}
+    </aside>
+  );
+
+  return (
+    <AdminFrame active="manufacturers" contentWidth="wide" sidebar={pressRail}>
+      <div className="space-y-6">
+        {/* Breadcrumb — content-side context (the rail owns navigation). */}
+        <div className="flex items-center gap-1.5 text-xs text-slate-400 font-medium min-w-0">
+          <span className="text-slate-700 font-semibold truncate max-w-[420px]">{m.name}</span>
+          <ChevronRight className="w-3 h-3 flex-shrink-0" />
+          <span className="truncate">
+            {activeGroup
+              ? `${activeGroup.label} · ${activeGroup.children.find((c) => c.id === tab)?.label ?? tab}`
+              : (rail.find((e) => e.kind === "tab" && e.id === tab) as any)?.label
+                ?? (tab === "overview" ? "Overview" : tab === "contacts" ? "Contacts" : tab === "analytics" ? "Analytics" : settingsEntry && tab === settingsEntry.id ? settingsEntry.label : tab)}
+          </span>
+        </div>
+
           <PressLogoEditorDialog
             name={m.name}
             logoUrl={m.logoUrl}
@@ -533,169 +679,39 @@ export function AdminManufacturer() {
             FallbackIcon={Factory}
             testIdPrefix="press-identity-icon"
           />
-          <div className="flex-1 min-w-0">
-            <h1
-              className="text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] truncate"
-              data-testid="heading-manufacturer-name"
-            >
-              {m.name}
-            </h1>
-            {(m.websiteUrl || m.domain) && (
-              <a
-                href={m.websiteUrl || `https://${m.domain}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 inline-flex items-center gap-1 text-xs text-[var(--brand-blue)] hover:underline underline-offset-2"
-                data-testid="link-press-website"
-              >
-                {(m.domain || m.websiteUrl).replace(/^https?:\/\//, "")}
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
-          </div>
-        </div>
-
-        {/* TAB BAR — Overview / People / Albums / Analytics; Refresh + Delete sit on the right. */}
-        <div
-          className="flex items-end justify-between gap-5 border-b border-slate-200"
-          data-testid="tabs-admin-press"
-        >
-          <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
-            {strip.map((e) => {
-              if (e.kind === "group") {
-                const active = e.children.some((c) => c.id === tab);
-                return (
-                  <button
-                    key={`group-${e.section}`}
-                    type="button"
-                    onClick={() => handleTabChange(e.children[0].id)}
-                    className={[
-                      "relative pb-2.5 text-sm font-semibold whitespace-nowrap transition-colors",
-                      active ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
-                    ].join(" ")}
-                    data-testid={`tab-group-${e.section}`}
-                  >
-                    {e.label}
-                    {active && (
-                      <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
-                    )}
-                  </button>
-                );
-              }
-              if (e.soon) {
-                // Decorative "Soon" row (White Label) — mirrors the portal
-                // rail's dimmed non-clickable treatment; god view says "Soon".
-                return (
-                  <span
-                    key={e.id}
-                    className="relative pb-2.5 text-sm font-semibold whitespace-nowrap text-slate-300 inline-flex items-center gap-1.5 cursor-default select-none"
-                    data-testid={`tab-${e.id}`}
-                  >
-                    {e.label}
-                    <span className="text-[10px] font-semibold uppercase tracking-wide rounded-full px-1.5 py-0.5 bg-slate-100 text-slate-400">Soon</span>
-                  </span>
-                );
-              }
-              return (
-                <button
-                  key={e.id}
-                  type="button"
-                  onClick={() => handleTabChange(e.id)}
-                  className={[
-                    "relative pb-2.5 text-sm font-semibold whitespace-nowrap transition-colors",
-                    tab === e.id ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
-                  ].join(" ")}
-                  data-testid={`tab-${e.id}`}
-                >
-                  {e.label}
-                  {tab === e.id && (
-                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
-                  )}
-                </button>
-              );
-            })}
-            {/* Operator-only extras, after a quiet divider — surfaces with no
-                press-portal equivalent (profile editing, plant contacts,
-                operator analytics). */}
-            <span aria-hidden className="h-4 w-px bg-slate-200 flex-shrink-0 mb-2" />
-            {([
-              { key: "overview", label: "Overview" },
-              { key: "contacts", label: "Contacts" },
-              { key: "analytics", label: "Analytics" },
-            ] as const).map((t) => (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => handleTabChange(t.key)}
-                className={[
-                  "relative pb-2.5 text-sm font-semibold whitespace-nowrap transition-colors",
-                  tab === t.key ? "text-slate-900" : "text-slate-400 hover:text-slate-700",
-                ].join(" ")}
-                data-testid={`tab-${t.key}`}
-              >
-                {t.label}
-                {tab === t.key && (
-                  <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => rescrape.mutate()}
-              disabled={!m.websiteUrl || rescrape.isPending}
-              aria-label="Refresh from website"
-              title={m.websiteUrl ? "Re-fetch logo, cover, and bio from the website" : "Add a website URL first"}
-              className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
-              data-testid="button-rescrape-manufacturer"
-            >
-              <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                {rescrape.isPending ? "Refreshing…" : "Refresh from website"}
-              </span>
-              <RefreshCw className={`w-3.5 h-3.5 ${rescrape.isPending ? "animate-spin" : ""}`} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeleteOpen(true)}
-              disabled={remove.isPending}
-              aria-label="Delete press"
-              className="group inline-flex items-center gap-1.5 h-7 px-1.5 mb-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
-              data-testid="button-delete-manufacturer"
-            >
-              <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
-                Delete
-              </span>
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Sub-pills for the active group tab (Create / Product Specs /
-            Components) — the portal rail shows these as indented children. */}
-        {activeGroup && (
-          <div className="flex items-center gap-2 flex-wrap" data-testid={`subtabs-${activeGroup.section}`}>
-            {activeGroup.children.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => handleTabChange(c.id)}
-                className={[
-                  "px-3 py-1.5 rounded-full text-[12.5px] font-semibold transition-colors",
-                  tab === c.id
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-100 text-slate-500 hover:text-slate-800",
-                ].join(" ")}
-                data-testid={`subtab-${c.id}`}
-              >
-                {c.label}
-              </button>
-            ))}
-          </div>
-        )}
-
         {tab === "overview" && (
           <>
+            {/* Operator profile actions — used to live on the right edge of
+                the old horizontal tab bar; the rail has no room for them. */}
+            <div className="flex items-center justify-end gap-1">
+              <button
+                type="button"
+                onClick={() => rescrape.mutate()}
+                disabled={!m.websiteUrl || rescrape.isPending}
+                aria-label="Refresh from website"
+                title={m.websiteUrl ? "Re-fetch logo, cover, and bio from the website" : "Add a website URL first"}
+                className="group inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)]/40"
+                data-testid="button-rescrape-manufacturer"
+              >
+                <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                  {rescrape.isPending ? "Refreshing…" : "Refresh from website"}
+                </span>
+                <RefreshCw className={`w-3.5 h-3.5 ${rescrape.isPending ? "animate-spin" : ""}`} />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteOpen(true)}
+                disabled={remove.isPending}
+                aria-label="Delete press"
+                className="group inline-flex items-center gap-1.5 h-7 px-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300"
+                data-testid="button-delete-manufacturer"
+              >
+                <span className="text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity">
+                  Delete
+                </span>
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
             <PressCapabilitiesCard
               m={m}
               onSave={(patch) => save.mutate(patch)}

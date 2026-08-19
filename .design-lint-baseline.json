@@ -18520,6 +18520,11 @@
     "snippet": "className=\"inline-flex items-center justify-center h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-[var(--brand-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors\""
   },
   {
+    "rule": "admin-link-missing-shared-treatment",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<Link"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
     "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)] mb-2\">Funding pools</div>"
@@ -18527,22 +18532,42 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "className=\"text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] truncate\""
+    "snippet": "className={`w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] font-medium text-[var(--apple-faint)] select-none ${indent ? \"ml-3 w-[calc(100%-0.75rem)]\" : \"\"}`}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "<span className=\"text-[10px] font-semibold uppercase tracking-wide rounded-full px-1.5 py-0.5 bg-slate-100 text-slate-400\">Soon</span>"
+    "snippet": "<span className=\"ml-auto flex-shrink-0 px-2 h-[18px] rounded-full text-[10px] font-semibold tracking-wide flex items-center text-[var(--apple-subink)] bg-[var(--apple-card-soft,rgba(0,0,0,0.04))] bord"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "\"w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] font-medium transition-colors text-left\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "className=\"w-full flex items-center gap-2 h-8 px-2.5 rounded-lg text-[12.5px] font-medium text-[var(--apple-faint)] hover:text-[var(--apple-subink)] hover:bg-slate-100 transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "<div className=\"text-[15px] font-semibold text-[var(--apple-ink)] leading-tight truncate\" data-testid=\"heading-manufacturer-name\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "className=\"mt-0.5 inline-flex items-center gap-1 text-[11.5px] text-[var(--brand-blue)] hover:underline underline-offset-2 max-w-full\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": "\"w-full flex items-center gap-2 h-9 px-2.5 rounded-lg text-[13.5px] font-medium transition-colors\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminManufacturer.tsx",
     "snippet": "<span className=\"text-[12px] font-medium opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/AdminManufacturer.tsx",
-    "snippet": "\"px-3 py-1.5 rounded-full text-[12.5px] font-semibold transition-colors\","
   },
   {
     "rule": "hardcoded-font-size",

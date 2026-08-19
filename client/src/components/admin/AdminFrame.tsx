@@ -163,9 +163,19 @@ export function AdminFrame({
   active,
   preview,
   contentWidth = "wide",
+  sidebar,
   children,
 }: {
   active: EntityKey;
+  /**
+   * Partner-scoped rail override (rail standard, Ruby nav-restructure
+   * handoff Aug 19 2026). When a detail page mirrors a partner's own
+   * portal rail (e.g. the super-admin press page), it passes its own
+   * <aside> here and AdminFrame renders it INSTEAD of the operator
+   * sidebar — keeping the shared top bar, banners, theming and preview
+   * machinery.
+   */
+  sidebar?: ReactNode;
   /**
    * Optional fan-side preview to render in the collapsible right pane.
    * When omitted (list pages, loading/error states) the pane is hidden
@@ -594,6 +604,7 @@ export function AdminFrame({
           (not `hidden`) so the row doesn't become a scroll container —
           sticky headers and the raise-on-save bar keep their behavior. */}
       <div className="flex flex-1 min-h-0 w-full min-w-0 overflow-x-clip">
+      {sidebar ? sidebar : (
       <aside className="w-64 flex-shrink-0 bg-[var(--apple-rail)] hidden md:flex md:flex-col">
         {/* Task #336 — Global admin search. Sits above Dashboard so it
             anchors the top of the sidebar; ⌘K opens/focuses from
@@ -1242,6 +1253,7 @@ export function AdminFrame({
             )}
           </nav>
         </aside>
+      )}
 
       {/* Task #2987 — overflow-x-clip (not hidden): hidden leaves <main>
           horizontally scrollable via focus/scrollIntoView, which slid page

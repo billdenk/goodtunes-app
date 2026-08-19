@@ -396,7 +396,11 @@ export function OperatorShell<TabId extends string>({
               // registry places section members contiguously right under the
               // section's anchor row, the group lands in the intended spot.
               const drawnSections = new Set<OperatorSectionId>();
-              return tabs.map((t) => {
+              // Rail standard (Ruby nav-restructure handoff, Aug 19 2026):
+              // Settings is PINNED to the rail bottom for every leftnav
+              // portal — hoisted out of the scrollable nav so it can never
+              // scroll away. Rendered below, above "Powered by GoodTunes".
+              return tabs.filter((t) => !(t.id === "settings" && !t.section)).map((t) => {
                 if (t.section) {
                   if (drawnSections.has(t.section)) return null;
                   drawnSections.add(t.section);
@@ -496,6 +500,26 @@ export function OperatorShell<TabId extends string>({
               </>
             )}
           </nav>
+
+          {/* Settings — pinned to the rail bottom (rail standard, Ruby
+              nav-restructure handoff Aug 19 2026). Hoisted out of the
+              scrollable nav above so it stays visible however long the
+              nav grows. */}
+          {(() => {
+            const settingsTab = tabs.find((t) => t.id === "settings" && !t.section);
+            if (!settingsTab || settingsTab.soon) return null;
+            return (
+              <div className="flex-shrink-0 border-t border-r border-[var(--apple-hairline)] px-2.5 py-2">
+                <NavButton
+                  label={settingsTab.label}
+                  icon={settingsTab.icon}
+                  active={settingsTab.id === activeTab}
+                  onClick={() => onTabChange(settingsTab.id)}
+                  testId={`nav-${settingsTab.id}`}
+                />
+              </div>
+            );
+          })()}
 
           {/* "Powered by GoodTunes" — bottom of rail. GoodTunes logo moves
               here so the partner's own logo claims the top-left position. */}
