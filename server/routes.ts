@@ -31390,10 +31390,13 @@ export async function registerRoutes(
       } else if (role === "manufacturer" && roleScopeId) {
         const [albumRows, mfrRows, rosterRows, pressOrderRows] = await Promise.all([
           db.execute<any>(sql`
-            SELECT id, title, artist FROM albums
-            WHERE submitted_press_id = ${roleScopeId} AND deleted_at IS NULL
-              AND lower(title) LIKE ${pat}
-            ORDER BY title LIMIT ${n}
+            SELECT a.id, a.title, a.artist FROM albums a
+            WHERE EXISTS (
+                SELECT 1 FROM album_skus sku
+                WHERE sku.album_id = a.id AND sku.press_id = ${roleScopeId}
+              ) AND a.deleted_at IS NULL
+              AND lower(a.title) LIKE ${pat}
+            ORDER BY a.title LIMIT ${n}
           `),
           db.execute<any>(sql`
             SELECT id, name FROM manufacturers
@@ -31405,7 +31408,10 @@ export async function registerRoutes(
             SELECT DISTINCT p.id, p.name
             FROM people p
             JOIN albums a ON a.primary_artist_id = p.id
-            WHERE a.submitted_press_id = ${roleScopeId}
+            WHERE EXISTS (
+                SELECT 1 FROM album_skus sku
+                WHERE sku.album_id = a.id AND sku.press_id = ${roleScopeId}
+              )
               AND a.deleted_at IS NULL AND p.deleted_at IS NULL
               AND lower(p.name) LIKE ${pat}
             ORDER BY p.name LIMIT ${n}
@@ -31416,7 +31422,10 @@ export async function registerRoutes(
                    por.quantity, por.status
             FROM pressing_order_requests por
             JOIN albums a ON a.id = por.album_id
-            WHERE a.submitted_press_id = ${roleScopeId}
+            WHERE EXISTS (
+                SELECT 1 FROM album_skus sku
+                WHERE sku.album_id = a.id AND sku.press_id = ${roleScopeId}
+              )
               AND (lower(a.title) LIKE ${pat} OR lower(por.status) LIKE ${pat})
             ORDER BY por.submitted_at DESC LIMIT ${n}
           `),
