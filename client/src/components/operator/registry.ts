@@ -212,6 +212,10 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // (Task #3057 — replaced the inline admin pricing matrix of Task #2075,
   // which leaked GoodTunes margins/wholesale to presses).
   { id: "dashboard",   label: "Dashboard",        icon: LayoutDashboard,  roles: ["press"] },
+  // "Details" (Ruby handoff PRESS_NAV, Aug 19 2026): the press's own profile
+  // page hoisted onto the rail, named for consistency with the artist
+  // release tabs. Body = the Settings→Profile surface.
+  { id: "details",    label: "Details",          icon: FileText,         roles: ["press"] },
   // Icons follow the press playground mock canon (Bill, Aug 2026):
   // Clients=Users, Acquisition=UserPlus, Catalog=Library, Referrals=Gift.
   { id: "people",     label: "Clients",          icon: Users,            roles: ["press"] },
@@ -227,8 +231,12 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // supersedes the Aug 11 rail). Children in canon order: GoodTunes
   // Packages, GoodDeed Certificates, Specs, Templates. White Label moved
   // to top-level above Settings.
-  { id: "catalog",    label: "GoodTunes Packages",    icon: Package,    section: "productSpecs", roles: ["press"] },
-  { id: "pricing",    label: "GoodDeed Certificates", icon: Award,      section: "productSpecs", roles: ["press"] },
+  // "MRP Packages" (Ruby handoff, Aug 19 2026): the catalog leaf is the
+  // press's OWN built packages, not GoodTunes' set — label carries the
+  // press's short name. Call sites override via pressPackagesLabel(name);
+  // this static fallback matches the handoff's sample press.
+  { id: "catalog",    label: "MRP Packages",          icon: Package,    section: "productSpecs", roles: ["press"] },
+  { id: "pricing",    label: "GoodDeed® Certificates", icon: Award,     section: "productSpecs", roles: ["press"] },
   { id: "specs",      label: "Specs",                 icon: AudioLines, section: "productSpecs", roles: ["press"] },
   // Press-templates flow (Ruby handoff, Aug 2026): template ingestion +
   // finished-file certification. LayoutTemplate glyph per Bill (canon
@@ -237,19 +245,24 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // Components section (Ruby handoff, handoff/press-components/, Aug 12
   // 2026): the per-press component setup surfaces. Rail order matches the
   // mock's COMPONENTS_CHILDREN.
+  // Format-first (Ruby handoff PRESS_NAV, Aug 19 2026): formats are the rail
+  // items; per-component pages (Jackets, Inner Sleeves, Center Labels,
+  // Inserts, Stickers) live as the in-page segmented control on the Vinyl
+  // page, never in the rail. Pricing stays the all-format roll-up sheet.
   { id: "comp-vinyl",    label: "Vinyl",         icon: Disc3,      section: "components", roles: ["press"] },
-  { id: "comp-jackets",  label: "Jackets",       icon: Square,     section: "components", roles: ["press"] },
-  { id: "comp-sleeves",  label: "Inner Sleeves", icon: Layers,     section: "components", roles: ["press"] },
-  { id: "comp-labels",   label: "Center Labels", icon: CircleDot,  section: "components", roles: ["press"] },
-  { id: "comp-inserts",  label: "Inserts",       icon: StickyNote, section: "components", roles: ["press"] },
-  { id: "comp-stickers", label: "Stickers",      icon: Sticker,    section: "components", roles: ["press"] },
+  { id: "comp-cd",       label: "CD",            icon: CircleDot,  section: "components", roles: ["press"] },
+  { id: "comp-cassette", label: "Cassette",      icon: Square,     section: "components", roles: ["press"] },
   { id: "comp-pricing",  label: "Pricing",       icon: Receipt,    section: "components", roles: ["press"] },
-  // White Label promoted to top-level above Settings (press rail canon,
-  // Bill Aug 16 2026); press-facing pill says "Request", super-admin god
-  // view shows "Soon".
+  // Referrals sits after Components, last in the scrollable tree (Ruby
+  // handoff PRESS_NAV, Aug 19 2026); Settings stays pinned to the rail
+  // bottom by the shell.
+  { id: "referrals",  label: "Referrals",        icon: Gift,             roles: ["press"] },
+  // White Label top-level above Settings (press rail canon, Bill Aug 16
+  // 2026); press-facing pill says "Request", super-admin god view shows
+  // "Soon". (The Aug 19 handoff moves it inside Settings — pending the
+  // White Label settings body.)
   { id: "whitelabel", label: "White Label",      icon: Layers, soon: true, soonLabel: "Request", roles: ["press"] },
   { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },
-  { id: "referrals",  label: "Referrals",        icon: Gift,             roles: ["press"] },
 
   // GoodDeed Quickprinter shell — `/vendor` routed via VendorScopeRouter
   // for is_quickprinter vendors (PrinterPortal.tsx). Print Queue stays the
@@ -263,6 +276,21 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "catalog",     label: "GoodDeed pricing", icon: Receipt,         roles: ["printer"] },
   { id: "settings",    label: "Settings",        icon: Cog,              roles: ["printer"] },
 ];
+
+/** "MRP Packages" per-press label (Ruby handoff, Aug 19 2026): the catalog
+ * leaf names the press's OWN packages. Multi-word press names collapse to
+ * initials ("Memphis Record Pressing" → "MRP"); single-word names ride as-is
+ * ("Hellbender Packages"). Fallback = the registry's static label. */
+export function pressPackagesLabel(pressName: string | null | undefined): string {
+  const name = (pressName ?? "").trim();
+  if (!name) return "MRP Packages";
+  const words = name.split(/\s+/).filter((w) => /[a-z0-9]/i.test(w));
+  if (words.length >= 2) {
+    const initials = words.map((w) => w[0]!.toUpperCase()).join("");
+    return `${initials} Packages`;
+  }
+  return `${name} Packages`;
+}
 
 export function modulesForRole(
   role: OperatorRole,

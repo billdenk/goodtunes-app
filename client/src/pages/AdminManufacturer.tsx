@@ -58,7 +58,7 @@ import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { SaveLink, CardHeader, EditPencil } from "@/components/admin/EditCardChrome";
 import { IconButton } from "@/components/ui/IconButton";
 import { PressTabBody, usePressPortalNav, type PressMe } from "@/pages/PressPortal";
-import { modulesForRole, SECTION_LABELS, type OperatorSectionId } from "@/components/operator/registry";
+import { modulesForRole, pressPackagesLabel, SECTION_LABELS, type OperatorSectionId } from "@/components/operator/registry";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -297,7 +297,10 @@ export function AdminManufacturer() {
     | { kind: "group"; section: OperatorSectionId; label: string; children: { id: string; label: string; icon?: any; soon?: boolean; soonLabel?: string }[] };
   const rail: RailEntry[] = [];
   let settingsEntry: Extract<RailEntry, { kind: "tab" }> | null = null;
-  for (const mod of modulesForRole("press")) {
+  for (const rawMod of modulesForRole("press")) {
+    // "MRP Packages" (Ruby handoff, Aug 19 2026) — the catalog leaf names
+    // THIS press's own packages; mirror the portal's per-press label.
+    const mod = rawMod.id === "catalog" ? { ...rawMod, label: pressPackagesLabel(pressMe?.name) } : rawMod;
     if (mod.section) {
       const last = rail[rail.length - 1];
       if (last && last.kind === "group" && last.section === mod.section) {

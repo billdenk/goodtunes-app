@@ -64,8 +64,11 @@ import {
   PressStickersComponentTab,
   PressComponentPricingTab,
   PressGoodDeedPricingTab,
+  PressVinylFormatTab,
+  PressCdFormatTab,
+  PressCassetteFormatTab,
 } from "@/pages/press-components/tabs";
-import { modulesForRole } from "@/components/operator/registry";
+import { modulesForRole, pressPackagesLabel } from "@/components/operator/registry";
 import { AdminReports } from "@/pages/AdminReports";
 import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { PressPackagePricingCatalog } from "@/pages/PressPackagePricingCatalog";
@@ -93,9 +96,12 @@ import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 
 // pipeline + reports stay in the union so direct ?tab= URLs still render
 // their content (they're just hidden from the nav per Task #2188).
-type TabId = "dashboard" | "people" | "estimates" | "packages" | "catalog" | "specs" | "templates" | "comp-vinyl" | "comp-jackets" | "comp-sleeves" | "comp-inserts" | "comp-labels" | "comp-stickers" | "comp-pricing" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "acquisition" | "settings";
+// comp-jackets/sleeves/labels/inserts/stickers stay in the union so legacy
+// deep links still land — they render the Vinyl format page with the matching
+// segment pre-selected (format-first rail, Ruby handoff Aug 19 2026).
+type TabId = "dashboard" | "details" | "people" | "estimates" | "packages" | "catalog" | "specs" | "templates" | "comp-vinyl" | "comp-cd" | "comp-cassette" | "comp-jackets" | "comp-sleeves" | "comp-inserts" | "comp-labels" | "comp-stickers" | "comp-pricing" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "acquisition" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "people", "estimates", "packages", "catalog", "specs", "templates", "comp-vinyl", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "details", "people", "estimates", "packages", "catalog", "specs", "templates", "comp-vinyl", "comp-cd", "comp-cassette", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 export interface PressMe {
@@ -222,6 +228,16 @@ function pressPortalHref(tab: string): string {
   return `/vendor?${carry.toString()}`;
 }
 
+// Legacy per-component tab ids → Vinyl-page segment (format-first rail,
+// Ruby handoff Aug 19 2026). Kept in TabId so old links never 404.
+const LEGACY_COMP_SEGMENT: Record<string, "jackets" | "sleeves" | "labels" | "inserts" | "stickers"> = {
+  "comp-jackets": "jackets",
+  "comp-sleeves": "sleeves",
+  "comp-labels": "labels",
+  "comp-inserts": "inserts",
+  "comp-stickers": "stickers",
+};
+
 // Shared nav state for the press module surface. Owns the ?tab / ?view /
 // ?person / ?estimate / ?package URL wiring so the SAME module body can be
 // mounted by PressPortal (left-rail portal) AND the super-admin press page
@@ -267,6 +283,10 @@ export function usePressPortalNav(opts?: {
     // The Customers tab was folded into People (People is now the single
     // directory). Old ?tab=customers deep-links degrade to People.
     if (t === "customers") return "people";
+    // Format-first rail (Ruby handoff, Aug 19 2026): legacy per-component
+    // deep links canonicalize to the Vinyl format page with the matching
+    // segment (?comp=) so the rail highlight + breadcrumb read "Vinyl".
+    if (t && t in LEGACY_COMP_SEGMENT) return "comp-vinyl";
     if (t && (PRESS_TAB_IDS as string[]).includes(t)) return t;
     if (t && opts?.extraTabIds?.includes(t)) return t;
     return "dashboard";
@@ -277,6 +297,14 @@ export function usePressPortalNav(opts?: {
 
   useEffect(() => {
     setTab(resolveTab(tabFromUrl, settingsSubFromUrl));
+    // Rewrite legacy comp-* links to the canonical ?tab=comp-vinyl&comp=<seg>
+    // form (replace, not push) so refreshes/feedback links stay canonical.
+    if (tabFromUrl && tabFromUrl in LEGACY_COMP_SEGMENT) {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set("tab", "comp-vinyl");
+      sp.set("comp", LEGACY_COMP_SEGMENT[tabFromUrl]);
+      history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabFromUrl, settingsSubFromUrl]);
   useEffect(() => {
@@ -390,7 +418,13 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   // the decorative "White Label" Soon row (inert; rendered by OperatorShell,
   // never routable — it's not in PRESS_TAB_IDS so ?tab=whitelabel resolves
   // to dashboard).
-  const tabs = modulesForRole("press") as ReadonlyArray<{ id: TabId; label: string; soon?: boolean }>;
+  // "MRP Packages" (Ruby handoff, Aug 19 2026): the Product Specs catalog
+  // leaf names the press's OWN packages — swap in this press's short name.
+  // Spread-preserve the row so icon/section survive (rebuilding rows strips
+  // them from the rail).
+  const tabs = modulesForRole("press").map((m) =>
+    m.id === "catalog" ? { ...m, label: pressPackagesLabel(me?.name) } : m,
+  ) as ReadonlyArray<{ id: TabId; label: string; soon?: boolean }>;
 
   return (
     <OperatorShell
@@ -417,7 +451,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       // while the embedded album view is open (it brings its own chrome).
       pageTitle={
         albumViewId ||
-        ["dashboard", "estimates", "packages", "catalog", "specs", "pricing", "referrals", "reports", "people", "albums", "acquisition", "templates", "comp-vinyl", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing"].includes(tab)
+        ["dashboard", "estimates", "packages", "catalog", "specs", "pricing", "referrals", "reports", "people", "albums", "acquisition", "templates", "comp-vinyl", "comp-cd", "comp-cassette", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing"].includes(tab)
           ? undefined
           : tab === "pipeline"
             ? "Pipeline"
@@ -544,12 +578,25 @@ export function PressTabBody({
         />
       ))}
       {tab === "templates" && <PressTemplatesTab pressId={pressId} />}
-      {tab === "comp-vinyl" && <PressVinylComponentTab pressId={pressId} />}
-      {tab === "comp-jackets" && <PressJacketsComponentTab pressId={pressId} />}
-      {tab === "comp-sleeves" && <PressInnerSleevesComponentTab pressId={pressId} />}
-      {tab === "comp-labels" && <PressLabelsComponentTab pressId={pressId} />}
-      {tab === "comp-inserts" && <PressInsertsComponentTab pressId={pressId} />}
-      {tab === "comp-stickers" && <PressStickersComponentTab pressId={pressId} />}
+      {/* Format-first Components (Ruby handoff, Aug 19 2026): the Vinyl page
+          hosts the per-component pages behind an in-page segmented control;
+          legacy comp-* tab ids deep-link to the matching segment. */}
+      {(tab === "comp-vinyl" || tab === "comp-jackets" || tab === "comp-sleeves" || tab === "comp-labels" || tab === "comp-inserts" || tab === "comp-stickers") && (
+        <PressVinylFormatTab
+          key={tab}
+          pressId={pressId}
+          initial={
+            tab === "comp-jackets" ? "jackets"
+            : tab === "comp-sleeves" ? "sleeves"
+            : tab === "comp-labels" ? "labels"
+            : tab === "comp-inserts" ? "inserts"
+            : tab === "comp-stickers" ? "stickers"
+            : "vinyl"
+          }
+        />
+      )}
+      {tab === "comp-cd" && <PressCdFormatTab pressId={pressId} />}
+      {tab === "comp-cassette" && <PressCassetteFormatTab pressId={pressId} />}
       {tab === "comp-pricing" && <PressComponentPricingTab pressId={pressId} />}
       {tab === "pipeline" && <PipelineTab pressId={pressId} />}
       {tab === "reports" && <AdminReports embedded />}
@@ -578,6 +625,14 @@ export function PressTabBody({
             testId="heading-press-referrals"
           />
           <ReferralLinkWidget kind="manufacturer" scopeId={pressId} canEdit={me?.canEdit !== false} />
+        </div>
+      )}
+      {/* Details (Ruby handoff, Aug 19 2026): the press's profile surface
+          hoisted onto the rail — same body as Settings → Profile, named for
+          consistency with the artist release tabs. */}
+      {tab === "details" && (
+        <div className="space-y-4" data-testid="press-details-tab">
+          <ProfileSubTab pressId={pressId} />
         </div>
       )}
       {tab === "settings" && <SettingsTab pressId={pressId} pressName={me?.name ?? ""} />}

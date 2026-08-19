@@ -29,8 +29,10 @@ import { PressInsertsComponent } from "./PressInsertsComponent";
 import { PressComponentPricing } from "./PressComponentPricing";
 import { PressGoodDeedPricingComponent } from "./PressGoodDeedPricingComponent";
 import { createSerialSaver } from "./saveQueue";
+import { CdCatalogBody, CassetteCatalogBody, type MediaCatalogData } from "@/pages/PressMediaCatalog";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { useMemo, useRef } from "react";
+import { useMemo, useRef, useState } from "react";
 
 function LoadingRow() {
   return (
@@ -204,4 +206,134 @@ export function PressInnerSleevesComponentTab({ pressId }: { pressId: string }) 
       saving={save.isPending}
     />
   );
+}
+
+// ─── Format-first Components (Ruby handoff PRESS_NAV, Aug 19 2026) ─────────
+// Formats are the rail items; the per-component pages (Jackets, Inner
+// Sleeves, Center Labels, Inserts, Stickers) live as an in-page segmented
+// control on the Vinyl page. Legacy ?tab=comp-jackets|… deep links land here
+// with the matching segment pre-selected. The segment mirrors into ?comp=
+// (portal tab-in-URL rule) so feedback links deep-link the right sub-page.
+
+const VINYL_SEGMENTS = [
+  { id: "vinyl", label: "Vinyl" },
+  { id: "jackets", label: "Jackets" },
+  { id: "sleeves", label: "Inner Sleeves" },
+  { id: "labels", label: "Center Labels" },
+  { id: "inserts", label: "Inserts" },
+  { id: "stickers", label: "Stickers" },
+] as const;
+type VinylSegmentId = (typeof VINYL_SEGMENTS)[number]["id"];
+
+function readCompParam(): VinylSegmentId | null {
+  const sp = new URLSearchParams(window.location.search);
+  const raw = sp.get("comp");
+  if (VINYL_SEGMENTS.some((s) => s.id === raw)) return raw as VinylSegmentId;
+  // Legacy ?tab=comp-jackets|… deep link, read before the nav hook's
+  // canonicalizing replaceState has landed (mount-order safety).
+  const legacy = (sp.get("tab") ?? "").replace(/^comp-/, "");
+  return VINYL_SEGMENTS.some((s) => s.id === legacy && legacy !== "vinyl") ? (legacy as VinylSegmentId) : null;
+}
+
+function writeCompParam(next: VinylSegmentId) {
+  const url = new URL(window.location.href);
+  if (next === "vinyl") url.searchParams.delete("comp");
+  else url.searchParams.set("comp", next);
+  window.history.replaceState(window.history.state, "", url.toString());
+}
+
+export function PressVinylFormatTab({ pressId, initial }: { pressId: string; initial?: VinylSegmentId }) {
+  const [seg, setSeg] = useState<VinylSegmentId>(() => readCompParam() ?? initial ?? "vinyl");
+  // Per Bill (2026-08-10, catalog media pills) — switching segments must never
+  // reset a sub-page's build state: visited panels stay mounted and toggle
+  // visibility.
+  const [visited, setVisited] = useState<Record<string, boolean>>(() => ({ [seg]: true }));
+  const switchSeg = (next: VinylSegmentId) => {
+    if (next === seg) return;
+    setVisited((v) => ({ ...v, [next]: true }));
+    setSeg(next);
+    writeCompParam(next);
+  };
+  return (
+    <div className="min-w-0" data-testid="press-vinyl-format-tab">
+      <div className="flex flex-wrap items-center gap-2 mb-5" role="tablist" aria-label="Vinyl components">
+        {VINYL_SEGMENTS.map((s) => {
+          const active = s.id === seg;
+          return (
+            <button
+              key={s.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => switchSeg(s.id)}
+              data-testid={`vinyl-segment-${s.id}`}
+              className={
+                "h-9 px-4 rounded-full border text-[13px] font-medium transition-colors " +
+                (active
+                  ? "bg-white border-slate-300 text-slate-900 shadow-sm"
+                  : "bg-transparent border-slate-200 text-slate-500 hover:bg-slate-50")
+              }
+            >
+              {s.label}
+            </button>
+          );
+        })}
+      </div>
+      {visited["vinyl"] && <div hidden={seg !== "vinyl"}><PressVinylComponentTab pressId={pressId} /></div>}
+      {visited["jackets"] && <div hidden={seg !== "jackets"}><PressJacketsComponentTab pressId={pressId} /></div>}
+      {visited["sleeves"] && <div hidden={seg !== "sleeves"}><PressInnerSleevesComponentTab pressId={pressId} /></div>}
+      {visited["labels"] && <div hidden={seg !== "labels"}><PressLabelsComponentTab pressId={pressId} /></div>}
+      {visited["inserts"] && <div hidden={seg !== "inserts"}><PressInsertsComponentTab pressId={pressId} /></div>}
+      {visited["stickers"] && <div hidden={seg !== "stickers"}><PressStickersComponentTab pressId={pressId} /></div>}
+    </div>
+  );
+}
+
+// CD / Cassette format pages — the per-press media catalog build surfaces
+// (same bodies the GoodTunes-packages catalog mounts behind its media pills),
+// now first-class rail destinations. A press with no catalog for the format
+// gets an honest empty state, never a blank page.
+function useMediaFormatCatalog(pressId: string) {
+  const { data: catalogRaw, isLoading } = useQuery<
+    | { canEdit?: boolean; cdCatalog?: MediaCatalogData; cassetteCatalog?: MediaCatalogData }
+    | { data: { canEdit?: boolean; cdCatalog?: MediaCatalogData; cassetteCatalog?: MediaCatalogData } }
+  >({
+    queryKey: ["/api/admin/manufacturers", pressId, "catalog"],
+    enabled: !!pressId,
+  });
+  const catalog = ((catalogRaw as { data?: unknown } | undefined)?.data ?? catalogRaw) as
+    | { canEdit?: boolean; cdCatalog?: MediaCatalogData; cassetteCatalog?: MediaCatalogData }
+    | undefined;
+  const { data: pressRow } = useQuery<{ labelLogoUrl?: string | null; logoUrl?: string | null }>({
+    queryKey: ["/api/manufacturers", pressId],
+    enabled: !!pressId,
+  });
+  return {
+    catalog,
+    isLoading,
+    canEdit: catalog?.canEdit !== false,
+    logoUrl: pressRow?.labelLogoUrl ?? pressRow?.logoUrl ?? null,
+  };
+}
+
+function MediaFormatEmpty({ format }: { format: "CD" | "Cassette" }) {
+  return (
+    <div className="py-16 text-center text-[13.5px] text-muted-foreground" data-testid={`no-${format.toLowerCase()}-catalog`}>
+      No {format} catalog yet. Build one from Product Specs to offer {format === "CD" ? "discs" : "tapes"} here.
+    </div>
+  );
+}
+
+export function PressCdFormatTab({ pressId }: { pressId: string }) {
+  const { catalog, isLoading, canEdit, logoUrl } = useMediaFormatCatalog(pressId);
+  if (isLoading || !catalog) return <LoadingRow />;
+  if (!catalog.cdCatalog) return <MediaFormatEmpty format="CD" />;
+  return <CdCatalogBody pressId={pressId} canEdit={canEdit} logoUrl={logoUrl} data={catalog.cdCatalog} />;
+}
+
+export function PressCassetteFormatTab({ pressId }: { pressId: string }) {
+  const { catalog, isLoading, canEdit, logoUrl } = useMediaFormatCatalog(pressId);
+  if (isLoading || !catalog) return <LoadingRow />;
+  if (!catalog.cassetteCatalog) return <MediaFormatEmpty format="Cassette" />;
+  return <CassetteCatalogBody pressId={pressId} canEdit={canEdit} logoUrl={logoUrl} data={catalog.cassetteCatalog} />;
 }
