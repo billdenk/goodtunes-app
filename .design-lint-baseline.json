@@ -21102,6 +21102,16 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 620, lineHeight: 1.5 }}>"
   },
   {
@@ -21187,6 +21197,21 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[13.5px] font-semibold\" style={{ color: t.ink }}>Drag &amp; drop your new art here</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: t.faint }}>or click to upload &mdash; replaces the current file and re-runs the checks</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<span className=\"block text-[12px] font-medium\" style={{ color: t.subink, animation: measuring && uploadPct === null ? 'gt-ink-pulse 1.4s ease-in-out infinite' : undefined }}>"
   },
   {
@@ -21202,27 +21227,77 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<h2 className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>File history</h2>"
+    "snippet": "<div className=\"text-[15px] font-semibold tracking-[-0.01em]\" style={{ color: t.ink }}>File history</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<span className=\"text-[12.5px]\" style={{ color: t.faint }}>every upload and download, newest first</span>"
+    "snippet": "<div className=\"text-[12px] mt-0.5\" style={{ color: t.subink }}>Every upload and download, newest first</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<div className=\"text-[13px] font-medium truncate\" style={{ color: t.ink }}>{h.fileName ?? 'File'}</div>"
+    "snippet": "<p className=\"text-[12.5px] py-3\" style={{ color: t.faint }} data-testid=\"history-empty\">No uploads or downloads recorded yet.</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<div className=\"text-[12px]\" style={{ marginTop: 2, color: t.faint }}>{h.dims ? <>{h.dims} &middot; </> : null}{fmtWhen(h.at)}</div>"
+    "snippet": "<div className=\"text-[12.5px] font-medium truncate\" style={{ color: t.ink }} title={h.fileName ?? undefined}>{h.fileName ?? 'File'}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0\" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>"
+    "snippet": "<div className=\"text-[11.5px] mt-0.5 tabular-nums\" style={{ color: t.subink }}>{h.dims ? <>{h.dims} &middot; </> : null}{fmtWhen(h.at)}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[11px] font-semibold flex-shrink-0\" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<div className=\"text-[12.5px]\" style={{ marginTop: 2, color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[13px] font-semibold\">Drag &amp; drop your {panel} art here</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12px]\" style={{ opacity: 0.8 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', t.hoverCard)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"absolute text-[11px] font-semibold\" style={{ top: 6, left: 8, color: RED, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{panel}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"text-[11px]\" style={{ color: RED, letterSpacing: '0.06em' }}>Raw press template &middot; art not placed yet</span>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<button type=\"button\" onClick={onClose} aria-label=\"Close\" className=\"w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0\" style={{ border: `1px solid ${t.hairline}`, color: t.s"
+  },
+  {
+    "rule": "player-touch-target-too-small",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<button type=\"button\" onClick={onClose} aria-label=\"Close\" className=\"w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0\" style={{ border: `1px solid ${t.hairline}`, color: t.s"
   },
   {
     "rule": "hardcoded-font-size",
@@ -26402,7 +26477,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/TemplateArtViewer.tsx",
-    "snippet": "className=\"inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors disabled:opacity-60\""
+    "snippet": "className=\"text-[13px] font-medium whitespace-nowrap transition-all duration-200 opacity-0 max-w-0 group-hover:opacity-100 group-hover:max-w-[160px] group-hover:pl-3.5\""
   },
   {
     "rule": "hardcoded-font-size",

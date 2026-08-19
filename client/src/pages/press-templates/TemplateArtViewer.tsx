@@ -45,6 +45,7 @@ export function TemplateArtViewer({
   dark,
   t,
   proofName,
+  actions,
 }: {
   template: ViewerTemplate;
   /** Kept alive for hi-DPI crop re-renders; crops fall back to the base raster without it. */
@@ -54,6 +55,11 @@ export function TemplateArtViewer({
   t: ViewerTheme;
   /** Base name for the "Download test proof" PNG; omitting hides the button. */
   proofName?: string;
+  /** Host-page toolbar actions (e.g. the artist page's File-history popover +
+      Replace pill — Ruby's Aug 18 handoff) rendered at the head of the
+      right-side action cluster. The toolbar is permanent architecture: the
+      host keeps the same buttons in every state, disabled until applicable. */
+  actions?: React.ReactNode;
 }) {
   const [activeZones, setActiveZones] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'line' | 'area'>('line');
@@ -305,6 +311,7 @@ export function TemplateArtViewer({
           })}
         </div>
         <div className="flex items-center gap-2">
+          {actions}
           <div className="relative">
             <button
               type="button"
@@ -360,15 +367,28 @@ export function TemplateArtViewer({
             )}
           </div>
           {proofName !== undefined && (
+            /* Circular icon button that expands to the LEFT on hover to reveal
+               its label (Ruby's Aug 18 handoff — same 34px circle as the
+               history/layers buttons). */
             <button
               type="button"
               onClick={() => void downloadProof()}
               disabled={proofBusy}
-              className="inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors disabled:opacity-60"
-              style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+              className="group inline-flex items-center justify-end rounded-full overflow-hidden transition-colors disabled:opacity-60"
+              style={{ height: 34, border: `1px solid ${t.hairline}`, color: t.subink, paddingLeft: 0, paddingRight: 0 }}
               data-testid="button-download-proof"
+              aria-label="Download test proof"
+              title="Download test proof"
             >
-              <Download className="w-4 h-4 flex-shrink-0" /> {proofBusy ? 'Preparing…' : 'Download test proof'}
+              <span
+                className="text-[13px] font-medium whitespace-nowrap transition-all duration-200 opacity-0 max-w-0 group-hover:opacity-100 group-hover:max-w-[160px] group-hover:pl-3.5"
+                style={{ color: t.ink }}
+              >
+                {proofBusy ? 'Preparing…' : 'Download test proof'}
+              </span>
+              <span className="inline-flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32 }}>
+                <Download className="w-4 h-4" />
+              </span>
             </button>
           )}
         </div>

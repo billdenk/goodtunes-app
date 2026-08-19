@@ -40,10 +40,17 @@ import {
   BadgeCheck,
   Download,
   Upload,
+  UploadCloud,
   Lock,
   Circle,
   ArrowLeftRight,
   History,
+  X,
+  Clock,
+  Link2,
+  FileUp,
+  ImagePlus,
+  LayoutTemplate,
   type LucideIcon,
 } from 'lucide-react';
 import { queryClient, apiRequest } from '@/lib/queryClient';
@@ -183,6 +190,17 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   // object storage, then the same measured-check run the press panel uses;
   // a fresh checks card + a new "File history" row come back in the payload.
   const [uploading, setUploading] = useState(false);
+  // File history is revealed from the toolbar History icon (same as the press
+  // side), not a standing card (Ruby's Aug 18 handoff).
+  const [showHistory, setShowHistory] = useState(false);
+  // The upload/check card's expanded state is lifted so the toolbar "Replace"
+  // pill can open it (the replace affordance is otherwise invisible while the
+  // check card is collapsed — Bill, Aug 18 2026).
+  const [uploadOpen, setUploadOpen] = useState(false);
+  // Whether the actual drag-drop upload box is showing in the card footer. The
+  // toolbar Replace takes the artist straight to it — one click, no intermediate
+  // buttons (Bill, Aug 18 2026 late: "This should just show me the upload box.").
+  const [showDrop, setShowDrop] = useState(false);
   // Real upload progress (0..1) for the thin determinate bar — null when no
   // upload is in flight (Task #3184; press live-test canon).
   const [uploadPct, setUploadPct] = useState<number | null>(null);
@@ -197,6 +215,8 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
     },
     onSuccess: (resp) => {
       queryClient.setQueryData(['/api/admin/albums', albumId, 'completed-template'], resp);
+      setShowDrop(false);
+      setUploadOpen(true);
       toast({ title: 'Checked', description: 'Your file was checked against the press template.' });
     },
     onError: (e: any) => toast({ title: "Couldn't replace the file", description: e?.message, variant: 'destructive' }),
@@ -343,11 +363,10 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   }));
   const allPass = CHECKS.length > 0 && CHECKS.every((r) => r.tone === 'pass' || r.word === 'Advisory');
 
-  // Loading / error / not-found are explicit — the full page only renders on
-  // a successful response that actually contains the requested component.
-  // "No test found" is reserved for a SUCCESSFUL read missing the component;
-  // an access or server failure says so honestly instead.
-  if (!component) {
+  // Loading / error / unknown-slot states are explicit. A KNOWN slot with no
+  // upload yet renders the full page in its "Pending — not tested yet" state
+  // (PendingCard + raw template; Ruby's Aug 18 handoff) instead of a dead end.
+  if (!component && (scan.isLoading || scan.isError || !spec)) {
     const message = scan.isLoading
       ? 'Loading\u2026'
       : scan.isError
@@ -370,6 +389,87 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
       </div>
     );
   }
+
+  const hasArt = !!component;
+
+  // ── Toolbar actions (Ruby's Aug 18 handoff) — permanent architecture: the
+  // same buttons in every state, disabled-faint until applicable. Rendered
+  // inside TemplateArtViewer's right cluster when the viewer is live, or in a
+  // standalone toolbar row when it isn't.
+  const toolbarActions = (
+    <>
+      {/* History icon — reveals the File-history popover (same as the press
+          Test/Certify surface). Only meaningful once there's art. */}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => { if (hasArt) setShowHistory((v) => !v); }}
+          aria-disabled={!hasArt}
+          aria-expanded={hasArt ? showHistory : undefined}
+          aria-haspopup="dialog"
+          className={cn('inline-flex items-center justify-center rounded-full transition-colors', hasArt && t.hoverCard)}
+          style={{ width: 34, height: 34, border: `1px solid ${t.hairline}`, color: hasArt ? t.subink : t.faint, opacity: hasArt ? 1 : 0.55, cursor: hasArt ? 'pointer' : 'not-allowed' }}
+          data-testid="button-history"
+          aria-label="File history"
+          title="File history"
+        >
+          <History className="w-4 h-4" />
+        </button>
+        {hasArt && showHistory && <HistoryPanel t={t} rows={history} onClose={() => setShowHistory(false)} />}
+      </div>
+      {!hasArt && tpl && (
+        <button
+          type="button"
+          onClick={downloadTemplate}
+          className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+          style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+          data-testid="button-download-raw"
+        >
+          <LayoutTemplate className="w-4 h-4 flex-shrink-0" /> Download raw template
+        </button>
+      )}
+
+      {/* Replace — the toolbar counterpart of the press "Save result & test
+          another" slot. Visible once art exists; goes straight to the upload
+          box in one click (opens the card AND reveals the drop target — no
+          intermediate button). When locked, becomes a disabled Lock pill. */}
+      {hasArt && (lock.locked ? (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium"
+          style={{ padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.faint, opacity: 0.6, cursor: 'not-allowed' }}
+          aria-disabled="true"
+          data-testid="button-replace-locked"
+        >
+          <Lock className="w-4 h-4 flex-shrink-0" /> Upload locked
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => { setUploadOpen(true); setShowDrop(true); }}
+          className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+          style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+          data-testid="button-replace"
+          aria-label="Replace file"
+          title="Replace file"
+        >
+          <Upload className="w-4 h-4 flex-shrink-0" /> Replace
+        </button>
+      ))}
+      {!hasArt && (
+        /* Disabled-faint Download-test-proof circle — the permanent-toolbar
+           placeholder until there's art to proof. */
+        <span
+          className="inline-flex items-center justify-center rounded-full"
+          style={{ width: 34, height: 34, border: `1px solid ${t.hairline}`, color: t.faint, opacity: 0.55, cursor: 'not-allowed' }}
+          aria-disabled="true"
+          data-testid="button-download-proof-disabled"
+          title="Download test proof"
+        >
+          <Download className="w-4 h-4" />
+        </span>
+      )}
+    </>
+  );
 
   return (
     <div className={wrapClass} style={{ background: embedded ? undefined : t.canvas, color: t.ink, ...wrapStyle }} data-testid="artist-template-test">
@@ -400,20 +500,28 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             screenshot 3. Check-circle + "Pass! All measured checks passed" +
             "5 of 5 passed" + filename; chevron to expand the rows; "Try another
             file" quiet action bottom-right when open. */}
-        <UploadCard
-          t={t}
-          rows={CHECKS}
-          fileName={TEST_FILE}
-          allPass={allPass}
-          lock={lock}
-          busy={uploading || check.isPending}
-          uploadPct={uploadPct}
-          measuring={check.isPending}
-          onReplaceFile={handleReplaceFile}
-        />
+        {hasArt ? (
+          <UploadCard
+            t={t}
+            rows={CHECKS}
+            fileName={TEST_FILE}
+            allPass={allPass}
+            lock={lock}
+            busy={uploading || check.isPending}
+            uploadPct={uploadPct}
+            measuring={check.isPending}
+            onReplaceFile={handleReplaceFile}
+            open={uploadOpen}
+            onOpenChange={setUploadOpen}
+            showDrop={showDrop}
+            onShowDropChange={setShowDrop}
+          />
+        ) : (
+          <PendingCard t={t} />
+        )}
 
-        {/* 4b · File history — upload/download audit trail (Item 2). */}
-        <HistoryCard t={t} rows={history} />
+        {/* File history is no longer a standing card — it's revealed from the
+            toolbar History icon in the viewer toolbar (Ruby's Aug 18 handoff). */}
 
         {/* 4 · Template header card — read-only facts an artist cares about.
             Press-internal lines + Cancel/Save removed. */}
@@ -468,24 +576,33 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             art={art}
             dark={mode === 'dark'}
             t={{ card: t.card, soft: t.soft, hairline: t.hairline, ink: t.ink, subink: t.subink, faint: t.faint, blue: t.blue }}
-            proofName={component.fileName ?? spec?.label ?? 'art-test'}
+            proofName={hasArt ? (component?.fileName ?? spec?.label ?? 'art-test') : undefined}
+            actions={toolbarActions}
           />
         ) : (
-          /* No template PDF to seat the art in — show the art raster alone
-             (previous behavior), or the honest no-preview message. */
-          <div
-            className="w-full overflow-hidden rounded-2xl flex items-center justify-center"
-            style={{ marginTop: 14, background: '#ffffff', border: `1px solid ${t.hairline}`, padding: '56px 40px' }}
-            data-testid="template-canvas"
-          >
-            {ART.image ? (
-              <img src={ART.image} alt={ART.alt} className="w-full h-auto" data-testid="canvas-art" />
-            ) : (
-              <p className="text-[13px]" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid="canvas-no-preview">
-                No preview could be generated for this file.
-              </p>
-            )}
-          </div>
+          /* No template PDF to seat the art in — permanent toolbar row, then
+             the art raster alone (previous behavior), the raw-template
+             upload panels (no art yet), or the honest no-preview message. */
+          <>
+            <div className="flex items-center justify-end gap-2 flex-wrap" style={{ marginTop: 16 }}>
+              {toolbarActions}
+            </div>
+            <div
+              className="w-full overflow-hidden rounded-2xl flex items-center justify-center"
+              style={{ marginTop: 14, background: '#ffffff', border: `1px solid ${t.hairline}`, padding: '56px 40px' }}
+              data-testid="template-canvas"
+            >
+              {ART.image ? (
+                <img src={ART.image} alt={ART.alt} className="w-full h-auto" data-testid="canvas-art" />
+              ) : !hasArt ? (
+                <RawTemplate t={t} busy={uploading || check.isPending} onReplaceFile={handleReplaceFile} onCheckUrl={(url) => check.mutate({ url, fileName: url.split('/').pop() || 'art.pdf' })} />
+              ) : (
+                <p className="text-[13px]" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid="canvas-no-preview">
+                  No preview could be generated for this file.
+                </p>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -507,6 +624,10 @@ function UploadCard({
   uploadPct,
   measuring,
   onReplaceFile,
+  open,
+  onOpenChange,
+  showDrop,
+  onShowDropChange,
 }: {
   t: Theme;
   rows: CheckRow[];
@@ -519,8 +640,14 @@ function UploadCard({
   /** True while the server measures the uploaded file. */
   measuring: boolean;
   onReplaceFile: (file: File | undefined) => void;
+  /** Lifted so the toolbar Replace pill can open the card (Aug 18 handoff). */
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  /** Whether the drag-drop upload box is showing in the footer. */
+  showDrop: boolean;
+  onShowDropChange: (v: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const setOpen = (fn: (v: boolean) => boolean) => onOpenChange(fn(open));
   const fileRef = useRef<HTMLInputElement>(null);
   const passed = rows.filter((r) => r.tone === 'pass').length;
   return (
@@ -587,6 +714,44 @@ function UploadCard({
                 <Lock className="w-4 h-4 flex-shrink-0" /> Upload locked
               </span>
             </div>
+          ) : showDrop && !busy ? (
+            /* The actual drag-drop upload box — shown in one click from the
+               toolbar Replace pill (or the footer button). No intermediate step:
+               the drop target is visible and ready. */
+            <div style={{ padding: '16px 20px', borderTop: `1px solid ${t.hairline}` }} data-testid="replace-dropbox">
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => onReplaceFile(e.target.files?.[0])}
+                data-testid="input-replace-file"
+              />
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => { e.preventDefault(); onReplaceFile(e.dataTransfer.files?.[0]); }}
+                className="w-full flex flex-col items-center justify-center text-center gap-2 rounded-xl transition-colors"
+                style={{ padding: '28px 20px', border: `2px dashed ${t.hairline}`, background: t.soft, color: t.subink }}
+                data-testid="upload-dropzone"
+              >
+                <UploadCloud className="w-7 h-7" style={{ color: t.subink, strokeWidth: 1.5 }} aria-hidden />
+                <span className="text-[13.5px] font-semibold" style={{ color: t.ink }}>Drag &amp; drop your new art here</span>
+                <span className="text-[12px]" style={{ color: t.faint }}>or click to upload &mdash; replaces the current file and re-runs the checks</span>
+              </button>
+              <div className="flex justify-end" style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => onShowDropChange(false)}
+                  className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+                  style={{ padding: '6px 14px', border: `1px solid ${t.hairline}`, color: t.subink }}
+                  data-testid="button-cancel-replace"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="flex items-center justify-between gap-3" style={{ padding: '12px 20px', borderTop: `1px solid ${t.hairline}` }}>
               {busy ? (
@@ -613,23 +778,15 @@ function UploadCard({
               ) : (
                 <span className="text-[12px]" style={{ color: t.faint }}>Replaces the current file and re-runs the checks.</span>
               )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".pdf"
-                className="hidden"
-                onChange={(e) => onReplaceFile(e.target.files?.[0])}
-                data-testid="input-replace-file"
-              />
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => fileRef.current?.click()}
+                onClick={() => onShowDropChange(true)}
                 className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium transition-colors flex-shrink-0', !busy && t.hoverCard)}
                 style={{ padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.ink, opacity: busy ? 0.6 : undefined }}
                 data-testid="button-upload-another"
               >
-                <Upload className="w-4 h-4 flex-shrink-0" /> {busy ? (uploadPct !== null ? 'Uploading\u2026' : 'Measuring\u2026') : 'Upload another file'}
+                <Upload className="w-4 h-4 flex-shrink-0" /> {busy ? (uploadPct !== null ? 'Uploading\u2026' : 'Measuring\u2026') : 'Save result & upload new'}
               </button>
             </div>
           )}
@@ -650,12 +807,13 @@ function fmtWhen(iso: string | null | undefined): string {
   }
 }
 
-// File history card (Item 2) — the upload/download audit trail. Canon list rows,
-// faint text, word + icon result on every row; newest first. The newest upload
-// is "Current"; prior uploads show their check result; press downloads are
-// their own event rows. Nothing is ever deleted.
-function HistoryCard({ t, rows }: { t: Theme; rows: FileEventRow[] }) {
-  if (rows.length === 0) return null;
+// File history — the SAME right-anchored popover the press Test/Certify surface
+// uses (rounded-2xl, soft header band, close X, revision rows newest first),
+// revealed by the toolbar History icon, not a standing card (Ruby, Aug 18 2026).
+// Rows are the REAL fileEvents audit trail: the newest upload is "Current";
+// prior uploads show their check result; press downloads/unlocks are their own
+// event rows. Nothing is ever deleted.
+function HistoryPanel({ t, rows, onClose }: { t: Theme; rows: FileEventRow[]; onClose: () => void }) {
   const firstUploadIdx = rows.findIndex((r) => r.event === 'uploaded');
   const meta = (row: FileEventRow, i: number): { word: string; icon: LucideIcon; color: string; fillDot?: boolean } => {
     if (row.event === 'downloaded') return { word: 'Downloaded by press', icon: Download, color: t.subink };
@@ -665,28 +823,164 @@ function HistoryCard({ t, rows }: { t: Theme; rows: FileEventRow[] }) {
     return { word: 'Replaced', icon: ArrowLeftRight, color: t.faint };
   };
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ marginTop: 16, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="file-history">
-      <div className="flex items-center gap-2" style={{ padding: '14px 20px', borderBottom: `1px solid ${t.hairline}` }}>
-        <History className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
-        <h2 className="text-[14px] font-semibold" style={{ color: t.ink }}>File history</h2>
-        <span className="text-[12.5px]" style={{ color: t.faint }}>every upload and download, newest first</span>
-      </div>
-      {rows.map((h, i) => {
-        const m = meta(h, i);
-        const Icon = m.icon;
-        return (
-          <div key={h.id} className="flex items-center justify-between gap-4" style={{ padding: '12px 20px', borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`history-row-${h.id}`}>
-            <div className="min-w-0">
-              <div className="text-[13px] font-medium truncate" style={{ color: t.ink }}>{h.fileName ?? 'File'}</div>
-              <div className="text-[12px]" style={{ marginTop: 2, color: t.faint }}>{h.dims ? <>{h.dims} &middot; </> : null}{fmtWhen(h.at)}</div>
-            </div>
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>
-              <Icon className="w-3.5 h-3.5 flex-shrink-0" style={m.fillDot ? { fill: m.color } : undefined} aria-hidden />
-              {m.word}
-            </span>
+    <>
+      <div className="fixed inset-0 z-[70]" onClick={onClose} data-testid="file-history-backdrop" />
+      <div
+        className="absolute z-[71] rounded-2xl overflow-hidden shadow-2xl"
+        style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, top: 'calc(100% + 6px)', right: 0, width: 380 }}
+        role="dialog"
+        aria-label="File history"
+        data-testid="file-history"
+      >
+        <div className="flex items-start justify-between gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${t.hairline}`, backgroundColor: t.soft }}>
+          <div>
+            <div className="text-[15px] font-semibold tracking-[-0.01em]" style={{ color: t.ink }}>File history</div>
+            <div className="text-[12px] mt-0.5" style={{ color: t.subink }}>Every upload and download, newest first</div>
           </div>
-        );
-      })}
+          <button type="button" onClick={onClose} aria-label="Close" className="w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${t.hairline}`, color: t.subink }} data-testid="button-close-history">
+            <X style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+        <div className="px-5 py-3 max-h-[420px] overflow-y-auto">
+          {rows.length === 0 && (
+            <p className="text-[12.5px] py-3" style={{ color: t.faint }} data-testid="history-empty">No uploads or downloads recorded yet.</p>
+          )}
+          {rows.map((h, i) => {
+            const m = meta(h, i);
+            const Icon = m.icon;
+            return (
+              <div key={h.id} className="py-3 flex items-center justify-between gap-4" style={{ borderBottom: i < rows.length - 1 ? `1px solid ${t.hairline}` : undefined }} data-testid={`history-row-${h.id}`}>
+                <div className="min-w-0">
+                  <div className="text-[12.5px] font-medium truncate" style={{ color: t.ink }} title={h.fileName ?? undefined}>{h.fileName ?? 'File'}</div>
+                  <div className="text-[11.5px] mt-0.5 tabular-nums" style={{ color: t.subink }}>{h.dims ? <>{h.dims} &middot; </> : null}{fmtWhen(h.at)}</div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold flex-shrink-0" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>
+                  <Icon className="w-3 h-3 flex-shrink-0" style={m.fillDot ? { fill: m.color } : undefined} aria-hidden />
+                  {m.word}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// Pending card (Part B) — the pre-upload state that replaces the PASSED summary
+// when there's no art yet. Quiet, word + icon, zero blue. Mirrors the checks-card
+// shell so the two states swap cleanly in place.
+function PendingCard({ t }: { t: Theme }) {
+  return (
+    <div className="rounded-2xl overflow-hidden" style={{ marginTop: 22, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="pending-card">
+      <div className="flex items-center gap-3" style={{ padding: '16px 20px' }}>
+        <Clock className="w-5 h-5 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-semibold" style={{ color: t.ink }}>
+            Pending &mdash; not tested yet
+          </div>
+          <div className="text-[12.5px]" style={{ marginTop: 2, color: t.faint }}>
+            Drop your art onto the template below to run the checks.
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Panel upload overlay (Part B) — the dashed drop-zone that sits over each raw
+// template panel. Clicking opens a small popover with "Choose file" and
+// "Paste URL" rows — the same upload-menu affordance used elsewhere. REAL here:
+// Choose file opens the picker; Paste URL prompts for a link; both run the
+// same measured check as a replace (the file covers the full piece).
+function PanelUpload({ t, panel, busy, onReplaceFile, onCheckUrl }: { t: Theme; panel: 'Front' | 'Back'; busy: boolean; onReplaceFile: (file: File | undefined) => void; onCheckUrl: (url: string) => void }) {
+  const [menu, setMenu] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  return (
+    <div className="absolute inset-3">
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".pdf"
+        className="hidden"
+        onChange={(e) => { setMenu(false); onReplaceFile(e.target.files?.[0]); }}
+        data-testid={`input-panel-${panel.toLowerCase()}`}
+      />
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => setMenu((v) => !v)}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); setMenu(false); onReplaceFile(e.dataTransfer.files?.[0]); }}
+        className="w-full h-full flex flex-col items-center justify-center text-center gap-2 rounded-xl transition-colors"
+        style={{ border: '2px dashed rgba(200,60,60,0.55)', background: 'rgba(200,60,60,0.05)', color: '#7a2a2a', opacity: busy ? 0.6 : undefined }}
+        data-testid={`panel-upload-${panel.toLowerCase()}`}
+      >
+        <ImagePlus className="w-7 h-7" style={{ strokeWidth: 1.5 }} aria-hidden />
+        <span className="text-[13px] font-semibold">Drag &amp; drop your {panel} art here</span>
+        <span className="inline-flex items-center gap-1.5 text-[12px]" style={{ opacity: 0.8 }}>
+          or click to upload &middot; paste a URL
+        </span>
+      </button>
+      {menu && !busy && (
+        <div
+          className="absolute left-1/2 rounded-xl overflow-hidden"
+          style={{ top: '50%', transform: 'translate(-50%, 8px)', minWidth: 190, background: t.card, border: `1px solid ${t.hairline}`, boxShadow: '0 12px 32px rgba(0,0,0,0.28)', zIndex: 5 }}
+          data-testid={`panel-menu-${panel.toLowerCase()}`}
+        >
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', t.hoverCard)}
+            style={{ padding: '10px 14px', color: t.ink }}
+            data-testid={`menu-choose-${panel.toLowerCase()}`}
+          >
+            <FileUp className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Choose file
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMenu(false);
+              const url = window.prompt('Paste a link to your art file (PDF):');
+              if (url && url.trim()) onCheckUrl(url.trim());
+            }}
+            className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', t.hoverCard)}
+            style={{ padding: '10px 14px', color: t.ink, borderTop: `1px solid ${t.hairline}` }}
+            data-testid={`menu-url-${panel.toLowerCase()}`}
+          >
+            <Link2 className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Paste URL
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Raw press template (Part B) — the white template the artist lands on before
+// uploading. Front + Back panels with hairline red template linework (simple
+// styled divs, no assets) and an upload overlay on each. Shown when the slot
+// has no art yet AND no template PDF could be rendered (with a template PDF,
+// the real viewer shows the actual template instead).
+function RawTemplate({ t, busy, onReplaceFile, onCheckUrl }: { t: Theme; busy: boolean; onReplaceFile: (file: File | undefined) => void; onCheckUrl: (url: string) => void }) {
+  const RED = 'rgba(200,60,60,0.7)';
+  return (
+    <div className="w-full" data-testid="raw-template">
+      <div className="grid grid-cols-2" style={{ gap: 2 }}>
+        {(['Back', 'Front'] as const).map((panel) => (
+          <div key={panel} className="relative" style={{ aspectRatio: '1 / 1', background: '#ffffff', outline: `1.5px solid ${RED}`, outlineOffset: -1 }} data-testid={`raw-panel-${panel.toLowerCase()}`}>
+            {/* Bleed guide — dashed inset rectangle, press template convention. */}
+            <div className="absolute" style={{ inset: 14, border: `1px dashed ${RED}` }} aria-hidden />
+            {/* Panel label, top-left, template red. */}
+            <span className="absolute text-[11px] font-semibold" style={{ top: 6, left: 8, color: RED, letterSpacing: '0.08em', textTransform: 'uppercase' }}>{panel}</span>
+            <PanelUpload t={t} panel={panel} busy={busy} onReplaceFile={onReplaceFile} onCheckUrl={onCheckUrl} />
+          </div>
+        ))}
+      </div>
+      {/* Spine strip between panels is implied by the 2px gap; a thin center
+          fold guide keeps the template read. */}
+      <div className="flex items-center justify-center" style={{ marginTop: 8 }}>
+        <span className="text-[11px]" style={{ color: RED, letterSpacing: '0.06em' }}>Raw press template &middot; art not placed yet</span>
+      </div>
     </div>
   );
 }
