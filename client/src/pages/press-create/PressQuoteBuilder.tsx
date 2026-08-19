@@ -1896,6 +1896,8 @@ const INSERT_OPTIONS: InsertOption[] = [
   },
 ];
 
+const insertsAvailableForSize = (sizeId: SizeId): boolean =>
+  INSERT_OPTIONS.filter((o) => !o.sizes || o.sizes.includes(sizeId)).length > 1;
 const POSTER_RATIO: Record<'small' | 'large', number> = { small: 18 / 24, large: 24 / 36 };
 
 function InsertThumbnail({ insert, variantId, size = 64 }: { insert: InsertOption; variantId: string; size?: number }) {
@@ -2631,7 +2633,9 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   const [done, setDone] = useState<Set<StepKey>>(() => new Set());
   const mark = (k: StepKey) => setDone((p) => (p.has(k) ? p : new Set(p).add(k)));
   const picked = (k: StepKey) => done.has(k);
-  const skipStep = (k: StepKey) => k === 'hole' && sizeId !== '7';
+  const skipStep = (k: StepKey) =>
+    (k === 'hole' && sizeId !== '7') ||
+    (k === 'insert' && !insertsAvailableForSize(sizeId));
   const canDo = (k: StepKey) =>
     STEP_ORDER.slice(0, STEP_ORDER.indexOf(k)).every((s) => skipStep(s) || done.has(s));
   const allDone = STEP_ORDER.every((s) => skipStep(s) || done.has(s));
@@ -2717,6 +2721,18 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
     if (currentInsert?.sizes && !currentInsert.sizes.includes(id)) {
       setInsertId('none');
       setInsertVariantId('');
+    }
+    // sizes with no real insert styles skip the step entirely — auto-resolve
+    // to None and un-mark it so the step comes back fresh on a size with options
+    if (!insertsAvailableForSize(id)) {
+      setInsertId('none');
+      setInsertVariantId('');
+      setDone((p) => {
+        if (!p.has('insert')) return p;
+        const n = new Set(p);
+        n.delete('insert');
+        return n;
+      });
     }
     // labels: leaving 7" resets the jukebox hole
     if (id !== '7') setHoleId('small');
@@ -3354,7 +3370,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                         key={s.id}
                         style={s}
                         active={picked('label') && s.id === labelId}
-                        onSelect={() => { setLabelId(s.id); if (sizeId !== '7') advance('label', 'step-inserts'); mark('label'); touch(); }}
+                        onSelect={() => { setLabelId(s.id); advance('label', insertsAvailable ? 'step-inserts' : 'step-stickers'); mark('label'); touch(); }}
                         discSize={tileDiscSize}
                         labelRatio={labelRatio}
                         holeRatio={labelHoleRatio}
@@ -3370,7 +3386,9 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
           </Gate>
         </section>
 
-        {/* ═══ 5 · INSERTS (Choose your inserts) ═══ */}
+        {/* ═══ 5 · INSERTS (Choose your inserts) — hidden entirely when the
+            size has no real insert styles (skipStep auto-resolves to None) ═══ */}
+        {insertsAvailable && (
         <section id="step-inserts" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
           <Gate on={canDo('insert')}>
           <SplitSection
@@ -3417,6 +3435,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
           />
           </Gate>
         </section>
+        )}
 
         {/* ═══ 6 · STICKERS ═══ */}
         <section id="step-stickers" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
