@@ -2793,6 +2793,18 @@ export const pressTemplateSpecs = pgTable(
     // Task #3030 — the template's own drawn bleed line, measured from its
     // trim vs bleed geometry during the same scan. Operator column wins.
     measuredBleedLineInches: doublePrecision("measured_bleed_line_inches"),
+    // Aug 18 2026 (Bill's CALIFORNIALAND false-flag) — the GT-layer cut
+    // rectangle the press live-test client reads from the template file
+    // ({left,top,width,height} inches on the template artboard). Persisted at
+    // live-test time so the ARTIST-side check route can pass the same
+    // trim-rect override the press path gets from its client — never
+    // inferred server-side (client-read geometry only, per canon).
+    measuredCutRectInches: jsonb("measured_cut_rect_inches").$type<{
+      left: number;
+      top: number;
+      width: number;
+      height: number;
+    }>(),
     measuredHasCmyk: boolean("measured_has_cmyk"),
     measuredHasRgb: boolean("measured_has_rgb"),
     measuredHasSpot: boolean("measured_has_spot"),

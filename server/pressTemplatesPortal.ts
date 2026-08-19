@@ -1273,6 +1273,26 @@ export function registerPressTemplateFlowRoutes(
             measuredBleedLineInches: clientLine,
           });
         }
+        // Aug 18 2026 (Bill's CALIFORNIALAND false-flag): persist the
+        // client-read GT-layer cut rect on the spec row so the ARTIST-side
+        // check route can pass the same trim override this route gets from
+        // its client. Client-measured geometry only — never inferred.
+        const clientCut = body.data.templateCutRect ?? null;
+        if (clientCut && clientCut.widthIn > 0 && clientCut.heightIn > 0) {
+          const stored = spec.measuredCutRectInches ?? null;
+          const next = { left: clientCut.leftIn, top: clientCut.topIn, width: clientCut.widthIn, height: clientCut.heightIn };
+          const same =
+            stored != null &&
+            Math.abs(stored.left - next.left) < 0.005 &&
+            Math.abs(stored.top - next.top) < 0.005 &&
+            Math.abs(stored.width - next.width) < 0.005 &&
+            Math.abs(stored.height - next.height) < 0.005;
+          if (!same) {
+            await storage.updatePressTemplateSpecMeasured(pressId, spec.id, {
+              measuredCutRectInches: next,
+            });
+          }
+        }
         // Task #3072 parity with the album-side route: when a line exists but
         // the art carries no trustworthy PDF boxes (print-ready exports strip
         // them), measure bleed from RENDERED content — otherwise the check

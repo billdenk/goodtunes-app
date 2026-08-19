@@ -34372,6 +34372,19 @@ export async function registerRoutes(
         // Task #2705 — the original file name for direct uploads (the
         // /objects path itself is an opaque uuid).
         fileName: z.string().trim().max(300).optional(),
+        // Aug 18 2026 — the template's GT-layer cut rect, when the CLIENT
+        // has parsed the template file (same contract as the press
+        // live-test route). Used only for this check's content-bleed trim
+        // override; never persisted from this route (the press live-test
+        // is the trusted persist site).
+        templateCutRect: z
+          .object({
+            leftIn: z.number().finite().min(0),
+            topIn: z.number().finite().min(0),
+            widthIn: z.number().finite().positive(),
+            heightIn: z.number().finite().positive(),
+          })
+          .nullish(),
       })
       .safeParse(req.body);
     if (!body.success) return res.status(400).json({ message: body.error.message });
@@ -34475,7 +34488,20 @@ export async function registerRoutes(
           const pdfPath = path.join(tmpDir, "src.pdf");
           await file.download({ destination: pdfPath });
           if (wantsEdgeBand) edgeBand = await edgeBandContent(pdfPath, scan);
-          if (wantsContentBleed) contentBleed = await contentBleedMeasurement(pdfPath, scan, spec);
+          // Aug 18 2026 (Bill's CALIFORNIALAND false-flag): pass the
+          // template's GT-layer cut rect (persisted on the spec row at press
+          // live-test time) so this path measures content bleed with the
+          // SAME trim override the press live-test gets from its client.
+          // Without it, full-artboard exports (Trim==Bleed boxes) false-flag
+          // "Bleed ≈0" + a low full-artboard PPI estimate.
+          if (wantsContentBleed) {
+            const bodyCut = body.data.templateCutRect ?? null;
+            contentBleed = await contentBleedMeasurement(pdfPath, scan, spec, {
+              trimRectOverrideInches: bodyCut
+                ? { left: bodyCut.leftIn, top: bodyCut.topIn, width: bodyCut.widthIn, height: bodyCut.heightIn }
+                : (spec.templateCutRectInches ?? null),
+            });
+          }
         }
       } catch {
         edgeBand = null;

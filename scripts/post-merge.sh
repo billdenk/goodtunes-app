@@ -12240,6 +12240,19 @@ SQL
 create_completed_template_file_events dev  "${DATABASE_URL:-}"
 create_completed_template_file_events prod "${PROD_DATABASE_URL:-}"
 
+# ── Aug 18 2026 — measured_cut_rect_inches on press_template_specs ──
+# The GT-layer cut rect the press live-test client reads, persisted so the
+# artist-side check gets the same content-bleed trim override. Idempotent.
+add_measured_cut_rect() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[measured-cut-rect] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 -c "ALTER TABLE press_template_specs ADD COLUMN IF NOT EXISTS measured_cut_rect_inches jsonb;" >/dev/null \
+    && echo "post-merge: measured-cut-rect DDL ok on $label" \
+    || echo "post-merge: WARNING — measured-cut-rect DDL failed on $label"
+}
+add_measured_cut_rect dev  "${DATABASE_URL:-}"
+add_measured_cut_rect prod "${PROD_DATABASE_URL:-}"
+
 # ── Task #3075 — fulfillment GoodDeed service pricing + cert-batch return label ──
 # gooddeed_service_json on fulfillment_partners (receive/hologram/shrinkwrap/
 # ship ladder) + 4 cert-batch return-label columns on albums. Idempotent on

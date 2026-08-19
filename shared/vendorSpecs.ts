@@ -594,6 +594,11 @@ export type FinishedComponentSpec = {
    * file's own bleed box, yielding an "unverified" result).
    */
   templateBleedLineInches?: number | null;
+  /** Aug 18 2026 — the template's GT-layer cut rectangle (inches on the
+   * template artboard), measured by the press live-test client and persisted
+   * on the spec row. Gives the artist-side check the same content-bleed
+   * trim override the press live-test gets. Null = never measured. */
+  templateCutRectInches?: { left: number; top: number; width: number; height: number } | null;
   /** Provenance of templateBleedLineInches: operator edit wins over the
    * value measured from the press's uploaded template. */
   bleedLineSource?: "operator" | "measured" | null;
@@ -747,6 +752,7 @@ export function requiredFinishedComponents(
     // or measured from the press's uploaded template).
     spec.templateBleedLineInches = null;
     spec.bleedLineSource = null;
+    spec.templateCutRectInches = null;
   }
 
   return out;
@@ -938,6 +944,12 @@ export function resolveFinishedComponents(args: {
       next.templateBleedLineInches = match.measuredBleedLineInches;
       next.bleedLineSource = "measured";
       next.measuredFromLabel = args.pressName ?? next.measuredFromLabel ?? null;
+    }
+    // Aug 18 2026 — client-measured GT-layer cut rect rides the spec row so
+    // every check path (press live-test AND artist art-test) shares it.
+    const cutRect = (match as { measuredCutRectInches?: { left: number; top: number; width: number; height: number } | null }).measuredCutRectInches;
+    if (cutRect && cutRect.width > 0 && cutRect.height > 0) {
+      next.templateCutRectInches = cutRect;
     }
     // handoff/press-settings-templates-policy — a Pending template can't
     // measure client files when the press requires certification first.
