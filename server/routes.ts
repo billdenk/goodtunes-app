@@ -34495,11 +34495,18 @@ export async function registerRoutes(
           // Without it, full-artboard exports (Trim==Bleed boxes) false-flag
           // "Bleed ≈0" + a low full-artboard PPI estimate.
           if (wantsContentBleed) {
-            const bodyCut = body.data.templateCutRect ?? null;
+            // Trust order (code review, Aug 18 2026): the press-persisted
+            // spec rect is authoritative; a body-supplied rect is honored
+            // ONLY from operators/press (an artist could otherwise forge an
+            // inset rect that makes inadequate bleed look sufficient).
+            const bodyCut =
+              (caller.operator || caller.pressId) ? (body.data.templateCutRect ?? null) : null;
             contentBleed = await contentBleedMeasurement(pdfPath, scan, spec, {
-              trimRectOverrideInches: bodyCut
-                ? { left: bodyCut.leftIn, top: bodyCut.topIn, width: bodyCut.widthIn, height: bodyCut.heightIn }
-                : (spec.templateCutRectInches ?? null),
+              trimRectOverrideInches:
+                spec.templateCutRectInches ??
+                (bodyCut
+                  ? { left: bodyCut.leftIn, top: bodyCut.topIn, width: bodyCut.widthIn, height: bodyCut.heightIn }
+                  : null),
             });
           }
         }

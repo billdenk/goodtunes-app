@@ -580,6 +580,10 @@ export async function clearTemplateSpecMeasurements(pressId: string, specId: str
     measuredHasEmbeddedFonts: null,
     measuredHasDieline: null,
     measuredGuides: null,
+    // Aug 18 2026 — the live-test-persisted GT-layer cut rect is geometry of
+    // the REPLACED file; a new template with the same artboard size must not
+    // inherit it (stale rect = wrong content-bleed trim on artist checks).
+    measuredCutRectInches: null,
     measuredAt: null,
     measuredError: null,
   });
