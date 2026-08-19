@@ -40,6 +40,17 @@ accents on ~14%-alpha translucent washes — see tokens).
 
 - Buttons are **rounded-full pills**. Tiles choose; buttons act.
 - **Only the ONE truly primary CTA per screen gets a filled blue pill.**
+- **Confirm buttons earn their blue.** A dialog/form confirm is NOT solid
+  blue until the user has done something actionable (picked a file, typed a
+  valid URL, changed a field). Until then it renders as a quiet Apple-like
+  pill with a dark-gray hairline outline (subink text, transparent fill);
+  it fills blue the moment the action becomes valid. Never a big idle blue
+  button. (Ratified 2026-08-18, Bill.)
+- **Page-header actions are dark-gray-outline pills, not blue.** The
+  top-right page action (e.g. "Create release" on a wall page) renders as an
+  Apple-like quiet pill — dark-gray hairline outline, ink text, NO fill.
+  Filled blue is reserved for confirms that have earned it inside a flow,
+  not for standing page-level entry points. (Ratified 2026-08-18, Bill.)
 - All other actions — list/row actions, secondary links, header extras — are
   **quiet borderless text buttons** (blue for the main verb, subink for the
   rest) with a soft hover tint (`#f0f7fc` for blue, light gray otherwise).
@@ -73,6 +84,12 @@ accents on ~14%-alpha translucent washes — see tokens).
   with `rounded-md`/`rounded-lg` corners or box-shaped options is a canon
   violation. (Ratified 2026-08-09; closes the squared segmented controls Bill
   found in the live admin.)
+- Appearance switcher (user menu): an **`APPEARANCE` small-caps eyebrow** above
+  a segmented pill with **worded segments — `Light` / `Dark` / `System`** —
+  never icon-only sun/moon/monitor glyphs (words over icons; icon-only state
+  controls are a canon violation). Reference: the press shell user menu.
+  (Ratified 2026-08-19; closes the icon-only variant Bill found in the artist
+  portal.)
 - Modal close: small gray circle (`--apple-chip`) with a dark ×. Notification
   bells use the same gray-circle treatment.
 - Header: sticky, translucent, blurred (`rgba(255,255,255,0.72)` +
@@ -247,15 +264,9 @@ Reference implementation: the dark Catalog mockup
 - **No mixed surfaces.** Every surface on a page inherits the page's active
   theme. A dark card on a light page (or vice versa) is a bug, even if it
   matches a mock drawn for the other theme.
-- **Which theme where (ruled Aug 16 2026, supersedes any "light-only"
-  language):** ALL operator and partner surfaces — artist, press, label,
-  NPO, manager, vendor, publisher — are theme-aware with BOTH light and
-  dark modes. Dark is the charcoal admin dark, never navy. Ruby defaults
-  to dark in her mocks; both token sets ship with every handoff. The fan
-  player's navy shell is a separate world, untouched by this ruling.
-  Existing portal screens sweep against the acceptance gate below;
-  previously pushed dark screens become reference implementations where
-  they pass.
+- **Which theme where:** artist-facing contexts = light; the charcoal
+  admin/operator shell = dark. Screens serving both are theme-aware from
+  day one, never forked.
 - **Breakpoints:** no fixed pixel widths that overflow the viewport. Grids
   collapse gracefully at 1024 and 768 (prefer auto-fit/minmax grids and
   flex-wrap over breakpoint classes).
