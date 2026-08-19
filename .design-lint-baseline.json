@@ -10382,7 +10382,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/AdminUserMenu.tsx",
-    "snippet": "<span className=\"text-[13px] text-slate-700\">Appearance</span>"
+    "snippet": "<div className=\"text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 px-0.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/AdminUserMenu.tsx",
+    "snippet": "className={`flex-1 h-7 rounded-full text-[12px] transition-colors ${"
   },
   {
     "rule": "brand-hex-literal",
@@ -21407,7 +21412,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>Pending &mdash; no art uploaded yet</div>"
+    "snippet": "className=\"inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<div className=\"text-[15px] font-semibold\" style={{ marginTop: 12, color: t.ink, letterSpacing: '-0.01em' }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 4, color: t.subink, maxWidth: 560, lineHeight: 1.55 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<div className=\"text-[12.5px]\" style={{ marginTop: 12, color: t.faint, lineHeight: 1.55 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21418,6 +21443,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<h2 className=\"text-[16px] font-semibold\" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{pieceLabel}</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium\" style={{ padding: '3px 10px', border: `1px solid ${t.chipBorder}`, color: t.subink }} data-testid=\"chip-file-sta"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21448,6 +21478,21 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<p className=\"text-[13px]\" style={{ marginTop: 14, color: t.subink }} data-testid=\"template-missing\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[11px] font-medium\" style={{ padding: '2px 8px', border: `1px solid ${t.hairline}`, background: t.card, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium\" style={{ padding: '3px 10px', border: `1px solid ${t.hairline}`, background: t.card, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className=\"absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium transition-colors\""
   },
   {
     "rule": "naked-icon-button",
@@ -27013,6 +27058,16 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
     "snippet": "className=\"absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/PressClientEstimate.tsx",
+    "snippet": "const BLUE = '#319ED8';"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/PressClientEstimate.tsx",
+    "snippet": "background: linear-gradient(100deg, #86868b 0%, #86868b 38%, #6fc3ea 48%, #319ED8 50%, #6fc3ea 52%, #86868b 62%, #86868b 100%);"
   },
   {
     "rule": "brand-hex-literal",

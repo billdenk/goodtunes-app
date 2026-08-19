@@ -108,6 +108,7 @@ import { AdminTeamAccounts } from "@/pages/AdminTeamAccounts";
 import { AdminReview } from "@/pages/AdminReview";
 import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
 import AcceptInvite from "@/pages/AcceptInvite";
+import PressClientEstimate from "@/pages/PressClientEstimate";
 import JoinReferralLink from "@/pages/JoinReferralLink";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
@@ -831,6 +832,9 @@ function Router() {
             without an account; the page itself routes them through
             sign-in/up before letting them call POST claim. */}
         <Route path="/gift/:token" component={GiftClaim} />
+        {/* Press client estimate — public tokenized link (VIEW-only, no
+            account needed; the link is the secret). Dark-only page. */}
+        <Route path="/e/:token" component={PressClientEstimate} />
         {/* Task #49 — Shopify redemption landing. Public; the page itself
             routes the fan through sign-in/up before calling claim. */}
         <Route path="/redeem/:code" component={Redeem} />

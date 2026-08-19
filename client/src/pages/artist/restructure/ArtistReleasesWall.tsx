@@ -10,7 +10,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
-import { ChevronRight, Disc3, FileImage, MoreHorizontal, ImagePlus, LayoutTemplate, Upload } from 'lucide-react';
+import { Disc3, FileImage, MoreHorizontal, ImagePlus, LayoutTemplate, Upload } from 'lucide-react';
 import {
   useRestructureTheme,
   ChannelGlyph,
@@ -159,10 +159,8 @@ function WallCardTile({ card, t, onOpen }: { card: WallCard; t: Theme; onOpen: (
         </div>
       </div>
       <div className="flex flex-col" style={{ padding: '13px 16px 15px' }}>
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="text-[15.5px] font-semibold truncate min-w-0" style={{ color: t.ink, letterSpacing: '-0.015em' }}>{card.name}</h3>
-          <ChevronRight className="w-4 h-4 flex-shrink-0 transition-opacity" style={{ color: t.faint, opacity: hover ? 1 : 0 }} aria-hidden />
-        </div>
+        {/* Hover chevron removed (Bill, Aug 18 2026): the whole card is the affordance. */}
+        <h3 className="text-[15.5px] font-semibold truncate min-w-0" style={{ color: t.ink, letterSpacing: '-0.015em' }}>{card.name}</h3>
         {/* Derived per-format status line, directly under the title */}
         <div className="text-[12px] truncate" style={{ marginTop: 6, color: t.subink, lineHeight: 1.4 }} data-testid={`badge-${card.id}`}>{badge}</div>
         {/* Bottom row — year on the left, channel glyph (logo only) on the right */}

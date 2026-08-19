@@ -49,6 +49,8 @@ import {
   Clock,
   ImagePlus,
   LayoutTemplate,
+  CircleDashed,
+  ArrowRight,
   MoreHorizontal,
   Check,
   FileImage,
@@ -537,8 +539,8 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
 
   // ── No art yet: the GOLDENROD raw-template flow (Ruby's Aug 19 restructure
   // handoff). Full-template drops are REAL (same upload + measured check as a
-  // replace); per-panel uploads are a deliberate quiet dead-end until Ruby
-  // designs the ending (gogoods, Aug 19 2026: "visual-only").
+  // replace); per-panel uploads seat art locally and end honestly — "Art
+  // seated · not yet measured", never a green Passed (Ruby's Aug 19 ending).
   if (!hasArt) {
     return (
       <div className={wrapClass} style={{ background: embedded ? undefined : t.canvas, color: t.ink, ...wrapStyle }} data-testid="artist-template-test">
@@ -1157,7 +1159,9 @@ function TemplateDropBox({ label, onOpen, onDropFile, testid }: {
 // Contained upload dialog — handoff UploadDialog (variant 'contained': scrim
 // scoped to the sheet). Segmented Upload file / Paste a URL; confirm earns its
 // blue only once a file is chosen or a URL typed. Real when wired to the
-// full-template handlers; per-panel confirms close quietly (deadEnd).
+// full-template handlers; per-panel confirms seat art locally (Ruby's Aug 19
+// update — the panel path ends honestly: seated, never measured). deadEnd is
+// kept for any caller that still wants a quiet close.
 function RawUploadDialog({ t, title, subtitle, onClose, deadEnd, busy, uploadPct, measuring, onConfirmFile, onConfirmUrl }: {
   t: Theme; title: string; subtitle: string; onClose: () => void; deadEnd: boolean;
   busy: boolean; uploadPct: number | null; measuring: boolean;
@@ -1316,21 +1320,33 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
   const [dialog, setDialog] = useState<null | 'template' | RawPanelId>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Per-panel seated art (Ruby's Aug 19 update: the panel path now has a real
+  // ending). Object URLs for dropped files; a pasted link seats without a
+  // preview. Local-only — panels can't be measured server-side yet.
+  const [panelArt, setPanelArt] = useState<Record<RawPanelId, string | null>>({ front: null, back: null, spine: null });
+  const anyPanelArt = RAW_PANELS.some((p) => panelArt[p.id] !== null);
+  const allPanelArt = RAW_PANELS.every((p) => panelArt[p.id] !== null);
+  const panelComplete = mode === 'images' && allPanelArt;
 
-  // Template mode always views the full sheet; images mode views a panel.
+  const seatPanel = (p: RawPanelId, file?: File) => {
+    setPanelArt((s) => ({ ...s, [p]: file ? URL.createObjectURL(file) : '' }));
+    setDialog(null);
+  };
+
+  // Template mode always views the full sheet; images mode views a panel
+  // until every panel is seated (then Full template unlocks).
   useEffect(() => {
     if (mode === 'template' && area !== 'all') setArea('all');
-    if (mode === 'images' && area === 'all') setArea('front');
+    if (mode === 'images' && area === 'all' && !allPanelArt) setArea('front');
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sheetAspect = tplAspect ?? JACKET_ASPECT;
-  const panelDeadEnd = dialog !== null && dialog !== 'template';
   const dialogTitle = dialog === 'template' ? 'Upload your full template' : dialog ? `Upload your ${dialog} art` : '';
 
   const viewChips: Array<{ value: RawArea; label: string; locked?: boolean; tooltip?: string }> =
     mode === 'template'
       ? [{ value: 'all', label: 'Full template' }, ...RAW_PANELS.map((p) => ({ value: p.id as RawArea, label: p.label, locked: true, tooltip: 'Panels unlock once your template art is placed' }))]
-      : [{ value: 'all', label: 'Full template', locked: true, tooltip: 'Upload each panel to see the full template' }, ...RAW_PANELS.map((p) => ({ value: p.id as RawArea, label: p.label }))];
+      : [{ value: 'all', label: 'Full template', locked: !allPanelArt, tooltip: allPanelArt ? undefined : 'Upload each panel to see the full template' }, ...RAW_PANELS.map((p) => ({ value: p.id as RawArea, label: p.label }))];
 
   return (
     <div data-testid="raw-flow">
@@ -1367,16 +1383,58 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
         </button>
       </div>
 
-      {/* Pending status card — no art anywhere yet. */}
-      <div className="rounded-2xl overflow-hidden" style={{ marginTop: 16, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="pending-card">
-        <div className="flex items-center gap-3" style={{ padding: '16px 20px' }}>
-          <span className="flex-shrink-0 rounded-full" style={{ width: 18, height: 18, border: `2px solid ${t.dot}` }} aria-hidden />
-          <div className="min-w-0 flex-1">
-            <div className="text-[14px] font-semibold" style={{ color: t.ink }}>Pending &mdash; no art uploaded yet</div>
-            <div className="text-[12.5px]" style={{ marginTop: 2, color: t.faint }}>{specLine}</div>
+      {/* Status card. The per-panel path can't be measured against the press
+          spec — measured checks run on ONE print-ready template file. When all
+          three panels are seated we show an HONEST, CALM intermediate (Ruby's
+          Aug 19 update): a neutral "Not tested against press spec" chip, calm
+          grammar, and one quiet forward path into the template flow where
+          checks CAN run. Never a green Passed on the panel path. */}
+      {panelComplete ? (
+        <div className="rounded-2xl" style={{ marginTop: 16, padding: '18px 20px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="raw-not-measured">
+          <span
+            className="inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-semibold"
+            style={{ padding: '3px 10px', border: `1px solid ${t.hairline}`, color: t.subink, background: t.soft }}
+            data-testid="chip-not-measured"
+          >
+            <CircleDashed className="w-3.5 h-3.5 flex-shrink-0" aria-hidden /> Not tested against press spec
+          </span>
+          <div className="text-[15px] font-semibold" style={{ marginTop: 12, color: t.ink, letterSpacing: '-0.01em' }}>
+            Looks right. Not yet measured.
+          </div>
+          <p className="text-[12.5px]" style={{ marginTop: 4, color: t.subink, maxWidth: 560, lineHeight: 1.55 }}>
+            Measured checks run on a single print-ready template file. Your panels are seated visually &mdash; the press will run the full check when your proof is made.
+          </p>
+          <div className="text-[12.5px]" style={{ marginTop: 12, color: t.faint, lineHeight: 1.55 }}>
+            Want it measured now? Download the template, place your art, and upload it as one file.
+          </div>
+          <button
+            type="button"
+            onClick={() => { setMode('template'); setArea('all'); }}
+            className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+            style={{ marginTop: 10, padding: '6px 13px', border: `1px solid ${t.hairline}`, color: t.ink }}
+            data-testid="button-switch-to-template"
+          >
+            <LayoutTemplate className="w-4 h-4 flex-shrink-0" aria-hidden /> Switch to the template path
+            <ArrowRight className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-2xl overflow-hidden" style={{ marginTop: 16, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="pending-card">
+          <div className="flex items-center gap-3" style={{ padding: '16px 20px' }}>
+            {anyPanelArt ? (
+              <BadgeCheck className="w-5 h-5 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
+            ) : (
+              <span className="flex-shrink-0 rounded-full" style={{ width: 18, height: 18, border: `2px solid ${t.dot}` }} aria-hidden />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="text-[14px] font-semibold" style={{ color: t.ink }}>
+                {anyPanelArt ? 'Art started \u2014 some panels still pending' : 'Pending \u2014 no art uploaded yet'}
+              </div>
+              <div className="text-[12.5px]" style={{ marginTop: 2, color: t.faint }}>{specLine}</div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* File header card — title + status chips, rename dead-end. */}
       <div className="rounded-2xl" style={{ marginTop: 16, padding: '18px 20px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="raw-file-header">
@@ -1391,15 +1449,30 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
           >
             <Pencil className="w-3.5 h-3.5" />
           </button>
-          <span className="inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium" style={{ padding: '3px 10px', border: `1px solid ${t.chipBorder}`, color: t.subink }}>
-            <Clock className="w-3.5 h-3.5 flex-shrink-0" /> No art yet
-          </span>
-          <span className="inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium" style={{ padding: '3px 10px', border: `1px solid ${t.chipBorder}`, color: t.subink }}>
-            <History className="w-3.5 h-3.5 flex-shrink-0" /> Not tested
-          </span>
+          {panelComplete ? (
+            /* Per-panel completed slot — honest, calm, word + icon. Neutral
+               dashed-circle, not a green "Passed": the panels are seated but
+               nothing has been measured against the press spec yet. */
+            <span className="inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium" style={{ padding: '3px 10px', border: `1px solid ${t.chipBorder}`, color: t.subink }} data-testid="chip-file-status">
+              <CircleDashed className="w-3.5 h-3.5 flex-shrink-0" /> Art seated &middot; not yet measured
+            </span>
+          ) : anyPanelArt ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium" style={{ padding: '3px 10px', border: `1px solid ${t.chipBorder}`, color: t.subink }} data-testid="chip-file-status">
+              <History className="w-3.5 h-3.5 flex-shrink-0" /> Not tested
+            </span>
+          ) : (
+            <>
+              <span className="inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium" style={{ padding: '3px 10px', border: `1px solid ${t.chipBorder}`, color: t.subink }}>
+                <Clock className="w-3.5 h-3.5 flex-shrink-0" /> No art yet
+              </span>
+              <span className="inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium" style={{ padding: '3px 10px', border: `1px solid ${t.chipBorder}`, color: t.subink }}>
+                <History className="w-3.5 h-3.5 flex-shrink-0" /> Not tested
+              </span>
+            </>
+          )}
         </div>
         <p className="text-[12.5px]" style={{ marginTop: 6, color: t.faint }}>
-          {templateName} &middot; drop art to run the measured checks
+          {templateName} &middot; {panelComplete ? 'panels seated \u2014 measured checks run on one template file' : 'drop art to run the measured checks'}
         </p>
       </div>
 
@@ -1498,8 +1571,35 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
       )}
 
       {/* Canvas — full sheet (template mode) or a panel viewport (images mode),
-          cropped from the real rendered template sheet when available. */}
-      {area === 'all' ? (
+          cropped from the real rendered template sheet when available. In
+          images mode the Full-template view is the stitched spread of the
+          seated panels (unlocked once all three are in). */}
+      {area === 'all' && mode === 'images' ? (
+        <div className="relative w-full overflow-hidden rounded-2xl" style={{ marginTop: 14, border: `1px solid ${t.hairline}`, background: '#ffffff' }} data-testid="raw-sheet-stitched">
+          <div className="relative w-full" style={{ aspectRatio: `${sheetAspect} / 1`, maxHeight: '70vh' }}>
+            {tplImg ? (
+              <img src={tplImg} alt={`${templateName} template`} className="absolute inset-0 w-full h-full" style={{ objectFit: 'contain' }} aria-hidden />
+            ) : (
+              <RawLinework area="all" />
+            )}
+            {RAW_PANELS.map((p) => {
+              const src = panelArt[p.id];
+              if (src === null) return null;
+              const r = PANEL_REGIONS[p.id];
+              const box: React.CSSProperties = { position: 'absolute', left: `${r.x * 100}%`, top: `${r.y * 100}%`, width: `${r.width * 100}%`, height: `${r.height * 100}%` };
+              return src ? (
+                <img key={p.id} src={src} alt={`${p.label} art`} style={{ ...box, objectFit: 'cover' }} data-testid={`stitched-${p.id}`} />
+              ) : (
+                <div key={p.id} className="flex items-center justify-center" style={{ ...box, background: 'rgba(0,0,0,0.04)' }} data-testid={`stitched-${p.id}`}>
+                  <span className="inline-flex items-center gap-1.5 rounded-full text-[11px] font-medium" style={{ padding: '2px 8px', border: `1px solid ${t.hairline}`, background: t.card, color: t.subink }}>
+                    <CircleDashed className="w-3 h-3 flex-shrink-0" /> Art seated
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : area === 'all' ? (
         <div className="relative w-full overflow-hidden rounded-2xl" style={{ marginTop: 14, border: `1px solid ${t.hairline}`, background: '#ffffff' }} data-testid="raw-sheet">
           <div className="relative w-full" style={{ aspectRatio: `${sheetAspect} / 1`, maxHeight: '70vh' }}>
             {tplImg ? (
@@ -1556,18 +1656,41 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
                     title={dialogTitle}
                     subtitle={`Press-ready art for the ${area} panel \u2014 we validate it automatically.`}
                     onClose={() => setDialog(null)}
-                    deadEnd
+                    deadEnd={false}
                     busy={false}
                     uploadPct={null}
                     measuring={false}
-                    onConfirmFile={() => setDialog(null)}
-                    onConfirmUrl={() => setDialog(null)}
+                    onConfirmFile={(f) => seatPanel(area, f)}
+                    onConfirmUrl={() => seatPanel(area)}
                   />
+                ) : panelArt[area] !== null ? (
+                  /* Seated panel — art (when we have a preview) + a quiet
+                     Replace affordance. No green Passed on the panel path. */
+                  <>
+                    {panelArt[area] ? (
+                      <img src={panelArt[area]!} alt={`${area} art`} className="absolute inset-0 w-full h-full" style={{ objectFit: 'cover' }} data-testid={`seated-${area}`} />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center" data-testid={`seated-${area}`}>
+                        <span className="inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium" style={{ padding: '3px 10px', border: `1px solid ${t.hairline}`, background: t.card, color: t.subink }}>
+                          <CircleDashed className="w-3.5 h-3.5 flex-shrink-0" /> Art seated &middot; not yet measured
+                        </span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setDialog(area)}
+                      className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full text-[12px] font-medium transition-colors"
+                      style={{ padding: '5px 12px', border: `1px solid ${t.hairline}`, background: t.card, color: t.subink }}
+                      data-testid={`button-replace-${area}`}
+                    >
+                      <Upload className="w-3.5 h-3.5 flex-shrink-0" /> Replace
+                    </button>
+                  </>
                 ) : (
                   <TemplateDropBox
                     label={`Drag & drop your ${area} art`}
                     onOpen={() => setDialog(area)}
-                    onDropFile={() => setDialog(area)}
+                    onDropFile={(f) => seatPanel(area, f)}
                     testid={`raw-drop-${area}`}
                   />
                 )}
@@ -1576,7 +1699,6 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
           );
         })()
       )}
-      {panelDeadEnd && null}
     </div>
   );
 }

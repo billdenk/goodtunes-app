@@ -14,6 +14,8 @@
 // of the funnel reads pending admin_invites with defaultPressId=:id.
 
 import type { Express, Request, Response } from "express";
+import crypto from "crypto";
+import { sendPressEstimateEmail } from "./mail";
 import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import * as dnsLookup from "dns/promises";
@@ -2350,6 +2352,135 @@ export function registerPressPortalRoutes(
       .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
       .returning();
     res.json(row);
+  });
+
+  // Public, no-auth read of a sent estimate by its private share token
+  // (Ruby handoff, Aug 19 2026). Returns a sanitized view — enough to render
+  // the client estimate page, nothing operator-internal. First open flips
+  // Sent → Viewed so the press sees engagement on their index.
+  app.get("/api/estimate-link/:token", async (req, res) => {
+    const token = String(req.params.token ?? "").trim();
+    if (token.length < 24 || token.length > 128) return res.status(404).json({ message: "Estimate not found" });
+    const found = await db.execute<any>(sql`
+      SELECT e.*, m.name AS press_name
+      FROM press_estimates e
+      JOIN manufacturers m ON m.id = e.press_id
+      WHERE e.kind = 'estimate' AND e.payload->>'shareToken' = ${token}
+      LIMIT 1
+    `);
+    const row = ((found as any).rows ?? [])[0];
+    if (!row) return res.status(404).json({ message: "Estimate not found" });
+    const payload = (row.payload ?? {}) as Record<string, any>;
+    if (row.status === "Sent") {
+      await db
+        .update(pressEstimates)
+        .set({ status: "Viewed", updatedAt: new Date() })
+        .where(and(eq(pressEstimates.id, row.id), eq(pressEstimates.status, "Sent")));
+    }
+    res.json({
+      title: row.title,
+      displayId: row.display_id,
+      status: row.status === "Sent" ? "Viewed" : row.status,
+      createdAt: row.created_at,
+      sentAt: payload.sentAt ?? null,
+      pressName: row.press_name,
+      clientName: payload.clientName ?? null,
+      preparedBy: payload.preparedBy ?? null,
+      build: payload.build ?? null,
+      size: payload.size ?? null,
+      totalCents: payload.totalCents ?? null,
+      builderState: payload.builderState ?? null,
+    });
+  });
+
+  // Send an estimate to the artist (Ruby handoff, Aug 19 2026). Requires an
+  // artist association (name at minimum) and at least one valid recipient
+  // email. Mints the private share token on first send (reused after), stamps
+  // sentTo + clientName into the payload, flips status to Sent, and mails a
+  // one-line email per recipient with the tokenized link. The link is
+  // VIEW-only — it never authorizes checkout (preview-pass law).
+  const sendRecipientSchema = z.object({
+    name: z.string().trim().max(120).optional().default(""),
+    email: z.string().trim().email().max(200),
+  });
+  app.post("/api/press/:id/estimates/:estimateId/send", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const estimateId = String(req.params.estimateId);
+    const body = z
+      .object({
+        artistName: z.string().trim().min(1).max(200),
+        artistPersonId: z.string().trim().max(80).optional(),
+        recipients: z.array(sendRecipientSchema).min(1).max(4),
+      })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: "Artist association and at least one valid recipient email are required" });
+    const press = await resolvePress(pressId);
+    if (!press) return res.status(404).json({ message: "Press not found" });
+    const existing = await db
+      .select()
+      .from(pressEstimates)
+      .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
+      .limit(1);
+    const row = existing[0];
+    if (!row) return res.status(404).json({ message: "Estimate not found" });
+    if (row.kind !== "estimate") return res.status(400).json({ message: "Only estimates can be sent" });
+
+    const payload = (row.payload ?? {}) as Record<string, any>;
+    const shareToken: string = typeof payload.shareToken === "string" && payload.shareToken.length >= 24
+      ? payload.shareToken
+      : crypto.randomBytes(24).toString("base64url");
+    const sentTo = body.data.recipients.map((r) => ({ name: r.name, email: r.email }));
+    const nextPayload: Record<string, any> = {
+      ...payload,
+      shareToken,
+      sentTo,
+      sentAt: new Date().toISOString(),
+      clientName: body.data.artistName,
+      ...(body.data.artistPersonId ? { artistPersonId: body.data.artistPersonId } : {}),
+      builderState: payload.builderState
+        ? { ...payload.builderState, clientName: body.data.artistName }
+        : payload.builderState,
+    };
+    const [updated] = await db
+      .update(pressEstimates)
+      .set({ status: "Sent", payload: nextPayload, updatedAt: new Date() })
+      .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
+      .returning();
+
+    // Private link lives on the host that served this request — the client
+    // route (/e/:token) ships in the same SPA bundle on every host.
+    const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https";
+    const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
+    const linkUrl = `${proto}://${host}/e/${shareToken}`;
+
+    // Sender first name: the signed-in press user's name when we have one
+    // (bearer stamp OR session — same resolution as requirePressEditor).
+    const callerId = ((req as any).adminUserId as string | undefined) ?? req.session?.userId;
+    let senderName = "";
+    if (callerId) {
+      const u = await db.execute<any>(sql`SELECT name, email FROM users WHERE id = ${callerId} LIMIT 1`);
+      const uRow = ((u as any).rows ?? [])[0];
+      senderName = String(uRow?.name ?? uRow?.email ?? "").trim();
+    }
+    const senderFirst = senderName ? senderName.split(/[\s@]/)[0] : press.name;
+    const jobTitle = String(row.title ?? "your record").trim() || "your record";
+    // Stamp the sender onto the payload so the public page can show
+    // "Prepared by ‹name›" (one more write, same row).
+    if (senderName && nextPayload.preparedBy !== senderName) {
+      nextPayload.preparedBy = senderName;
+      await db
+        .update(pressEstimates)
+        .set({ payload: nextPayload, updatedAt: new Date() })
+        .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)));
+    }
+
+    // Best-effort mail — a transport failure must not lose the Sent state,
+    // but the caller needs to know (mail.ts records failures for ops).
+    const results = await Promise.all(
+      sentTo.map((r) => sendPressEstimateEmail(r.email, { senderFirst, pressName: press.name, jobTitle, linkUrl })),
+    );
+    const sentCount = results.filter((r) => r.ok).length;
+    res.json({ row: updated, shareToken, linkUrl, sentCount, attempted: sentTo.length });
   });
 
   app.get("/api/press/:id/payouts", requireAdmin, requirePressScope, async (req, res) => {

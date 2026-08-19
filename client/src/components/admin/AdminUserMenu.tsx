@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { LogOut, ShieldCheck, UserPlus, Check, UserPen, FlaskConical, X, Sun, Moon, Monitor } from "lucide-react";
+import { LogOut, ShieldCheck, UserPlus, Check, UserPen, FlaskConical, X } from "lucide-react";
 import {
   getAdminAppearance,
   setAdminAppearance,
@@ -255,42 +255,45 @@ export function AdminUserMenu() {
         {/* Appearance — Light / Dark / System. Toggles the Apple-canon
             charcoal theme (`gt-admin-dark`) across every admin + partner
             surface; persisted, "System" tracks the OS live. */}
-        <div className="px-2 py-1.5 flex items-center justify-between gap-3">
-          <span className="text-[13px] text-slate-700">Appearance</span>
+        <div className="px-2 py-2">
+          {/* Canon (Ruby, Aug 19 2026): appearance switcher is WORDED pills
+              under an APPEARANCE eyebrow — no Sun/Moon/Monitor icons. */}
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 px-0.5">
+            Appearance
+          </div>
           <div
-            className="inline-flex items-center rounded-full p-0.5 bg-slate-100"
-            role="group"
+            className="flex rounded-full p-0.5 border border-slate-200"
+            role="radiogroup"
             aria-label="Appearance"
             data-testid="appearance-toggle"
           >
             {(
               [
-                { v: "light", icon: Sun, label: "Light" },
-                { v: "dark", icon: Moon, label: "Dark" },
-                { v: "system", icon: Monitor, label: "System" },
+                { v: "light", label: "Light" },
+                { v: "dark", label: "Dark" },
+                { v: "system", label: "System" },
               ] as const
-            ).map(({ v, icon: Icon, label }) => {
+            ).map(({ v, label }) => {
               const active = appearance === v;
               return (
                 <button
                   key={v}
                   type="button"
-                  title={label}
-                  aria-label={`${label} appearance`}
-                  aria-pressed={active}
+                  role="radio"
+                  aria-checked={active}
                   onClick={(e) => {
                     e.preventDefault();
                     setAdminAppearance(v as AdminAppearance);
                     setAppearance(v as AdminAppearance);
                   }}
-                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
+                  className={`flex-1 h-7 rounded-full text-[12px] transition-colors ${
                     active
-                      ? "bg-white text-slate-900 shadow-sm"
-                      : "text-slate-400 hover:text-slate-700"
+                      ? "bg-slate-100 text-slate-900 font-semibold shadow-sm"
+                      : "text-slate-500 font-medium hover:text-slate-700"
                   }`}
                   data-testid={`appearance-${v}`}
                 >
-                  <Icon className="w-3.5 h-3.5" />
+                  {label}
                 </button>
               );
             })}

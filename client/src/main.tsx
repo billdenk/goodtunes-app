@@ -104,8 +104,14 @@ try {
     p === "/vendor" || p.indexOf("/vendor/albums/") === 0 ||
     p === "/non-profit" || p === "/publisher" ||
     p === "/invite" || p.indexOf("/invite/") === 0;
+  // /e/:token is the PUBLIC client-estimate page (dark-only, viewed by
+  // artists from an emailed private link). It's minted on whatever host the
+  // press user was on — often the admin host — so exempt it here or the
+  // page flashes/locks light.
+  const isPublicEstimate = p.indexOf("/e/") === 0;
   const isAdmin =
-    h === "admin.goodtunes.music" || p.indexOf("/admin") === 0 || lightPortal;
+    !isPublicEstimate &&
+    (h === "admin.goodtunes.music" || p.indexOf("/admin") === 0 || lightPortal);
   if (isAdmin) {
     document.body.classList.add("gt-admin");
     // Optional ?gtappearance=light|dark|system deep-link (persists the

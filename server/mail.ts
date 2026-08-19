@@ -686,6 +686,37 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
   return sendViaResend("customer-welcome-back", toEmail, subject, html, text);
 }
 
+// Press estimate send (Ruby handoff, Aug 19 2026) — ONE line of copy and a
+// single blue "View estimate" button pointing at the private tokenized link.
+// No account needed to view; the link-not-login rule flips only at "Start
+// this project" on the estimate page itself.
+export async function sendPressEstimateEmail(
+  toEmail: string,
+  opts: { senderFirst: string; pressName: string; jobTitle: string; linkUrl: string },
+): Promise<SendResult> {
+  const { senderFirst, pressName, jobTitle, linkUrl } = opts;
+  const subject = `${senderFirst} at ${pressName} sent you an estimate for ${jobTitle}`;
+  const text = [
+    `${senderFirst} at ${pressName} sent you an estimate for ${jobTitle}.`,
+    ``,
+    `View it here (private link, no account needed):`,
+    linkUrl,
+  ].join("\n");
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
+      ${emailLogoImg("color")}
+      <p style="font-size: 16px; line-height: 1.6; margin: 20px 0 28px;">
+        <strong>${escapeHtml(senderFirst)}</strong> at ${escapeHtml(pressName)} sent you an estimate for <strong>${escapeHtml(jobTitle)}</strong>.
+      </p>
+      ${bulletproofButton(linkUrl, "View estimate", { bgColor: "#319ED8", paddingV: 13, paddingH: 26, borderRadius: 999 })}
+      <p style="font-size: 12.5px; color: #888; line-height: 1.55; margin: 26px 0 0;">
+        This is a private link — no account needed to view.
+      </p>
+    </div>
+  `;
+  return sendViaResend("press-estimate-send", toEmail, subject, html, text);
+}
+
 // Task #2921 — neutral one-tap sign-in link for fans who are NOT legacy
 // gogoods imports. A brand-new purchase-created account (Shopify webhook
 // stub) was getting the "major upgrade / welcome back / while you were

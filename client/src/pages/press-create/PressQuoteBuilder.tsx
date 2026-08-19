@@ -2592,10 +2592,21 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   const [clientName, setClientName] = useState<string | null>(null);
   const [clientSearch, setClientSearch] = useState('');
   const [sendEmail, setSendEmail] = useState('');
+  const [mgrName, setMgrName] = useState('');
+  const [mgrEmail, setMgrEmail] = useState('');
+  const [sentNames, setSentNames] = useState<string[]>([]);
   const [picking, setPicking] = useState(false); // modal open
   const [pickStep, setPickStep] = useState<'search' | 'confirm'>('search');
   const [pendingClient, setPendingClient] = useState<{ name: string; viaSpotify: boolean } | null>(null);
   const clientFirst = clientName ? clientName.split(' ')[0] : 'the client';
+  // Send loop (Ruby handoff, Aug 19 2026): Send earns its blue only when an
+  // artist is associated AND at least one recipient email is valid.
+  const emailOk = (s: string) => /.+@.+\..+/.test(s.trim());
+  const sendRecipients = [
+    ...(emailOk(sendEmail) && pendingClient ? [{ name: pendingClient.name, email: sendEmail.trim() }] : []),
+    ...(emailOk(mgrEmail) ? [{ name: mgrName.trim(), email: mgrEmail.trim() }] : []),
+  ];
+  const sendEarned = !!pendingClient && sendRecipients.length >= 1;
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -3823,28 +3834,69 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                           <input
                             value={sendEmail}
                             onChange={(e) => setSendEmail(e.target.value)}
-                            placeholder="Invite email — their manager works too"
+                            placeholder={`${pendingClient.name.split(' ')[0]}'s email`}
                             className="w-full focus:outline-none"
                             style={{ marginTop: 14, borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#f5f5f7', padding: '10px 14px', fontSize: 14 }}
                             data-testid="quote-send-email"
                           />
+                          {/* Optional manager pair — a second private-link recipient. */}
+                          <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                            <input
+                              value={mgrName}
+                              onChange={(e) => setMgrName(e.target.value)}
+                              placeholder="Manager name (optional)"
+                              className="focus:outline-none"
+                              style={{ flex: 1, borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#f5f5f7', padding: '10px 14px', fontSize: 14 }}
+                              data-testid="quote-send-mgr-name"
+                            />
+                            <input
+                              value={mgrEmail}
+                              onChange={(e) => setMgrEmail(e.target.value)}
+                              placeholder="Manager email"
+                              className="focus:outline-none"
+                              style={{ flex: 1, borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#f5f5f7', padding: '10px 14px', fontSize: 14 }}
+                              data-testid="quote-send-mgr-email"
+                            />
+                          </div>
                           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20, paddingTop: 18, borderTop: '1px solid rgba(255,255,255,0.10)' }}>
                             <button type="button" onClick={() => { setPickStep('search'); setPendingClient(null); }} style={{ padding: '11px 20px', borderRadius: 10, background: 'rgba(255,255,255,0.10)', border: 'none', color: '#f5f5f7', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Back</button>
+                            {/* Send earns its blue only once the artist is associated
+                                AND at least one recipient email is valid (canon). */}
                             <button
                               type="button"
-                              disabled={saving}
+                              disabled={saving || !sendEarned}
                               onClick={async () => {
+                                if (!sendEarned) return;
                                 const chosen = pendingClient.name;
                                 try {
-                                  await persistEstimate('Sent', chosen);
-                                } catch { return; } // stay in the modal; saveError shows below
+                                  const row = await persistEstimate('Sent', chosen);
+                                  const estId = row?.id ?? rowIdRef.current;
+                                  if (estId) {
+                                    const res = await apiRequest('POST', `/api/press/${pressId}/estimates/${estId}/send`, {
+                                      artistName: chosen,
+                                      recipients: sendRecipients.map((r) => ({ name: r.name, email: r.email })),
+                                    });
+                                    await res.json();
+                                  }
+                                } catch {
+                                  setSaveError('Couldn’t send — check your connection and try again.');
+                                  return; // stay in the modal; saveError shows below
+                                }
+                                setSentNames(sendRecipients.map((r) => r.name || r.email));
                                 setClientName(chosen); setSaved(true); setPicking(false); setPickStep('search');
                               }}
-                              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '11px 20px', borderRadius: 10, background: BLUE, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: 7, padding: '11px 20px', borderRadius: 10,
+                                background: sendEarned ? BLUE : 'transparent',
+                                border: sendEarned ? '1px solid transparent' : '1px solid rgba(255,255,255,0.14)',
+                                color: sendEarned ? '#fff' : '#a1a1a6',
+                                fontSize: 14, fontWeight: 700,
+                                cursor: saving || !sendEarned ? 'default' : 'pointer', opacity: saving ? 0.6 : 1,
+                              }}
                               data-testid="quote-save-confirm"
                             >
-                              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><path d="M3 8.5L6.5 12L13 4.5" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                              {saving ? 'Saving…' : 'Add person & save estimate'}
+                              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><path d="M3 8.5L6.5 12L13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                              {saving ? 'Sending…' : 'Send estimate'}
                             </button>
                           </div>
                           {saveError && (
@@ -3863,7 +3915,9 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                     }}>
                       <Check className="w-3.5 h-3.5" strokeWidth={3} />
                     </span>
-                    Saved to Estimates — sent to {clientFirst}
+                    {sentNames.length > 0
+                      ? <>Sent — {sentNames.join(' and ')} got a private link</>
+                      : <>Saved to Estimates — sent to {clientFirst}</>}
                   </div>
                 ) : (picking || !canEdit) ? null : (
                   <div className="flex items-center gap-3">

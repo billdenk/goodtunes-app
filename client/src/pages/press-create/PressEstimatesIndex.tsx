@@ -319,15 +319,16 @@ export function PressEstimatesIndex({ pressId, canEdit, onBuildEstimate }: { pre
               Estimates are immutable once sent — edits issue a new estimate variant.
             </p>
           </div>
-          {/* ONE filled blue — canon primary, verbatim copy of PressQuoteBuilder's
-              "Send estimate" pill. Rule: CTAs are copied from a canon button, never
-              hand-styled (founder, Aug 16 2026). */}
+          {/* Page-header action — dark-gray-outline quiet pill, no fill
+              (Bill, Aug 18 2026: header actions are never filled blue; blue is
+              earned by confirms only). */}
           {canEdit && (
             <Button
               type="button"
+              variant="outline"
               onClick={() => onBuildEstimate(null)}
-              className="rounded-full px-7 flex-shrink-0"
-              style={{ background: BLUE, color: '#fff', height: 44, fontSize: 14.5, marginTop: 34 }}
+              className="rounded-full px-7 flex-shrink-0 bg-transparent hover:bg-transparent"
+              style={{ background: 'transparent', color: INK, border: '1px solid #6e6e73', height: 44, fontSize: 14.5, marginTop: 34 }}
               data-testid="button-build-estimate"
             >
               Build estimate
