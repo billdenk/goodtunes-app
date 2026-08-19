@@ -526,6 +526,14 @@ export function PressTabBody({
           packageId={packageIdFromUrl}
           canEdit={me?.canEdit !== false}
           onExit={(dest) => setCreateViewParam(dest ?? "packages", { builder: false })}
+          onSaved={(savedId) => {
+            // Roll back to the packages index with `?saved=<id>` — the index
+            // reads it once for the save-arrival whisper, then strips it.
+            setCreateViewParam("packages", { builder: false });
+            const sp = new URLSearchParams(window.location.search);
+            sp.set("saved", savedId);
+            history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+          }}
         />
       ) : (
         <PressPackagesIndex

@@ -2235,7 +2235,9 @@ export function registerPressPortalRoutes(
   const estimateKindSchema = z.enum(["estimate", "package"]);
   const estimatePayloadSchema = z.record(z.any());
   const ESTIMATE_STATUSES = ["Draft", "Sent", "Viewed", "Converted", "Abandoned"] as const;
-  const PACKAGE_STATUSES = ["draft", "live"] as const;
+  // 'archived' (Ruby handoff, Aug 19 2026): a package leaves the artist rail
+  // but keeps its estimate history — distinct from hard delete below.
+  const PACKAGE_STATUSES = ["draft", "live", "archived"] as const;
 
   function pressInitials(name: string): string {
     const letters = (name || "")
@@ -2352,6 +2354,21 @@ export function registerPressPortalRoutes(
       .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
       .returning();
     res.json(row);
+  });
+
+  // Hard delete (Ruby handoff, Aug 19 2026) — the packages index offers
+  // Delete beside Archive; archive is the history-keeping path, delete is
+  // the real removal. Scoped to the press like every other estimates route.
+  app.delete("/api/press/:id/estimates/:estimateId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const estimateId = String(req.params.estimateId);
+    if (!(await resolvePress(pressId))) return res.status(404).json({ message: "Press not found" });
+    const [row] = await db
+      .delete(pressEstimates)
+      .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
+      .returning({ id: pressEstimates.id });
+    if (!row) return res.status(404).json({ message: "Estimate not found" });
+    res.json({ ok: true, id: row.id });
   });
 
   // Public, no-auth read of a sent estimate by its private share token

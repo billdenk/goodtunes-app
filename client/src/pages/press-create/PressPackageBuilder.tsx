@@ -22,6 +22,13 @@ import {
   EyeOff,
   Check,
   ChevronDown,
+  CheckCircle2,
+  Pencil,
+  Sparkles,
+  ImagePlus,
+  Upload,
+  UploadCloud,
+  ReceiptText,
 } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -292,7 +299,7 @@ function DiscLabelArt({ size }: { size: number }) {
   );
 }
 
-function VinylDisc({
+export function VinylDisc({
   size,
   swatch,
   labelRatio,
@@ -526,7 +533,7 @@ const qsw = (id: string, name: string, kind: SwatchKind, kindNote: string, base:
   id, name, kind, kindNote, base, price, sizes: ['7', '10', '12'], ...extra,
 });
 
-const CATALOG_COLORS: QuoteSwatch[] = [
+export const CATALOG_COLORS: QuoteSwatch[] = [
   qsw('BK1', 'Classic Black', 'black', 'Black', '#111114', 1.80),
   qsw('T01', 'Ruby',   'translucent', 'Translucent', '#C81E38', 2.30, { photo: rubyVinylPhoto }),
   qsw('T02', 'Clear',  'translucent', 'Translucent', '#E8ECEF', 2.40),
@@ -820,7 +827,7 @@ function JacketTile({
         </div>
         {active && hasVariants && (
           <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10 }}>
-            <div style={{ display: 'inline-flex', gap: 6, padding: 3, borderRadius: 999, background: 'var(--q-track)', border: `1px solid ${HAIRLINE}` }}>
+            <div style={{ display: 'inline-flex', gap: 6, padding: 3, borderRadius: 999, background: 'var(--q-track)' }}>
               {jacket.variants.map((v) => {
                 const vActive = v.id === variantId;
                 return (
@@ -874,13 +881,10 @@ function JacketStage({ jacketType, widespine = false, tipOn = false }: { jacketT
   const HOLE_D = JS * (368 / 1104);
   const HOLE_R = HOLE_D / 2;
 
+  // Closed by default — the closed state shows the EXTERIOR front face;
+  // the interior only appears when the gatefold opens on hover (Bill).
   useEffect(() => {
-    if (isGatefold && !tipOn) {
-      const t = setTimeout(() => setOpen(true), 600);
-      return () => clearTimeout(t);
-    }
     setOpen(false);
-    return undefined;
   }, [jacketType?.id, isGatefold, tipOn]);
 
   useEffect(() => {
@@ -1056,12 +1060,13 @@ function JacketStage({ jacketType, widespine = false, tipOn = false }: { jacketT
 
           {panels === 1 && (
             <>
+              {/* interior panel sits exactly behind the cover — edges line up;
+                  it is fully hidden until the front cover swings open */}
               <div style={{
                 position: 'absolute',
-                top: open ? 0 : 5, left: open ? 0 : -5,
+                top: 0, left: 0,
                 width: JS, height: JS,
                 overflow: 'hidden', zIndex: 1,
-                transition: `top 600ms ${GATEFOLD_EASE}, left 600ms ${GATEFOLD_EASE}`,
               }}>
                 <KraftFace />
               </div>
@@ -1434,7 +1439,7 @@ function SleeveTile({
         </div>
         {active && (
           <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10 }}>
-            <div style={{ display: 'inline-flex', gap: 6, padding: 3, borderRadius: 999, background: 'var(--q-track)', border: `1px solid ${HAIRLINE}` }}>
+            <div style={{ display: 'inline-flex', gap: 6, padding: 3, borderRadius: 999, background: 'var(--q-track)' }}>
               {sleeve.variants.map((v) => {
                 const vActive = v.id === variantId;
                 return (
@@ -2049,7 +2054,7 @@ function InsertTile({
         </div>
         {active && insert.variants.length > 0 && (
           <div onClick={(e) => e.stopPropagation()} style={{ marginTop: 10 }}>
-            <div style={{ display: 'inline-flex', gap: 6, padding: 3, borderRadius: 999, background: 'var(--q-track)', border: `1px solid ${HAIRLINE}` }}>
+            <div style={{ display: 'inline-flex', gap: 6, padding: 3, borderRadius: 999, background: 'var(--q-track)' }}>
               {insert.variants.map((v) => {
                 const vActive = v.id === variantId;
                 return (
@@ -2476,7 +2481,7 @@ const DEFAULT_SLEEVE_PRICE = { printed: 0.81, unprinted: 0.24, polylined: 0.30 }
 const DEFAULT_INSERT_PRICE = { none: 0, sheet: 0.67, gatefold: 0.98, booklet: 1.44, poster: 1.65 } as Record<string, number>;
 // Press minimum (Bill, Aug 16 2026): the press won't run splatter under 300
 // units — those quantity cards gray out as "Unavailable", no price shown.
-const DEFAULT_KIND_MIN_QTY: Record<string, number> = { splatter: 300 };
+export const DEFAULT_KIND_MIN_QTY: Record<string, number> = { splatter: 300 };
 const DEFAULT_ASSEMBLY_PRICE = 0.36; // insert placed on top before shrink
 const DEFAULT_SHRINK_PRICE = 0.17;   // retail-ready seal
 const DEFAULT_STICKER_PRICE = { none: 0, rect: 0.30, square: 0.35, circle: 0.45, upc: 0.18 } as Record<string, number>;
@@ -2519,6 +2524,187 @@ function applyComponentPricing(components: PressComponentsPayload | undefined): 
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// ARTIST-CARD COVERS (handoff verbatim, Bill Aug 20 2026) — the press
+// supplies variables, the system does the design.
+// ═══════════════════════════════════════════════════════════════════
+function PpbCoverAmber() {
+  return (
+    <svg viewBox="0 0 460 260" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Amber cover: warm sunset bands">
+      <defs>
+        <linearGradient id="ppb-amber" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#3a1f0e" /><stop offset="0.55" stopColor="#8a4718" /><stop offset="1" stopColor="#d67a34" />
+        </linearGradient>
+      </defs>
+      <rect width="460" height="260" fill="url(#ppb-amber)" />
+      <rect x="0" y="128" width="460" height="14" fill="rgba(0,0,0,0.28)" />
+      <rect x="0" y="150" width="460" height="10" fill="rgba(0,0,0,0.2)" />
+      <rect x="0" y="167" width="460" height="7" fill="rgba(0,0,0,0.14)" />
+    </svg>
+  );
+}
+function PpbCoverCharcoal() {
+  return (
+    <svg viewBox="0 0 460 260" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Charcoal cover: quiet pinstripes">
+      <defs>
+        <linearGradient id="ppb-char" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#232327" /><stop offset="1" stopColor="#101012" />
+        </linearGradient>
+      </defs>
+      <rect width="460" height="260" fill="url(#ppb-char)" />
+      {[0, 60, 120, 180, 240, 300, 360, 420].map((x) => (
+        <line key={x} x1={x} y1="0" x2={x + 90} y2="260" stroke="rgba(255,255,255,0.045)" strokeWidth="10" />
+      ))}
+    </svg>
+  );
+}
+function PpbCoverTeal() {
+  return (
+    <svg viewBox="0 0 460 260" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Teal cover: splatter dabs">
+      <defs>
+        <linearGradient id="ppb-teal" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#0e2b2a" /><stop offset="1" stopColor="#123c38" />
+        </linearGradient>
+      </defs>
+      <rect width="460" height="260" fill="url(#ppb-teal)" />
+      <circle cx="70" cy="60" r="16" fill="#f2c94c" /><circle cx="395" cy="48" r="11" fill="#e0466b" />
+      <circle cx="330" cy="120" r="8" fill="#f2c94c" /><circle cx="120" cy="140" r="7" fill="#4ec9b0" />
+      <circle cx="420" cy="150" r="14" fill="#4ec9b0" /><circle cx="30" cy="180" r="9" fill="#e0466b" />
+    </svg>
+  );
+}
+function PpbCoverViolet() {
+  return (
+    <svg viewBox="0 0 460 260" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Violet cover: gatefold spine motif">
+      <defs>
+        <linearGradient id="ppb-violet" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#1c1436" /><stop offset="1" stopColor="#332457" />
+        </linearGradient>
+      </defs>
+      <rect width="460" height="260" fill="url(#ppb-violet)" />
+      <line x1="230" y1="0" x2="230" y2="178" stroke="rgba(255,255,255,0.10)" strokeWidth="2" />
+    </svg>
+  );
+}
+function PpbCoverCoastal() {
+  return (
+    <svg viewBox="0 0 460 260" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Coastal cover: deep blue horizon">
+      <defs>
+        <linearGradient id="ppb-coastal" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#0d2740" /><stop offset="1" stopColor="#2f6f9a" />
+        </linearGradient>
+      </defs>
+      <rect width="460" height="260" fill="url(#ppb-coastal)" />
+      <ellipse cx="230" cy="210" rx="320" ry="70" fill="rgba(255,255,255,0.06)" />
+      <ellipse cx="230" cy="236" rx="320" ry="60" fill="rgba(255,255,255,0.05)" />
+    </svg>
+  );
+}
+function PpbCoverPressroom() {
+  return (
+    <svg viewBox="0 0 460 260" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Pressroom cover: warm gray with groove rings">
+      <defs>
+        <linearGradient id="ppb-press" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#2b2723" /><stop offset="1" stopColor="#4a423a" />
+        </linearGradient>
+      </defs>
+      <rect width="460" height="260" fill="url(#ppb-press)" />
+      {[40, 70, 100, 130].map((r) => (
+        <circle key={r} cx="392" cy="52" r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="2" />
+      ))}
+    </svg>
+  );
+}
+
+// "Match my vinyl" — a SYSTEM-generated background derived from the chosen
+// vinyl's colors: darken + shift hue toward the complement so the disc pops.
+// Near-black vinyl gets a warm charcoal-amber instead of a dead gray.
+function ppbHexToHsl(hex: string): { h: number; s: number; l: number } {
+  const m = hex.replace('#', '');
+  const r = parseInt(m.slice(0, 2), 16) / 255;
+  const g = parseInt(m.slice(2, 4), 16) / 255;
+  const b = parseInt(m.slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const d = max - min;
+  if (d === 0) return { h: 0, s: 0, l };
+  const s = d / (1 - Math.abs(2 * l - 1));
+  let h: number;
+  if (max === r) h = 60 * (((g - b) / d) % 6);
+  else if (max === g) h = 60 * ((b - r) / d + 2);
+  else h = 60 * ((r - g) / d + 4);
+  return { h: (h + 360) % 360, s, l };
+}
+
+export function matchVinylBackground(base: string): string {
+  const { h, s } = ppbHexToHsl(base);
+  // Black-ish vinyl: complement of "nothing" is noise — go warm amber-charcoal.
+  const dead = s < 0.14;
+  const ch = dead ? 32 : Math.round((h + 180) % 360);
+  const cs = dead ? 34 : Math.round(Math.min(s * 100, 52));
+  return `linear-gradient(165deg, hsl(${ch} ${cs}% 9%) 0%, hsl(${ch} ${Math.min(cs + 8, 60)}% 20%) 100%)`;
+}
+
+// "Logo" — MRP's mark, ghosted like a debossed watermark on near-black warm
+// charcoal (Bill's color call). It sits BEHIND the disc, large and
+// centered-high so it peeks around the disc's arc.
+function PpbCoverLogo() {
+  return (
+    <div aria-label="Logo cover: ghosted MRP mark on warm charcoal" role="img" style={{ width: '100%', height: '100%', position: 'relative', overflow: 'hidden', background: 'linear-gradient(180deg, #1a1817 0%, #0f0e0d 100%)' }}>
+      <img
+        src={mrpLabelLogo}
+        alt=""
+        aria-hidden
+        style={{ position: 'absolute', left: '50%', top: 0, transform: 'translateX(-50%)', width: '85%', opacity: 0.2, filter: 'invert(1)' }}
+      />
+    </div>
+  );
+}
+
+// "Your own" — a mock uploaded background. The press changes the BACKGROUND
+// freely; the SYSTEM keeps the composition (disc arcing from the bottom,
+// sell line over the automatic top scrim, name/price grammar untouched).
+// Bill, Aug 20 2026: the stand-in must contain NO records, NO logos, NO album
+// anything — so it's a pure CSS/SVG "studio wall": layered warm-neutral
+// gradients + turbulence grain that reads as an uploaded texture photo.
+function PpbCoverCustom() {
+  return (
+    <svg viewBox="0 0 460 260" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Uploaded background: warm studio-wall texture">
+      <defs>
+        <linearGradient id="ppb-upl-base" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#1b1613" /><stop offset="0.55" stopColor="#2c241d" /><stop offset="1" stopColor="#1e1a16" />
+        </linearGradient>
+        <radialGradient id="ppb-upl-glow" cx="0.28" cy="0.22" r="0.9">
+          <stop offset="0" stopColor="#5a4632" stopOpacity="0.55" /><stop offset="0.6" stopColor="#3a2e22" stopOpacity="0.18" /><stop offset="1" stopColor="#000000" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="ppb-upl-vig" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0.55" stopColor="#000000" stopOpacity="0" /><stop offset="1" stopColor="#000000" stopOpacity="0.35" />
+        </linearGradient>
+        <filter id="ppb-upl-grain">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch" />
+          <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.05 0" />
+        </filter>
+      </defs>
+      <rect width="460" height="260" fill="url(#ppb-upl-base)" />
+      <rect width="460" height="260" fill="url(#ppb-upl-glow)" />
+      <rect width="460" height="260" fill="url(#ppb-upl-vig)" />
+      <rect width="460" height="260" filter="url(#ppb-upl-grain)" />
+    </svg>
+  );
+}
+
+export const PPB_COVERS: Array<{ id: string; name: string; ad: () => ReactNode; chip: string }> = [
+  { id: 'amber', name: 'Amber', ad: PpbCoverAmber, chip: 'linear-gradient(180deg, #3a1f0e, #d67a34)' },
+  { id: 'charcoal', name: 'Pinstripe', ad: PpbCoverCharcoal, chip: 'linear-gradient(135deg, #232327, #101012)' },
+  { id: 'teal', name: 'Teal', ad: PpbCoverTeal, chip: 'linear-gradient(180deg, #0e2b2a, #123c38)' },
+  { id: 'violet', name: 'Violet', ad: PpbCoverViolet, chip: 'linear-gradient(135deg, #1c1436, #332457)' },
+  { id: 'coastal', name: 'Coastal', ad: PpbCoverCoastal, chip: 'linear-gradient(180deg, #0d2740, #2f6f9a)' },
+  { id: 'pressroom', name: 'Pressroom', ad: PpbCoverPressroom, chip: 'linear-gradient(135deg, #2b2723, #4a423a)' },
+  { id: 'logo', name: 'Logo', ad: PpbCoverLogo, chip: 'linear-gradient(180deg, #1a1817, #0f0e0d)' },
+  { id: 'custom', name: 'Your own', ad: PpbCoverCustom, chip: '' },
+];
+
+// ═══════════════════════════════════════════════════════════════════
 // PAGE
 // ═══════════════════════════════════════════════════════════════════
 // ─── Persistence shape ─────────────────────────────────────────────────
@@ -2544,6 +2730,11 @@ type BuilderState = {
   stickerSizeId: string;
   pkgName: string;
   done: StepKey[];
+  // Artist-card fields (Bill, Aug 19 2026) — optional so older rows hydrate.
+  minRunQty?: number;
+  cardSell?: string;
+  cardCoverId?: string;
+  customUploaded?: boolean;
 };
 
 type EstimateRow = {
@@ -2556,15 +2747,9 @@ type EstimateRow = {
   updatedAt?: string;
 };
 
-export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { pressId: string; packageId: string | null; canEdit: boolean; onExit: (dest?: "estimates" | "packages") => void }) {
+export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSaved }: { pressId: string; packageId: string | null; canEdit: boolean; onExit: (dest?: "estimates" | "packages") => void; onSaved: (id: string) => void }) {
   useAdminDark();
   const packagesKey = `/api/press/${pressId}/estimates?kind=package`;
-
-  // Live people roster -> string[] of names (empty roster -> empty list).
-  const { data: peopleRows } = useQuery<Array<{ name: string }>>({
-    queryKey: [`/api/press/${pressId}/people`],
-  });
-  const clients: string[] = (peopleRows ?? []).map((p) => p.name).filter(Boolean);
 
   // Per-press component prices overlay the demo defaults (never errors when
   // components are missing/partial).
@@ -2615,14 +2800,23 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
   const [stickerShapeId, setStickerShapeId] = useState<StickerShapeId | 'none'>('none');
   const [stickerSizeId, setStickerSizeId] = useState<string>('3x3');
 
-  const [clientName, setClientName] = useState<string | null>(null);
-  const [clientSearch, setClientSearch] = useState('');
-  const [sendEmail, setSendEmail] = useState('');
-  const [picking, setPicking] = useState(false); // modal open
-  const [pickStep, setPickStep] = useState<'search' | 'confirm'>('search');
-  const [pendingClient, setPendingClient] = useState<{ name: string; viaSpotify: boolean } | null>(null);
-  const clientFirst = clientName ? clientName.split(' ')[0] : 'the client';
-  const [saved, setSaved] = useState(false);
+  // Per-package MINIMUM RUN (Bill): the anchor — the highest per-unit price
+  // an artist could ever pay; bigger runs only get cheaper.
+  const [minRunQty, setMinRunQty] = useState<number>(300);
+  // "How artists will see it." (Bill, Aug 19 2026) — the press supplies
+  // variables, the system does the design. Vinyl color is NOT an input here;
+  // it reads from the chosen vinyl in section 1. The card name IS the package
+  // name (single-name decision) — it binds to pkgName.
+  const [cardSell, setCardSell] = useState('');
+  // 'match' = system-derived from the vinyl — the default for new packages.
+  const [cardCoverId, setCardCoverId] = useState('match');
+  // Frontend stand-in "upload" — the Upload tile opens the canon upload sheet;
+  // seating from the sheet flips the tile thumb to the studio-wall stand-in.
+  const [customUploaded, setCustomUploaded] = useState(false);
+  const [uploadSheetOpen, setUploadSheetOpen] = useState(false);
+  const seatUpload = () => { setCustomUploaded(true); setCardCoverId('custom'); setUploadSheetOpen(false); };
+  // Edit-mode header facts, captured from the opened row at hydrate.
+  const [openedRow, setOpenedRow] = useState<{ title: string; status: string; updatedAt?: string } | null>(null);
   const [qbDetailsOpen, setQbDetailsOpen] = useState(false);
   const [qbSetupOpen, setQbSetupOpen] = useState(false);
 
@@ -2668,6 +2862,13 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
     setStickerSizeId(bs.stickerSizeId);
     setPkgName(bs.pkgName ?? '');
     setDone(new Set(bs.done ?? []));
+    setMinRunQty(bs.minRunQty ?? 300);
+    setCardSell(bs.cardSell ?? '');
+    setCardCoverId(bs.cardCoverId ?? 'match');
+    setCustomUploaded(bs.customUploaded ?? bs.cardCoverId === 'custom');
+    // Edit mode opens with the type grid folded and edit-mode header grammar.
+    setTypeOpen(false);
+    setOpenedRow({ title: row!.title, status: row!.status, updatedAt: row!.updatedAt });
   }, [packageId, packageList]);
 
   // First-time picks glide the page down to the step that just unlocked.
@@ -2709,7 +2910,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
   const stickerSize = stickerShape ? (stickerShape.sizes.find((s) => s.id === stickerSizeId) ?? stickerShape.sizes[Math.floor(stickerShape.sizes.length / 2)]) : null;
 
   // ── Selection handlers (donor logic, wired to shared size) ──
-  const touch = () => setSaved(false);
+  const touch = () => setPkgSaved(false);
 
   const selectSize = (id: SizeId) => {
     setSizeId(id);
@@ -2801,6 +3002,11 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
   const total = picked('qty') ? perUnit * qty + QB_SETUP_TOTAL : 0;
 
   const perUnitAt = (q: number) => baseUnit * tierFactor(q);
+  // Minimum-run anchor (Bill): every price artists see computes here — the
+  // most they could ever pay; bigger runs only get cheaper.
+  const minUnitFactor = tierFactor(minRunQty);
+  const minPerUnit = baseUnit * minUnitFactor;
+  const minTotal = minPerUnit * minRunQty + QB_SETUP_TOTAL;
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
   const sizeLabel = VINYL_SIZES.find((s) => s.id === sizeId)?.label ?? '';
@@ -2826,6 +3032,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
     jacketId, jacketVariantId, sleeveId, sleeveVariantId, useArtistArt,
     labelId, holeId, insertId, insertVariantId, stickerShapeId, stickerSizeId,
     pkgName, done: Array.from(done),
+    minRunQty, cardSell, cardCoverId, customUploaded,
   };
   // Serialize persists: a create in flight before rowId lands would spawn a
   // duplicate row, so each call chains onto the previous one and re-reads the
@@ -2841,7 +3048,16 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
           kind: 'package' as const,
           title: pkgName.trim() || 'Untitled package',
           status,
-          payload: { builderState, summary: buildSummary, perUnitCents: Math.round(perUnit * 100) },
+          payload: {
+            builderState,
+            summary: buildSummary,
+            perUnitCents: Math.round(perUnit * 100),
+            // Top-level card fields the packages index reads directly.
+            sell: cardSell.trim(),
+            coverId: cardCoverId,
+            minRun: minRunQty,
+            minPerUnitCents: Math.round(minPerUnit * 100),
+          },
         };
         const id = rowIdRef.current;
         const res = id
@@ -2857,23 +3073,22 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
       persistChainRef.current = next;
       return next;
     },
-    onSuccess: (row, status) => {
+    onSuccess: (row) => {
       if (row?.id) setRowId(row.id);
       queryClient.invalidateQueries({ queryKey: [packagesKey] });
-      // Success UI only flips once the write actually resolved OK.
-      if (status === 'live') setSaved(true);
-      else setPkgSaved(true);
+      // Success UI only flips once the write actually resolved OK. The save
+      // moment is subtle, cross-page (Bill): save, a brief beat so the click
+      // lands, then roll back to the index — which whispers the arrival.
+      setPkgSaved(true);
+      const id = rowIdRef.current ?? row?.id;
+      if (id) window.setTimeout(() => onSaved(id), 400);
     },
   });
   const saveError = saveMutation.isError;
 
-  // Guarded persist entry points. `canEdit === false` is read-only: no writes.
-  const savePackageDraft = () => {
-    if (!canEdit) return;
-    if (!pkgName.trim()) { setNameRequired(true); return; }
-    setNameRequired(false);
-    saveMutation.mutate('draft');
-  };
+  // Guarded persist entry point — every terminal save lands 'live' (Bill,
+  // Aug 20 2026: packages are catalog items; one terminal action).
+  // `canEdit === false` is read-only: no writes.
   const savePackageLive = () => {
     if (!canEdit) return;
     // Never persist a live row with a blank name — quiet inline prompt first.
@@ -2947,13 +3162,47 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
           <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
             <a href="#" onClick={(e) => { e.preventDefault(); onExit("packages"); }} className="hover:text-slate-600 transition-colors">Packages</a>
             <span style={{ color: '#d0d0d5' }}>›</span>
-            <span style={{ color: SUBINK }}>Create a package</span>
+            <span style={{ color: SUBINK }}>{openedRow ? openedRow.title : 'New package'}</span>
           </div>
-          <PageHeading lead="Create a package." rest="From scratch." />
-          <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: SUBINK }}>
-            Pick the size once — every later choice is already sized to match.
-            When you&rsquo;re done, the estimate saves to your catalog.
-          </p>
+          {openedRow ? (
+            <>
+              <PageHeading lead={`${openedRow.title}.`} rest={openedRow.status === 'live' ? 'Tuned and live.' : 'Still a draft.'} />
+              <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: SUBINK }}>
+                Every choice below is saved. Change anything — the price updates honestly.
+              </p>
+              {/* Stats band — word + icon, never color alone (Bill). */}
+              <div
+                className="flex items-center flex-wrap"
+                style={{ marginTop: 20, padding: '12px 0', borderTop: `1px solid ${HAIRLINE}`, borderBottom: `1px solid ${HAIRLINE}`, columnGap: 28, rowGap: 8 }}
+                data-testid="package-stats-band"
+              >
+                <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold" style={{ color: openedRow.status === 'live' ? BLUE : '#8e8e93' }}>
+                  {openedRow.status === 'live'
+                    ? <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.2} />
+                    : <Pencil className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2.2} />}
+                  {openedRow.status === 'live' ? 'Live' : 'Draft'}
+                </span>
+                <span className="inline-flex items-center gap-1.5 text-[12.5px]" style={{ color: SUBINK, fontVariantNumeric: 'tabular-nums' }} data-testid="stat-unit-price">
+                  <ReceiptText className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#a1a1a6' }} />
+                  From {fmt(perUnitAt(minRunQty))} / unit at {minRunQty.toLocaleString()}
+                </span>
+                {openedRow.updatedAt && (
+                  <span className="inline-flex items-center gap-1.5 text-[12.5px]" style={{ color: SUBINK }} data-testid="stat-last-edited">
+                    <Pencil className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#a1a1a6' }} />
+                    Last edited {new Date(openedRow.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <PageHeading lead="Create a package." rest="From scratch." />
+              <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: SUBINK }}>
+                Pick the size once — every later choice is already sized to match.
+                When you&rsquo;re done, the estimate saves to your catalog.
+              </p>
+            </>
+          )}
         </div>
 
         {/* ═══ 1 · VINYL (Add your vinyl) ═══ */}
@@ -3623,31 +3872,280 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
           </Gate>
         </section>
 
+        {/* ═══ 6.5 · HOW ARTISTS WILL SEE IT (Bill, Aug 19 2026) ═══ */}
+        <section id="step-artist-card" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+          <Gate on={allDone}>
+            <SectionHeading
+              lead="How artists will see it."
+              rest="Your package, their rail."
+              sub={openedRow
+                ? 'Fill in two lines, pick a cover — the card designs itself.'
+                : 'Name it here — this is what artists will see on the card. Fill in two lines, pick a cover — the card designs itself.'}
+            />
+            <div style={{ marginTop: 36, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 460px', gap: 56, alignItems: 'start' }}>
+              {/* ── Inputs — the press's variables ── */}
+              <div className="min-w-0" style={{ maxWidth: 420 }}>
+                <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>Package name</div>
+                <input
+                  value={pkgName}
+                  onChange={(e) => { setPkgName(e.target.value); if (e.target.value.trim()) setNameRequired(false); touch(); }}
+                  placeholder="Name your package"
+                  className="w-full bg-white focus:outline-none"
+                  style={{ marginTop: 8, height: 40, borderRadius: 10, padding: '0 12px', fontSize: 14, border: `1px solid ${nameRequired ? '#e0245e' : HAIRLINE}`, color: INK }}
+                  data-testid="input-artist-card-name"
+                />
+                <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6', marginTop: 24 }}>Sell line</div>
+                <input
+                  value={cardSell}
+                  onChange={(e) => { setCardSell(e.target.value.slice(0, 60)); touch(); }}
+                  placeholder="Everything a first pressing needs."
+                  className="w-full bg-white focus:outline-none"
+                  style={{ marginTop: 8, height: 40, borderRadius: 10, padding: '0 12px', fontSize: 14, border: `1px solid ${HAIRLINE}`, color: INK }}
+                  data-testid="input-artist-card-sell"
+                />
+                <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 6 }}>
+                  One line, {60 - cardSell.length} characters left. It sits on the cover.
+                </div>
+
+                <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6', marginTop: 24 }}>Cover</div>
+                {/* Apple buy-flow option tiles (Bill, Aug 20 2026): generous
+                    tiles, art thumb + proper name label; selected = 2px accent
+                    ring + subtle raised fill, unselected = hairline. */}
+                <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                  {(() => {
+                    // Layout-stable selection: constant 1px border; the accent
+                    // ring is a box-shadow (0 0 0 2px) so nothing reflows.
+                    const tileStyle = (active: boolean): React.CSSProperties => ({
+                      padding: 8, cursor: 'pointer', textAlign: 'center',
+                      border: `1px solid ${active ? BLUE : HAIRLINE}`,
+                      background: active ? 'var(--q-card)' : 'transparent',
+                      boxShadow: active ? `0 0 0 2px ${BLUE}` : undefined,
+                    });
+                    const thumbStyle: React.CSSProperties = {
+                      position: 'relative', display: 'block', width: '100%',
+                      aspectRatio: '460 / 260', borderRadius: 8, overflow: 'hidden',
+                    };
+                    const labelStyleFor = (active: boolean): React.CSSProperties => ({
+                      display: 'block', marginTop: 8, marginBottom: 2, fontSize: 12.5, fontWeight: 600,
+                      color: active ? INK : SUBINK, lineHeight: 1.2,
+                    });
+                    const tiles: ReactNode[] = [];
+                    for (const c of PPB_COVERS.filter((x) => x.id !== 'custom')) {
+                      const active = c.id === cardCoverId;
+                      const Ad = c.ad;
+                      tiles.push(
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => { setCardCoverId(c.id); touch(); }}
+                          aria-pressed={active}
+                          className="rounded-xl transition-colors"
+                          style={tileStyle(active)}
+                          data-testid={`cover-swatch-${c.id}`}
+                        >
+                          <span aria-hidden style={thumbStyle}>
+                            <span style={{ position: 'absolute', inset: 0, display: 'block' }}><Ad /></span>
+                          </span>
+                          <span style={labelStyleFor(active)}>{c.name}</span>
+                        </button>,
+                      );
+                    }
+                    // LAST ROW (Bill's pick): "Magic Background" bottom-left,
+                    // "Upload" to its right.
+                    {
+                      const active = cardCoverId === 'match';
+                      tiles.push(
+                        <button
+                          key="match"
+                          type="button"
+                          onClick={() => { setCardCoverId('match'); touch(); }}
+                          aria-pressed={active}
+                          className="rounded-xl transition-colors"
+                          style={tileStyle(active)}
+                          data-testid="cover-swatch-match"
+                        >
+                          <span aria-hidden style={{ ...thumbStyle, background: matchVinylBackground(color.base) }} />
+                          <span style={{ ...labelStyleFor(active), fontSize: 11.5, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+                            <Sparkles style={{ width: 11, height: 11, flexShrink: 0, color: active ? INK : '#a1a1a6' }} />
+                            Magic Background
+                          </span>
+                        </button>,
+                      );
+                    }
+                    {
+                      const active = cardCoverId === 'custom';
+                      tiles.push(
+                        <button
+                          key="custom"
+                          type="button"
+                          onClick={() => (customUploaded ? (setCardCoverId('custom'), touch()) : setUploadSheetOpen(true))}
+                          aria-pressed={active}
+                          className="rounded-xl transition-colors"
+                          style={tileStyle(active)}
+                          data-testid="cover-swatch-custom"
+                        >
+                          {customUploaded ? (
+                            <span aria-hidden style={thumbStyle}>
+                              <span style={{ position: 'absolute', inset: 0, display: 'block' }}>{PPB_COVERS[7].ad()}</span>
+                            </span>
+                          ) : (
+                            // Un-uploaded: a designed quiet well — solid soft
+                            // fill + hairline, so it never reads as broken art.
+                            <span aria-hidden style={{ ...thumbStyle, background: 'rgba(120,120,128,0.14)', border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <ImagePlus className="w-6 h-6" style={{ color: '#8e8e93' }} />
+                            </span>
+                          )}
+                          {/* The label is the control's name, not its state —
+                              stays "Upload" after uploading. */}
+                          <span style={labelStyleFor(active)}>Upload</span>
+                        </button>,
+                      );
+                    }
+                    return tiles;
+                  })()}
+                </div>
+
+                {/* ── Upload sheet — canon grammar (ArtistTemplateTest Replace
+                    flow): dashed drop zone, paste-a-link, plain size rule. ── */}
+                {uploadSheetOpen && (
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '12vh 20px 20px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }} data-testid="cover-upload-sheet">
+                    <div style={{ width: 520, maxWidth: '100%', borderRadius: 20, background: '#1c1c1e', border: '1px solid rgba(255,255,255,0.10)', color: '#f5f5f7', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
+                        <div style={{ fontSize: 19, fontWeight: 700 }}>Upload a background</div>
+                        <button type="button" aria-label="Close" onClick={() => setUploadSheetOpen(false)} style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.10)', border: 'none', color: '#f5f5f7', cursor: 'pointer', fontSize: 15 }} data-testid="upload-sheet-close">✕</button>
+                      </div>
+                      <div style={{ padding: '20px 24px 24px' }}>
+                        <button
+                          type="button"
+                          onClick={seatUpload}
+                          className="w-full flex flex-col items-center justify-center text-center gap-2 rounded-xl transition-colors hover:bg-white/5"
+                          style={{ padding: '32px 20px', border: '2px dashed rgba(255,255,255,0.16)', background: 'rgba(255,255,255,0.04)', cursor: 'pointer', color: '#f5f5f7' }}
+                          data-testid="upload-dropzone"
+                        >
+                          <UploadCloud className="w-7 h-7" style={{ color: '#98989d', strokeWidth: 1.5 }} aria-hidden />
+                          <span className="text-[14px] font-semibold">Drag your image here</span>
+                          <span className="text-[12px]" style={{ color: '#98989d' }}>or click to choose a file</span>
+                        </button>
+                        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.1, textTransform: 'uppercase', color: '#6e6e73', marginTop: 18 }}>Or paste a link</div>
+                        <input
+                          placeholder="https://…"
+                          className="w-full focus:outline-none placeholder:text-white/30"
+                          style={{ marginTop: 8, borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: '#26262a', color: '#f5f5f7', padding: '10px 14px', fontSize: 14 }}
+                          data-testid="upload-link-input"
+                        />
+                        <div style={{ fontSize: 12.5, color: '#98989d', marginTop: 14, lineHeight: 1.6 }}>
+                          At least 1840 &times; 1040 pixels (16:9-ish) &mdash; JPG or PNG. It fills the whole card, edge to edge.
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20, paddingTop: 18, borderTop: '1px solid rgba(255,255,255,0.10)' }}>
+                          <button
+                            type="button"
+                            onClick={seatUpload}
+                            className="inline-flex items-center gap-2 rounded-full text-[13.5px] font-semibold transition-colors hover:bg-white/15"
+                            style={{ padding: '10px 20px', border: '1px solid rgba(255,255,255,0.16)', background: 'rgba(255,255,255,0.10)', color: '#f5f5f7', cursor: 'pointer' }}
+                            data-testid="button-choose-file"
+                          >
+                            <Upload className="w-4 h-4 flex-shrink-0" aria-hidden />
+                            Choose file
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ── Live card preview — assembles as they type ── */}
+              <div>
+                <div data-testid="artist-card-preview" style={{ width: 460, textAlign: 'left', color: INK }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: '#a1a1a6' }}>
+                    MRP PACKAGE
+                  </div>
+                  <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.2, marginTop: 4, color: INK }}>
+                    {pkgName.trim() || 'Untitled package'}
+                  </div>
+                  <div style={{ fontSize: 13, color: SUBINK, marginTop: 2, lineHeight: 1.35 }}>
+                    {sizeLabel} · {weightId}g {color.name.toLowerCase()} · {jacketType.name.toLowerCase()}
+                  </div>
+                  {/* the wide card face — cover edge-to-edge, disc arcing up from the bottom */}
+                  <div style={{ position: 'relative', marginTop: 12, height: 260, borderRadius: 14, overflow: 'hidden', border: `1px solid ${HAIRLINE}`, boxShadow: '0 4px 14px rgba(0,0,0,0.25)' }}>
+                    {cardCoverId === 'match' ? (
+                      <div aria-hidden style={{ position: 'absolute', inset: 0, background: matchVinylBackground(color.base) }} />
+                    ) : (
+                      (() => { const Ad = (PPB_COVERS.find((c) => c.id === cardCoverId) ?? PPB_COVERS[0]).ad; return <Ad />; })()
+                    )}
+                    <div
+                      aria-hidden
+                      style={{ position: 'absolute', left: '50%', top: 78, transform: 'translateX(-50%)', filter: 'drop-shadow(0 -6px 22px rgba(0,0,0,0.45))' }}
+                    >
+                      <VinylDisc size={330} swatch={color} />
+                    </div>
+                    {/* sell line — top area, over a top scrim */}
+                    <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 92, background: 'linear-gradient(180deg, rgba(0,0,0,0.62) 0%, rgba(0,0,0,0) 100%)' }} />
+                    <div style={{ position: 'absolute', left: 16, right: 100, top: 14, zIndex: 2, fontSize: 15, fontWeight: 600, color: '#fff', lineHeight: 1.3, letterSpacing: -0.1, textShadow: '0 1px 3px rgba(0,0,0,0.5)', opacity: cardSell.trim() ? 1 : 0.55 }}>
+                      {cardSell.trim() || 'Everything a first pressing needs.'}
+                    </div>
+                  </div>
+                  {/* quiet price line — the artist-rail grammar, from live page state */}
+                  <div style={{ fontSize: 12, color: SUBINK, marginTop: 10 }} data-testid="artist-card-price">
+                    From ${perUnitAt(minRunQty).toFixed(2)} / unit at {minRunQty.toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Gate>
+        </section>
+
         {/* ═══ 7 · SAVE ═══ */}
         <section id="step-save" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
           <Gate on={allDone}>
           <div className="rounded-3xl bg-white" style={{ marginTop: 28, padding: 32, border: `1px solid ${HAIRLINE}` }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 32, alignItems: 'start' }}>
               <div className="min-w-0">
-                <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 10, paddingLeft: 20 }}>Prepared for</div>
-                {clientName ? (
-                  <div className="flex items-center gap-3" style={{ paddingLeft: 20 }} data-testid="quote-client-chosen">
-                    <span style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, border: `1px solid ${HAIRLINE}` }}>
-                      {clientName === 'Niina Soleil'
-                        ? <img src={californialandCover} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : <span style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f0f2', color: '#a1a1a6', fontSize: 15, fontWeight: 600 }}>{clientName[0]}</span>}
-                    </span>
-                    <div>
-                      <div className="text-[15px] font-semibold" style={{ color: INK }}>{clientName}</div>
-                      <div className="text-[11.5px]" style={{ color: '#a1a1a6' }}>From your client list · via Spotify</div>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="text-[12.5px]" style={{ marginTop: 18, color: SUBINK, lineHeight: 1.6, paddingLeft: 20 }}>
-                  {sizeLabel} · {qty.toLocaleString()} units · {weightId}g · {color.name} · {labelStyle.name} label · {jacketType.name} · {sleeveType.name} sleeve
+                {/* Packages are catalog items — no client, no quantity picked
+                    here. Estimates get built FROM packages later (Bill). */}
+                <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 10, paddingLeft: 20 }}>The build</div>
+                <div className="text-[12.5px]" style={{ color: SUBINK, lineHeight: 1.6, paddingLeft: 20 }}>
+                  {sizeLabel} · {minRunQty.toLocaleString()} unit minimum · {weightId}g · {color.name} · {labelStyle.name} label · {jacketType.name} · {sleeveType.name} sleeve
                   {insertType.id === 'none' ? '' : ` · ${insertType.name}`}
                   {stickerShape ? ` · ${stickerShape.name} sticker` : ''}
+                </div>
+                {/* Minimum run — the price anchor (Bill): quiet Apple-form
+                    segmented row, reusing the builder's run tiers. */}
+                <div style={{ marginTop: 20, paddingLeft: 20 }} data-testid="min-run-row">
+                  <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>Minimum run</div>
+                  <div className="inline-flex items-center rounded-full" style={{ marginTop: 10, background: 'var(--q-track)', padding: 3, gap: 2 }}>
+                    {QUANTITIES.slice(0, 4).map((q) => {
+                      const activeMin = q === minRunQty;
+                      const below = q < minRun;
+                      return (
+                        <button
+                          key={q}
+                          type="button"
+                          disabled={below}
+                          title={below ? `Splatter won’t run under ${minRun.toLocaleString()} units` : undefined}
+                          onClick={() => { if (below) return; setMinRunQty(q); touch(); }}
+                          aria-pressed={activeMin}
+                          className="rounded-full text-[13px] font-semibold transition-colors"
+                          style={{
+                            height: 32, padding: '0 16px', border: 'none', cursor: 'default',
+                            background: activeMin ? 'var(--q-card)' : 'transparent',
+                            boxShadow: activeMin ? PILL_SHADOW : undefined,
+                            color: activeMin ? INK : SUBINK,
+                            // Disabled must be visibly deader than unselected (Bill)
+                            opacity: below ? 0.35 : 1,
+                            fontVariantNumeric: 'tabular-nums',
+                            ...(below ? {} : { cursor: 'pointer' }),
+                          }}
+                          data-testid={`min-run-${q}`}
+                        >
+                          {q.toLocaleString()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 8, maxWidth: 460, lineHeight: 1.5 }}>
+                    The smallest run you&rsquo;ll press for this package. Every price artists see is anchored here.
+                  </div>
                 </div>
                 {/* Honest math, big finish — now in lockstep with the client
                     estimate (Bill, Aug 16 2026): Per record expands to the full
@@ -3667,21 +4165,21 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
                         <span className="text-[13.5px] font-medium" style={{ color: INK }}>Per record</span>
                         <ChevronDown className="w-3.5 h-3.5 transition-transform" style={{ color: '#a1a1a6', transform: qbDetailsOpen ? 'rotate(180deg)' : 'none' }} />
                       </div>
-                      <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>This exact build, at this run</div>
+                      <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>This exact build, at the minimum run</div>
                     </div>
-                    <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-per-record">{fmt(perUnit)}</span>
+                    <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-per-record">{fmt(minPerUnit)}</span>
                   </button>
                   {qbDetailsOpen && (
                     <div style={{ background: 'var(--q-canvas, #fafafa)' }}>
                       {[
-                        vinylDone ? { id: 'vinyl', name: `${sizeLabel} · ${weightId}g ${color.name}`, note: discs > 1 ? `${discs} LP per record` : 'Vinyl', v: (color.price + DEFAULT_WEIGHT_UP[weightId]) * discs * unitFactor } : null,
-                        picked('label') ? { id: 'label', name: `${labelStyle.name} label`, note: discs > 1 ? `Both discs` : undefined, v: pricingTable.labelPrice[labelId] * discs * unitFactor } : null,
-                        picked('jacket') ? { id: 'jacket', name: `${jacketType.name} jacket`, v: DEFAULT_JACKET_PRICE[jacketType.id] * unitFactor } : null,
-                        picked('sleeve') ? { id: 'sleeve', name: `${sleeveType.name} sleeve`, v: DEFAULT_SLEEVE_PRICE[sleeveType.id] * unitFactor } : null,
-                        picked('insert') && insertType.id !== 'none' ? { id: 'insert', name: insertType.name, v: DEFAULT_INSERT_PRICE[insertType.id] * unitFactor } : null,
-                        picked('sticker') && stickerShapeId !== 'none' && stickerShape ? { id: 'sticker', name: `${stickerShape.name} sticker`, v: pricingTable.stickerPrice[stickerShapeId] * unitFactor } : null,
-                        vinylDone ? { id: 'assembly', name: 'Assembly', note: 'Insert placed on top before shrink', v: DEFAULT_ASSEMBLY_PRICE * unitFactor } : null,
-                        vinylDone ? { id: 'shrink', name: 'Shrinkwrap', note: 'Retail-ready seal', v: DEFAULT_SHRINK_PRICE * unitFactor } : null,
+                        vinylDone ? { id: 'vinyl', name: `${sizeLabel} · ${weightId}g ${color.name}`, note: discs > 1 ? `${discs} LP per record` : 'Vinyl', v: (color.price + DEFAULT_WEIGHT_UP[weightId]) * discs * minUnitFactor } : null,
+                        picked('label') ? { id: 'label', name: `${labelStyle.name} label`, note: discs > 1 ? `Both discs` : undefined, v: pricingTable.labelPrice[labelId] * discs * minUnitFactor } : null,
+                        picked('jacket') ? { id: 'jacket', name: `${jacketType.name} jacket`, v: DEFAULT_JACKET_PRICE[jacketType.id] * minUnitFactor } : null,
+                        picked('sleeve') ? { id: 'sleeve', name: `${sleeveType.name} sleeve`, v: DEFAULT_SLEEVE_PRICE[sleeveType.id] * minUnitFactor } : null,
+                        picked('insert') && insertType.id !== 'none' ? { id: 'insert', name: insertType.name, v: DEFAULT_INSERT_PRICE[insertType.id] * minUnitFactor } : null,
+                        picked('sticker') && stickerShapeId !== 'none' && stickerShape ? { id: 'sticker', name: `${stickerShape.name} sticker`, v: pricingTable.stickerPrice[stickerShapeId] * minUnitFactor } : null,
+                        vinylDone ? { id: 'assembly', name: 'Assembly', note: 'Insert placed on top before shrink', v: DEFAULT_ASSEMBLY_PRICE * minUnitFactor } : null,
+                        vinylDone ? { id: 'shrink', name: 'Shrinkwrap', note: 'Retail-ready seal', v: DEFAULT_SHRINK_PRICE * minUnitFactor } : null,
                       ].filter((x): x is { id: string; name: string; note?: string; v: number } => x !== null).map((l) => (
                         <div key={l.id} className="flex items-center justify-between gap-4" style={{ padding: '9px 20px 9px 34px', borderTop: `1px solid ${HAIRLINE}` }}>
                           <div>
@@ -3699,7 +4197,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
                       <div className="text-[13.5px] font-medium" style={{ color: INK }}>Run</div>
                       <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>{discs > 1 ? `${discs} LP per record, pressed and packed` : 'Pressed and packed'}</div>
                     </div>
-                    <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-run">{qty.toLocaleString()} units · {fmt(perUnit * qty)}</span>
+                    <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-run">{minRunQty.toLocaleString()} units · {fmt(minPerUnit * minRunQty)}</span>
                   </div>
                   <div aria-hidden style={{ height: 1, background: HAIRLINE, margin: '0 20px' }} />
                   <button
@@ -3734,177 +4232,36 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
                   )}
                   <div className="flex items-end justify-between gap-4" style={{ padding: '16px 20px 18px', borderTop: `1px solid ${HAIRLINE}`, background: 'linear-gradient(180deg, rgba(49,158,216,0.10) 0%, rgba(49,158,216,0.02) 100%)' }}>
                     <div>
-                      <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BLUE }}>Estimate total</div>
-                      <div className="text-[11.5px]" style={{ marginTop: 3, color: SUBINK }}>If {clientFirst} presses the full run</div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BLUE }}>Full run total</div>
+                      <div className="text-[11.5px]" style={{ marginTop: 3, color: SUBINK }}>At the minimum run — the most an artist would pay</div>
                     </div>
-                    <span className="font-semibold tracking-tight" style={{ fontSize: 34, lineHeight: 1, color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-total-hero">{fmt(total)}</span>
+                    <span className="font-semibold tracking-tight" style={{ fontSize: 34, lineHeight: 1, color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-total-hero">{fmt(minTotal)}</span>
                   </div>
                 </div>
               </div>
 
               <div className="flex flex-col items-end gap-3 flex-shrink-0">
-                {picking && !saved && (
-                  /* The real Otis "Add a person" flow, lifted verbatim in structure
-                     (Bill, Aug 16 2026): overlay modal so staff never leave the
-                     estimate. Adding the person sets up the artist — the estimate
-                     lives on their profile, visible when they're invited. */
-                  <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '9vh 20px 20px', background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }} data-testid="quote-client-modal">
-                    <div style={{ width: 560, maxWidth: '100%', borderRadius: 20, background: '#1c1c1e', border: '1px solid rgba(255,255,255,0.10)', color: '#f5f5f7', boxShadow: '0 24px 80px rgba(0,0,0,0.5)' }}>
-                      {/* header */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid rgba(255,255,255,0.10)' }}>
-                        <div style={{ fontSize: 20, fontWeight: 700 }}>{pickStep === 'search' ? 'Add a person' : 'Confirm person'}</div>
-                        <button type="button" aria-label="Close" onClick={() => { setPicking(false); setPickStep('search'); setPendingClient(null); }} style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.10)', border: 'none', color: '#f5f5f7', cursor: 'pointer', fontSize: 15 }}>✕</button>
-                      </div>
-                      {pickStep === 'search' ? (
-                        <div style={{ padding: '20px 24px 24px' }}>
-                          {/* Catalog-first search (apple-canon dark input: inset
-                              surface, white-alpha hairline, INK text). Spotify
-                              only appears when the catalog comes up empty. */}
-                          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.1, textTransform: 'uppercase', color: 'var(--apple-faint, #6e6e73)' }}>Name</div>
-                          <input
-                            autoFocus
-                            value={clientSearch}
-                            onChange={(e) => setClientSearch(e.target.value)}
-                            placeholder="Search your catalog"
-                            className="w-full focus:outline-none placeholder:text-white/30"
-                            style={{ marginTop: 8, borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: '#26262a', color: '#f5f5f7', padding: '10px 14px', fontSize: 15 }}
-                            data-testid="quote-client-search"
-                          />
-                          <div style={{ fontSize: 12.5, color: '#98989d', marginTop: 8 }}>
-                            We search your own catalog first — pasting a Spotify or Apple Music link works too.
-                          </div>
-                          {clientSearch.trim() !== '' && clients.filter((c) => c.toLowerCase().includes(clientSearch.toLowerCase())).length > 0 && (
-                            <>
-                              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.1, textTransform: 'uppercase', color: 'var(--apple-faint, #6e6e73)', marginTop: 20 }}>In your catalog</div>
-                              <div style={{ marginTop: 8, borderRadius: 12, border: '1px solid rgba(255,255,255,0.10)', overflow: 'hidden' }}>
-                                {clients.filter((c) => c.toLowerCase().includes(clientSearch.toLowerCase())).slice(0, 4).map((c, i) => (
-                                  <button
-                                    key={c}
-                                    type="button"
-                                    onClick={() => { setPendingClient({ name: c, viaSpotify: false }); setPickStep('confirm'); }}
-                                    className="w-full flex items-center gap-3 text-left hover:bg-white/5 transition-colors"
-                                    style={{ padding: '10px 16px', background: 'transparent', border: 'none', borderTop: i === 0 ? 'none' : '1px solid rgba(255,255,255,0.10)', color: '#f5f5f7', cursor: 'pointer', fontSize: 15 }}
-                                  >
-                                    <span style={{ width: 36, height: 36, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, border: '1px solid rgba(255,255,255,0.14)' }}>
-                                      {c === 'Niina Soleil'
-                                        ? <img src={californialandCover} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                        : <span style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.10)', color: '#98989d', fontSize: 14, fontWeight: 600 }}>{c[0]}</span>}
-                                    </span>
-                                    {c}
-                                    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden style={{ marginLeft: 'auto' }}><path d="M6 3.5L10.5 8L6 12.5" fill="none" stroke="#6e6e73" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                                  </button>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                          {clientSearch.trim() !== '' && clients.filter((c) => c.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
-                            /* Empty state: catalog exhausted — only now does Spotify appear. */
-                            <div style={{ marginTop: 20, borderRadius: 12, border: '1px solid rgba(255,255,255,0.10)', padding: '22px 20px', textAlign: 'center' }} data-testid="quote-client-no-match">
-                              <div style={{ fontSize: 14, fontWeight: 600, color: '#f5f5f7' }}>No match in your catalog</div>
-                              <div style={{ fontSize: 12.5, color: '#98989d', marginTop: 4 }}>They may be new to you — try Spotify, or enter them manually.</div>
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 16 }}>
-                                <button type="button" className="hover:bg-white/5 transition-colors" style={{ background: 'none', border: 'none', borderRadius: 999, color: '#98989d', fontSize: 14, fontWeight: 500, cursor: 'pointer', padding: '10px 14px' }}>Enter manually</button>
-                                <button
-                                  type="button"
-                                  onClick={() => { setPendingClient({ name: clientSearch.trim(), viaSpotify: true }); setPickStep('confirm'); }}
-                                  className="transition-opacity hover:opacity-90"
-                                  style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: 999, background: '#1DB954', border: 'none', color: '#0b0b0c', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
-                                  data-testid="quote-spotify-search"
-                                >
-                                  <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.6 14.5a.7.7 0 0 1-1 .2c-2.6-1.6-5.9-2-9.8-1.1a.7.7 0 0 1-.3-1.4c4.2-1 7.9-.5 10.8 1.3.3.2.4.7.3 1zm1.2-2.9a.9.9 0 0 1-1.2.3c-3-1.8-7.5-2.4-11-1.3a.9.9 0 0 1-.5-1.7c4-1.2 9-.6 12.4 1.5.4.2.5.8.3 1.2zm.1-3a1 1 0 0 1-1.4.4C13 9 7.9 8.8 4.6 9.8a1 1 0 1 1-.6-2c3.8-1.1 9.5-.9 13.5 1.5.5.3.7.9.4 1.3z" /></svg>
-                                  Search "{clientSearch.trim()}" on Spotify
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : pendingClient && (
-                        <div style={{ padding: '20px 24px 24px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 18px', borderRadius: 14, border: '1px solid rgba(255,255,255,0.10)' }}>
-                            <span style={{ width: 64, height: 64, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, border: '1px solid rgba(255,255,255,0.14)' }}>
-                              {pendingClient.name === 'Niina Soleil'
-                                ? <img src={californialandCover} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                : <span style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,0.10)', color: '#a1a1a6', fontSize: 24, fontWeight: 600 }}>{pendingClient.name[0]}</span>}
-                            </span>
-                            <div>
-                              <div style={{ fontSize: 18, fontWeight: 700 }}>{pendingClient.name}</div>
-                              <div style={{ fontSize: 13, color: '#a1a1a6', marginTop: 3 }}>{pendingClient.viaSpotify ? 'Spotify · profile and catalog will be pulled in the background' : 'In your catalog'}</div>
-                              {pendingClient.name === 'Niina Soleil' && <div style={{ fontSize: 13, color: '#a1a1a6', marginTop: 2 }}>Latest release: "Californialand"</div>}
-                            </div>
-                          </div>
-                          <div style={{ fontSize: 12.5, color: '#a1a1a6', marginTop: 14, lineHeight: 1.6 }}>
-                            This estimate will live on their profile — they'll see it there when you invite them.
-                          </div>
-                          <input
-                            value={sendEmail}
-                            onChange={(e) => setSendEmail(e.target.value)}
-                            placeholder="Invite email — their manager works too"
-                            className="w-full focus:outline-none"
-                            style={{ marginTop: 14, borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'transparent', color: '#f5f5f7', padding: '10px 14px', fontSize: 14 }}
-                            data-testid="quote-send-email"
-                          />
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 20, paddingTop: 18, borderTop: '1px solid rgba(255,255,255,0.10)' }}>
-                            <button type="button" onClick={() => { setPickStep('search'); setPendingClient(null); }} style={{ padding: '11px 20px', borderRadius: 10, background: 'rgba(255,255,255,0.10)', border: 'none', color: '#f5f5f7', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Back</button>
-                            <button
-                              type="button"
-                              onClick={() => { if (!canEdit) return; if (!pkgName.trim()) { setNameRequired(true); setPicking(false); setPickStep('search'); setPkgNaming(true); return; } setClientName(pendingClient.name); setPicking(false); setPickStep('search'); savePackageLive(); }}
-                              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '11px 20px', borderRadius: 10, background: BLUE, border: 'none', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
-                              data-testid="quote-save-confirm"
-                            >
-                              <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden><path d="M3 8.5L6.5 12L13 4.5" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                              Add person & save estimate
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                {canEdit && !pkgSaved && !pkgNaming && (
+                  <Button
+                    className="rounded-full px-7"
+                    style={{ background: BLUE, color: '#fff', height: 44, fontSize: 14.5 }}
+                    onClick={() => { if (openedRow) { savePackageLive(); } else { setPkgNaming(true); } }}
+                    disabled={saveMutation.isPending}
+                    data-testid="quote-save"
+                  >
+                    {openedRow ? 'Save changes' : 'Save to catalog'}
+                  </Button>
                 )}
-                {saved ? (
-                  <div className="flex items-center gap-2 text-[13.5px] font-semibold" style={{ color: '#34a853' }} data-testid="quote-saved-note">
-                    <span style={{
-                      width: 22, height: 22, borderRadius: '50%', background: '#34a85315',
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                    }}>
-                      <Check className="w-3.5 h-3.5" strokeWidth={3} />
-                    </span>
-                    Saved to Estimates — sent to {clientFirst}
-                  </div>
-                ) : picking ? null : !canEdit ? null : (
-                  <div className="flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setPkgNaming(true)}
-                      className="rounded-full text-[14px] font-semibold transition-colors hover:opacity-80"
-                      style={{ height: 44, padding: '0 22px', border: `1px solid ${HAIRLINE}`, background: 'var(--q-card)', color: INK, cursor: 'pointer' }}
-                      data-testid="button-save-as-package"
-                    >
-                      Create package
-                    </button>
-                    <Button
-                      className="rounded-full px-7"
-                      style={{ background: BLUE, color: '#fff', height: 44, fontSize: 14.5 }}
-                      onClick={() => setPicking(true)}
-                      data-testid="quote-save"
-                    >
-                      Create a package
-                    </Button>
-                  </div>
-                )}
-                {saveError && !saved && !pkgSaved && (
+                {saveError && !pkgSaved && (
                   <p className="text-[11.5px] text-right" style={{ color: '#e0245e', whiteSpace: 'nowrap' }} data-testid="package-save-error">
                     Couldn&rsquo;t save — check your connection and try again.
                   </p>
                 )}
-                {!saved && !picking && canEdit && (
+                {canEdit && (
                   <p className="text-[11.5px] text-right" style={{ color: '#a1a1a6', whiteSpace: 'nowrap' }}>
                     Packages skip quantity and price — artists pick their quantity later.
                   </p>
                 )}
-
-                {/* Save as Package (Bill, Aug 16 2026): the same config, kept as
-                    a reusable named package — auto-priced from the component
-                    prices, offered to artists as a quick pick. */}
                 {pkgSaved ? (
                   <div className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: '#34a853' }} data-testid="package-saved-note">
                     <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#34a85315', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3919,7 +4276,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
                         autoFocus
                         value={pkgName}
                         onChange={(e) => { setPkgName(e.target.value); if (e.target.value.trim()) setNameRequired(false); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && pkgName.trim()) { savePackageDraft(); } if (e.key === 'Escape') setPkgNaming(false); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && pkgName.trim()) { savePackageLive(); } if (e.key === 'Escape') setPkgNaming(false); }}
                         placeholder="Name this package"
                         className="rounded-full text-[13px] focus:outline-none"
                         style={{ height: 36, padding: '0 14px', border: `1px solid ${nameRequired ? '#e0245e' : HAIRLINE}`, background: 'var(--q-card)', color: INK, width: 200 }}
@@ -3927,7 +4284,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
                       />
                       <button
                         type="button"
-                        onClick={() => { setPkgNaming(false); setPkgName(''); setNameRequired(false); }}
+                        onClick={() => { setPkgNaming(false); setNameRequired(false); }}
                         className="text-[13.5px] font-medium transition-opacity hover:opacity-70"
                         style={{ background: 'none', border: 'none', color: SUBINK, cursor: 'pointer', padding: '0 6px' }}
                         data-testid="button-package-name-cancel"
@@ -3936,7 +4293,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit }: { p
                       </button>
                       <button
                         type="button"
-                        onClick={() => { savePackageDraft(); }}
+                        onClick={() => { savePackageLive(); }}
                         className="rounded-full text-[13.5px] font-semibold transition-all"
                         style={{ height: 36, padding: '0 18px', border: 'none', background: pkgName.trim() ? BLUE : 'rgba(128,128,136,0.25)', color: pkgName.trim() ? '#fff' : '#a1a1a6', cursor: pkgName.trim() ? 'pointer' : 'default' }}
                         data-testid="button-package-name-save"

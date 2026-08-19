@@ -25397,6 +25397,21 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px] font-semibold\" style={{ color: openedRow.status === 'live' ? BLUE : '#8e8e93' }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px]\" style={{ color: SUBINK, fontVariantNumeric: 'tabular-nums' }} data-testid=\"stat-unit-price\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px]\" style={{ color: SUBINK }} data-testid=\"stat-last-edited\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
     "snippet": "<div className=\"flex items-center justify-center gap-2 text-[13px]\" style={{ marginTop: 28, color: SUBINK }}>"
   },
   {
@@ -25522,22 +25537,62 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[12px] font-semibold uppercase tracking-wider\" style={{ color: '#a1a1a6', marginBottom: 10, paddingLeft: 20 }}>Prepared for</div>"
+    "snippet": "<div className=\"text-[12px] font-semibold uppercase tracking-wider\" style={{ color: '#a1a1a6' }}>Package name</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[15px] font-semibold\" style={{ color: INK }}>{clientName}</div>"
+    "snippet": "<div className=\"text-[12px] font-semibold uppercase tracking-wider\" style={{ color: '#a1a1a6', marginTop: 24 }}>Sell line</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ color: '#a1a1a6' }}>From your client list · via Spotify</div>"
+    "snippet": "<div className=\"text-[11.5px]\" style={{ color: '#a1a1a6', marginTop: 6 }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[12.5px]\" style={{ marginTop: 18, color: SUBINK, lineHeight: 1.6, paddingLeft: 20 }}>"
+    "snippet": "<div className=\"text-[12px] font-semibold uppercase tracking-wider\" style={{ color: '#a1a1a6', marginTop: 24 }}>Cover</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<span className=\"text-[14px] font-semibold\">Drag your image here</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: '#98989d' }}>or click to choose a file</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "className=\"inline-flex items-center gap-2 rounded-full text-[13.5px] font-semibold transition-colors hover:bg-white/15\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<div className=\"text-[12px] font-semibold uppercase tracking-wider\" style={{ color: '#a1a1a6', marginBottom: 10, paddingLeft: 20 }}>The build</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<div className=\"text-[12.5px]\" style={{ color: SUBINK, lineHeight: 1.6, paddingLeft: 20 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<div className=\"text-[12px] font-semibold uppercase tracking-wider\" style={{ color: '#a1a1a6' }}>Minimum run</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "className=\"rounded-full text-[13px] font-semibold transition-colors\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<div className=\"text-[11.5px]\" style={{ color: '#a1a1a6', marginTop: 8, maxWidth: 460, lineHeight: 1.5 }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -25547,12 +25602,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 1, color: '#a1a1a6' }}>This exact build, at this run</div>"
+    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 1, color: '#a1a1a6' }}>This exact build, at the minimum run</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<span className=\"text-[14px] font-semibold\" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid=\"quote-per-record\">{fmt(perUnit)}</span>"
+    "snippet": "<span className=\"text-[14px] font-semibold\" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid=\"quote-per-record\">{fmt(minPerUnit)}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -25582,7 +25637,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<span className=\"text-[14px] font-semibold\" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid=\"quote-run\">{qty.toLocaleString()} units · {fmt(perUnit * qty)}</span>"
+    "snippet": "<span className=\"text-[14px] font-semibold\" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid=\"quote-run\">{minRunQty.toLocaleString()} units · {fmt(minPerUnit * minRunQty)}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -25617,22 +25672,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: BLUE }}>Estimate total</div>"
+    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: BLUE }}>Full run total</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 3, color: SUBINK }}>If {clientFirst} presses the full run</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"flex items-center gap-2 text-[13.5px] font-semibold\" style={{ color: '#34a853' }} data-testid=\"quote-saved-note\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "className=\"rounded-full text-[14px] font-semibold transition-colors hover:opacity-80\""
+    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 3, color: SUBINK }}>At the minimum run — the most an artist would pay</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -25682,32 +25727,47 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
-    "snippet": "<h3 className=\"text-[18px] font-semibold tracking-tight\" style={{ color: INK }}>{pkg.name}</h3>"
+    "snippet": "className=\"inline-flex items-center gap-1 rounded-full text-[11.5px] font-semibold\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
-    "snippet": "<p className=\"text-[13px]\" style={{ color: SUBINK, marginTop: 8, lineHeight: 1.5 }}>"
+    "snippet": "<button type=\"button\" onClick={() => { setMenuOpen(false); onEdit(); }} className=\"w-full flex items-center gap-2.5 text-left rounded-lg text-[13.5px] font-medium hover:bg-black/5 transition-colors\" s"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
-    "snippet": "<p className=\"text-[12px]\" style={{ color: '#a1a1a6', marginTop: 10, lineHeight: 1.45 }}>"
+    "snippet": "<span className=\"block text-[13.5px] font-medium\">{pkg.status === 'archived' ? 'Unarchive' : 'Archive'}</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
-    "snippet": "<div className=\"text-[19px] font-semibold\" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }}>"
+    "snippet": "<span className=\"block text-[11.5px]\" style={{ color: '#a1a1a6', marginTop: 1 }}>Keeps its estimate history</span>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ color: '#a1a1a6', marginTop: 1 }}>"
+    "snippet": "<button type=\"button\" onClick={() => { setMenuOpen(false); onDelete(); }} className=\"w-full flex items-center gap-2.5 text-left rounded-lg text-[13.5px] font-medium hover:bg-black/5 transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1.5 text-[13px] font-semibold hover:opacity-70 transition-opacity\""
+    "snippet": "<h3 className=\"text-[16px] font-semibold tracking-tight\" style={{ color: INK }}>{pkg.name}</h3>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<span className=\"text-[16px] font-semibold\" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid={`price-${pkg.id}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<span className=\"text-[11.5px]\" style={{ color: '#a1a1a6' }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -25718,6 +25778,46 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
     "snippet": "<p className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 6, maxWidth: 240, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: '#a1a1a6' }}>How artists see it</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<div className=\"text-[19px] font-semibold tracking-tight\" style={{ marginTop: 3 }}>{pkg.name}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<div className=\"text-[12px]\" style={{ color: SUBINK, marginTop: 10 }} data-testid=\"preview-price\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<button type=\"button\" onClick={onClose} className=\"text-[13.5px] font-medium transition-opacity hover:opacity-70\" style={{ background: 'none', border: 'none', color: SUBINK, cursor: 'pointer', padding"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<button type=\"button\" onClick={onEdit} className=\"rounded-full text-[13.5px] font-semibold transition-colors hover:bg-black/5\" style={{ height: 38, padding: '0 18px', border: '1px solid #6e6e73', back"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<div className=\"text-[17px] font-semibold tracking-tight\">Delete \"{pkg.name}\"?</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ color: SUBINK, marginTop: 8, lineHeight: 1.55 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<button type=\"button\" onClick={onConfirm} disabled={busy} className=\"rounded-full text-[13.5px] font-semibold transition-opacity hover:opacity-90\" style={{ height: 38, padding: '0 18px', border: 'none"
   },
   {
     "rule": "hardcoded-font-size",
@@ -25733,6 +25833,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
     "snippet": "<p className=\"text-[13px]\" style={{ color: SUBINK }} data-testid=\"text-empty-packages\">"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/press-create/PressPackagesIndex.tsx",
+    "snippet": "<button type=\"button\" onClick={onOpen} className=\"text-left\" style={{ display: 'block', width: '100%', padding: 0, border: 'none', background: 'transparent', cursor: 'pointer', opacity: dim }} data-te"
   },
   {
     "rule": "brand-hex-literal",
