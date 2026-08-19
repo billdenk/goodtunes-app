@@ -17425,11 +17425,18 @@ export async function registerRoutes(
     const opt = (v: any) => (v ? String(v) : null);
     // Spotify-import dedupe — the same artist clicked twice (or retried
     // after a slow response) must return the existing row, never mint a
-    // duplicate Person. Keyed on the canonical Spotify URL.
-    if (b.spotifyUrl) {
+    // duplicate Person. Fast path here; the race-safe guarantee is the
+    // partial unique index people_spotify_url_active_uniq, whose 23505
+    // is recovered below by re-reading the winner. Same raw-Person shape
+    // as the 201 create path (200 = reused existing).
+    const findBySpotifyUrl = async () => {
+      if (!b.spotifyUrl) return null;
       const all = await storage.getPeople();
-      const existing = all.find((p) => p.spotifyUrl && p.spotifyUrl === String(b.spotifyUrl));
-      if (existing) return res.json(toPublicPerson(existing));
+      return all.find((p) => p.spotifyUrl && p.spotifyUrl === String(b.spotifyUrl)) ?? null;
+    };
+    {
+      const existing = await findBySpotifyUrl();
+      if (existing) return res.status(200).json(existing);
     }
     // Gravatar fallback: when we have an email but no photo, hit Gravatar
     // and rehost the avatar if a profile exists. Silent miss otherwise so
@@ -17467,7 +17474,15 @@ export async function registerRoutes(
       groupKind: opt(b.groupKind),
       // Task #824 — creative-credit tags from the multi-role picker.
       roles: sanitizeRoles(b.roles),
-    } as any);
+    } as any).catch(async (err: any) => {
+      // Unique-index race: a concurrent create won — return their row.
+      const code = err?.cause?.code ?? err?.code;
+      if (code === "23505") {
+        const winner = await findBySpotifyUrl();
+        if (winner) return winner;
+      }
+      throw err;
+    });
     return res.status(201).json(p);
   });
   // Task #2253 — God-View "Add Person" for a Press. Mirrors the admin create
