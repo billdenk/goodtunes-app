@@ -61,6 +61,9 @@ import {
   PPB_COVERS,
   matchVinylBackground,
   DEFAULT_KIND_MIN_QTY,
+  PressBrandContext,
+  DEFAULT_PRESS_BRAND,
+  pressShortName,
 } from "./press-create/PressPackageBuilder";
 import { useAdminDark } from "@/lib/adminAppearance";
 import { resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
@@ -1423,6 +1426,13 @@ export function PressAlbumPackageBuilder({
   }
 
   return (
+    <PressBrandContext.Provider
+      value={{
+        name: press?.name ?? DEFAULT_PRESS_BRAND.name,
+        shortName: pressShortName(press?.name),
+        labelLogo: labelLogoUrl ?? DEFAULT_PRESS_BRAND.labelLogo,
+      }}
+    >
     <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }} data-testid="panel-package-builder">
       {/* Page header + quiet save state */}
       <div className="flex items-start justify-between gap-6">
@@ -1818,6 +1828,7 @@ export function PressAlbumPackageBuilder({
         </div>
       </fieldset>
     </div>
+    </PressBrandContext.Provider>
   );
 }
 

@@ -28,17 +28,15 @@ import { Button } from '@/components/ui/button';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useAdminDark } from '@/lib/adminAppearance';
 import type { PressComponentsPayload } from '@shared/pressComponents';
-import mrpLabelLogo from './assets/mrp-logo.svg';
+import { PressLogoImg, usePressBrand } from './PressPackageBuilder';
 import californialandCover from './assets/californialand-cover.jpg';
 import californialandInnerSleeve from './assets/californialand-inner-sleeve.png';
 import rubyVinylPhoto from './assets/mrp-ruby-translucent.png';
 import niinaLabelArt from './assets/niina-label-1.png';
 
 // ── Per-press label branding ─────────────────────────────────────────
-const PRESS_LABEL_LOGO = mrpLabelLogo;
 const PRESS_LABEL_BG = '#0a0a0a';
 const PRESS_LABEL_LOGO_FILTER = 'invert(1) brightness(1.7)';
-const PRESS_STICKER_LOGO = mrpLabelLogo;
 
 // ─── Brand tokens (Apple calm visual language) ──────────────────────
 const BLUE = '#319ED8';
@@ -261,11 +259,12 @@ type Swatch = {
 
 // The white MRP logo mark + quiet arc text — printed on the black label.
 function DiscLabelArt({ size }: { size: number }) {
+  const { shortName } = usePressBrand();
   const showArcText = size >= 70;
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
-      <img
-        src={PRESS_LABEL_LOGO}
+      <PressLogoImg
+        
         alt=""
         aria-hidden
         style={{
@@ -286,7 +285,7 @@ function DiscLabelArt({ size }: { size: number }) {
           </defs>
           <text fill="rgba(245,245,247,0.5)" style={{ fontSize: 4.4, fontWeight: 600, letterSpacing: 1 }}>
             <textPath href="#quote-disc-arc-bottom" startOffset="50%" textAnchor="middle">
-              MRP-001 · 33 ⅓ RPM
+              {`${shortName}-001 · 33 ⅓ RPM`}
             </textPath>
           </text>
         </svg>
@@ -714,7 +713,7 @@ function JacketThumbnail({ jacket, size = THUMB }: { jacket: JacketOption; size?
         </>
       )}
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <img src={PRESS_LABEL_LOGO} alt="" aria-hidden style={{ width: size * THUMB_LOGO, height: size * THUMB_LOGO, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.90 }} />
+        <PressLogoImg  alt="" aria-hidden style={{ width: size * THUMB_LOGO, height: size * THUMB_LOGO, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.90 }} />
       </div>
     </div>
   );
@@ -772,7 +771,7 @@ function JacketTile({
             }}>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.12)' }} />
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <img src={PRESS_LABEL_LOGO} alt="" aria-hidden style={{ width: THUMB * THUMB_LOGO, height: THUMB * THUMB_LOGO, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.90 }} />
+                <PressLogoImg  alt="" aria-hidden style={{ width: THUMB * THUMB_LOGO, height: THUMB * THUMB_LOGO, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.90 }} />
               </div>
             </div>
             <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 1, background: 'rgba(0,0,0,0.45)', zIndex: 4 }} />
@@ -806,7 +805,7 @@ function JacketTile({
             }}>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.12)' }} />
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <img src={PRESS_LABEL_LOGO} alt="" aria-hidden style={{ width: THUMB * THUMB_LOGO, height: THUMB * THUMB_LOGO, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.90 }} />
+                <PressLogoImg  alt="" aria-hidden style={{ width: THUMB * THUMB_LOGO, height: THUMB * THUMB_LOGO, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.90 }} />
               </div>
             </div>
             <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 1, background: 'rgba(0,0,0,0.40)', zIndex: 4 }} />
@@ -896,7 +895,7 @@ function JacketStage({ jacketType, widespine = false, tipOn = false }: { jacketT
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(155deg, #1e1e26 0%, #0f0f14 100%)', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%)' }} />
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <img src={PRESS_LABEL_LOGO} alt="" aria-hidden style={{ width: JS * 0.52, height: JS * 0.52, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.92 }} />
+          <PressLogoImg  alt="" aria-hidden style={{ width: JS * 0.52, height: JS * 0.52, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.92 }} />
         </div>
         {tipOn && (
           <div style={{ position: 'absolute', top: 0, right: 0, width: P, height: P, pointerEvents: 'none' }}>
@@ -964,7 +963,7 @@ function JacketStage({ jacketType, widespine = false, tipOn = false }: { jacketT
                 flexShrink: 0, position: 'relative',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <img src={PRESS_LABEL_LOGO} alt="" aria-hidden style={{
+                <PressLogoImg  alt="" aria-hidden style={{
                   width: HOLE_D * 0.56, height: HOLE_D * 0.56,
                   objectFit: 'contain',
                   filter: 'none',
@@ -1287,7 +1286,7 @@ function RainbowPrintFace({ logoSize }: { logoSize: number }) {
       <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(55% 55% at 30% 26%, rgba(120,150,255,0.55), rgba(120,150,255,0) 60%)', mixBlendMode: 'screen' }} />
       <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(46% 46% at 50% 50%, rgba(0,0,0,0.52), rgba(0,0,0,0) 74%)' }} />
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <img src={PRESS_LABEL_LOGO} alt="" aria-hidden style={{ width: logoSize, height: logoSize, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.92 }} />
+        <PressLogoImg  alt="" aria-hidden style={{ width: logoSize, height: logoSize, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.92 }} />
       </div>
     </>
   );
@@ -1496,12 +1495,13 @@ const LABEL_STYLES: LabelStyle[] = [
 ];
 
 function LabelLogo({ size, whiteFilter = true, offsetRight = false }: { size: number; whiteFilter?: boolean; offsetRight?: boolean }) {
+  const { shortName } = usePressBrand();
   const showArcText = size >= 70 && !offsetRight;
   const arcTextFill = whiteFilter ? 'rgba(245,245,247,0.55)' : 'rgba(0,0,0,0.38)';
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
-      <img
-        src={PRESS_LABEL_LOGO}
+      <PressLogoImg
+        
         alt=""
         aria-hidden
         style={{
@@ -1522,7 +1522,7 @@ function LabelLogo({ size, whiteFilter = true, offsetRight = false }: { size: nu
           </defs>
           <text fill={arcTextFill} style={{ fontSize: 4.4, fontWeight: 600, letterSpacing: 1 }}>
             <textPath href="#quote-lbl-arc-bottom" startOffset="50%" textAnchor="middle">
-              MRP-001 · 33 ⅓ RPM
+              {`${shortName}-001 · 33 ⅓ RPM`}
             </textPath>
           </text>
         </svg>
@@ -2219,8 +2219,8 @@ function Sticker({
     >
       {kind === 'promo' ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: minDim * 0.05, padding: minDim * 0.12 }}>
-          <img
-            src={PRESS_STICKER_LOGO}
+          <PressLogoImg
+            
             alt=""
             aria-hidden
             style={{ width: minDim * 0.52, height: minDim * 0.52, objectFit: 'contain' }}
@@ -2533,6 +2533,7 @@ function priceOverlay(components: PressComponentsPayload | undefined): PricingTa
 // PAGE
 // ═══════════════════════════════════════════════════════════════════
 export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pressId: string; estimateId: string | null; canEdit: boolean; onExit: (dest?: "estimates" | "packages") => void }) {
+  const pressBrandShort = usePressBrand().shortName;
   // Dark mode rides the portal's body.gt-admin-dark (useAdminDark) — the mock's
   // per-mount html[data-gt-dark] chrome is gone. Subscribing keeps token-driven
   // inline values (frosted shadows, disc rims) in step with the operator toggle.
@@ -3499,12 +3500,12 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                             '#0fa596 165deg, #2e9e3f 210deg, #d99a00 265deg,' +
                             '#e05a1a 305deg, #e91e8c 360deg)',
                         }}>
-                          <img src={PRESS_LABEL_LOGO} alt="" aria-hidden style={{ width: '72%', height: '72%', objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.95 }} />
+                          <PressLogoImg  alt="" aria-hidden style={{ width: '72%', height: '72%', objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.95 }} />
                         </div>
                       ))}
                       {labelStyle.id === 'bw' && (
                         <div className="w-full h-full" style={{ background: '#ffffff' }}>
-                          <img src={PRESS_LABEL_LOGO} alt="" aria-hidden className="absolute" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '56%', height: '56%', objectFit: 'contain', opacity: 0.78 }} />
+                          <PressLogoImg  alt="" aria-hidden className="absolute" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '56%', height: '56%', objectFit: 'contain', opacity: 0.78 }} />
                         </div>
                       )}
                       {labelStyle.id === 'blank' && <div className="w-full h-full" style={{ background: '#ffffff' }} />}
@@ -3551,7 +3552,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                       <img src={californialandCover} alt="Artist cover" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center" style={{ background: '#111112' }}>
-                        <img src={mrpLabelLogo} alt="Memphis Record Pressing" style={{ width: '52%', height: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.92 }} />
+                        <PressLogoImg  alt="Memphis Record Pressing" style={{ width: '52%', height: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.92 }} />
                       </div>
                     )}
                   </div>
@@ -3967,7 +3968,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                     <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#34a85315', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Check className="w-3 h-3" strokeWidth={3} />
                     </span>
-                    "{pkgName || 'Untitled package'}" saved to Product Specs › MRP Packages
+                    "{pkgName || 'Untitled package'}" saved to Product Specs › {`${pressBrandShort} Packages`}
                   </div>
                 ) : pkgNaming ? (
                   <div className="flex items-center gap-2">

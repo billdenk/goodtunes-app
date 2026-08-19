@@ -54,7 +54,7 @@ import { PressTemplatesTab } from "@/pages/press-templates/PressTemplatesTab";
 import { PressEstimatesIndex } from "@/pages/press-create/PressEstimatesIndex";
 import { PressPackagesIndex } from "@/pages/press-create/PressPackagesIndex";
 import { PressQuoteBuilder } from "@/pages/press-create/PressQuoteBuilder";
-import { PressPackageBuilder } from "@/pages/press-create/PressPackageBuilder";
+import { PressPackageBuilder, PressBrandContext, DEFAULT_PRESS_BRAND, pressShortName } from "@/pages/press-create/PressPackageBuilder";
 import {
   PressVinylComponentTab,
   PressJacketsComponentTab,
@@ -439,6 +439,13 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   ) as ReadonlyArray<{ id: TabId; label: string; soon?: boolean }>;
 
   return (
+    <PressBrandContext.Provider
+      value={{
+        name: me?.name ?? DEFAULT_PRESS_BRAND.name,
+        shortName: pressShortName(me?.name),
+        labelLogo: me?.labelLogoUrl ?? me?.logoUrl ?? DEFAULT_PRESS_BRAND.labelLogo,
+      }}
+    >
     <OperatorShell
       testId="press-shell"
       layout="leftnav"
@@ -484,6 +491,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
         <PressTabBody pressId={pressId} isSuperAdminView={isSuperAdminView} me={me} nav={nav} />
       )}
     </OperatorShell>
+    </PressBrandContext.Provider>
   );
 }
 

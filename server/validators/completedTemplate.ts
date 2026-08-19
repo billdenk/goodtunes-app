@@ -700,6 +700,15 @@ export class CompletedPdfScanner {
     // Lexically strip comments and literal/hex strings so `/Name cs` inside
     // a string or comment never counts as a colorspace selection.
     const code = stripPdfStringsAndComments(decoded);
+    // Paint OPERATORS in the content stream are the ground truth for ink
+    // usage. Illustrator emits `0 0.5 1 0 k` directly with NO /DeviceCMYK
+    // token anywhere in the file, so a genuinely-CMYK file used to read as
+    // "RGB only" off a leftover editing-data preview thumbnail (which is
+    // never painted on the artboard). Operand-count-anchored patterns:
+    // 4 numbers + k/K = CMYK, 3 numbers + rg/RG = RGB, 1 number + g/G = gray.
+    if (!this.cmyk && /(?:[\d.]+\s+){4}[kK](?![A-Za-z0-9])/.test(code)) this.cmyk = true;
+    if (!this.rgb && /(?:[\d.]+\s+){3}(?:rg|RG)(?![A-Za-z0-9])/.test(code)) this.rgb = true;
+    if (!this.gray && /(?:[\d.]+\s+)[gG](?![A-Za-z0-9])/.test(code)) this.gray = true;
     CONTENT_CS_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = CONTENT_CS_RE.exec(code)) !== null) {
@@ -1830,8 +1839,8 @@ export function validateCompletedComponent(
     checks.push({
       key: "tmpl.fonts",
       label: "Fonts",
-      status: "pass",
-      message: "All fonts embedded.",
+      status: "warn",
+      message: "Live text detected (fonts are embedded) — outline all type before sending final print files.",
     });
   } else {
     checks.push({

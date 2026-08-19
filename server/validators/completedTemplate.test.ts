@@ -107,7 +107,9 @@ describe("validateCompletedComponent", () => {
     assert.equal(checks.find((c) => c.key === "tmpl.pages")!.status, "pass");
     assert.equal(checks.find((c) => c.key === "tmpl.size")!.status, "pass");
     assert.equal(checks.find((c) => c.key === "tmpl.color")!.status, "pass");
-    assert.equal(checks.find((c) => c.key === "tmpl.fonts")!.status, "pass");
+    // Live text with embedded fonts is now ADVISORY (warn) — presses want
+    // type outlined in final print files.
+    assert.equal(checks.find((c) => c.key === "tmpl.fonts")!.status, "warn");
     // Task #3030 — bleed now always runs and FAILS without a certified
     // template line or file BleedBox; exclude it from the legacy roll-up
     // assertion (its behavior is covered by the Task #3030 suite).

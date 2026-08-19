@@ -21,6 +21,7 @@ import {
   PPB_COVERS,
   matchVinylBackground,
   DEFAULT_KIND_MIN_QTY,
+  usePressBrand,
 } from './PressPackageBuilder';
 
 type Swatch = (typeof CATALOG_COLORS)[number];
@@ -293,12 +294,16 @@ function PackageCard({
   );
 }
 
-// The hint card showing where a newly saved package lands.
-function NewPackageHint() {
+// The hint card showing where a newly saved package lands. When the viewer
+// can edit, it's a second click-target into the builder (gogoods, Aug 19
+// 2026: "center button isn't working" — it looked clickable, so make it so).
+function NewPackageHint({ onCreate }: { onCreate?: () => void }) {
+  const Tag: any = onCreate ? 'button' : 'div';
   return (
-    <div
-      className="rounded-2xl flex flex-col items-center justify-center text-center"
-      style={{ border: `1.5px dashed ${HAIRLINE}`, padding: 24, minHeight: 168, color: SUBINK }}
+    <Tag
+      {...(onCreate ? { type: 'button', onClick: onCreate } : {})}
+      className={`rounded-2xl flex flex-col items-center justify-center text-center${onCreate ? ' transition-colors hover:bg-black/5 cursor-pointer' : ''}`}
+      style={{ border: `1.5px dashed ${HAIRLINE}`, padding: 24, minHeight: 168, color: SUBINK, background: 'transparent' }}
       data-testid="package-hint"
     >
       <span className="flex items-center justify-center rounded-full" style={{ width: 40, height: 40, backgroundColor: 'rgba(0,0,0,0.04)' }}>
@@ -310,7 +315,7 @@ function NewPackageHint() {
       <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, maxWidth: 240, lineHeight: 1.5 }}>
         Anything you save from the builder shows up in this catalog, ready to send as an estimate.
       </p>
-    </div>
+    </Tag>
   );
 }
 
@@ -373,6 +378,7 @@ function DeleteConfirmSheet({ pkg, busy, onConfirm, onClose }: { pkg: Pkg; busy:
 // PAGE
 // ═══════════════════════════════════════════════════════════════════
 export function PressPackagesIndex({ pressId, canEdit, onCreatePackage, onOpenPackage }: { pressId: string; canEdit: boolean; onCreatePackage: () => void; onOpenPackage: (id: string) => void }) {
+  const pressBrandShort = usePressBrand().shortName;
   useAdminDark(); // re-render on Light/Dark/System toggle (vars drive the rest)
 
   const packagesUrl = '/api/press/' + pressId + '/estimates?kind=package';
@@ -424,9 +430,9 @@ export function PressPackagesIndex({ pressId, canEdit, onCreatePackage, onOpenPa
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
               <a href="#" onClick={(e) => e.preventDefault()} className="hover:text-slate-600 transition-colors">Product Specs</a>
               <span style={{ color: '#d0d0d5' }}>›</span>
-              <span style={{ color: SUBINK }}>MRP Packages</span>
+              <span style={{ color: SUBINK }}>{`${pressBrandShort} Packages`}</span>
             </div>
-            <PageHeading lead="MRP Packages." rest="Your saved builds." />
+            <PageHeading lead={`${pressBrandShort} Packages.`} rest="Your saved builds." />
             <p style={{ fontSize: 15, marginTop: 10, maxWidth: 560, color: SUBINK }}>
               Packages skip quantity and price &mdash; artists pick their quantity later.
             </p>
@@ -470,7 +476,7 @@ export function PressPackagesIndex({ pressId, canEdit, onCreatePackage, onOpenPa
               onDelete={() => setDeleteId(pkg.id)}
             />
           ))}
-          <NewPackageHint />
+          <NewPackageHint onCreate={canEdit ? () => onCreatePackage() : undefined} />
         </div>
 
       </div>

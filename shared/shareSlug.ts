@@ -25,6 +25,7 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "manifest",
   "favicon",
   "share",
+  "e", // public estimate links (/e/:token)
   ".well-known",
   // auth + account routes
   "login",

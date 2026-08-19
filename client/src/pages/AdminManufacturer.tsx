@@ -58,6 +58,7 @@ import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { SaveLink, CardHeader, EditPencil } from "@/components/admin/EditCardChrome";
 import { IconButton } from "@/components/ui/IconButton";
 import { PressTabBody, usePressPortalNav, type PressMe } from "@/pages/PressPortal";
+import { PressBrandContext, DEFAULT_PRESS_BRAND, pressShortName } from "@/pages/press-create/PressPackageBuilder";
 import { modulesForRole, pressPackagesLabel, SECTION_LABELS, type OperatorSectionId } from "@/components/operator/registry";
 import {
   DropdownMenu,
@@ -783,7 +784,17 @@ export function AdminManufacturer() {
             )}
             {/* Mirror body — the press portal's own module mounts, driven by
                 the shared nav hook (same ?tab/?view/?person/?estimate wiring). */}
-            <PressTabBody pressId={id} isSuperAdminView me={pressMe} nav={nav} />
+            {/* Per-press builder branding (gogoods, Aug 19 2026) — the god
+                view mirrors the portal, so it must carry the same brand. */}
+            <PressBrandContext.Provider
+              value={{
+                name: pressMe?.name ?? DEFAULT_PRESS_BRAND.name,
+                shortName: pressShortName(pressMe?.name),
+                labelLogo: pressMe?.labelLogoUrl ?? pressMe?.logoUrl ?? DEFAULT_PRESS_BRAND.labelLogo,
+              }}
+            >
+              <PressTabBody pressId={id} isSuperAdminView me={pressMe} nav={nav} />
+            </PressBrandContext.Provider>
             <NewAlbumArtistDialog
               open={artistDialogOpen}
               onOpenChange={(next) => { if (createAlbum.isPending && !next) return; setArtistDialogOpen(next); }}
