@@ -208,10 +208,13 @@ export function AddPeopleMenu(props: AddPeopleMenuProps) {
 
 // ─── Shared Person picker (with Spotify fallback) ────────────────────
 
+// Mirrors the server's /api/admin/spotify/artist-search candidate shape
+// (server/lib/spotify.ts searchArtistCandidatesDetailed).
 type SpotifyCandidate = {
-  spotifyArtistId: string;
+  id: string;
   name: string;
-  imageUrl?: string | null;
+  spotifyUrl?: string | null;
+  photoUrl?: string | null;
 };
 
 type ScrapePersonResult = {
@@ -362,23 +365,18 @@ export function PersonPicker({
       // the candidate apply endpoint. Today the cleanest endpoint we
       // have is the "save candidate" pattern on a freshly-created
       // Person, so we create the row first then attach the Spotify id.
+      // One POST does it all — the create route accepts photoUrl and
+      // spotifyUrl directly, and dedupes on spotifyUrl server-side so a
+      // double-click (or a retry after a slow response) can never mint a
+      // second copy of the same artist.
       const created = await apiRequest("POST", "/api/admin/people", {
         name: cand.name,
-        photoUrl: cand.imageUrl ?? null,
+        photoUrl: cand.photoUrl ?? null,
+        spotifyUrl: cand.spotifyUrl ?? null,
       });
       const personJson = (await created.json()) as PersonLite & {
         id: string;
       };
-      try {
-        await apiRequest(
-          "POST",
-          `/api/admin/people/${personJson.id}/apply-spotify-candidate`,
-          { spotifyArtistId: cand.spotifyArtistId },
-        );
-      } catch {
-        // Apply-candidate endpoint may not exist on every deploy — the
-        // Person row is still usable for the invite without it.
-      }
       return personJson;
     },
     onSuccess: (p) => {
@@ -721,17 +719,17 @@ export function PersonPicker({
           ) : (
             <ul className="divide-y divide-slate-200">
               {(spotify.data?.candidates ?? []).map((c) => (
-                <li key={c.spotifyArtistId}>
+                <li key={c.id}>
                   <button
                     type="button"
                     onClick={() => createFromSpotify.mutate(c)}
                     disabled={createFromSpotify.isPending}
                     className="w-full flex items-center gap-3 px-2 py-2 text-left hover:bg-white rounded-md disabled:opacity-50"
-                    data-testid={`button-${testIdPrefix}-spotify-${c.spotifyArtistId}`}
+                    data-testid={`button-${testIdPrefix}-spotify-${c.id}`}
                   >
-                    {c.imageUrl ? (
+                    {c.photoUrl ? (
                       <img
-                        src={c.imageUrl}
+                        src={c.photoUrl}
                         alt=""
                         className="w-7 h-7 rounded-full object-cover bg-slate-100"
                       />

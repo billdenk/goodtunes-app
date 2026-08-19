@@ -17423,6 +17423,14 @@ export async function registerRoutes(
     const b = req.body ?? {};
     if (!b.name) return res.status(400).json({ message: "name is required" });
     const opt = (v: any) => (v ? String(v) : null);
+    // Spotify-import dedupe — the same artist clicked twice (or retried
+    // after a slow response) must return the existing row, never mint a
+    // duplicate Person. Keyed on the canonical Spotify URL.
+    if (b.spotifyUrl) {
+      const all = await storage.getPeople();
+      const existing = all.find((p) => p.spotifyUrl && p.spotifyUrl === String(b.spotifyUrl));
+      if (existing) return res.json(toPublicPerson(existing));
+    }
     // Gravatar fallback: when we have an email but no photo, hit Gravatar
     // and rehost the avatar if a profile exists. Silent miss otherwise so
     // the admin can fill the photo by hand later.
