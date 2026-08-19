@@ -257,11 +257,9 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // handoff PRESS_NAV, Aug 19 2026); Settings stays pinned to the rail
   // bottom by the shell.
   { id: "referrals",  label: "Referrals",        icon: Gift,             roles: ["press"] },
-  // White Label top-level above Settings (press rail canon, Bill Aug 16
-  // 2026); press-facing pill says "Request", super-admin god view shows
-  // "Soon". (The Aug 19 handoff moves it inside Settings — pending the
-  // White Label settings body.)
-  { id: "whitelabel", label: "White Label",      icon: Layers, soon: true, soonLabel: "Request", roles: ["press"] },
+  // White Label lives INSIDE pinned Settings as a sub-tab (Ruby handoff
+  // PressWhiteLabelSettings, Aug 19 2026) — the top-level "Soon" row is
+  // gone; ?tab=whitelabel deep links canonicalize to settings=whitelabel.
   { id: "settings",   label: "Settings",         icon: Cog,              roles: ["press"] },
 
   // GoodDeed Quickprinter shell — `/vendor` routed via VendorScopeRouter

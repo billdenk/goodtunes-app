@@ -25205,6 +25205,21 @@
     "snippet": "className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center transition-opacity ${menuOpenId === s.id ? 'opacity-100' : 'opacity-0 group-hover/offer:opacity-100'}`}"
   },
   {
+    "rule": "fan-text-tone",
+    "file": "client/src/pages/press-components/tabs.tsx",
+    "snippet": ": \"bg-transparent border-slate-200 text-slate-500 hover:bg-slate-50\")"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/tabs.tsx",
+    "snippet": "\"h-9 px-4 rounded-full border text-[13px] font-medium transition-colors \" +"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/tabs.tsx",
+    "snippet": "<div className=\"py-16 text-center text-[13.5px] text-muted-foreground\" data-testid={`no-${format.toLowerCase()}-catalog`}>"
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/press-create/PressEstimatesIndex.tsx",
     "snippet": "const BLUE = '#319ED8';"
@@ -26173,6 +26188,126 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
     "snippet": "className=\"rounded-full text-[13.5px] font-semibold transition-all\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "const BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "const DEFAULT_ACCENT = \"#319ED8\";"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[12px] font-semibold uppercase tracking-wider\" style={{ color: \"#a1a1a6\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12px] font-medium\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<p className=\"text-[15px]\" style={{ marginTop: 8, maxWidth: 560, color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: INK }}>GoodTunes subdomain</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 1 }}>{subdomain}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: INK }}>Your own domain</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ color: \"#a1a1a6\", marginTop: 8 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ color: SUBINK, marginTop: 8, maxWidth: 480, lineHeight: 1.6 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[12px] font-semibold\" style={{ color: \"#1d1d1f\", marginTop: 10 }}>Light backgrounds</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"inline-flex items-center gap-1.5 text-[11.5px]\" style={{ color: \"#6e6e73\", marginTop: 4 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[12px] font-semibold\" style={{ color: \"#f5f5f7\", marginTop: 10 }}>Dark backgrounds</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"inline-flex items-center gap-1.5 text-[11.5px]\" style={{ color: \"#98989d\", marginTop: 4 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: INK }}>{pressName}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[12px]\" style={{ color: SUBINK, marginTop: 1 }}>Client services</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<li key={item} className=\"flex items-center gap-2 text-[13px]\" style={{ color: INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 14, lineHeight: 1.6 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "className=\"px-4 h-8 rounded-full text-[13px] leading-none capitalize\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[10.5px]\" style={{ color: \"#a1a1a6\" }} data-testid=\"preview-email-from\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<p className=\"text-[13.5px]\" style={{ color: \"#1d1d1f\", margin: \"14px auto 0\", maxWidth: 260, lineHeight: 1.55 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[10.5px]\" style={{ color: \"#a1a1a6\", marginTop: 16 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[10px] font-semibold uppercase tracking-wider\" style={{ color: \"#a1a1a6\", marginTop: 14, paddingTop: 12, borderTop: \"1px solid #e6e6ea\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<p className=\"text-[11.5px]\" style={{ color: \"#a1a1a6\", marginTop: 12, lineHeight: 1.6 }}>"
   },
   {
     "rule": "brand-hex-literal",

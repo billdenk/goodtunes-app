@@ -65,6 +65,9 @@ import {
   PressComponentPricingTab,
   PressGoodDeedPricingTab,
   PressVinylFormatTab,
+} from "@/pages/press-components/tabs";
+import PressWhiteLabelSubTab from "@/pages/press-settings/PressWhiteLabelSubTab";
+import {
   PressCdFormatTab,
   PressCassetteFormatTab,
 } from "@/pages/press-components/tabs";
@@ -287,6 +290,9 @@ export function usePressPortalNav(opts?: {
     // deep links canonicalize to the Vinyl format page with the matching
     // segment (?comp=) so the rail highlight + breadcrumb read "Vinyl".
     if (t && t in LEGACY_COMP_SEGMENT) return "comp-vinyl";
+    // White Label moved inside Settings (Ruby handoff, Aug 19 2026); the
+    // old top-level ?tab=whitelabel deep link lands on the settings sub-tab.
+    if (t === "whitelabel") return "settings";
     if (t && (PRESS_TAB_IDS as string[]).includes(t)) return t;
     if (t && opts?.extraTabIds?.includes(t)) return t;
     return "dashboard";
@@ -303,6 +309,12 @@ export function usePressPortalNav(opts?: {
       const sp = new URLSearchParams(window.location.search);
       sp.set("tab", "comp-vinyl");
       sp.set("comp", LEGACY_COMP_SEGMENT[tabFromUrl]);
+      history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+    }
+    if (tabFromUrl === "whitelabel") {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set("tab", "settings");
+      sp.set("settings", "whitelabel");
       history.replaceState(null, "", `${window.location.pathname}?${sp}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3198,8 +3210,18 @@ function InvoiceDialog({ open, onOpenChange, pressId, albumId }: { open: boolean
 // ─── Settings tab ─────────────────────────────────────────────────
 
 // Task #2188 — Catalog is now a top-level tab; removed from Settings.
-type SettingsSub = "profile" | "staff" | "payouts" | "notifications";
-const SETTINGS_SUB_IDS: SettingsSub[] = ["profile", "staff", "payouts", "notifications"];
+// Ruby handoff (Aug 19 2026): Settings gains a White Label sub-tab (the
+// old top-level "Soon" rail row). Sub-tab labels follow the canon —
+// General (press profile) · Team · Payouts · Notifications · White Label;
+// legacy ?settings=profile|staff aliases keep old links working.
+type SettingsSub = "general" | "team" | "payouts" | "notifications" | "whitelabel";
+const SETTINGS_SUB_IDS: SettingsSub[] = ["general", "team", "payouts", "notifications", "whitelabel"];
+const SETTINGS_SUB_ALIASES: Record<string, SettingsSub> = { profile: "general", staff: "team" };
+function resolveSettingsSub(raw: string | null): SettingsSub | null {
+  if (!raw) return null;
+  if ((SETTINGS_SUB_IDS as string[]).includes(raw)) return raw as SettingsSub;
+  return SETTINGS_SUB_ALIASES[raw] ?? null;
+}
 
 function SettingsTab({ pressId, pressName }: { pressId: string; pressName: string }) {
   // Settings sub-tabs: Profile / Staff / Payouts / Notifications.
@@ -3208,15 +3230,10 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
   // new catalog tab, so this component will never receive "catalog" as sub.
   const search = useSearch();
   const subFromUrl = new URLSearchParams(search).get("settings");
-  const [sub, setSub] = useState<SettingsSub>(
-    subFromUrl && (SETTINGS_SUB_IDS as string[]).includes(subFromUrl)
-      ? (subFromUrl as SettingsSub)
-      : "profile",
-  );
+  const [sub, setSub] = useState<SettingsSub>(() => resolveSettingsSub(subFromUrl) ?? "general");
   useEffect(() => {
-    if (subFromUrl && (SETTINGS_SUB_IDS as string[]).includes(subFromUrl)) {
-      setSub(subFromUrl as SettingsSub);
-    }
+    const resolved = resolveSettingsSub(subFromUrl);
+    if (resolved) setSub(resolved);
   }, [subFromUrl]);
   // Task #2039 — the Partner-permissions toggles are GoodTunes-internal gates
   // only a super-admin can move (from /admin/manufacturers/:id). Press
@@ -3225,10 +3242,11 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
   const { data: role } = useQuery<{ role?: string }>({ queryKey: ["/api/me/role"] });
   const isSuperAdmin = role?.role === "super_admin";
   const subTabs = [
-    { id: "profile" as const, label: "Profile" },
-    { id: "staff" as const, label: "Staff" },
+    { id: "general" as const, label: "General" },
+    { id: "team" as const, label: "Team" },
     { id: "payouts" as const, label: "Payouts" },
     { id: "notifications" as const, label: "Notifications" },
+    { id: "whitelabel" as const, label: "White Label" },
   ];
   return (
     <div className="space-y-4">
@@ -3243,8 +3261,8 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
           >{t.label}</button>
         ))}
       </div>
-      {sub === "profile" && <ProfileSubTab pressId={pressId} />}
-      {sub === "staff" && (
+      {sub === "general" && <ProfileSubTab pressId={pressId} />}
+      {sub === "team" && (
         <div className="space-y-4">
           {/* Task #665 — same Contacts panel admins see on
               /admin/manufacturers/:id. Server gates POSTs by
@@ -3261,6 +3279,7 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
       )}
       {sub === "payouts" && <PayoutsSubTab pressId={pressId} pressName={pressName} />}
       {sub === "notifications" && <NotificationsSubTab pressId={pressId} />}
+      {sub === "whitelabel" && <PressWhiteLabelSubTab pressId={pressId} />}
     </div>
   );
 }
