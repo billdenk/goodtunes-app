@@ -22,6 +22,7 @@ import {
   matchVinylBackground,
   DEFAULT_KIND_MIN_QTY,
   usePressBrand,
+  usePressCatalogSwatches,
 } from './PressPackageBuilder';
 
 type Swatch = (typeof CATALOG_COLORS)[number];
@@ -92,10 +93,10 @@ function fmt(n: number): string {
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function rowToPkg(row: EstimateRow): Pkg {
+function rowToPkg(row: EstimateRow, catalog: Swatch[]): Pkg {
   const p = row.payload ?? {};
   const bs = p.builderState ?? {};
-  const swatch = CATALOG_COLORS.find((c) => c.id === bs.colorId) ?? CATALOG_COLORS[0];
+  const swatch = catalog.find((c) => c.id === bs.colorId) ?? CATALOG_COLORS.find((c) => c.id === bs.colorId) ?? catalog[0] ?? CATALOG_COLORS[0];
   const minRun = Number(p.minRun ?? bs.minRunQty ?? DEFAULT_KIND_MIN_QTY[swatch.kind] ?? 300) || 300;
   const perUnitCents = Number(p.minPerUnitCents ?? p.perUnitCents ?? 0) || 0;
   const status: PkgStatus = row.status === 'live' ? 'live' : row.status === 'archived' ? 'archived' : 'draft';
@@ -379,11 +380,12 @@ function DeleteConfirmSheet({ pkg, busy, onConfirm, onClose }: { pkg: Pkg; busy:
 // ═══════════════════════════════════════════════════════════════════
 export function PressPackagesIndex({ pressId, canEdit, onCreatePackage, onOpenPackage }: { pressId: string; canEdit: boolean; onCreatePackage: () => void; onOpenPackage: (id: string) => void }) {
   const pressBrandShort = usePressBrand().shortName;
+  const { colors: pressColors } = usePressCatalogSwatches();
   useAdminDark(); // re-render on Light/Dark/System toggle (vars drive the rest)
 
   const packagesUrl = '/api/press/' + pressId + '/estimates?kind=package';
   const { data } = useQuery<{ rows: EstimateRow[] }>({ queryKey: [packagesUrl] });
-  const packages: Pkg[] = useMemo(() => (data?.rows ?? []).map(rowToPkg), [data]);
+  const packages: Pkg[] = useMemo(() => (data?.rows ?? []).map((r) => rowToPkg(r, pressColors)), [data, pressColors]);
 
   // The builder hands back `?saved=<id>` — read it once, strip it from the
   // URL (history.replaceState so back doesn't replay the whisper).

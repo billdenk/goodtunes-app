@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/button';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useAdminDark } from '@/lib/adminAppearance';
 import type { PressComponentsPayload } from '@shared/pressComponents';
-import { PressLogoImg, usePressBrand } from './PressPackageBuilder';
+import { PressLogoImg, usePressBrand, usePressCatalogSwatches } from './PressPackageBuilder';
 import californialandCover from './assets/californialand-cover.jpg';
 import californialandInnerSleeve from './assets/californialand-inner-sleeve.png';
 import rubyVinylPhoto from './assets/mrp-ruby-translucent.png';
@@ -241,7 +241,7 @@ function RewindButton({ show, onClick, size = 28 }: { show: boolean; onClick: ()
 // ═══════════════════════════════════════════════════════════════════
 // SECTION 1 — VINYL (from PressVinylColorSetup)
 // ═══════════════════════════════════════════════════════════════════
-type SwatchKind = 'black' | 'opaque' | 'translucent' | 'splatter';
+type SwatchKind = 'black' | 'opaque' | 'translucent' | 'splatter' | (string & {});
 type SizeId = '7' | '10' | '12';
 
 type Swatch = {
@@ -2645,7 +2645,22 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   };
 
   // ── Derived options per size ──
-  const colors = CATALOG_COLORS.filter((c) => c.sizes.includes(sizeId));
+  const { colors: pressColors, types: pressColorTypes } = usePressCatalogSwatches();
+  const colors = pressColors.filter((c) => c.sizes.includes(sizeId));
+
+  // Snap a stale/foreign selection onto this press's catalog once it arrives.
+  useEffect(() => {
+    if (pressColors.length === 0) return;
+    const current = pressColors.find((c) => c.id === colorId);
+    if (!current) {
+      const fb = pressColors.find((c) => c.sizes.includes(sizeId)) ?? pressColors[0];
+      setColorId(fb.id);
+      setColorKind(fb.kind);
+    } else if (current.kind !== colorKind) {
+      setColorKind(current.kind);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pressColors, colorId, colorKind, sizeId]);
   const color = colors.find((c) => c.id === colorId) ?? colors[0];
 
   const jacketOptions = JACKET_CATALOG[sizeId] ?? JACKET_CATALOG['12'];
@@ -2683,9 +2698,9 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
     mark('size');
     touch();
     // colors: fall back to Classic Black when the color doesn't press this size
-    if (!CATALOG_COLORS.find((c) => c.id === colorId)?.sizes.includes(id)) {
-      setColorId('BK1');
-      setColorKind('black');
+    if (!pressColors.find((c) => c.id === colorId)?.sizes.includes(id)) {
+      const fb = pressColors.find((c) => c.sizes.includes(id)) ?? pressColors[0];
+      if (fb) { setColorId(fb.id); setColorKind(fb.kind); }
     }
     // jackets: keep the style if this size offers it, else the first
     const opts = JACKET_CATALOG[id] ?? JACKET_CATALOG['12'];
@@ -3091,7 +3106,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                         <VinylDisc size={44} swatch={color} />
                         <div className="flex-1" style={{ minWidth: 0 }}>
                           <div className="text-[14px] font-semibold" style={{ color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {COLOR_TYPES.find((t) => t.id === colorKind)?.name}
+                            {pressColorTypes.find((t) => t.id === colorKind)?.name}
                           </div>
                           <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>
                             Type · {colors.filter((c) => c.kind === colorKind).length} colors
@@ -3115,7 +3130,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                         {colors.length} colors in your catalog press for {sizeLabel}.
                       </p>
                       <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
-                        {COLOR_TYPES.map((t) => {
+                        {pressColorTypes.map((t) => {
                           const kindColors = colors.filter((c) => c.kind === t.id);
                           if (kindColors.length === 0) return null;
                           const isActive = picked('ctype') && t.id === colorKind;
@@ -3150,7 +3165,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                   <StepHeading lead="Pick a color." rest="From your catalog." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     {picked('ctype')
-                      ? `${COLOR_TYPES.find((t) => t.id === colorKind)?.name} · ${colors.filter((c) => c.kind === colorKind).length} colors`
+                      ? `${pressColorTypes.find((t) => t.id === colorKind)?.name} · ${colors.filter((c) => c.kind === colorKind).length} colors`
                       : 'Pick a type first.'}
                   </p>
                   <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>

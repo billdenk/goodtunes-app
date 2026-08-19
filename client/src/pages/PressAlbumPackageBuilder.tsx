@@ -57,6 +57,7 @@ import type { PressTemplate } from "@/components/admin/PressTemplateDownloads";
 // package art to what the press designed.
 import {
   CATALOG_COLORS as PKG_SWATCHES,
+  type CatalogFormat,
   VinylDisc as PkgRailDisc,
   PPB_COVERS,
   matchVinylBackground,
@@ -988,9 +989,14 @@ const PMP_ICON = "/pmp-icon.png";
 // "Start from this package" affordance earns full opacity on hover/selected.
 type RailPkg = NonNullable<InvitedPressResponse["packages"]>[number];
 
-function railSwatch(pkg: RailPkg) {
+function railSwatch(pkg: RailPkg, catalog?: typeof PKG_SWATCHES) {
   const bs = pkg.payload?.builderState ?? {};
-  return PKG_SWATCHES.find((c) => c.id === bs.colorId) ?? PKG_SWATCHES[0];
+  return (
+    catalog?.find((c) => c.id === bs.colorId) ??
+    PKG_SWATCHES.find((c) => c.id === bs.colorId) ??
+    catalog?.[0] ??
+    PKG_SWATCHES[0]
+  );
 }
 
 function StartPackageCard({ pkg, pressName, selected, onSelect }: {
@@ -1431,6 +1437,8 @@ export function PressAlbumPackageBuilder({
         name: press?.name ?? DEFAULT_PRESS_BRAND.name,
         shortName: pressShortName(press?.name),
         labelLogo: labelLogoUrl ?? DEFAULT_PRESS_BRAND.labelLogo,
+        pressId: press?.id,
+        catalogFormats: (invited?.catalog?.formats as CatalogFormat[] | undefined) ?? null,
       }}
     >
     <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }} data-testid="panel-package-builder">

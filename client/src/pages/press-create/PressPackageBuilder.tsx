@@ -15,7 +15,7 @@
 // A frosted running-total bar stays pinned at the top.
 // Components below are copied verbatim from their donor files.
 
-import { useState, useEffect, useRef, useCallback, createContext, useContext, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext, type ReactNode } from 'react';
 import {
   RotateCcw,
   Eye,
@@ -48,7 +48,15 @@ import niinaLabelArt from './assets/niina-label-1.png';
 // uploaded logo look exactly as before). Portals provide their own press's
 // logo + short name. The existing invert/whiten filters work for any dark
 // uploaded mark, so swapping the src is enough.
-export type PressBrand = { name: string; shortName: string; labelLogo: string };
+export type PressBrand = {
+  name: string;
+  shortName: string;
+  labelLogo: string;
+  /** Press id — lets the builders fetch this press's real color catalog. */
+  pressId?: string;
+  /** Artist-side: catalog formats already in hand (invited-press payload) — skips the admin catalog fetch. */
+  catalogFormats?: CatalogFormat[] | null;
+};
 export function pressShortName(pressName: string | null | undefined): string {
   const name = (pressName ?? '').trim();
   if (!name) return 'MRP';
@@ -268,7 +276,7 @@ function RewindButton({ show, onClick, size = 28 }: { show: boolean; onClick: ()
 // ═══════════════════════════════════════════════════════════════════
 // SECTION 1 — VINYL (from PressVinylColorSetup)
 // ═══════════════════════════════════════════════════════════════════
-type SwatchKind = 'black' | 'opaque' | 'translucent' | 'splatter';
+type SwatchKind = 'black' | 'opaque' | 'translucent' | 'splatter' | (string & {});
 type SizeId = '7' | '10' | '12';
 
 type Swatch = {
@@ -569,13 +577,72 @@ export const CATALOG_COLORS: QuoteSwatch[] = [
   qsw('SP5', 'Midnight Gold', 'splatter', 'Splatter', '#141418', 3.20, { s1: '#E8C84A', s2: '#B7942E', s3: '#F0E6C8', sizes: ['10', '12'] }),
 ];
 
-// Vinyl types — donor "Pick a type. What kind of vinyl?" cards.
+// Vinyl types — donor "Pick a type. What kind of vinyl?" cards (fallback only).
 const COLOR_TYPES: { id: SwatchKind; name: string }[] = [
   { id: 'black', name: 'Black' },
   { id: 'splatter', name: 'Splatter' },
   { id: 'translucent', name: 'Translucent' },
   { id: 'opaque', name: 'Opaque' },
 ];
+
+
+// ─── Per-press catalog colors (gogoods, Aug 19 2026) ───
+// The builders show each press's REAL color catalog (press_formats →
+// press_color_tiers → press_colors), not the MRP demo set above. Tier names
+// become the "Pick a type" cards; colors render from their swatch photo (or
+// hex). The hardcoded CATALOG_COLORS/COLOR_TYPES remain only as the fallback
+// for a press with an empty catalog.
+export type CatalogColor = { id: string; name: string; swatchHex?: string | null; swatchImageUrl?: string | null; swatchThumbUrl?: string | null };
+export type CatalogTier = { id: string; name: string; colors?: CatalogColor[] | null };
+export type CatalogFormat = { format: string; hidden?: boolean; tiers?: CatalogTier[] | null };
+
+const slugKind = (name: string): SwatchKind => name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-');
+// Per-unit dollars used by the builder's illustrative math — keyed off the
+// tier family; catalog tiers without a known family land on the middle value.
+const KIND_PRICE: Record<string, number> = { black: 1.8, translucent: 2.3, opaque: 2.4, splatter: 3.2 };
+const formatSize = (format: string): SizeId => (format.includes('7') ? '7' : format.includes('10') ? '10' : '12');
+
+export function usePressCatalogSwatches(): { colors: QuoteSwatch[]; types: { id: SwatchKind; name: string }[] } {
+  const { pressId, catalogFormats } = usePressBrand();
+  const { data } = useQuery<{ formats?: CatalogFormat[] }>({
+    queryKey: [`/api/admin/manufacturers/${pressId}/catalog`],
+    enabled: Boolean(pressId) && !catalogFormats,
+    staleTime: 60_000,
+  });
+  const formats = catalogFormats ?? data?.formats;
+  return useMemo(() => {
+    const types: { id: SwatchKind; name: string }[] = [];
+    const byColor = new Map<string, QuoteSwatch>();
+    for (const f of formats ?? []) {
+      if (f.hidden) continue;
+      const size = formatSize(f.format);
+      for (const tier of f.tiers ?? []) {
+        const kind = slugKind(tier.name);
+        if (!types.some((t) => t.id === kind)) types.push({ id: kind, name: tier.name });
+        for (const c of tier.colors ?? []) {
+          const existing = byColor.get(c.id);
+          if (existing) {
+            if (!existing.sizes.includes(size)) existing.sizes.push(size);
+            continue;
+          }
+          byColor.set(c.id, {
+            id: c.id,
+            name: c.name,
+            kind,
+            kindNote: tier.name,
+            base: c.swatchHex ?? '#111114',
+            photo: c.swatchImageUrl ?? c.swatchThumbUrl ?? undefined,
+            sizes: [size],
+            price: KIND_PRICE[kind] ?? 2.6,
+          });
+        }
+      }
+    }
+    const colors = Array.from(byColor.values());
+    if (colors.length === 0) return { colors: CATALOG_COLORS, types: COLOR_TYPES };
+    return { colors, types };
+  }, [formats]);
+}
 
 // Type card — mini disc + name + color count (mirrors the color-setup type row).
 function TypeCard({ name, count, swatch, active, onSelect }: {
@@ -2903,9 +2970,25 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
     if (!picked(k)) goTo(target);
   };
 
-  // ── Derived options per size ──
-  const colors = CATALOG_COLORS.filter((c) => c.sizes.includes(sizeId));
-  const color = colors.find((c) => c.id === colorId) ?? colors[0];
+  // ── Derived options per size ── (colors come from the press's own catalog)
+  const { colors: pressColors, types: pressColorTypes } = usePressCatalogSwatches();
+  const colors = pressColors.filter((c) => c.sizes.includes(sizeId));
+  const color = colors.find((c) => c.id === colorId) ?? colors[0] ?? pressColors[0] ?? CATALOG_COLORS[0];
+
+  // Snap a stale/foreign selection (e.g. the old MRP demo ids) onto this
+  // press's catalog once it arrives.
+  useEffect(() => {
+    if (pressColors.length === 0) return;
+    const current = pressColors.find((c) => c.id === colorId);
+    if (!current) {
+      const fb = pressColors.find((c) => c.sizes.includes(sizeId)) ?? pressColors[0];
+      setColorId(fb.id);
+      setColorKind(fb.kind);
+    } else if (current.kind !== colorKind) {
+      setColorKind(current.kind);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pressColors, colorId, colorKind, sizeId]);
 
   const jacketOptions = JACKET_CATALOG[sizeId] ?? JACKET_CATALOG['12'];
   const jacketType = jacketOptions.find((j) => j.id === jacketId) ?? jacketOptions[0];
@@ -2942,9 +3025,9 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
     mark('size');
     touch();
     // colors: fall back to Classic Black when the color doesn't press this size
-    if (!CATALOG_COLORS.find((c) => c.id === colorId)?.sizes.includes(id)) {
-      setColorId('BK1');
-      setColorKind('black');
+    if (!pressColors.find((c) => c.id === colorId)?.sizes.includes(id)) {
+      const fb = pressColors.find((c) => c.sizes.includes(id)) ?? pressColors[0];
+      if (fb) { setColorId(fb.id); setColorKind(fb.kind); }
     }
     // jackets: keep the style if this size offers it, else the first
     const opts = JACKET_CATALOG[id] ?? JACKET_CATALOG['12'];
@@ -3367,7 +3450,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                         <VinylDisc size={44} swatch={color} />
                         <div className="flex-1" style={{ minWidth: 0 }}>
                           <div className="text-[14px] font-semibold" style={{ color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {COLOR_TYPES.find((t) => t.id === colorKind)?.name}
+                            {pressColorTypes.find((t) => t.id === colorKind)?.name}
                           </div>
                           <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>
                             Type · {colors.filter((c) => c.kind === colorKind).length} colors
@@ -3391,7 +3474,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                         {colors.length} colors in your catalog press for {sizeLabel}.
                       </p>
                       <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
-                        {COLOR_TYPES.map((t) => {
+                        {pressColorTypes.map((t) => {
                           const kindColors = colors.filter((c) => c.kind === t.id);
                           if (kindColors.length === 0) return null;
                           const isActive = picked('ctype') && t.id === colorKind;
@@ -3426,7 +3509,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                   <StepHeading lead="Pick a color." rest="From your catalog." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     {picked('ctype')
-                      ? `${COLOR_TYPES.find((t) => t.id === colorKind)?.name} · ${colors.filter((c) => c.kind === colorKind).length} colors`
+                      ? `${pressColorTypes.find((t) => t.id === colorKind)?.name} · ${colors.filter((c) => c.kind === colorKind).length} colors`
                       : 'Pick a type first.'}
                   </p>
                   <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>

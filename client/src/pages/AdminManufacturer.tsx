@@ -791,6 +791,7 @@ export function AdminManufacturer() {
                 name: pressMe?.name ?? DEFAULT_PRESS_BRAND.name,
                 shortName: pressShortName(pressMe?.name),
                 labelLogo: pressMe?.labelLogoUrl ?? pressMe?.logoUrl ?? DEFAULT_PRESS_BRAND.labelLogo,
+                pressId: id,
               }}
             >
               <PressTabBody pressId={id} isSuperAdminView me={pressMe} nav={nav} />

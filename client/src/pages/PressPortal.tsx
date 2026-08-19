@@ -444,6 +444,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
         name: me?.name ?? DEFAULT_PRESS_BRAND.name,
         shortName: pressShortName(me?.name),
         labelLogo: me?.labelLogoUrl ?? me?.logoUrl ?? DEFAULT_PRESS_BRAND.labelLogo,
+        pressId: me?.id,
       }}
     >
     <OperatorShell
