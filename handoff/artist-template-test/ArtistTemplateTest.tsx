@@ -41,11 +41,13 @@ import {
   Layers,
   Download,
   Upload,
+  UploadCloud,
   Lock,
   Unlock,
   ArrowLeftRight,
   Circle,
   History,
+  X,
   Clock,
   Link2,
   FileUp,
@@ -215,6 +217,14 @@ const MOCK_HISTORY: Array<{
   { id: 'v1', file: 'CALIFORNIALAND_12-JKT-draft.pdf', dims: '762.0 \u00d7 528.0 mm', when: 'Aug 11 at 11:20 AM', event: 'replaced' },
 ];
 
+// History row status meta — word + icon, never colour alone (Bill is colourblind).
+const HISTORY_META: (t: Theme) => Record<HistoryEvent, { word: string; icon: LucideIcon; color: string; fillDot?: boolean }> = (t) => ({
+  current: { word: 'Current', icon: Circle, color: t.ready, fillDot: true },
+  passed: { word: 'Passed', icon: CheckCircle2, color: t.subink },
+  replaced: { word: 'Replaced', icon: ArrowLeftRight, color: t.faint },
+  downloaded: { word: 'Downloaded by press', icon: Download, color: t.subink },
+});
+
 // ─── Viewer toolbar tabs + overlay chips — mirror the live page verbatim. ────
 const VIEW_TABS = ['Full Template', 'Back', 'Front', 'Spine'] as const;
 type ViewTab = (typeof VIEW_TABS)[number];
@@ -350,6 +360,17 @@ export function ArtistTemplateTest() {
   // Mock-only: "No art yet" = the raw-template landing state a first-time artist
   // sees; true = the tested/certified state. Not shipped.
   const [hasArt, setHasArt] = useState(true);
+  // File history is revealed from the toolbar icon (same as the press side), not
+  // a standing card. Only meaningful once there's art/upload history.
+  const [showHistory, setShowHistory] = useState(false);
+  // The upload/check card's expanded state is lifted so the toolbar "Replace"
+  // pill can open it (the replace affordance is otherwise invisible while the
+  // check card is collapsed — Bill, Aug 18 2026).
+  const [uploadOpen, setUploadOpen] = useState(false);
+  // Whether the actual drag-drop upload box is showing in the card footer. The
+  // toolbar Replace takes the artist straight to it — one click, no intermediate
+  // buttons (Bill, Aug 18 2026 late: "This should just show me the upload box.").
+  const [showDrop, setShowDrop] = useState(false);
 
   return (
     <ArtistShell t={t} mode={mode} setMode={setMode} locked={locked} setLocked={setLocked} hasArt={hasArt} setHasArt={setHasArt}>
@@ -381,7 +402,7 @@ export function ArtistTemplateTest() {
             "5 of 5 passed" + filename; chevron to expand the rows; "Try another
             file" quiet action bottom-right when open. */}
         {hasArt ? (
-          <UploadCard t={t} rows={MOCK_CHECKS} fileName={MOCK_TEST_FILE} locked={locked} />
+          <UploadCard t={t} rows={MOCK_CHECKS} fileName={MOCK_TEST_FILE} locked={locked} open={uploadOpen} onOpenChange={setUploadOpen} showDrop={showDrop} onShowDropChange={setShowDrop} />
         ) : (
           <PendingCard t={t} />
         )}
@@ -401,9 +422,8 @@ export function ArtistTemplateTest() {
           </p>
         </div>
 
-        {/* 4b · File history — upload/download audit trail. Only once there's
-            art; a first-time artist with no uploads has no history yet. */}
-        {hasArt && <HistoryCard t={t} locked={locked} />}
+        {/* File history is no longer a standing card — it's revealed from the
+            toolbar history/layers icon below, same as the press Test/Certify surface. */}
 
         {/* 5 · Viewer toolbar — segmented view tabs left; artist-quiet actions
             right (layers view + Download test proof; press •••/Save removed). */}
@@ -428,9 +448,25 @@ export function ArtistTemplateTest() {
             })}
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" className={cn('inline-flex items-center justify-center rounded-full transition-colors', t.hoverCard)} style={{ width: 34, height: 34, border: `1px solid ${t.hairline}`, color: t.subink }} data-testid="button-layers" aria-label="Layers view">
-              <Layers className="w-4 h-4" />
-            </button>
+            {/* History/layers icon — reveals the File history popover (same as the
+                press Test/Certify surface). Only meaningful once there's art. */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { if (hasArt) setShowHistory((v) => !v); }}
+                aria-disabled={!hasArt}
+                aria-expanded={hasArt ? showHistory : undefined}
+                aria-haspopup="dialog"
+                className={cn('inline-flex items-center justify-center rounded-full transition-colors', hasArt && t.hoverCard)}
+                style={{ width: 34, height: 34, border: `1px solid ${t.hairline}`, color: hasArt ? t.subink : t.faint, opacity: hasArt ? 1 : 0.55, cursor: hasArt ? 'pointer' : 'not-allowed' }}
+                data-testid="button-layers"
+                aria-label="File history"
+                title="File history"
+              >
+                <History className="w-4 h-4" />
+              </button>
+              {hasArt && showHistory && <HistoryPanel t={t} locked={locked} onClose={() => setShowHistory(false)} />}
+            </div>
             {!hasArt && (
               <button
                 type="button"
@@ -441,14 +477,55 @@ export function ArtistTemplateTest() {
                 <LayoutTemplate className="w-4 h-4 flex-shrink-0" /> Download raw template
               </button>
             )}
+
+            {/* Replace — the toolbar counterpart of the press "Save result & test
+                another" slot. Visible once art exists; goes straight to the upload
+                box in one click (opens the card AND reveals the drop target — no
+                intermediate button). When locked, becomes a disabled Lock pill. */}
+            {hasArt && (locked ? (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium"
+                style={{ padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.faint, opacity: 0.6, cursor: 'not-allowed' }}
+                aria-disabled="true"
+                data-testid="button-replace-locked"
+              >
+                <Lock className="w-4 h-4 flex-shrink-0" /> Upload locked
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setUploadOpen(true); setShowDrop(true); }}
+                className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+                style={{ padding: '7px 14px', color: t.subink, border: `1px solid ${t.hairline}` }}
+                data-testid="button-replace"
+                aria-label="Replace file"
+                title="Replace file"
+              >
+                <Upload className="w-4 h-4 flex-shrink-0" /> Replace
+              </button>
+            ))}
+
+            {/* Download test proof — circular icon-only button that expands to the
+                LEFT on hover to reveal its label (same 34px circle as the history
+                button). Disabled/faint when there's no art. */}
             <button
               type="button"
-              className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
-              style={{ padding: '7px 14px', color: hasArt ? t.subink : t.faint, border: `1px solid ${t.hairline}`, opacity: hasArt ? 1 : 0.55, cursor: hasArt ? 'pointer' : 'not-allowed' }}
+              className="group inline-flex items-center justify-end rounded-full overflow-hidden transition-colors"
+              style={{ height: 34, border: `1px solid ${t.hairline}`, color: hasArt ? t.subink : t.faint, opacity: hasArt ? 1 : 0.55, cursor: hasArt ? 'pointer' : 'not-allowed', paddingLeft: 0, paddingRight: 0 }}
               aria-disabled={!hasArt}
               data-testid="button-download-proof"
+              aria-label="Download test proof"
+              title="Download test proof"
             >
-              <Download className="w-4 h-4 flex-shrink-0" /> Download test proof
+              <span
+                className="text-[13px] font-medium whitespace-nowrap transition-all duration-200 opacity-0 max-w-0 group-hover:opacity-100 group-hover:max-w-[160px] group-hover:pl-3.5"
+                style={{ color: t.ink }}
+              >
+                Download test proof
+              </span>
+              <span className="inline-flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32 }}>
+                <Download className="w-4 h-4" />
+              </span>
             </button>
           </div>
         </div>
@@ -538,8 +615,8 @@ export function ArtistTemplateTest() {
 // (mirrors the press-side upload treatment). When the press has downloaded the
 // file for production, the footer flips to a locked banner and the upload pill
 // disables (word + icon, never color alone).
-function UploadCard({ t, rows, fileName, locked }: { t: Theme; rows: typeof MOCK_CHECKS; fileName: string; locked: boolean }) {
-  const [open, setOpen] = useState(false);
+function UploadCard({ t, rows, fileName, locked, open, onOpenChange, showDrop, onShowDropChange }: { t: Theme; rows: typeof MOCK_CHECKS; fileName: string; locked: boolean; open: boolean; onOpenChange: (v: boolean) => void; showDrop: boolean; onShowDropChange: (v: boolean) => void }) {
+  const setOpen = (fn: (v: boolean) => boolean) => onOpenChange(fn(open));
   const passed = rows.filter((r) => r.tone === 'pass').length;
   return (
     <div className="rounded-2xl overflow-hidden" style={{ marginTop: 22, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="upload-card">
@@ -601,16 +678,44 @@ function UploadCard({ t, rows, fileName, locked }: { t: Theme; rows: typeof MOCK
                 <Lock className="w-4 h-4 flex-shrink-0" /> Upload locked
               </span>
             </div>
+          ) : showDrop ? (
+            /* The actual drag-drop upload box — shown in one click from the
+               toolbar Replace pill (or the footer button). No intermediate step:
+               the drop target is visible and ready. */
+            <div style={{ padding: '16px 20px', borderTop: `1px solid ${t.hairline}` }} data-testid="replace-dropbox">
+              <button
+                type="button"
+                className="w-full flex flex-col items-center justify-center text-center gap-2 rounded-xl transition-colors"
+                style={{ padding: '28px 20px', border: `2px dashed ${t.hairline}`, background: t.soft, color: t.subink }}
+                data-testid="upload-dropzone"
+              >
+                <UploadCloud className="w-7 h-7" style={{ color: t.subink, strokeWidth: 1.5 }} aria-hidden />
+                <span className="text-[13.5px] font-semibold" style={{ color: t.ink }}>Drag &amp; drop your new art here</span>
+                <span className="text-[12px]" style={{ color: t.faint }}>or click to upload &middot; paste a URL &mdash; replaces the current file and re-runs the checks</span>
+              </button>
+              <div className="flex justify-end" style={{ marginTop: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => onShowDropChange(false)}
+                  className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
+                  style={{ padding: '6px 14px', border: `1px solid ${t.hairline}`, color: t.subink }}
+                  data-testid="button-cancel-replace"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           ) : (
             <div className="flex items-center justify-between gap-3" style={{ padding: '12px 20px', borderTop: `1px solid ${t.hairline}` }}>
               <span className="text-[12px]" style={{ color: t.faint }}>Replaces the current file and re-runs the checks.</span>
               <button
                 type="button"
+                onClick={() => onShowDropChange(true)}
                 className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium transition-colors flex-shrink-0', t.hoverCard)}
                 style={{ padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.ink }}
                 data-testid="button-upload-another"
               >
-                <Upload className="w-4 h-4 flex-shrink-0" /> Upload another file
+                <Upload className="w-4 h-4 flex-shrink-0" /> Save result &amp; upload new
               </button>
             </div>
           )}
@@ -622,39 +727,54 @@ function UploadCard({ t, rows, fileName, locked }: { t: Theme; rows: typeof MOCK
 
 // File history card (Item 2) — the upload/download audit trail. Canon list rows,
 // faint text, word + icon result on every row; newest first.
-function HistoryCard({ t, locked }: { t: Theme; locked: boolean }) {
-  const meta: Record<HistoryEvent, { word: string; icon: LucideIcon; color: string; fillDot?: boolean }> = {
-    current: { word: 'Current', icon: Circle, color: t.ready, fillDot: true },
-    passed: { word: 'Passed', icon: CheckCircle2, color: t.subink },
-    replaced: { word: 'Replaced', icon: ArrowLeftRight, color: t.faint },
-    downloaded: { word: 'Downloaded by press', icon: Download, color: t.subink },
-  };
+// File history — the SAME right-anchored popover the press Test/Certify surface
+// uses (rounded-2xl, soft header band, close X, revision rows newest first),
+// reused verbatim for the artist. Revealed by the toolbar layers/history icon,
+// not a standing card. Artist content = MOCK_HISTORY (filename · dims · date ·
+// Current/Passed/Replaced/Downloaded word+icon states).
+function HistoryPanel({ t, locked, onClose }: { t: Theme; locked: boolean; onClose: () => void }) {
+  const meta = HISTORY_META(t);
   // The press-download event only exists once the file is locked.
   const rows = MOCK_HISTORY.filter((h) => h.event !== 'downloaded' || locked);
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ marginTop: 16, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="file-history">
-      <div className="flex items-center gap-2" style={{ padding: '14px 20px', borderBottom: `1px solid ${t.hairline}` }}>
-        <History className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
-        <h2 className="text-[14px] font-semibold" style={{ color: t.ink }}>File history</h2>
-        <span className="text-[12.5px]" style={{ color: t.faint }}>every upload and download, newest first</span>
-      </div>
-      {rows.map((h, i) => {
-        const m = meta[h.event];
-        const Icon = m.icon;
-        return (
-          <div key={h.id} className="flex items-center justify-between gap-4" style={{ padding: '12px 20px', borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`history-row-${h.id}`}>
-            <div className="min-w-0">
-              <div className="text-[13px] font-medium truncate" style={{ color: t.ink }}>{h.file}</div>
-              <div className="text-[12px]" style={{ marginTop: 2, color: t.faint }}>{h.dims} &middot; {h.when}</div>
-            </div>
-            <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold flex-shrink-0" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>
-              <Icon className="w-3.5 h-3.5 flex-shrink-0" style={m.fillDot ? { fill: m.color } : undefined} aria-hidden />
-              {m.word}
-            </span>
+    <>
+      <div className="fixed inset-0 z-[70]" onClick={onClose} data-testid="file-history-backdrop" />
+      <div
+        className="absolute z-[71] rounded-2xl overflow-hidden shadow-2xl"
+        style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, top: 'calc(100% + 6px)', right: 0, width: 380 }}
+        role="dialog"
+        aria-label="File history"
+        data-testid="file-history"
+      >
+        <div className="flex items-start justify-between gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${t.hairline}`, backgroundColor: t.soft }}>
+          <div>
+            <div className="text-[15px] font-semibold tracking-[-0.01em]" style={{ color: t.ink }}>File history</div>
+            <div className="text-[12px] mt-0.5" style={{ color: t.subink }}>Every upload and download, newest first</div>
           </div>
-        );
-      })}
-    </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0" style={{ border: `1px solid ${t.hairline}`, color: t.subink }} data-testid="button-close-history">
+            <X style={{ width: 14, height: 14 }} />
+          </button>
+        </div>
+        <div className="px-5 py-3 max-h-[420px] overflow-y-auto">
+          {rows.map((h, i) => {
+            const m = meta[h.event];
+            const Icon = m.icon;
+            return (
+              <div key={h.id} className="py-3 flex items-center justify-between gap-4" style={{ borderBottom: i < rows.length - 1 ? `1px solid ${t.hairline}` : undefined }} data-testid={`history-row-${h.id}`}>
+                <div className="min-w-0">
+                  <div className="text-[12.5px] font-medium truncate" style={{ color: t.ink }} title={h.file}>{h.file}</div>
+                  <div className="text-[11.5px] mt-0.5 tabular-nums" style={{ color: t.subink }}>{h.dims} &middot; {h.when}</div>
+                </div>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold flex-shrink-0" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>
+                  <Icon className="w-3 h-3 flex-shrink-0" style={m.fillDot ? { fill: m.color } : undefined} aria-hidden />
+                  {m.word}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 }
 
