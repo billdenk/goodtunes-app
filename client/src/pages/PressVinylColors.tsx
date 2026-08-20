@@ -25,6 +25,14 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Check,
   Plus,
   MoreHorizontal,
@@ -362,6 +370,292 @@ export function ColorBall({
   );
 }
 
+// ─── Type (tier) 3-dots menu — Edit… / Archive ──────────────────────
+// Mirrors the catalog page's type-tile menu (GroupCard) and the color
+// swatches' SwatchEditorPopover pattern: the "…" opens a two-item menu,
+// Edit… swaps to a small editor (name + preview image), Archive raises a
+// real dialog because archiving a type cascades to every color in it.
+function TierMenuPopover({
+  tier,
+  saving,
+  archiving,
+  onSave,
+  onArchive,
+  labelLogoUrl,
+  labelBgColor,
+}: {
+  tier: CatalogTier;
+  saving: boolean;
+  archiving: boolean;
+  onSave: (v: { name: string; previewImageUrl: string | null }) => void;
+  onArchive: () => void;
+  labelLogoUrl: string | null;
+  labelBgColor: string | null;
+}) {
+  const { toast } = useToast();
+  const dark = useAdminDark();
+  const [open, setOpen] = useState(false);
+  const [view, setView] = useState<"menu" | "edit">("menu");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [name, setName] = useState(tier.name);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(tier.previewImageUrl ?? null);
+  const [uploading, setUploading] = useState(false);
+  const seed = () => {
+    setView("menu");
+    setName(tier.name);
+    setPreviewUrl(tier.previewImageUrl ?? null);
+    setUploading(false);
+  };
+  const canSave = name.trim().length > 0 && !uploading && !saving;
+  const pickImage = () => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      setUploading(true);
+      try {
+        const r = await postAdminImage(file, { mask: "disc", noun: "type preview" });
+        setPreviewUrl(r.url);
+        if (r.lowRes) {
+          toast({
+            title: "Low-resolution image",
+            description: `This file is ${r.sourceWidth}×${r.sourceHeight}px — it may look soft on the big preview. 680px or larger is recommended.`,
+          });
+        }
+      } catch (err: any) {
+        toast({ title: "Upload failed", description: err?.message, variant: "destructive" });
+      } finally {
+        setUploading(false);
+      }
+    };
+    input.click();
+  };
+  // Editor disc preview reflects the STAGED image (nothing commits until Save).
+  const firstColor = tier.colors[0] ?? null;
+  const editorPreview = previewUrl
+    ? ({ ...(firstColor ?? { id: "preview", name: tier.name, swatchHex: null, swatchThumbUrl: null, position: 0 }), swatchImageUrl: previewUrl, swatchThumbUrl: null } as CatalogColor)
+    : firstColor;
+  const critical = criticalColor(dark);
+  return (
+    <>
+      <Popover
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v);
+          if (v) seed();
+        }}
+      >
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            onClick={(e) => e.stopPropagation()}
+            aria-label={`Edit ${tier.name}`}
+            data-testid={`button-type-menu-${tier.id}`}
+            className={cn(
+              "absolute inline-flex items-center justify-center rounded-full transition-opacity focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300",
+              open ? "opacity-100" : "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
+            )}
+            style={{
+              top: 8,
+              right: 8,
+              zIndex: 2,
+              width: 26,
+              height: 26,
+              backgroundColor: "var(--apple-frost, rgba(255,255,255,0.88))",
+              backdropFilter: "blur(8px)",
+              WebkitBackdropFilter: "blur(8px)",
+              border: `1px solid ${HAIRLINE}`,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.10)",
+              color: SUBINK,
+            }}
+          >
+            <MoreHorizontal className="w-4 h-4" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          align="end"
+          sideOffset={8}
+          className={cn("p-0 rounded-2xl overflow-hidden", view === "menu" ? "w-44" : "w-80")}
+          style={{
+            border: `1px solid ${HAIRLINE}`,
+            backgroundColor: "var(--apple-frost, rgba(255,255,255,0.85))",
+            backdropFilter: "blur(24px)",
+            WebkitBackdropFilter: "blur(24px)",
+            boxShadow: "0 20px 48px rgba(0,0,0,0.16)",
+          }}
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`popover-edit-type-${tier.id}`}
+        >
+          {view === "menu" ? (
+            <div style={{ padding: 8 }}>
+              <button
+                type="button"
+                onClick={() => setView("edit")}
+                className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors hover:bg-slate-100"
+                style={{ color: INK }}
+                data-testid={`menu-type-edit-${tier.id}`}
+              >
+                Edit…
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setConfirmOpen(true);
+                }}
+                className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors"
+                style={{ color: critical }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = dark ? CRITICAL_WASH_DARK : "#fdeef2")}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                data-testid={`menu-type-archive-${tier.id}`}
+              >
+                Archive
+              </button>
+            </div>
+          ) : (
+            <>
+              <div style={{ padding: 18 }}>
+                <div className="text-[15px] font-semibold tracking-tight" style={{ color: INK }}>
+                  Edit type. <span style={{ color: FAINT, fontWeight: 600 }}>{tier.name}.</span>
+                </div>
+                <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: SUBINK }}>
+                      Preview image
+                    </label>
+                    <div className="flex items-center gap-3">
+                      <VinylDisc size={64} color={editorPreview} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+                      <div className="flex flex-col items-start" style={{ gap: 2 }}>
+                        <button
+                          type="button"
+                          onClick={pickImage}
+                          disabled={uploading}
+                          className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100 disabled:opacity-50"
+                          style={{ color: BLUE }}
+                          data-testid={`button-type-image-${tier.id}`}
+                        >
+                          {uploading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                          {uploading ? "Uploading…" : "Change image…"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPreviewUrl(null)}
+                          disabled={!previewUrl || uploading}
+                          className="text-[12.5px] font-semibold rounded-full px-2.5 py-1 transition-colors hover:bg-slate-100 disabled:opacity-40"
+                          style={{ color: SUBINK }}
+                          data-testid={`button-type-image-clear-${tier.id}`}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: SUBINK }}>
+                      Type name
+                    </label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="text-[13.5px] focus:outline-none transition-colors focus:border-slate-400"
+                      style={{ height: 40, border: `1px solid ${HAIRLINE}`, borderRadius: 10, padding: "0 12px", color: INK, background: "#fff" }}
+                      data-testid={`input-type-name-${tier.id}`}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-3" style={{ padding: "12px 18px", borderTop: `1px solid ${HAIRLINE}` }}>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100"
+                  style={{ color: SUBINK }}
+                  data-testid={`button-cancel-type-${tier.id}`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!canSave}
+                  onClick={() => {
+                    onSave({ name: name.trim(), previewImageUrl: previewUrl });
+                    setOpen(false);
+                  }}
+                  className="text-[13px] font-semibold rounded-full px-4 py-1.5 text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                  style={{ backgroundColor: BLUE }}
+                  data-testid={`button-save-type-${tier.id}`}
+                >
+                  {saving ? "Saving…" : "Save"}
+                </button>
+              </div>
+              {/* Archive — destructive-adjacent action gets its own hairline-
+                  separated full-width row at the very bottom (Apple convention). */}
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  setConfirmOpen(true);
+                }}
+                className="w-full text-[13px] font-semibold transition-colors"
+                style={{ padding: "12px 18px", borderTop: `1px solid ${HAIRLINE}`, color: critical, textAlign: "center", background: "transparent" }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = dark ? CRITICAL_WASH_DARK : "#fdeef2")}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                data-testid={`button-archive-type-${tier.id}`}
+              >
+                Archive type
+              </button>
+            </>
+          )}
+        </PopoverContent>
+      </Popover>
+      {/* Type archive = cascade (every color goes with it) → a real dialog. */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent
+          className="max-w-sm rounded-2xl"
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`dialog-archive-type-${tier.id}`}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive {tier.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Archives the type and{" "}
+              {tier.colors.length === 1 ? "its 1 color" : `its ${tier.colors.length} colors`} for new
+              projects. Anything already in a project keeps working.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <button
+              type="button"
+              onClick={() => setConfirmOpen(false)}
+              className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100"
+              style={{ color: SUBINK }}
+              data-testid={`button-archive-cancel-${tier.id}`}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={archiving}
+              onClick={() => {
+                setConfirmOpen(false);
+                onArchive();
+              }}
+              className="text-[13px] font-semibold rounded-full px-4 py-1.5 text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: critical }}
+              data-testid={`button-archive-confirm-${tier.id}`}
+            >
+              Archive
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}
+
 // ─── Two-tone headings ───────────────────────────────────────────────
 export function PageHeading({ lead, rest }: { lead: string; rest: string }) {
   return (
@@ -494,6 +788,12 @@ export function SwatchEditorPopover({
       try {
         const r = await postAdminImage(file, { mask: "disc", noun: "swatch" });
         setPhotoUrl(r.url);
+        if (r.lowRes) {
+          toast({
+            title: "Low-resolution photo",
+            description: `This file is ${r.sourceWidth}×${r.sourceHeight}px — it may look soft on the big preview. 680px or larger is recommended.`,
+          });
+        }
       } catch (err: any) {
         toast({ title: "Upload failed", description: err?.message, variant: "destructive" });
       } finally {
@@ -1093,6 +1393,30 @@ export function PressVinylColors({
     onError: onErr,
   });
 
+  const patchTier = useMutation({
+    mutationFn: async (v: { id: string; name: string; previewImageUrl: string | null }) => {
+      const { id, ...body } = v;
+      const r = await apiRequest("PATCH", `/api/admin/manufacturers/${pressId}/catalog/tiers/${id}`, body);
+      return r.json();
+    },
+    onSuccess: () => invalidate(),
+    onError: onErr,
+  });
+
+  // Soft-retire (archive) — cascades to the type's colors server-side;
+  // pressed-record history keeps resolving by name (mirrors color archive).
+  const archiveTier = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/tiers/${id}/archive`);
+    },
+    onSuccess: (_d, id) => {
+      invalidate();
+      setTierId((cur) => (cur === id ? null : cur));
+      setColorId(null);
+    },
+    onError: onErr,
+  });
+
   const [addOpen, setAddOpen] = useState(false);
   const [editOpenId, setEditOpenId] = useState<string | null>(null);
 
@@ -1270,30 +1594,42 @@ export function PressVinylColors({
                         ? ({ ...(firstColor ?? { id: "preview", name: t.name, swatchHex: null, swatchThumbUrl: null, position: 0 }), swatchImageUrl: t.previewImageUrl, swatchThumbUrl: null } as CatalogColor)
                         : firstColor;
                       return (
-                        <button
-                          key={t.id}
-                          type="button"
-                          onClick={() => {
-                            setTierId(t.id);
-                            setColorId(t.colors[0]?.id ?? null);
-                            // Picking a type collapses the grid into the summary.
-                            setTypeGridOpen(false);
-                          }}
-                          aria-pressed={on}
-                          data-testid={`category-${t.id}`}
-                          className="rounded-2xl bg-white text-left transition-all hover:-translate-y-px focus:outline-none"
-                          style={{ padding: 14, border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
-                        >
-                          <div className="flex justify-center" style={{ marginBottom: 10 }}>
-                            <VinylDisc size={90} color={preview} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
-                          </div>
-                          <div className="text-[13.5px] font-semibold leading-tight" style={{ color: on ? BLUE : INK }}>
-                            {t.name}
-                          </div>
-                          <div className="text-[11.5px]" style={{ marginTop: 2, color: FAINT }}>
-                            {t.colors.length} {t.colors.length === 1 ? "color" : "colors"}
-                          </div>
-                        </button>
+                        <div key={t.id} className="group relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTierId(t.id);
+                              setColorId(t.colors[0]?.id ?? null);
+                              // Picking a type collapses the grid into the summary.
+                              setTypeGridOpen(false);
+                            }}
+                            aria-pressed={on}
+                            data-testid={`category-${t.id}`}
+                            className="w-full rounded-2xl bg-white text-left transition-all hover:-translate-y-px focus:outline-none"
+                            style={{ padding: 14, border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
+                          >
+                            <div className="flex justify-center" style={{ marginBottom: 10 }}>
+                              <VinylDisc size={90} color={preview} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+                            </div>
+                            <div className="text-[13.5px] font-semibold leading-tight" style={{ color: on ? BLUE : INK }}>
+                              {t.name}
+                            </div>
+                            <div className="text-[11.5px]" style={{ marginTop: 2, color: FAINT }}>
+                              {t.colors.length} {t.colors.length === 1 ? "color" : "colors"}
+                            </div>
+                          </button>
+                          {canEdit && (
+                            <TierMenuPopover
+                              tier={t}
+                              saving={patchTier.isPending}
+                              archiving={archiveTier.isPending}
+                              onSave={(v) => patchTier.mutate({ id: t.id, ...v })}
+                              onArchive={() => archiveTier.mutate(t.id)}
+                              labelLogoUrl={labelLogoUrl}
+                              labelBgColor={labelBgColor}
+                            />
+                          )}
+                        </div>
                       );
                     })}
                   </div>

@@ -6345,6 +6345,25 @@ export async function registerRoutes(
           }
         }
         let maskApplied: boolean | undefined;
+        // Task #3215 — swatch/type photos render on a 340px preview disc, so
+        // a retina screen needs ~680px of source before upscaling shows.
+        // Warn-only (lowRes flag + dimensions back to the client): plenty of
+        // vendor libraries only publish ~400px tiles and blocking them would
+        // strand imports — the operator just gets told it will look soft.
+        let lowRes: boolean | undefined;
+        let srcW: number | undefined;
+        let srcH: number | undefined;
+        if (wantMask && mime !== "image/svg+xml") {
+          try {
+            const { loadImage } = await import("@napi-rs/canvas");
+            const img = await loadImage(f.buffer);
+            srcW = img.width;
+            srcH = img.height;
+            lowRes = Math.min(img.width, img.height) < 680;
+          } catch {
+            /* unreadable image will fail the mask step below anyway */
+          }
+        }
         if (wantMask) {
           const masked = await maskToVinylDisc(f.buffer).catch((e) => {
             console.error("disc mask failed", e);
@@ -6359,7 +6378,12 @@ export async function registerRoutes(
           }
         }
         const url = await uploadBufferToObjectStorage(buffer, mime);
-        return res.json(maskApplied === undefined ? { url } : { url, maskApplied });
+        if (maskApplied === undefined) return res.json({ url });
+        return res.json({
+          url,
+          maskApplied,
+          ...(lowRes !== undefined ? { lowRes, sourceWidth: srcW, sourceHeight: srcH } : {}),
+        });
       } catch (err) {
         console.error("Object Storage upload failed", err);
         return res.status(500).json({ message: "Upload failed" });

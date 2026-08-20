@@ -28,7 +28,16 @@ import { downscaleImageFile, friendlyUploadError } from "@/lib/photoUpload";
 export async function postAdminImage(
   file: File,
   opts?: { mask?: "disc"; noun?: string },
-): Promise<{ url: string; maskApplied?: boolean }> {
+): Promise<{
+  url: string;
+  maskApplied?: boolean;
+  // Task #3215 — disc-mask uploads report the source pixel size; `lowRes`
+  // is true when the shorter side is under the 680px floor the 340px
+  // retina preview needs. Warn-only: the upload still succeeds.
+  lowRes?: boolean;
+  sourceWidth?: number;
+  sourceHeight?: number;
+}> {
   const token = getAuthToken();
   if (!token) {
     throw new Error("Sign out and back in — your session token is missing.");
@@ -60,11 +69,13 @@ export async function postAdminImage(
     );
   }
 
-  const { url, maskApplied } = (await res.json()) as {
+  return (await res.json()) as {
     url: string;
     maskApplied?: boolean;
+    lowRes?: boolean;
+    sourceWidth?: number;
+    sourceHeight?: number;
   };
-  return { url, maskApplied };
 }
 
 /**
