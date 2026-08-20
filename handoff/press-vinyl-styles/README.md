@@ -43,3 +43,6 @@ The press Catalog → Vinyl page rebuilt around the **style generator**: styles 
 
 ## Questions beat inventions
 Anything here that conflicts with live data wiring or the settled package designer: flag it to Bill, never silently adapt.
+
+## Addendum (Aug 20 2026): Components chip row → one segmented control
+The Components page's separate chips (Vinyl / Jackets / Inner Sleeves / Center Labels / Inserts / Stickers) become ONE segmented control, exactly like the Templates page's Vinyl / CD / Cassette: single shaded track, the active item as the raised white thumb, inactive items quiet text inside the track. Same labels, same order, same navigation behavior — only the chrome changes. Apply wherever this components chip row appears (press portal and super-admin view-as).
