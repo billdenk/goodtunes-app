@@ -225,7 +225,11 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   { id: "estimates",  label: "Estimates",        icon: FileText,         section: "create", roles: ["press"] },
   { id: "packages",   label: "Packages",         icon: Package,          section: "create", roles: ["press"] },
   { id: "albums",     label: "Projects",         icon: Disc3,            roles: ["press"] },
-  { id: "acquisition", label: "Acquisition",    icon: UserPlus,         roles: ["press"] },
+  // Acquisition removed from press portals (gogoods, Aug 19 2026): the buying
+  // funnel is fan-level marketing data for an artist's release — that belongs
+  // to the artist/label/manager who own the release, not the plant that
+  // pressed it. Kept for label/non_profit above. NOTE for Ruby: keep this out
+  // of the press left-rail handoff so the rail order stays aligned.
   // "Product Specs" is a collapsible SECTION per the press rail canon
   // (Ruby handoff f9adddf, Bill Aug 16 2026 — renamed from "Catalog",
   // supersedes the Aug 11 rail). Children in canon order: GoodTunes

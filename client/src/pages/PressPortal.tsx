@@ -104,7 +104,10 @@ import { PRIMARY_CREATIVE_CREDITS } from "@/components/admin/RolePicker";
 // segment pre-selected (format-first rail, Ruby handoff Aug 19 2026).
 type TabId = "dashboard" | "details" | "people" | "estimates" | "packages" | "catalog" | "specs" | "templates" | "comp-vinyl" | "comp-cd" | "comp-cassette" | "comp-jackets" | "comp-sleeves" | "comp-inserts" | "comp-labels" | "comp-stickers" | "comp-pricing" | "albums" | "pipeline" | "reports" | "pricing" | "referrals" | "acquisition" | "settings";
 
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "details", "people", "estimates", "packages", "catalog", "specs", "templates", "comp-vinyl", "comp-cd", "comp-cassette", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing", "albums", "pipeline", "reports", "pricing", "referrals", "acquisition", "settings"];
+// Note: "acquisition" is intentionally NOT a press tab (gogoods, Aug 19 2026) —
+// the fan buying funnel belongs to the artist/label/manager who own the
+// release, not the plant. Kept in TabId only so god-view/other roles compile.
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "details", "people", "estimates", "packages", "catalog", "specs", "templates", "comp-vinyl", "comp-cd", "comp-cassette", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing", "albums", "pipeline", "reports", "pricing", "referrals", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 export interface PressMe {
