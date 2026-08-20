@@ -46,7 +46,6 @@ export const pendingTemplateFile: {
 export const freshLiveSave = { flag: false };
 
 export type SavedTest = { art: string; at: string; verdict: string };
-
 import {
   CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Upload, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck,
 } from 'lucide-react';
@@ -68,6 +67,7 @@ import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, 
 // here is byte-identical to the previous inline copies.
 import { loadPdfjs, renderPage, extractGtLayers, shrinkDataUrl, zoneColor, type GtLayer } from './gtOverlayEngine';
 export type { GtLayer } from './gtOverlayEngine';
+import { createFullSharpController } from './fullSharpRender';
 type Theme = {
   canvas: string; rail: string; card: string; soft: string; hairline: string;
   ink: string; subink: string; faint: string; blue: string;
@@ -299,6 +299,15 @@ export default function PressTemplateLiveTest({
   // Monotonic sequence for crop renders — a slow render must never overwrite
   // state after a newer crop request has already landed.
   const cropRenderSeq = useRef(0);
+  // ── Sharp Full-Template raster (Task #3212) ──
+  // The base raster is a fixed 1400px-wide render; at 200–400% zoom (× Retina
+  // devicePixelRatio) a pure CSS scale of it goes blurry. When zoom exceeds
+  // what the base can support, lazily re-render the FULL page at a resolution
+  // sized to the zoom (debounced, cached per zoom tier). The low-res raster
+  // stays on screen until the sharp one lands (soft-then-sharp swap).
+  const [fullImg, setFullImg] = useState<string | null>(null);
+  const fullSharp = useRef(createFullSharpController()).current;
+  const fullSharpGen = useRef(0); // last templateGen the controller was synced to
   const replaceTemplate = () => {
     if (template) {
       replacingName.current = template.name;
@@ -1349,6 +1358,53 @@ export default function PressTemplateLiveTest({
   // same-size PDF still triggers a fresh crop render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewArea, templateGen, focus?.x, focus?.y, focus?.w, focus?.h]);
+
+  // ── Sharp Full-Template render (Task #3212) ──────────────────────────────
+  // Debounced so rapid zoom stepping doesn't queue a rasterization per step;
+  // cached per zoom tier (keyed on template generation) so toggling back and
+  // forth never re-rasterizes; silently keeps the low-res raster on any
+  // failure or when the retained pdf.js document is gone. Canvas size rides
+  // the same computeCropCanvasSize guard as the crop views (≤ 4096px/side).
+  useEffect(() => {
+    // Template identity sync FIRST — the invalidation must happen inside this
+    // effect, BEFORE this run's token is minted. (A separate invalidation
+    // effect declared after this one ran too late and staled the fresh
+    // template's own first render — completion review, Task #3212.)
+    if (fullSharpGen.current !== templateGen) {
+      fullSharpGen.current = templateGen;
+      fullSharp.invalidate();
+      setFullImg(null);
+    }
+    // Invalidate any in-flight render on EVERY change — including zoom-out
+    // and template swap — so a slow render can never land a stale overlay
+    // (rules tested in fullSharpRender.test.ts).
+    const token = fullSharp.begin();
+    if (!template || viewArea !== 'full' || zoom <= 1) { setFullImg(null); return; }
+    const doc = pdfDocRef.current;
+    if (!doc) return;
+    const key = `${templateGen}:${zoom}`;
+    const cached = fullSharp.cache.get(key);
+    if (cached) { setFullImg(cached); return; }
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          // Enough pixels to look sharp at this zoom on a Retina 1440px display.
+          const desiredPx = Math.round(1440 * zoom * (window.devicePixelRatio || 1));
+          const { targetW } = computeCropCanvasSize(template.wMm, template.hMm, desiredPx);
+          if (targetW <= 1400) return; // base raster already carries this detail
+          const { img } = await renderPage(doc, 1, targetW);
+          if (token.isCurrent()) {
+            fullSharp.cache.set(key, img);
+            setFullImg(img);
+          }
+        } catch {
+          // Best-effort — keep showing the base 1400px raster.
+        }
+      })();
+    }, 180);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewArea, zoom, templateGen, template?.wMm, template?.hMm]);
 
   // Viewport width as a % of the card, so a square zone reads square and the
   // spine reads as a tall strip — height stays what the full view would use.
@@ -2487,6 +2543,12 @@ export default function PressTemplateLiveTest({
                  >
                   {(!art || showTemplate) && (
                     <img src={template.img} alt="Template" className="absolute inset-0 w-full h-full" draggable={false} />
+                  )}
+                  {/* Sharp Full-Template raster (Task #3212): overlays the base
+                      1400px render once the zoom-sized re-render lands, so
+                      200–400% zoom shows print detail instead of a CSS upscale. */}
+                  {(!art || showTemplate) && fullImg && viewArea === 'full' && zoom > 1 && (
+                    <img src={fullImg} alt="" draggable={false} className="absolute inset-0 w-full h-full pointer-events-none" data-testid="img-full-sharp" />
                   )}
                   {/* High-DPI crop raster (Task #3162): overlays the low-res base image
                       only inside the focus region so the crop view is sharp. Positioned

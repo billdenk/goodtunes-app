@@ -14,9 +14,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, PenLine, PaintBucket, ZoomIn, Download } from 'lucide-react';
 import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
 import type * as pdfjs from 'pdfjs-dist';
-import { zoneColor, shapePath, type GtLayer } from './gtOverlayEngine';
+import { zoneColor, shapePath, renderPage, type GtLayer } from './gtOverlayEngine';
 import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, type SideName, type FamilyGroup } from './sidePillGroups';
 import { computeCropCanvasSize, PT_PER_MM } from './cropDimensions';
+import { createFullSharpController } from './fullSharpRender';
 import { computePdfArtRect } from './artPlacement';
 
 export type ViewerTemplate = { img: string; wMm: number; hMm: number; layers: GtLayer[] };
@@ -47,6 +48,8 @@ export function TemplateArtViewer({
   t,
   proofName,
   actions,
+  renderFullPage,
+  sharpDebounceMs = 180,
 }: {
   template: ViewerTemplate;
   /** Kept alive for hi-DPI crop re-renders; crops fall back to the base raster without it. */
@@ -61,6 +64,11 @@ export function TemplateArtViewer({
       right-side action cluster. The toolbar is permanent architecture: the
       host keeps the same buttons in every state, disabled until applicable. */
   actions?: React.ReactNode;
+  /** Test seam (Task #3212): sharp Full-Template rasterizer. Defaults to a
+      real pdf.js full-page render at the given width. */
+  renderFullPage?: (doc: pdfjs.PDFDocumentProxy, targetWidth: number) => Promise<{ img: string }>;
+  /** Test seam: debounce for the sharp Full-Template render. */
+  sharpDebounceMs?: number;
 }) {
   const [activeZones, setActiveZones] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'line' | 'area'>('line');
@@ -75,6 +83,12 @@ export function TemplateArtViewer({
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [cropImg, setCropImg] = useState<string | null>(null);
   const cropRenderSeq = useRef(0);
+  // Sharp Full-Template raster (Task #3212) — mirrors the press page: the base
+  // 1400px render goes blurry under a 200–400% CSS zoom (× Retina DPR), so a
+  // zoom-sized full-page re-render overlays it once ready.
+  const [fullImg, setFullImg] = useState<string | null>(null);
+  const fullSharp = useRef(createFullSharpController()).current;
+  const fullSharpId = useRef<{ doc: pdfjs.PDFDocumentProxy | null; img: string }>({ doc: null, img: '' });
   const dragRef = useRef<{ px: number; py: number; cx: number; cy: number; w: number; h: number } | null>(null);
 
   // Zones present in the template, grouped LINE + AREA (press page verbatim).
@@ -179,6 +193,55 @@ export function TemplateArtViewer({
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewArea, pdfDoc, focus?.x, focus?.y, focus?.w, focus?.h]);
+
+  // ── Sharp Full-Template render (Task #3212) — press page verbatim. ──
+  // Debounced across rapid zoom steps, cached per zoom tier (keyed on the
+  // template's base raster identity), silently keeps the low-res raster on
+  // failure or when no pdf.js document was passed in. Canvas size rides the
+  // same computeCropCanvasSize guard as the crop views (≤ 4096px/side).
+  useEffect(() => {
+    // Template identity sync FIRST — invalidation happens inside this effect,
+    // before this run's token is minted, so effect ordering can never stale a
+    // fresh template's own first render, and a swapped template can never
+    // serve a prior template's cached raster (completion review, Task #3212).
+    if (fullSharpId.current.doc !== (pdfDoc ?? null) || fullSharpId.current.img !== template.img) {
+      fullSharpId.current = { doc: pdfDoc ?? null, img: template.img };
+      fullSharp.invalidate();
+      setFullImg(null);
+    }
+    // Invalidate any in-flight render on EVERY change — including zoom-out
+    // and template swap — so a slow render can never land a stale overlay
+    // (rules tested in fullSharpRender.test.ts).
+    const token = fullSharp.begin();
+    if (viewArea !== 'full' || zoom <= 1) { setFullImg(null); return; }
+    const doc = pdfDoc;
+    if (!doc) return;
+    // Cache is scoped to ONE template (cleared above on any change), so the
+    // zoom tier alone identifies an entry — no cross-template collisions.
+    const key = `z${zoom}`;
+    const cached = fullSharp.cache.get(key);
+    if (cached) { setFullImg(cached); return; }
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const desiredPx = Math.round(1440 * zoom * (window.devicePixelRatio || 1));
+          const { targetW } = computeCropCanvasSize(template.wMm, template.hMm, desiredPx);
+          if (targetW <= 1400) return; // base raster already carries this detail
+          const { img } = await (renderFullPage
+            ? renderFullPage(doc, targetW)
+            : renderPage(doc, 1, targetW));
+          if (token.isCurrent()) {
+            fullSharp.cache.set(key, img);
+            setFullImg(img);
+          }
+        } catch {
+          // Best-effort — keep showing the base raster.
+        }
+      })();
+    }, sharpDebounceMs);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewArea, zoom, pdfDoc, template.img, template.wMm, template.hMm]);
 
   const viewportPct = useMemo(() => {
     if (!focus) return 100;
@@ -771,6 +834,11 @@ export function TemplateArtViewer({
           >
             {(!art || showTemplate) && (
               <img src={template.img} alt="Template" className="absolute inset-0 w-full h-full" draggable={false} />
+            )}
+            {/* Sharp Full-Template raster (Task #3212): overlays the base render
+                once the zoom-sized re-render lands — crisp 200–400% zoom. */}
+            {(!art || showTemplate) && fullImg && viewArea === 'full' && zoom > 1 && (
+              <img src={fullImg} alt="" draggable={false} className="absolute inset-0 w-full h-full pointer-events-none" data-testid="img-full-sharp" />
             )}
             {(!art || showTemplate) && cropImg && focus && viewArea !== 'full' && (
               <img
