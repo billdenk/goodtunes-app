@@ -752,8 +752,8 @@ function PressAlbumsTab({ pressId }: { pressId: string }) {
     search.trim()
       ? "No releases match that search."
       : stageTab === "all"
-      ? "No albums yet."
-      : `No ${stageTab.replace("_", " ")} albums.`;
+      ? "No projects yet."
+      : `No ${stageTab.replace("_", " ")} projects.`;
 
   return (
     <div className="space-y-4" data-testid="press-albums-tab">

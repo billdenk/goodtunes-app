@@ -778,7 +778,7 @@ export function AdminManufacturer() {
                   data-testid="button-press-add-album"
                 >
                   <Plus className="w-3 h-3" />
-                  Add album
+                  Add project
                 </button>
               </div>
             )}
