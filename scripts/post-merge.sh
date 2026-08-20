@@ -12451,11 +12451,91 @@ rehost_task_3197_dropbox_masters() {
 }
 rehost_task_3197_dropbox_masters
 
+# ── Task #3220 — press Setup & Services line items ──
+# Per-press one-time/per-order cost rows (metalwork, test pressings, setup
+# fees, sleeves, stickers, assembly, storage). Idempotent on both DBs
+# (schema-drift guard covers the table).
+create_press_service_items() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[press-service-items] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: press-service-items DDL ok on $label" \
+    || echo "post-merge: WARNING — press-service-items DDL failed on $label"
+CREATE TABLE IF NOT EXISTS press_service_items (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id varchar NOT NULL,
+  category text NOT NULL,
+  label text NOT NULL,
+  amount_cents integer NOT NULL,
+  unit_basis text NOT NULL,
+  note text,
+  position integer NOT NULL DEFAULT 0,
+  source text,
+  archived_at timestamp,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS press_service_items_press_idx ON press_service_items (press_id);
+SQL
+}
+create_press_service_items dev  "${DATABASE_URL:-}"
+create_press_service_items prod "${PROD_DATABASE_URL:-}"
+
+# Task #3220 — Viryl 2026 per-record price load. Marker-guarded inside the
+# script (viryl_pricing_2026_v4); never clobbers operator-confirmed rungs.
+load_viryl_2026_pricing() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping viryl 2026 pricing on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/load-viryl-2026-pricing.ts 2>&1); then
+    echo "post-merge: viryl 2026 pricing ok on $label"
+    echo "$out" | tail -6
+  else
+    echo "post-merge: WARNING — viryl 2026 pricing failed on $label (continuing, fingerprint withheld so next merge retries)"
+    echo "$out" | tail -10
+    PM_VIRYL_2026_FAILED=1
+  fi
+}
+PM_VIRYL_2026_FAILED=0
+load_viryl_2026_pricing dev  "${DATABASE_URL:-}"
+load_viryl_2026_pricing prod "${PROD_DATABASE_URL:-}"
+
+# Task #3220 — Viryl Setup & Services seed from the 2026 price list.
+# Marker-guarded inside the script (viryl_services_2026_v3) + per-item guard.
+seed_viryl_services_2026() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping viryl services seed on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/seed-viryl-services-2026.ts 2>&1); then
+    echo "post-merge: viryl services seed ok on $label"
+    echo "$out" | tail -4
+  else
+    echo "post-merge: WARNING — viryl services seed failed on $label (continuing, fingerprint withheld so next merge retries)"
+    echo "$out" | tail -10
+    PM_VIRYL_2026_FAILED=1
+  fi
+}
+seed_viryl_services_2026 dev  "${DATABASE_URL:-}"
+seed_viryl_services_2026 prod "${PROD_DATABASE_URL:-}"
+
 # ── Stamp the full-run fingerprint (see the skip block at the top) ─────────
 # Reached only on a full pass that survived to here; from now on, merges that
 # don't touch this script skip straight to the mirror sync below.
-pm_stamp_fp dev  "${DATABASE_URL:-}"
-pm_stamp_fp prod "${PROD_DATABASE_URL:-}"
+if [ "${PM_VIRYL_2026_FAILED:-0}" = "1" ]; then
+  # Task #3220: a viryl 2026 loader/seed failed above — withhold the full-run
+  # fingerprint so the next merge re-runs the whole migration suite and the
+  # marker-guarded loaders get retried instead of being silently skipped.
+  echo "post-merge: NOT stamping full-run fingerprint (viryl 2026 pricing/services failed; next merge retries)"
+else
+  pm_stamp_fp dev  "${DATABASE_URL:-}"
+  pm_stamp_fp prod "${PROD_DATABASE_URL:-}"
+fi
 
 fi # ── end migration suite part 2 ──
 

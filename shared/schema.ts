@@ -2738,6 +2738,74 @@ export const pressTierJacketLadders = pgTable(
 );
 export type PressTierJacketLadder = typeof pressTierJacketLadders.$inferSelect;
 
+// Task #3220 — per-press "Setup & Services" cost structure. One-time /
+// per-order line items (metalwork, test pressings, setup fees, sleeves,
+// stickers, assembly, storage…) any press can carry, operator-editable on
+// the press catalog page. Amounts are cents; unitBasis says what one unit
+// of the amount covers. Archive (not delete) keeps cost history. Only
+// concrete-priced items live here — "Custom Quote" rows are deliberately
+// NOT modeled (deferred).
+export const PRESS_SERVICE_CATEGORIES = [
+  "metalwork",
+  "test_pressings",
+  "setup_fees",
+  "surcharges",
+  "centre_labels",
+  "inner_sleeves",
+  "stickers",
+  "packaging_assembly",
+  "storage",
+] as const;
+export type PressServiceCategory = (typeof PRESS_SERVICE_CATEGORIES)[number];
+export const PRESS_SERVICE_CATEGORY_LABEL: Record<PressServiceCategory, string> = {
+  metalwork: "Metalwork",
+  test_pressings: "Test Pressings",
+  setup_fees: "Setup Fees",
+  surcharges: "Surcharges",
+  centre_labels: "Centre Labels",
+  inner_sleeves: "Inner Sleeves",
+  stickers: "Stickers",
+  packaging_assembly: "Packaging & Assembly",
+  storage: "Storage",
+};
+export const PRESS_SERVICE_UNIT_BASES = [
+  "per_pair",
+  "per_side",
+  "per_disc",
+  "per_unit",
+  "per_record",
+  "per_box",
+  "per_order",
+  "per_1000_pairs",
+] as const;
+export type PressServiceUnitBasis = (typeof PRESS_SERVICE_UNIT_BASES)[number];
+export const PRESS_SERVICE_UNIT_LABEL: Record<PressServiceUnitBasis, string> = {
+  per_pair: "per pair",
+  per_side: "per side",
+  per_disc: "per disc",
+  per_unit: "per unit",
+  per_record: "per record",
+  per_box: "per box",
+  per_order: "per order",
+  per_1000_pairs: "per 1,000 pairs",
+};
+export const pressServiceItems = pgTable("press_service_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pressId: varchar("press_id").notNull(),
+  category: text("category").$type<PressServiceCategory>().notNull(),
+  label: text("label").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  unitBasis: text("unit_basis").$type<PressServiceUnitBasis>().notNull(),
+  note: text("note"),
+  position: integer("position").notNull().default(0),
+  // Seed provenance (e.g. "viryl-2026-price-list"); null = operator-entered.
+  source: text("source"),
+  archivedAt: timestamp("archived_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+export type PressServiceItem = typeof pressServiceItems.$inferSelect;
+
 // Task #2109 — operator-editable finished-template specs, stored in the
 // press catalog keyed by manufacturers.id → AlbumFormat → component. The
 // completed-template check resolves these OVER the measured-constant

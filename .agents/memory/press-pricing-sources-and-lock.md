@@ -45,3 +45,8 @@ Splatter (12″), and Black (12″LP); every other tier was zero → free. **How
 apply:** never overwrite a tier that already has any `confirmed:true` rung (real
 quote); skip-if-confirmed makes the fill idempotent. Don't set `lockedFromSync`
 on placeholders so a future real MRP quote overwrites them freely.
+
+## Ladder semantics are ALL-IN
+Catalog price-ladder rungs are all-in per-unit manufacturing costs (record + printed jacket at that qty + insertion), not bare record prices — SellPanel and quote PDFs read them directly with no composition step.
+**Why:** loading a plant's bare per-record sheet into the ladders silently dropped jacket/insertion cost from every quote (caught in review, Aug 2026).
+**How to apply:** when loading a plant price sheet, compose all-in rungs; quantities the sheet can't price honestly (e.g. garbled bulk rows) stay unconfirmed/unquoted — never substitute an adjacent rate. Script-seeded rungs are overwritable by later scripts; operator-confirmed rungs never are. One-time setup/packaging costs go in press_service_items (Setup & Services), which is reference-only, not quote math.

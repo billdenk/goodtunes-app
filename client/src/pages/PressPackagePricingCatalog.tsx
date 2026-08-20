@@ -26,7 +26,16 @@ import { createPortal } from "react-dom";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ALBUM_FORMAT_LABEL, type AlbumFormat } from "@shared/schema";
+import {
+  ALBUM_FORMAT_LABEL,
+  PRESS_SERVICE_CATEGORIES,
+  PRESS_SERVICE_CATEGORY_LABEL,
+  PRESS_SERVICE_UNIT_BASES,
+  PRESS_SERVICE_UNIT_LABEL,
+  type AlbumFormat,
+  type PressServiceCategory,
+  type PressServiceUnitBasis,
+} from "@shared/schema";
 import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Info, Loader2, MinusCircle, MoreHorizontal, Plus, RotateCcw, Search, UploadCloud, X } from "lucide-react";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT, postAdminImage } from "@/lib/adminUpload";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -3576,6 +3585,18 @@ export function PressPackagePricingCatalog({
                 <p className="mt-1 text-[12.5px]" style={{ color: SUBINK }}>Keep the signed GoodDeed® printing ladder separate from vinyl package pricing.</p>
                 <fieldset disabled={!canEdit} className="mt-3"><GoodDeedPrintingEditor pressId={pressId} /></fieldset>
               </section>
+              {/* Task #3220 — Setup & Services: one-time / per-order cost rows */}
+              <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: "28px 0" }} />
+              <section className="pt-2" data-testid="section-setup-services">
+                <TwoTone lead="Setup & services." rest="One-time and per-order costs." />
+                <p className="mt-1 text-[12.5px]" style={{ color: SUBINK }}>
+                  Metalwork, test pressings, setup fees, sleeves, stickers, assembly and storage — cost
+                  reference for operators, kept separate from per-record package pricing.
+                </p>
+                <div className="mt-3">
+                  <SetupServicesSection pressId={pressId} canEdit={canEdit} />
+                </div>
+              </section>
             </div>
           </div>
         </fieldset>
@@ -4744,6 +4765,267 @@ function AudioSpecEditorCard({ pressId, canEdit }: { pressId: string; canEdit: b
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Task #3220 — Setup & Services (per-press one-time / per-order costs) ───
+// Categorized line items (metalwork, test pressings, setup fees, surcharges,
+// inner sleeves, stickers, packaging & assembly, storage) with amount + unit
+// basis. Visible for every press; empty by default. Add / edit-amount /
+// archive follow the catalog's quiet inline-editing patterns. Custom-Quote
+// items are deliberately NOT modeled here.
+type ServiceItem = {
+  id: string;
+  category: PressServiceCategory;
+  label: string;
+  amountCents: number;
+  unitBasis: PressServiceUnitBasis;
+  note: string | null;
+  position: number;
+  source: string | null;
+  archivedAt: string | null;
+};
+
+function ServiceAmountCell({
+  item,
+  canEdit,
+  onSave,
+}: {
+  item: ServiceItem;
+  canEdit: boolean;
+  onSave: (amountCents: number) => void;
+}) {
+  const [val, setVal] = useState(formatDollars(item.amountCents));
+  useEffect(() => setVal(formatDollars(item.amountCents)), [item.amountCents]);
+  const commit = () => {
+    const cents = parseDollars(val);
+    if (cents == null || cents === item.amountCents) {
+      setVal(formatDollars(item.amountCents));
+      return;
+    }
+    onSave(cents);
+  };
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[13px]" style={{ color: FAINT }}>$</span>
+      <input
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+        readOnly={!canEdit}
+        inputMode="decimal"
+        className="w-[72px] text-right text-[13px] font-semibold focus:outline-none rounded"
+        style={{ color: INK, background: "transparent", border: "none" }}
+        aria-label={`Amount for ${item.label}`}
+        data-testid={`input-service-amount-${item.id}`}
+      />
+    </div>
+  );
+}
+
+function SetupServicesSection({ pressId, canEdit }: { pressId: string; canEdit: boolean }) {
+  const { toast } = useToast();
+  const qk = ["/api/admin/manufacturers", pressId, "catalog", "services"];
+  const { data, isLoading } = useQuery<{ items: ServiceItem[] }>({ queryKey: qk });
+  const items = data?.items ?? [];
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: qk });
+
+  const [adding, setAdding] = useState(false);
+  const [addCategory, setAddCategory] = useState<PressServiceCategory>("metalwork");
+  const [addLabel, setAddLabel] = useState("");
+  const [addAmount, setAddAmount] = useState("");
+  const [addBasis, setAddBasis] = useState<PressServiceUnitBasis>("per_unit");
+
+  const create = useMutation({
+    mutationFn: async () => {
+      const cents = parseDollars(addAmount);
+      if (!addLabel.trim() || cents == null) throw new Error("Enter a name and a dollar amount.");
+      const r = await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/services`, {
+        category: addCategory,
+        label: addLabel.trim(),
+        amountCents: cents,
+        unitBasis: addBasis,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      invalidate();
+      setAddLabel("");
+      setAddAmount("");
+      setAdding(false);
+    },
+    onError: (e: any) => toast({ title: e?.message || "Couldn't add the item", variant: "destructive" }),
+  });
+  const patch = useMutation({
+    mutationFn: async (args: { id: string; body: Partial<Pick<ServiceItem, "amountCents" | "unitBasis" | "label">> }) => {
+      const r = await apiRequest("PATCH", `/api/admin/manufacturers/${pressId}/catalog/services/${args.id}`, args.body);
+      return r.json();
+    },
+    onSuccess: invalidate,
+    onError: (e: any) => toast({ title: e?.message || "Couldn't save the item", variant: "destructive" }),
+  });
+  const archive = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("POST", `/api/admin/manufacturers/${pressId}/catalog/services/${id}/archive`);
+    },
+    onSuccess: () => {
+      invalidate();
+      toast({ title: "Item archived" });
+    },
+    onError: (e: any) => toast({ title: e?.message || "Couldn't archive the item", variant: "destructive" }),
+  });
+
+  const selectStyle: React.CSSProperties = {
+    color: INK,
+    backgroundColor: "transparent",
+    border: `1px solid ${HAIRLINE}`,
+    borderRadius: 8,
+    padding: "5px 8px",
+    fontSize: 12.5,
+  };
+
+  return (
+    <div>
+      {isLoading ? (
+        <div className="text-[12.5px]" style={{ color: FAINT }}>Loading…</div>
+      ) : items.length === 0 && !adding ? (
+        <div
+          className="rounded-2xl text-[12.5px]"
+          style={{ border: `1px dashed ${DASHED}`, color: FAINT, padding: "16px 18px" }}
+          data-testid="setup-services-empty"
+        >
+          No setup &amp; services costs yet{canEdit ? " — add metalwork, test pressings, setup fees and more below." : "."}
+        </div>
+      ) : (
+        PRESS_SERVICE_CATEGORIES.map((cat) => {
+          const rows = items.filter((i) => i.category === cat);
+          if (rows.length === 0) return null;
+          return (
+            <div key={cat} style={{ marginBottom: 18 }} data-testid={`services-group-${cat}`}>
+              <SectionLabel>{PRESS_SERVICE_CATEGORY_LABEL[cat]}</SectionLabel>
+              <Card className="overflow-hidden" testId={`services-card-${cat}`}>
+                {rows.map((item, i) => (
+                  <div
+                    key={item.id}
+                    className="group flex items-center justify-between gap-3"
+                    style={{ borderTop: i === 0 ? undefined : `1px solid ${HAIRLINE}`, padding: "10px 16px" }}
+                    data-testid={`service-row-${item.id}`}
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-medium truncate" style={{ color: INK }}>
+                        {item.label}
+                      </div>
+                      <div className="text-[11.5px]" style={{ color: FAINT }}>
+                        {PRESS_SERVICE_UNIT_LABEL[item.unitBasis]}
+                        {item.note ? ` · ${item.note}` : ""}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <ServiceAmountCell
+                        item={item}
+                        canEdit={canEdit}
+                        onSave={(amountCents) => patch.mutate({ id: item.id, body: { amountCents } })}
+                      />
+                      {canEdit && (
+                        <button
+                          type="button"
+                          onClick={() => archive.mutate(item.id)}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Archive item"
+                          aria-label={`Archive ${item.label}`}
+                          data-testid={`button-archive-service-${item.id}`}
+                        >
+                          <MinusCircle className="h-4 w-4" style={{ color: FAINT }} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            </div>
+          );
+        })
+      )}
+      {canEdit && !adding && (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="text-[12.5px] font-semibold hover:underline underline-offset-2"
+          style={{ color: BLUE }}
+          data-testid="button-add-service-item"
+        >
+          + Add line item
+        </button>
+      )}
+      {canEdit && adding && (
+        <Card testId="service-add-form">
+          <div className="flex flex-wrap items-center gap-2" style={{ padding: "12px 16px" }}>
+            <select
+              value={addCategory}
+              onChange={(e) => setAddCategory(e.target.value as PressServiceCategory)}
+              style={selectStyle}
+              aria-label="Category"
+              data-testid="select-service-category"
+            >
+              {PRESS_SERVICE_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{PRESS_SERVICE_CATEGORY_LABEL[c]}</option>
+              ))}
+            </select>
+            <input
+              value={addLabel}
+              onChange={(e) => setAddLabel(e.target.value)}
+              placeholder="Line item name"
+              className="flex-1 min-w-[160px] text-[12.5px] focus:outline-none rounded-lg"
+              style={{ color: INK, background: "transparent", border: `1px solid ${HAIRLINE}`, padding: "5px 8px" }}
+              data-testid="input-service-label"
+            />
+            <div className="flex items-center gap-1">
+              <span className="text-[12.5px]" style={{ color: FAINT }}>$</span>
+              <input
+                value={addAmount}
+                onChange={(e) => setAddAmount(e.target.value)}
+                placeholder="0.00"
+                inputMode="decimal"
+                className="w-[80px] text-right text-[12.5px] focus:outline-none rounded-lg"
+                style={{ color: INK, background: "transparent", border: `1px solid ${HAIRLINE}`, padding: "5px 8px" }}
+                data-testid="input-service-amount"
+              />
+            </div>
+            <select
+              value={addBasis}
+              onChange={(e) => setAddBasis(e.target.value as PressServiceUnitBasis)}
+              style={selectStyle}
+              aria-label="Unit basis"
+              data-testid="select-service-basis"
+            >
+              {PRESS_SERVICE_UNIT_BASES.map((b) => (
+                <option key={b} value={b}>{PRESS_SERVICE_UNIT_LABEL[b]}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => create.mutate()}
+              disabled={create.isPending}
+              className="text-[12.5px] font-semibold disabled:opacity-40"
+              style={{ color: BLUE }}
+              data-testid="button-save-service-item"
+            >
+              Add
+            </button>
+            <button
+              type="button"
+              onClick={() => setAdding(false)}
+              className="text-[12.5px]"
+              style={{ color: FAINT }}
+              data-testid="button-cancel-service-item"
+            >
+              Cancel
+            </button>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

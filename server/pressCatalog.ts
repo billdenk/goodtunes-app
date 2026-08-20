@@ -46,6 +46,9 @@ import {
   pressColors,
   pressJackets,
   pressTierJacketLadders,
+  pressServiceItems,
+  PRESS_SERVICE_CATEGORIES,
+  PRESS_SERVICE_UNIT_BASES,
   manufacturers,
   ALBUM_FORMATS,
   type AlbumFormat,
@@ -3763,5 +3766,96 @@ export function registerPressCatalogRoutes(
       labelBgColor: (updated as any)?.labelBgColor ?? null,
       labelLogoUrl: (updated as any)?.labelLogoUrl ?? null,
     });
+  });
+
+  // ─── Task #3220 — Setup & Services line items ─────────────────────────
+  // Per-press one-time / per-order cost rows (metalwork, test pressings,
+  // setup fees, sleeves, stickers, assembly, storage). Operator-visible
+  // cost data — deliberately NOT wired into fan-facing quote math. Reads
+  // stay on requirePressScope (read-only Staff can view); mutations need
+  // requirePressEditor, matching the rest of the catalog.
+  const serviceItemBodySchema = z.object({
+    category: z.enum(PRESS_SERVICE_CATEGORIES),
+    label: z.string().trim().min(1).max(200),
+    amountCents: z.number().int().min(0).max(50_000_000),
+    unitBasis: z.enum(PRESS_SERVICE_UNIT_BASES),
+    note: z.string().trim().max(400).nullable().optional(),
+  });
+
+  app.get("/api/admin/manufacturers/:id/catalog/services", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+    const includeArchived = String(req.query.includeArchived ?? "") === "1";
+    const rows = await db
+      .select()
+      .from(pressServiceItems)
+      .where(eq(pressServiceItems.pressId, pressId))
+      .orderBy(asc(pressServiceItems.position), asc(pressServiceItems.createdAt));
+    res.json({ items: includeArchived ? rows : rows.filter((r) => !r.archivedAt) });
+  });
+
+  app.post("/api/admin/manufacturers/:id/catalog/services", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+    const parsed = serviceItemBodySchema.safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid service item" });
+    const [{ maxPos }] = await db
+      .select({ maxPos: sql<number>`COALESCE(MAX(${pressServiceItems.position}), -1)` })
+      .from(pressServiceItems)
+      .where(and(eq(pressServiceItems.pressId, pressId), eq(pressServiceItems.category, parsed.data.category)));
+    const [inserted] = await db
+      .insert(pressServiceItems)
+      .values({
+        pressId,
+        category: parsed.data.category,
+        label: parsed.data.label,
+        amountCents: parsed.data.amountCents,
+        unitBasis: parsed.data.unitBasis,
+        note: parsed.data.note ?? null,
+        position: Number(maxPos) + 1,
+      })
+      .returning();
+    res.json(inserted);
+  });
+
+  app.patch("/api/admin/manufacturers/:id/catalog/services/:itemId", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const itemId = String(req.params.itemId);
+    const parsed = serviceItemBodySchema.partial().safeParse(req.body ?? {});
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid service item" });
+    if (Object.keys(parsed.data).length === 0) return res.status(400).json({ message: "Nothing to update." });
+    const [updated] = await db
+      .update(pressServiceItems)
+      .set({ ...parsed.data, updatedAt: new Date() })
+      .where(and(eq(pressServiceItems.id, itemId), eq(pressServiceItems.pressId, pressId)))
+      .returning();
+    if (!updated) return res.status(404).json({ message: "Service item not found" });
+    res.json(updated);
+  });
+
+  app.post("/api/admin/manufacturers/:id/catalog/services/:itemId/archive", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const itemId = String(req.params.itemId);
+    const [updated] = await db
+      .update(pressServiceItems)
+      .set({ archivedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(pressServiceItems.id, itemId), eq(pressServiceItems.pressId, pressId)))
+      .returning();
+    if (!updated) return res.status(404).json({ message: "Service item not found" });
+    res.json(updated);
+  });
+
+  app.post("/api/admin/manufacturers/:id/catalog/services/:itemId/unarchive", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const itemId = String(req.params.itemId);
+    const [updated] = await db
+      .update(pressServiceItems)
+      .set({ archivedAt: null, updatedAt: new Date() })
+      .where(and(eq(pressServiceItems.id, itemId), eq(pressServiceItems.pressId, pressId)))
+      .returning();
+    if (!updated) return res.status(404).json({ message: "Service item not found" });
+    res.json(updated);
   });
 }
