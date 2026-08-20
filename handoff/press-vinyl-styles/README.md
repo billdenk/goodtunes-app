@@ -54,3 +54,7 @@ Presses like MRP arrive with real photos of pressed records. Otis keeps every ex
 - Progress is self-evident: photo tile = not migrated; rendered disc = done.
 - End-of-migration cleanup is a one-time job that deletes orphaned image files from storage once no swatch references them. Nothing else to reconcile.
 Also: a photo style's tile-level Edit routes to this same rebuild sheet (one door); and on any pristine edit sheet, the confirm renders as a quiet outline pill (no check, no fill) until a change earns the filled blue.
+
+## Addendum (Aug 20 2026): Migration progress signals
+- **Style-tile photo badge**: any style holding photo colors shows a quiet frosted pill on its tile — Image icon + "N photos" (word + icon, never color alone). It's a live count of colors still to rebuild; replacing the last photo clears it automatically. When no tile carries a badge, migration is done and the orphan-file cleanup can run.
+- **Compare drawer 1:1**: the drawer photo is clickable — it expands to exactly the live disc's render size (and back) for a true side-by-side match. Caption reads "Click to match the record size" / "Click to shrink".

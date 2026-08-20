@@ -46,6 +46,7 @@ import {
   Pencil,
   Star,
   Copy,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Moon, Sun, ClipboardList as NavEstimatesIcon } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
@@ -1533,6 +1534,22 @@ function CategoryCard({
           </button>
         }
       />
+      {/* Migration signal (Bill, Aug 20 2026): a quiet word+icon pill counts
+          the photo colors still to rebuild. It clears itself — replace the
+          last photo and the pill is gone. Word + icon, never color alone. */}
+      {(() => {
+        const photoCount = category.swatches.filter((s) => s.customImg).length;
+        return photoCount > 0 ? (
+          <span
+            className="absolute inline-flex items-center gap-1 rounded-full text-[10.5px] font-semibold"
+            data-testid={`badge-photos-${category.id}`}
+            style={{ top: 10, left: 10, zIndex: 2, padding: '3px 8px', border: `1px solid ${t.hairline}`, background: t.frostedBtnBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', color: t.subink }}
+          >
+            <ImageIcon style={{ width: 11, height: 11 }} />
+            {photoCount} {photoCount === 1 ? 'photo' : 'photos'}
+          </span>
+        ) : null;
+      })()}
       <div className="flex justify-center" style={{ marginBottom: 10, opacity: dimmed ? 0.35 : 1, filter: dimmed ? 'saturate(0.4)' : undefined, transition: 'opacity 0.3s, filter 0.3s' }}>
         <VinylDisc size={90} swatch={preview} />
       </div>
@@ -3872,6 +3889,9 @@ function GeneratorSheet({
   const [name, setName] = useState(initial?.name ?? replaceOf?.name ?? (presetStyleId ? initStyle.name : ''));
   // Photo comparison starts tucked away — click to slide it out.
   const [compareOpen, setCompareOpen] = useState(false);
+  // Drawer photo can expand to the live disc's exact size for a true
+  // side-by-side — click the photo to toggle. (Bill, Aug 20 2026.)
+  const [compareLarge, setCompareLarge] = useState(false);
   // Type flow only: the first color gets its own name, separate from the type's.
   const [colorName, setColorName] = useState('');
   const [sizeCtx, setSizeCtx] = useState<(typeof GEN_SIZE_CONTEXTS)[number]['id']>('12');
@@ -4117,12 +4137,27 @@ function GeneratorSheet({
             padding: '26px 30px 22px',
           }}
         >
-          <VinylDisc size={188} swatch={replaceOf} />
+          {/* Click the photo to match the live disc's size — true 1:1
+              side-by-side. (Bill, Aug 20 2026.) */}
+          <button
+            type="button"
+            onClick={() => setCompareLarge((v) => !v)}
+            data-testid="gen-compare-resize"
+            aria-label={compareLarge ? 'Shrink their photo' : 'Match the record size'}
+            style={{ background: 'transparent', border: 'none', padding: 0, cursor: compareLarge ? 'zoom-out' : 'zoom-in', display: 'block' }}
+          >
+            <div style={{ width: compareLarge ? 340 : 188, height: compareLarge ? 340 : 188, transition: 'width 320ms cubic-bezier(0.32,0.72,0,1), height 320ms cubic-bezier(0.32,0.72,0,1)' }}>
+              <VinylDisc size={compareLarge ? 340 : 188} swatch={replaceOf} />
+            </div>
+          </button>
           <span className="text-[10.5px] font-bold uppercase tracking-wider" style={{ color: t.faint, marginTop: 12, whiteSpace: 'nowrap' }}>
             Their photo
           </span>
           <span className="text-[11.5px] font-semibold" style={{ color: t.subink, marginTop: 2, whiteSpace: 'nowrap' }}>
             {replaceOf.name}
+          </span>
+          <span className="text-[11px]" style={{ color: t.faint, marginTop: 6, whiteSpace: 'nowrap' }}>
+            {compareLarge ? 'Click to shrink' : 'Click to match the record size'}
           </span>
         </div>
       )}
