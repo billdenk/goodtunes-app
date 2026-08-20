@@ -155,7 +155,10 @@ function silkBandGradient(picks: string[]): string | undefined {
       return `${c} ${(from + 0.5).toFixed(1)}% ${to.toFixed(1)}%`;
     })
     .join(', ');
-  return `radial-gradient(circle, transparent ${SILK_HUB}%, ${stops}, transparent ${(SILK_EDGE + 0.5).toFixed(1)}%)`;
+  // `closest-side` sizes the gradient to the disc radius (the default
+  // farthest-corner is ~141% of it, which stretched the stops and made the
+  // outermost band a thin sliver at the edge).
+  return `radial-gradient(circle closest-side, transparent ${SILK_HUB}%, ${stops}, transparent ${(SILK_EDGE + 0.5).toFixed(1)}%)`;
 }
 
 // Near-black inks disappear against the dark canvas — give them a subtle
