@@ -8,6 +8,7 @@ current, not appended to: stale lines are overwritten when things change.
 ## 1. Recent changes
 
 ### Open question for Ruby (from Bill, Aug 18 2026)
+- Press portal Acquisition tab Apple-canon lead (Aug 19 2026): the tab now opens with the standard big "Acquisition" H1 + plain-language subtitle like every other section, and the in-card funnel keeps a compact heading. Client-only; prod needs a publish.
 - Press Projects tab copy (Aug 19 2026): the god-view "+ Add album" action and the empty-state "No albums yet." now say project(s), matching the tab name. Client-only; prod needs a publish.
 - Circle avatars task applied manually (Aug 19 2026): task #3196 (perfect-circle person avatars — square center-crop at every photo save boundary + backfill of existing non-square photos) was stuck on a platform merge block, so its commit was cherry-picked onto main and the post-merge backfill ran (dev 4 photos fixed; prod already backfilled by the task). Prod needs a publish for the code half.
 - Press builder discs now always carry the press's label (Aug 19 2026): estimate/package builder vinyl renders were missing the press logo for presses whose catalog colors are photo-based with no hex (e.g. PMP) — the photo branch skipped the center label entirely, the logo was gated to ≥70px discs, and color tiles used a flat hex dot. All three now match the catalog color-setup treatment: photo or generated disc + press label/logo at every size, and color tiles render the mini vinyl. Client-only; prod needs a publish.

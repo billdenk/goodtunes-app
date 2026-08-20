@@ -33,6 +33,7 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Search } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { RangePicker } from "@/components/partner/dashboard-controls";
 import { CampaignLinkBuilder } from "./CampaignLinkBuilder";
 
@@ -270,13 +271,19 @@ export function AcquisitionTab({
 
   return (
     <div className="space-y-4" data-testid="acquisition-tab">
+      {/* Apple-canon lead (gogoods, Aug 19 2026) — big H1 like every other
+          portal section, instead of a tiny in-card heading. */}
+      <AdminPageHeader
+        title="Acquisition"
+        subtitle="How fans find and buy your releases — landed, viewed the offer, started checkout, bought."
+        testId="heading-acquisition"
+      />
       <Card>
         <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
           <div>
             <h3 className="text-sm font-semibold text-[color:var(--apple-ink)]">Acquisition funnel</h3>
             <p className="text-xs text-[color:var(--apple-subink)] mt-0.5">
-              Landed → viewed the offer → started checkout → bought, for your own
-              releases. Distinct sessions from first-party analytics.{" "}
+              Distinct sessions from first-party analytics.{" "}
               <span className="text-[color:var(--apple-faint)]">
                 "Landed" counts unique sessions that opened the release page. Your team's
                 own views and preview-link opens are filtered out by default.
