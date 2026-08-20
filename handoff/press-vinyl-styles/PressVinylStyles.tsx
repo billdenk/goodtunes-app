@@ -821,6 +821,21 @@ const INITIAL_CATEGORIES: Category[] = [
       }),
     ],
   },
+  // A migrated photo color — presses like MRP arrive with actual photos of
+  // their pressed records. No gen data, so its menu offers "Edit color" →
+  // the rebuild sheet, where the photo slides out for side-by-side matching.
+  {
+    id: 'ruby-red',
+    name: 'Ruby Red',
+    kind: 'opaque',
+    sizes: ['7"', '10"', '12"'],
+    swatches: [
+      mk('UP1', 'Ruby Red', 'opaque', '#B01E2E', {
+        sizes: ['7"', '10"', '12"'],
+        customImg: mockPreviewImg,
+      }),
+    ],
+  },
 ];
 
 // Representative preview swatch for each category card's mini disc.
@@ -3961,6 +3976,20 @@ function GeneratorSheet({
   const fixedStyle = rowNames.length === 0 && !style.gradient;
   const allValid = fixedStyle || (rowNames.length > 0 && rowNames.every((_, i) => HEX_RE.test(colors[i] ?? '')));
   const canSave = allValid && name.trim().length > 0 && (variant !== 'type' || colorName.trim().length > 0);
+  // Editing something that already exists? The confirm stays quiet until a
+  // change earns it — no check mark, no filled blue, on a pristine sheet.
+  // (Bill, Aug 20 2026.) Baseline re-snapshots when Update retargets.
+  const editSnapshot = JSON.stringify([name, colors, option, baseKind, splatterCount, styleId, styleNameEdit, offeredSizeIds, offeredFinishIds]);
+  const editBaseline = useRef<string | null>(null);
+  const baselineFor = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    editBaseline.current = editSnapshot;
+    baselineFor.current = editId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editId]);
+  const pristineEdit = !!editId && !replaceOf
+    && baselineFor.current === editId
+    && editBaseline.current === editSnapshot;
   const ctx = GEN_SIZE_CONTEXTS.find((s) => s.id === sizeCtx) ?? GEN_SIZE_CONTEXTS[0];
 
   // Live preview from the first valid color: assigned layers show their real
@@ -4071,10 +4100,35 @@ function GeneratorSheet({
       onClick={onClose}
       data-testid="gen-sheet-overlay"
     >
+      <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+      {/* The photo drawer slides out PAST the sheet's left edge — its own
+          panel, never squeezing the sheet's insides. (Bill, Aug 20 2026.) */}
+      {replaceOf?.customImg && (
+        <div
+          className="flex flex-col items-center"
+          data-testid="gen-compare-drawer"
+          style={{
+            position: 'absolute', top: '50%', right: 'calc(100% + 18px)',
+            transform: compareOpen ? 'translate(0, -50%)' : 'translate(48px, -50%)',
+            opacity: compareOpen ? 1 : 0,
+            pointerEvents: compareOpen ? 'auto' : 'none',
+            transition: 'transform 380ms cubic-bezier(0.32,0.72,0,1), opacity 300ms ease',
+            background: t.card, borderRadius: 24, boxShadow: t.popShadowLg,
+            padding: '26px 30px 22px',
+          }}
+        >
+          <VinylDisc size={188} swatch={replaceOf} />
+          <span className="text-[10.5px] font-bold uppercase tracking-wider" style={{ color: t.faint, marginTop: 12, whiteSpace: 'nowrap' }}>
+            Their photo
+          </span>
+          <span className="text-[11.5px] font-semibold" style={{ color: t.subink, marginTop: 2, whiteSpace: 'nowrap' }}>
+            {replaceOf.name}
+          </span>
+        </div>
+      )}
       <div
         className="rounded-3xl overflow-hidden flex flex-col"
         style={{ width: 'min(1040px, 96vw)', maxHeight: '90vh', background: t.card, boxShadow: t.popShadowLg }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-start justify-between" style={{ padding: '26px 30px 0' }}>
@@ -4106,27 +4160,10 @@ function GeneratorSheet({
           <div className="flex flex-col items-center" style={{ paddingTop: 8 }}>
             {/* The uploaded photo slides out to the left for comparison while
                 rebuilding — dial the colors in, then Replace. */}
+            {/* Compare lives in the slide-out drawer past the sheet's left
+                edge — Otis needs a has-photo flag on the swatch for this.
+                (Bill, Aug 20 2026.) */}
             <div className="flex items-center" style={{ gap: 6 }}>
-              {/* Compare exists only when there IS a photo — Otis will need a
-                  has-photo flag on the swatch for this. (Bill, Aug 20 2026.) */}
-              {replaceOf?.customImg && (
-                <div
-                  className="flex flex-col items-center overflow-hidden"
-                  style={{
-                    width: compareOpen ? 168 : 0, opacity: compareOpen ? 1 : 0,
-                    transition: 'width 380ms cubic-bezier(0.32,0.72,0,1), opacity 300ms ease',
-                    flexShrink: 0,
-                  }}
-                >
-                  <VinylDisc size={148} swatch={replaceOf} />
-                  <span className="text-[10.5px] font-bold uppercase tracking-wider" style={{ color: t.faint, marginTop: 10, whiteSpace: 'nowrap' }}>
-                    Their photo
-                  </span>
-                  <span className="text-[11.5px] font-semibold" style={{ color: t.subink, marginTop: 2, whiteSpace: 'nowrap' }}>
-                    {replaceOf.name}
-                  </span>
-                </div>
-              )}
             <div style={{ position: 'relative', width: 340, height: 340, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <GenDisc
                 size={Math.round(340 * ctx.scale)}
@@ -4764,19 +4801,24 @@ function GeneratorSheet({
                     All colors
                   </button>
                 )}
-                {/* The sheet's one filled blue — the earned confirm */}
+                {/* The sheet's one filled blue — the earned confirm. On a
+                    pristine edit it stays a quiet outline pill: no check,
+                    no fill, until a change earns it. (Bill, Aug 20 2026.) */}
                 <button
                   type="button"
                   onClick={save}
-                  disabled={!canSave}
+                  disabled={!canSave || pristineEdit}
                   data-testid="gen-save"
-                  className="inline-flex items-center gap-2 rounded-full text-[13.5px] font-semibold transition-opacity"
-                  style={{
+                  className="inline-flex items-center gap-2 rounded-full text-[13.5px] font-semibold transition-all"
+                  style={pristineEdit ? {
+                    padding: '10px 22px', border: `1px solid ${t.hairline}`, background: t.card,
+                    color: t.subink, cursor: 'default',
+                  } : {
                     padding: '10px 22px', border: 'none', background: t.blue, color: '#ffffff',
                     cursor: canSave ? 'pointer' : 'not-allowed', opacity: canSave ? 1 : 0.45,
                   }}
                 >
-                  <Check className="w-4 h-4" />
+                  {!pristineEdit && <Check className="w-4 h-4" />}
                   {replaceOf ? 'Replace' : editId ? 'Update' : 'Save color'}
                 </button>
               </div>
@@ -4802,6 +4844,7 @@ function GeneratorSheet({
           )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );
@@ -5227,7 +5270,13 @@ export function PressVinylPhotoshopMockup() {
                     onSaveType={(name, sizes) => updateCategory(c.id, name, sizes)}
                     onRemoveType={categories.length > 1 ? () => removeCategory(c.id) : undefined}
                     onDuplicateType={c.genStyleId ? () => duplicateCategory(c.id) : undefined}
-                    onEditColor={c.swatches[0]?.gen ? () => setGenSheet({ swatch: c.swatches[0], catId: c.id }) : undefined}
+                    onEditColor={c.swatches[0]?.gen
+                      ? () => setGenSheet({ swatch: c.swatches[0], catId: c.id })
+                      // Photo styles (migrated presses like MRP): Edit goes
+                      // straight to the rebuild sheet — never the old box.
+                      : c.swatches[0]?.customImg
+                        ? () => setGenSheet({ swatch: c.swatches[0], catId: c.id, replace: true })
+                        : undefined}
                     onToggleHidden={() => toggleCategoryHidden(c.id)}
                     t={t}
                   />

@@ -46,3 +46,11 @@ Anything here that conflicts with live data wiring or the settled package design
 
 ## Addendum (Aug 20 2026): Components chip row → one segmented control
 The Components page's separate chips (Vinyl / Jackets / Inner Sleeves / Center Labels / Inserts / Stickers) become ONE segmented control, exactly like the Templates page's Vinyl / CD / Cassette: single shaded track, the active item as the raised white thumb, inactive items quiet text inside the track. Same labels, same order, same navigation behavior — only the chrome changes. Apply wherever this components chip row appears (press portal and super-admin view-as).
+
+## Addendum (Aug 20 2026): Photo-color migration lifecycle
+Presses like MRP arrive with real photos of pressed records. Otis keeps every existing color and its image on day one — photo swatches keep rendering their photo on tiles and thumbnails (this is the has-photo flag).
+- Editing a photo color opens the REBUILD sheet ("Rebuild this color. Match their photo, then replace it."), never a legacy editor. The photo slides out as a drawer PAST the sheet's left edge for side-by-side matching — it must not compress the sheet's own layout.
+- **Replace is the point of no return**: the rebuilt color takes the photo swatch's spot and the image is detached from that color permanently. There is no separate "dismiss image" control — Replace is the "I'm good."
+- Progress is self-evident: photo tile = not migrated; rendered disc = done.
+- End-of-migration cleanup is a one-time job that deletes orphaned image files from storage once no swatch references them. Nothing else to reconcile.
+Also: a photo style's tile-level Edit routes to this same rebuild sheet (one door); and on any pristine edit sheet, the confirm renders as a quiet outline pill (no check, no fill) until a change earns the filled blue.
