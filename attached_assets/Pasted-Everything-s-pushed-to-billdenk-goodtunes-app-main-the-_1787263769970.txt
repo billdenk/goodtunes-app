@@ -1,0 +1,19 @@
+Everything's pushed to `billdenk/goodtunes-app` main — the full vinyl styles page (verbatim, with today's every fix baked in), the complete 75-file vinyl-gen layer kit (including Metallic Blend and Double Double), and a README carrying the must-work wiring list, the states checklist, both standing sweeps, and the Components segmented-control change.
+
+Here's your copy/paste for Otis:
+
+---
+
+**Otis — new design package: `handoff/press-vinyl-styles/` (commits 7353680 + 58de033 on main)**
+
+1. **Read `handoff/press-vinyl-styles/README.md` first** and follow the handoff law in `handoff/README-template.md`: delete-first, then copy `PressVinylStyles.tsx` **character-for-character** — replace presentational code verbatim; wire data only. It's the new press Catalog → Vinyl page (style generator, colors inside styles, finishes + sizes as style-level offers). It supersedes `handoff/press-components/PressVinylColorSetup.tsx` for this page.
+2. The asset kit is at `handoff/press-vinyl-styles/assets/vinyl-gen/` — repath the single `GEN_BASE` const to wherever you serve it. Nothing else in the file changes.
+3. The README's **"Must work" list** is the wiring contract — every control on it must function; anything not listed is decorative chrome. The **data model notes** section defines styles/colors/finishes from scratch (nothing exists yet). Component pricing and GoodTunes Packages stay untouched.
+4. Acceptance: screenshot every state in the README's list, both themes, at 1440/1024/768, and record the handoff commit SHA in `docs/STATUS.md`'s ledger.
+5. Same push, three sweeps (details in the README):
+   - **Size pills everywhere**: 12″ / 10″ / 7″ — largest first — and drop the Single/EP/LP words. All portals.
+   - **Blue-button sweep, all portals** (admin, press, artist): header/toolbar actions are quiet gray-outline pills, never filled; ready-state = the outline turns blue (#319ED8 border + text, no fill); filled blue stays the one earned confirm per screen. Note the sweep in the canon doc.
+   - **Components chip row** (Vinyl / Jackets / Inner Sleeves / Center Labels / Inserts / Stickers) becomes **one segmented control** like Templates' Vinyl / CD / Cassette — shaded track, raised white thumb. Chrome only; labels, order, and navigation unchanged.
+6. Questions beat inventions — anything that conflicts with live wiring, flag it to Bill.
+
+---
