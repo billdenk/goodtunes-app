@@ -1,0 +1,821 @@
+[
+  {
+    "group": "STANDARD VINYL",
+    "slug": "standard-vinyl",
+    "layers": [
+      {
+        "name": "ULTRA CLEAR VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.25882352941176473,
+        "blendMode": "normal",
+        "file": "standard-vinyl/ultra-clear-vinyl.png"
+      },
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": true,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "standard-vinyl/translucent-vinyl.png"
+      },
+      {
+        "name": "OPAQUE VINYL",
+        "parent": null,
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "standard-vinyl/opaque-vinyl.png"
+      }
+    ]
+  },
+  {
+    "group": "CLOUDY (TRANS. + ULTRA CLEAR)",
+    "slug": "cloudy-trans-ultra-clear",
+    "layers": [
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "cloudy-trans-ultra-clear/translucent-vinyl.png"
+      },
+      {
+        "name": "TEXTURE",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.9019607843137255,
+        "blendMode": "normal",
+        "file": "cloudy-trans-ultra-clear/texture.png"
+      },
+      {
+        "name": "Gradient Map 1",
+        "parent": null,
+        "hidden": false,
+        "clipping": true,
+        "opacity": 1,
+        "blendMode": "normal",
+        "adjustment": true
+      }
+    ]
+  },
+  {
+    "group": "COLOR CLOUDY (TRANS. + TRANS.)",
+    "slug": "color-cloudy-trans-trans",
+    "layers": [
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "color-cloudy-trans-trans/translucent-vinyl.png"
+      },
+      {
+        "name": "LIGHT",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.7019607843137254,
+        "blendMode": "normal",
+        "file": "color-cloudy-trans-trans/light.png"
+      }
+    ]
+  },
+  {
+    "group": "CORNETTO (ANY COLOR BASE + OPAQUE)",
+    "slug": "cornetto-any-color-base-opaque",
+    "layers": [
+      {
+        "subgroup": "BASE"
+      },
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": "BASE",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "cornetto-any-color-base-opaque/translucent-vinyl.png"
+      },
+      {
+        "name": "OPAQUE VINYL",
+        "parent": "BASE",
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "cornetto-any-color-base-opaque/opaque-vinyl.png"
+      },
+      {
+        "name": "6 SPOKES",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "multiply",
+        "file": "cornetto-any-color-base-opaque/6-spokes.png"
+      },
+      {
+        "name": "5 SPOKES",
+        "parent": null,
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "multiply",
+        "file": "cornetto-any-color-base-opaque/5-spokes.png"
+      },
+      {
+        "name": "4 SPOKES",
+        "parent": null,
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "cornetto-any-color-base-opaque/4-spokes.png"
+      },
+      {
+        "subgroup": "1 / 2 / 3 COLOR SPLATTER"
+      },
+      {
+        "name": "SPLATTER THREE",
+        "parent": "1 / 2 / 3 COLOR SPLATTER",
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "cornetto-any-color-base-opaque/splatter-three.png"
+      },
+      {
+        "name": "SPLATTER TWO",
+        "parent": "1 / 2 / 3 COLOR SPLATTER",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "cornetto-any-color-base-opaque/splatter-two.png"
+      },
+      {
+        "name": "SPLATTER ONE",
+        "parent": "1 / 2 / 3 COLOR SPLATTER",
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "cornetto-any-color-base-opaque/splatter-one.png"
+      }
+    ]
+  },
+  {
+    "group": "BUTTERFLY (TRANS. BASE + OPAQUE WINGS)",
+    "slug": "butterfly-trans-base-opaque-wings",
+    "layers": [
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "butterfly-trans-base-opaque-wings/translucent-vinyl.png"
+      },
+      {
+        "name": "WINGS COLOR",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.9019607843137255,
+        "blendMode": "normal",
+        "file": "butterfly-trans-base-opaque-wings/wings-color.png"
+      },
+      {
+        "name": "WING SPLATTER",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "butterfly-trans-base-opaque-wings/wing-splatter.png"
+      }
+    ]
+  },
+  {
+    "group": "COLOR IN COLOR + SPLATTER (TRANS. BASE + OPAQUE)",
+    "slug": "color-in-color-splatter-trans-base-opaque",
+    "layers": [
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "color-in-color-splatter-trans-base-opaque/translucent-vinyl.png"
+      },
+      {
+        "name": "SPLATTER",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "color-in-color-splatter-trans-base-opaque/splatter.png"
+      },
+      {
+        "name": "OPAQUE BLOB",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "color-in-color-splatter-trans-base-opaque/opaque-blob.png"
+      }
+    ]
+  },
+  {
+    "group": "3 COLOR STRIPED (ANY 3 COLORS)",
+    "slug": "3-color-striped-any-3-colors",
+    "layers": [
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "3-color-striped-any-3-colors/translucent-vinyl.png"
+      },
+      {
+        "subgroup": "COLORS (ADJUST OPACITY FOR TRANS. COLORS)"
+      },
+      {
+        "name": "RIGHT COLOR",
+        "parent": "COLORS (ADJUST OPACITY FOR TRANS. COLORS)",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.4,
+        "blendMode": "normal",
+        "file": "3-color-striped-any-3-colors/right-color.png"
+      },
+      {
+        "name": "LEFT COLOR",
+        "parent": "COLORS (ADJUST OPACITY FOR TRANS. COLORS)",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.4,
+        "blendMode": "normal",
+        "file": "3-color-striped-any-3-colors/left-color.png"
+      },
+      {
+        "name": "MIDDLE COLOR",
+        "parent": "COLORS (ADJUST OPACITY FOR TRANS. COLORS)",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "3-color-striped-any-3-colors/middle-color.png"
+      },
+      {
+        "subgroup": "1 / 2 / 3 COLOR SPLATTER "
+      },
+      {
+        "name": "SPLATTER THREE",
+        "parent": "1 / 2 / 3 COLOR SPLATTER ",
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "3-color-striped-any-3-colors/splatter-three.png"
+      },
+      {
+        "name": "SPLATTER TWO",
+        "parent": "1 / 2 / 3 COLOR SPLATTER ",
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "3-color-striped-any-3-colors/splatter-two.png"
+      },
+      {
+        "name": "SPLATTER ONE",
+        "parent": "1 / 2 / 3 COLOR SPLATTER ",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "3-color-striped-any-3-colors/splatter-one.png"
+      }
+    ]
+  },
+  {
+    "group": "2 COLOR SIDE A/B w/ SPLATTER (OPAQUE + OPAQUE)",
+    "slug": "2-color-side-a-b-w-splatter-opaque-opaque",
+    "layers": [
+      {
+        "name": "OPAQUE VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "2-color-side-a-b-w-splatter-opaque-opaque/opaque-vinyl.png"
+      },
+      {
+        "name": "SPLATTER",
+        "parent": null,
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "2-color-side-a-b-w-splatter-opaque-opaque/splatter.png"
+      },
+      {
+        "name": "A/B TEXTURE",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "2-color-side-a-b-w-splatter-opaque-opaque/a-b-texture.png"
+      }
+    ]
+  },
+  {
+    "group": "3 COLOR SIDE A/B (OPAQUE + OPAQUE + OPAQUE)",
+    "slug": "3-color-side-a-b-opaque-opaque-opaque",
+    "layers": [
+      {
+        "name": "TEXTURE",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "3-color-side-a-b-opaque-opaque-opaque/texture.png"
+      },
+      {
+        "name": "Gradient Map",
+        "parent": null,
+        "hidden": false,
+        "clipping": true,
+        "opacity": 1,
+        "blendMode": "normal",
+        "adjustment": true
+      },
+      {
+        "subgroup": "1 / 2 / 3 COLOR SPLATTER"
+      },
+      {
+        "name": "SPLATTER THREE",
+        "parent": "1 / 2 / 3 COLOR SPLATTER",
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "3-color-side-a-b-opaque-opaque-opaque/splatter-three.png"
+      },
+      {
+        "name": "SPLATTER TWO",
+        "parent": "1 / 2 / 3 COLOR SPLATTER",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "3-color-side-a-b-opaque-opaque-opaque/splatter-two.png"
+      },
+      {
+        "name": "SPLATTER ONE",
+        "parent": "1 / 2 / 3 COLOR SPLATTER",
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "3-color-side-a-b-opaque-opaque-opaque/splatter-one.png"
+      }
+    ]
+  },
+  {
+    "group": "SIDE A/B w/ MULTI SPLATTER",
+    "slug": "side-a-b-w-multi-splatter",
+    "layers": [
+      {
+        "name": "OPAQUE VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "side-a-b-w-multi-splatter/opaque-vinyl.png"
+      },
+      {
+        "name": "A/B TEXTURE (IF BLACK MOVE TO TOP)",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "side-a-b-w-multi-splatter/a-b-texture-if-black-move-to-top.png"
+      },
+      {
+        "name": "SPLATTER THREE",
+        "parent": null,
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "side-a-b-w-multi-splatter/splatter-three.png"
+      },
+      {
+        "name": "SPLATTER TWO",
+        "parent": null,
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "side-a-b-w-multi-splatter/splatter-two.png"
+      },
+      {
+        "name": "SPLATTER ONE",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "side-a-b-w-multi-splatter/splatter-one.png"
+      }
+    ]
+  },
+  {
+    "group": "COLOR ON COLOR (OPAQUE IN TRANS.)",
+    "slug": "color-on-color-opaque-in-trans",
+    "layers": [
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "color-on-color-opaque-in-trans/translucent-vinyl.png"
+      },
+      {
+        "name": "OPAQUE BLOB",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "color-on-color-opaque-in-trans/opaque-blob.png"
+      }
+    ]
+  },
+  {
+    "group": "DOUBLE C.I.C. (ANY 2 COLORS + TRANS. BASE)",
+    "slug": "double-c-i-c-any-2-colors-trans-base",
+    "layers": [
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "double-c-i-c-any-2-colors-trans-base/translucent-vinyl.png"
+      },
+      {
+        "name": "OUTER COLOR",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "double-c-i-c-any-2-colors-trans-base/outer-color.png"
+      },
+      {
+        "name": "MIDDLE COLOR",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "double-c-i-c-any-2-colors-trans-base/middle-color.png"
+      }
+    ]
+  },
+  {
+    "group": "C.I.C. + MULTI SPLATTER (OPAQUE IN TRANS. BASE w/ OPAQUE SPLATTERS)",
+    "slug": "c-i-c-multi-splatter-opaque-in-trans-base-w-opaque-splatters",
+    "layers": [
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "c-i-c-multi-splatter-opaque-in-trans-base-w-opaque-splatters/translucent-vinyl.png"
+      },
+      {
+        "name": "MINIMAL SPLATTER",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "c-i-c-multi-splatter-opaque-in-trans-base-w-opaque-splatters/minimal-splatter.png"
+      },
+      {
+        "name": "MORE SPLATTER",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "c-i-c-multi-splatter-opaque-in-trans-base-w-opaque-splatters/more-splatter.png"
+      },
+      {
+        "name": "BLOB",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "c-i-c-multi-splatter-opaque-in-trans-base-w-opaque-splatters/blob.png"
+      },
+      {
+        "name": "EXTRA SPLATTER",
+        "parent": null,
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "c-i-c-multi-splatter-opaque-in-trans-base-w-opaque-splatters/extra-splatter.png"
+      },
+      {
+        "name": "SAME COLOR AS BASE TO BLEND COLORS",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.12156862745098039,
+        "blendMode": "normal",
+        "file": "c-i-c-multi-splatter-opaque-in-trans-base-w-opaque-splatters/same-color-as-base-to-blend-colors.png"
+      }
+    ]
+  },
+  {
+    "group": "SMOKE (TRANS. BASE + ANY COLOR SMOKE)",
+    "slug": "smoke-trans-base-any-color-smoke",
+    "layers": [
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "smoke-trans-base-any-color-smoke/translucent-vinyl.png"
+      },
+      {
+        "name": "SMOKE",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.5019607843137255,
+        "blendMode": "normal",
+        "file": "smoke-trans-base-any-color-smoke/smoke.png"
+      }
+    ]
+  },
+  {
+    "group": "SPLIT + SPLATTER (ANY 2 COLORS + OPAQUE SPLATTER)",
+    "slug": "split-splatter-any-2-colors-opaque-splatter",
+    "layers": [
+      {
+        "subgroup": "BASE"
+      },
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": "BASE",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "split-splatter-any-2-colors-opaque-splatter/translucent-vinyl.png"
+      },
+      {
+        "name": "OPAQUE VINYL",
+        "parent": "BASE",
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "split-splatter-any-2-colors-opaque-splatter/opaque-vinyl.png"
+      },
+      {
+        "name": "HALF COLOR (ADJUST OPACITY FOR TRANS.)",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "multiply",
+        "file": "split-splatter-any-2-colors-opaque-splatter/half-color-adjust-opacity-for-trans.png"
+      },
+      {
+        "subgroup": "1 / 2 / 3 COLOR SPLATTER copy 2"
+      },
+      {
+        "name": "SPLATTER THREE",
+        "parent": "1 / 2 / 3 COLOR SPLATTER copy 2",
+        "hidden": true,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "split-splatter-any-2-colors-opaque-splatter/splatter-three.png"
+      },
+      {
+        "name": "SPLATTER TWO",
+        "parent": "1 / 2 / 3 COLOR SPLATTER copy 2",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "split-splatter-any-2-colors-opaque-splatter/splatter-two.png"
+      },
+      {
+        "name": "SPLATTER ONE",
+        "parent": "1 / 2 / 3 COLOR SPLATTER copy 2",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "split-splatter-any-2-colors-opaque-splatter/splatter-one.png"
+      }
+    ]
+  },
+  {
+    "group": "BLENDED (ANY 2 COLORS)",
+    "slug": "blended-any-2-colors",
+    "layers": [
+      {
+        "name": "OPAQUE VINYL ",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "blended-any-2-colors/opaque-vinyl.png"
+      },
+      {
+        "name": "BOTTOM COLOR",
+        "parent": null,
+        "hidden": false,
+        "clipping": true,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "blended-any-2-colors/bottom-color.png"
+      },
+      {
+        "name": "TOP COLOR",
+        "parent": null,
+        "hidden": false,
+        "clipping": true,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "blended-any-2-colors/top-color.png"
+      }
+    ]
+  },
+  {
+    "group": "GALAXY (ANY 2 COLORS - HIGH CONTRAST WORKS BEST)",
+    "slug": "galaxy-any-2-colors-high-contrast-works-best",
+    "layers": [
+      {
+        "name": "BLACK WILL CONSUME OTHER DARK COLORS",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "galaxy-any-2-colors-high-contrast-works-best/black-will-consume-other-dark-colors.png"
+      },
+      {
+        "name": "Gradient Map 3",
+        "parent": null,
+        "hidden": false,
+        "clipping": true,
+        "opacity": 1,
+        "blendMode": "normal",
+        "adjustment": true
+      }
+    ]
+  },
+  {
+    "group": "MARBLE (OPAQUE BASE + OPAQUE MARBLE)",
+    "slug": "marble-opaque-base-opaque-marble",
+    "layers": [
+      {
+        "name": "MARBLE TEXTURE",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "marble-opaque-base-opaque-marble/marble-texture.png"
+      },
+      {
+        "name": "Gradient Map 4",
+        "parent": null,
+        "hidden": false,
+        "clipping": true,
+        "opacity": 1,
+        "blendMode": "normal",
+        "adjustment": true
+      }
+    ]
+  },
+  {
+    "group": "SPLATTER (ANY COLOR BASE + OPAQUE SPLATTERS)",
+    "slug": "splatter-any-color-base-opaque-splatters",
+    "layers": [
+      {
+        "name": "TRANSLUCENT VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.6901960784313725,
+        "blendMode": "normal",
+        "file": "splatter-any-color-base-opaque-splatters/translucent-vinyl.png"
+      },
+      {
+        "name": "OPAQUE VINYL",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "splatter-any-color-base-opaque-splatters/opaque-vinyl.png"
+      },
+      {
+        "subgroup": "1 / 2 / 3 COLOR SPLATTER"
+      },
+      {
+        "name": "SPLATTER THREE",
+        "parent": "1 / 2 / 3 COLOR SPLATTER",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "splatter-any-color-base-opaque-splatters/splatter-three.png"
+      },
+      {
+        "name": "SPLATTER TWO",
+        "parent": "1 / 2 / 3 COLOR SPLATTER",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "splatter-any-color-base-opaque-splatters/splatter-two.png"
+      },
+      {
+        "name": "SPLATTER ONE",
+        "parent": "1 / 2 / 3 COLOR SPLATTER",
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "splatter-any-color-base-opaque-splatters/splatter-one.png"
+      }
+    ]
+  },
+  {
+    "group": "CENTER STICKER",
+    "slug": "center-sticker",
+    "layers": [
+      {
+        "name": "PLACE ART HERE (DOUBLE CLICK)",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 1,
+        "blendMode": "normal",
+        "file": "center-sticker/place-art-here-double-click.png"
+      },
+      {
+        "name": "INNER CIRCLE",
+        "parent": null,
+        "hidden": false,
+        "clipping": false,
+        "opacity": 0.45098039215686275,
+        "blendMode": "screen",
+        "file": "center-sticker/inner-circle.png"
+      }
+    ]
+  }
+]

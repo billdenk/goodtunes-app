@@ -307,7 +307,7 @@ function AdminPrintQueueInner() {
               type="button"
               onClick={() => batchDownload("merged_pdf")}
               disabled={selected.size === 0}
-              className="px-3 py-1.5 rounded-full bg-[var(--brand-blue)] text-white text-[12px] font-semibold hover:bg-[var(--brand-blue-hover)] disabled:opacity-40"
+              className="px-3 py-1.5 rounded-full border border-[var(--brand-blue)] text-[var(--brand-blue)] text-[12px] font-semibold hover:bg-[var(--brand-blue)]/10 disabled:opacity-40 disabled:border-[var(--apple-hairline)] disabled:text-[var(--apple-subink)]"
               data-testid="button-batch-pdf"
             >
               Download merged PDF ({selected.size})

@@ -701,6 +701,14 @@ body.gt-admin.gt-admin-dark .gt-dashboard-canon .animate-pulse {
 .gt-section-heading{font-size:30px;line-height:1.12;margin:0 0 20px;letter-spacing:-.02em;color:var(--apple-subink);font-weight:500}
 .gt-section-heading strong{color:var(--apple-ink);font-weight:600}
 .gt-quiet-link{display:inline-flex;align-items:center;gap:2px;font-size:14px;color:var(--apple-blue);font-weight:500}
+/* Blue-button canon (Aug 2026): header/toolbar actions are quiet gray-outline
+   pills; a "ready" action earns blue border + blue text but NO fill; the ONE
+   filled blue pill per screen is reserved for the earned confirm. */
+.gt-quiet-pill{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;font-size:13.5px;font-weight:600;border-radius:999px;background:transparent;color:var(--apple-ink);border:1px solid var(--apple-hairline)}
+.gt-quiet-pill:hover{background:var(--apple-card-soft,rgba(0,0,0,0.04))}
+.gt-ready-pill{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 16px;font-size:13.5px;font-weight:600;border-radius:999px;background:transparent;color:var(--apple-blue);border:1px solid var(--apple-blue)}
+.gt-ready-pill:hover{background:rgba(49,158,216,0.08)}
+.gt-quiet-pill:disabled,.gt-ready-pill:disabled{opacity:.4}
 
 /* Shared shell: translucent top bar, quiet rail, raised active item. */
 .gt-admin > div > aside,

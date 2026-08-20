@@ -7,6 +7,8 @@ current, not appended to: stale lines are overwritten when things change.
 
 ## 1. Recent changes
 
+- **Press vinyl styles page rebuilt from Ruby's handoff** (Aug 20 2026): `handoff/press-vinyl-styles/` ported verbatim as the press portal's Components → Vinyl page (old page deleted per the delete-first law). Real config wiring: styles/colors persist to the press's vinyl component config (card select/Edit/Duplicate/Archive, Add-style gallery with gradient-map generator styles off `/vinyl-gen/`, per-color photo upload through the standard admin image pipeline, finish-bar dual-action pills, 12″/10″/7″ size + offer pills, press-branded center labels via the shared white-mark logo chain). Addendum: the Components chip row above the page is now ONE segmented control matching Templates'. Two standing sweeps also landed: **size pills everywhere** are largest-first 12″/10″/7″ with the Single/EP/LP marketing words dropped (builders, quote, pricing, sleeves, audio-spec grids), and the **blue-button sweep** across admin/press/artist portals (header/toolbar actions → quiet gray-outline pills; ready-state = blue border + text, no fill; solid #319ED8 reserved for the one earned confirm — canon note added to docs/apple-canon.md, shared `.gt-quiet-pill`/`.gt-ready-pill` utilities). Client + shared-schema (additive jsonb fields only); prod needs a publish.
+
 ### Open question for Ruby (from Bill, Aug 18 2026)
 - Acquisition tab removed from ALL press portals (gogoods, Aug 19 2026): the fan buying funnel is artist/label/manager marketing data, not the plant's — dropped the press rail entry (registry.ts) and removed "acquisition" from PRESS_TAB_IDS so it's unreachable in press context; kept for label/non_profit. NOTE FOR RUBY: keep Acquisition out of the press left-rail handoff so the rail order stays aligned. Client-only; prod needs a publish.
 - Press portal Acquisition tab Apple-canon lead (Aug 19 2026): the tab now opens with the standard big "Acquisition" H1 + plain-language subtitle like every other section, and the in-card funnel keeps a compact heading. Client-only; prod needs a publish.
@@ -178,6 +180,7 @@ Per handoff law (`handoff/README-template.md` rule 3): each page built from a ha
 - **Press catalog** (`PressPackagePricingCatalog.tsx`) — matches `3fc5edb` (theme-aware round).
 - **Artist package builder** (`PressAlbumPackageBuilder.tsx`) — matches `4ddc047` (theme-aware round).
 - **Press specs pages** — match `df8f73a` / `3a780fc` (theme-aware round).
+- **Press vinyl styles page** (`client/src/pages/press-components/PressVinylStyles.tsx`, replaces `PressVinylComponent.tsx`) — matches `6f99937` (delete-first verbatim port; mock/seed data swapped for the press's vinyl config, GEN_BASE repathed to `/vinyl-gen/`, per-color photo upload wired to postAdminImage, center labels on the shared white-mark logo chain; Components chip row → Templates-style segmented control per addendum).
 
 ## 3. Super-admin press Catalog tab — current behavior
 - Each press's detail page has six tabs: Dashboard, Overview, People, Albums, Catalog, Analytics.

@@ -53,6 +53,13 @@ accents on ~14%-alpha translucent washes — see tokens).
   picked a file, typed a URL, changed a field. Until then it is a quiet pill:
   ink text, dark-gray hairline outline, transparent fill. It fills `#319ED8`
   the moment the action becomes valid.
+- **Blue-button sweep (ratified 2026-08-20).** Across admin, press, and artist
+  portals (fan surfaces out of scope): header/toolbar actions are quiet
+  gray-outline pills; a "ready" action (valid but not the screen's confirm —
+  per-row approves, prefill helpers, selection-gated batch actions) gets a
+  blue border + blue text with NO fill; solid `#319ED8` stays reserved for the
+  one earned confirm per screen/sheet. Shared utilities: `.gt-quiet-pill` and
+  `.gt-ready-pill` in index.css.
 - **Page-header actions are dark-gray-outline pills, never filled blue.**
   (Ratified 2026-08-18.) Top-right page actions (e.g. "Create release") are
   Apple-like quiet pills — ink text, dark-gray hairline outline, no fill.

@@ -534,7 +534,7 @@ export function PersonPicker({
           type="button"
           onClick={() => scrapeUrlMut.mutate(pasteUrl.trim())}
           disabled={scrapeUrlMut.isPending || commitPrefillMut.isPending || !pasteUrl.trim()}
-          className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60 whitespace-nowrap"
+          className="h-9 px-3 rounded-md border border-[var(--brand-blue)] text-[var(--brand-blue)] text-xs font-semibold hover:bg-[var(--brand-blue)]/10 inline-flex items-center justify-center gap-1.5 disabled:opacity-60 whitespace-nowrap"
           data-testid={`button-${testIdPrefix}-paste-url`}
         >
           {scrapeUrlMut.isPending && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

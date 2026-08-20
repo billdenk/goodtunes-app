@@ -20,7 +20,7 @@ import type {
   SleevesComponentConfig,
   InsertsComponentConfig,
 } from "@shared/pressComponents";
-import { PressVinylComponent } from "./PressVinylComponent";
+import { PressVinylStylesComponent } from "./PressVinylStyles";
 import { PressLabelsComponent } from "./PressLabelsComponent";
 import { PressStickersComponent } from "./PressStickersComponent";
 import { PressJacketsComponent } from "./PressJacketsComponent";
@@ -33,6 +33,7 @@ import { CdCatalogBody, CassetteCatalogBody, type MediaCatalogData } from "@/pag
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { useAdminDark } from "@/lib/adminAppearance";
 
 function LoadingRow() {
   return (
@@ -47,7 +48,7 @@ export function PressVinylComponentTab({ pressId }: { pressId: string }) {
   const save = useSavePressComponent(pressId, "vinyl");
   if (isLoading || !data) return <LoadingRow />;
   return (
-    <PressVinylComponent
+    <PressVinylStylesComponent
       payload={data}
       canEdit={data.canEdit}
       save={(config: VinylComponentConfig) => save.mutate(config)}
@@ -243,6 +244,11 @@ function writeCompParam(next: VinylSegmentId) {
 }
 
 export function PressVinylFormatTab({ pressId, initial }: { pressId: string; initial?: VinylSegmentId }) {
+  const dark = useAdminDark();
+  // Segmented-control tokens (mirrors PressTemplatesIndex's format switcher).
+  const segTheme = dark
+    ? { track: "rgba(255,255,255,0.06)", ink: "#f5f5f7", faint: "rgba(245,245,247,0.55)", pillActive: "rgba(255,255,255,0.12)", segShadow: "0 1px 2px rgba(0,0,0,0.4)" }
+    : { track: "#eef1f4", ink: "#0f172a", faint: "#64748b", pillActive: "#ffffff", segShadow: "0 1px 2px rgba(15,23,42,0.10)" };
   const [seg, setSeg] = useState<VinylSegmentId>(() => readCompParam() ?? initial ?? "vinyl");
   // Per Bill (2026-08-10, catalog media pills) — switching segments must never
   // reset a sub-page's build state: visited panels stay mounted and toggle
@@ -256,7 +262,14 @@ export function PressVinylFormatTab({ pressId, initial }: { pressId: string; ini
   };
   return (
     <div className="min-w-0" data-testid="press-vinyl-format-tab">
-      <div className="flex flex-wrap items-center gap-2 mb-5" role="tablist" aria-label="Vinyl components">
+      {/* ONE segmented control (Templates' Vinyl/CD/Cassette device) — chrome
+          only; the per-segment pages are untouched. */}
+      <div
+        className="inline-flex items-center rounded-full flex-shrink-0 mb-5"
+        style={{ padding: 3, backgroundColor: segTheme.track }}
+        role="tablist"
+        aria-label="Vinyl components"
+      >
         {VINYL_SEGMENTS.map((s) => {
           const active = s.id === seg;
           return (
@@ -267,12 +280,16 @@ export function PressVinylFormatTab({ pressId, initial }: { pressId: string; ini
               aria-selected={active}
               onClick={() => switchSeg(s.id)}
               data-testid={`vinyl-segment-${s.id}`}
-              className={
-                "h-9 px-4 rounded-full border text-[13px] font-medium transition-colors " +
-                (active
-                  ? "bg-white border-slate-300 text-slate-900 shadow-sm"
-                  : "bg-transparent border-slate-200 text-slate-500 hover:bg-slate-50")
-              }
+              className="rounded-full transition-colors"
+              style={{
+                padding: "6px 18px",
+                fontSize: 13.5,
+                fontWeight: active ? 600 : 500,
+                color: active ? segTheme.ink : segTheme.faint,
+                backgroundColor: active ? segTheme.pillActive : "transparent",
+                boxShadow: active ? segTheme.segShadow : "none",
+                cursor: "pointer",
+              }}
             >
               {s.label}
             </button>

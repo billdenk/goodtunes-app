@@ -298,7 +298,7 @@ export function AdminPressingOrders() {
                               type="button"
                               onClick={() => decide.mutate({ id: row.id, decision: "approve" })}
                               disabled={decide.isPending}
-                              className="bg-[var(--brand-blue)] text-white hover:bg-[var(--brand-blue-hover)]"
+                              className="border border-[var(--brand-blue)] bg-transparent text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10"
                               data-testid={`button-approve-${row.id}`}
                             >
                               <CheckCircle2 className="w-4 h-4 mr-1.5" />

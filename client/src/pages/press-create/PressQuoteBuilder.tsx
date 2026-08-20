@@ -519,10 +519,11 @@ function DiscStage({ swatch, sizeId }: { swatch: Swatch; sizeId: SizeId }) {
 }
 
 // ─── Record sizes (shared across every section) ──────────────────────
+// Largest-first, no marketing words — size-pill canon (Aug 2026).
 const VINYL_SIZES = [
-  { id: '7' as SizeId,  label: '7"',  note: 'Single' },
-  { id: '10' as SizeId, label: '10"', note: 'EP' },
-  { id: '12' as SizeId, label: '12"', note: 'LP · Standard' },
+  { id: '12' as SizeId, label: '12"', note: '' },
+  { id: '10' as SizeId, label: '10"', note: '' },
+  { id: '7' as SizeId,  label: '7"',  note: '' },
 ];
 
 // Press-run quantities + discount curve (from PressCatalogPricing).

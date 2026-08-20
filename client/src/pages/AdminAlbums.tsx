@@ -594,7 +594,7 @@ export function AdminAlbums() {
           </p>
           <button
             onClick={() => navigate("/collection")}
-            className="px-3 py-1.5 rounded-md bg-[var(--brand-blue)] text-white text-sm font-medium"
+            className="px-3 py-1.5 rounded-md border border-[var(--apple-hairline)] text-[var(--apple-ink)] text-sm font-medium hover:bg-black/5"
             data-testid="button-back-to-app"
           >
             Back to the app

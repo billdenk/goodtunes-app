@@ -1035,7 +1035,7 @@ export function NewAlbumArtistDialog({
                         type="button"
                         onClick={() => handlePasteUrl(trimmed)}
                         disabled={busy}
-                        className="w-full h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                        className="w-full h-9 px-3 rounded-md border border-[var(--brand-blue)] text-[var(--brand-blue)] text-[12.5px] font-semibold hover:bg-[var(--brand-blue)]/10 inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
                         data-testid="button-resolve-pasted-link"
                       >
                         {scrapeMut.isPending ? (
@@ -1172,9 +1172,9 @@ export function NewAlbumArtistDialog({
                       />
                       <button
                         type="button"
-                        onClick={handlePasteUrl}
+                        onClick={() => handlePasteUrl()}
                         disabled={busy || !pasteUrl.trim()}
-                        className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                        className="h-9 px-3 rounded-md border border-[var(--brand-blue)] text-[var(--brand-blue)] text-xs font-semibold hover:bg-[var(--brand-blue)]/10 inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
                         data-testid="button-artist-paste-url"
                       >
                         {scrapeMut.isPending ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : null}
@@ -1351,7 +1351,7 @@ export function NewAlbumArtistDialog({
                     type="button"
                     onClick={handleManual}
                     disabled={busy}
-                    className="h-9 px-3 rounded-md bg-[var(--brand-blue)] text-white text-[12.5px] font-semibold hover:bg-[#2890c8] inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
+                    className="h-9 px-3 rounded-md border border-[var(--apple-hairline,#d2d2d7)] text-[var(--apple-ink,#1d1d1f)] text-[12.5px] font-medium hover:bg-black/5 inline-flex items-center justify-center gap-1.5 disabled:opacity-60"
                     data-testid="button-enter-manually-fallback"
                   >
                     {createPersonMut.isPending ? <Spinner className="w-3.5 h-3.5 animate-spin" /> : null}

@@ -135,10 +135,11 @@ function RainbowPrintFace({ logoSize, logoUrl, pressName }: { logoSize: number; 
 }
 
 // ─── Vinyl sizes — selection-only, informs the stage caption ──────────
+// Largest-first, no marketing words — size-pill canon (Aug 2026).
 const VINYL_SIZES = [
-  { id: "7", label: '7"', note: "Single" },
-  { id: "10", label: '10"', note: "EP" },
-  { id: "12", label: '12"', note: "LP \u00b7 Standard" },
+  { id: "12", label: '12"', note: "" },
+  { id: "10", label: '10"', note: "" },
+  { id: "7", label: '7"', note: "" },
 ];
 
 // ─── The six flat sleeve styles (persisted vocabulary) ────────────────

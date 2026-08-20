@@ -1657,7 +1657,7 @@ function PreviewCollectionCard({
                 type="button"
                 onClick={() => extend.mutate()}
                 disabled={extend.isPending}
-                className="rounded-md bg-[var(--brand-blue)] text-white px-2.5 py-1 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                className="rounded-md border border-[var(--brand-blue)] text-[var(--brand-blue)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--brand-blue)]/10 disabled:opacity-50"
                 data-testid={`button-preview-extend-save-${item.id}`}
               >
                 {extend.isPending ? "Saving…" : "Save"}
@@ -1886,7 +1886,7 @@ function GrantAlbumDialog({
                           type="button"
                           disabled={grant.isPending}
                           onClick={() => grant.mutate({ albumId: a.id, preview: false })}
-                          className="rounded-md bg-[var(--brand-blue)] text-white px-2.5 py-1 text-xs font-medium hover:opacity-90 disabled:opacity-50"
+                          className="rounded-md border border-[var(--brand-blue)] text-[var(--brand-blue)] px-2.5 py-1 text-xs font-medium hover:bg-[var(--brand-blue)]/10 disabled:opacity-50"
                           data-testid={`button-grant-album-${a.id}`}
                           title="Permanent free comp — mints a GoodDeed number"
                         >

@@ -1362,7 +1362,7 @@ export function PressScopedPersonDetail({
             <Button
               type="button"
               onClick={() => setInviteOpen(true)}
-              className="h-8 rounded-full px-4 border-0 font-semibold text-sm text-white bg-[color:var(--brand-blue)] hover:opacity-90 shadow-none"
+              className="h-8 rounded-full px-4 font-semibold text-sm border border-[color:var(--apple-hairline)] bg-transparent text-[color:var(--apple-ink)] hover:bg-black/5 shadow-none"
               data-testid="button-invite-person"
             >
               Invite
@@ -1946,8 +1946,8 @@ function PdGettingStarted({ steps, onNavigate, rest = "A few steps to get rollin
               <button
                 type="button"
                 onClick={() => onNavigate(s.go!)}
-                className="flex-shrink-0 inline-flex items-center h-9 px-4 rounded-full text-[13px] font-medium text-white transition-opacity hover:opacity-90"
-                style={{ backgroundColor: PD_BLUE }}
+                className="flex-shrink-0 inline-flex items-center h-9 px-4 rounded-full text-[13px] font-medium transition-colors"
+                style={{ border: `1px solid ${PD_BLUE}`, color: PD_BLUE, backgroundColor: "transparent" }}
                 data-testid={`step-cta-${s.id}`}
               >
                 {s.cta}
@@ -2438,8 +2438,8 @@ function PressDashboardTab({
           <button
             type="button"
             onClick={() => goTab("pipeline")}
-            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-medium text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: PD_BLUE }}
+            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-medium transition-colors"
+            style={{ border: `1px solid ${PD_BLUE}`, color: PD_BLUE, backgroundColor: "transparent" }}
             data-testid="button-header-view-pipeline"
           >
             <GitBranch className="w-3.5 h-3.5" />

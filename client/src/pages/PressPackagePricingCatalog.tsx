@@ -4486,7 +4486,7 @@ function TemplateDialog({
 // One card of rows: bit depth, sample rate, longest side per size (33⅓ / 45),
 // and Notes. Values are shown in minutes / kHz; a BLANK field inherits the
 // plant's measured baseline (shown as the placeholder). Saves on blur.
-const AUDIO_SIZES = ['7"', '10"', '12"'] as const;
+const AUDIO_SIZES = ['12"', '10"', '7"'] as const; // largest-first (size-pill canon)
 const AUDIO_RPMS = ["33", "45"] as const;
 type PressAudioSpecRow = {
   id: string;

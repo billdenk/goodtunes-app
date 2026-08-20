@@ -4071,7 +4071,7 @@ type PressAudioSpec = {
   maxSideSeconds: Record<string, Record<string, number>> | null;
   notes: string | null;
 };
-const AUDIO_SIZES = ['7"', '10"', '12"'] as const;
+const AUDIO_SIZES = ['12"', '10"', '7"'] as const; // largest-first (size-pill canon)
 const AUDIO_RPMS = ["33", "45"] as const;
 
 // The inherited measured-baseline this press resolves to when a field is left

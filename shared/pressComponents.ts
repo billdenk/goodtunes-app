@@ -38,6 +38,21 @@ export const vinylSwatchSchema = z.object({
   // Uploaded/imported preview photo (splatter, picture disc, marbled).
   customImg: z.string().max(1024).optional(),
   splatterTranslucent: z.boolean().optional(),
+  // Generator-made color (handoff/press-vinyl-styles, Aug 20 2026): style +
+  // assigned hexes. Presence means the disc renders through the stencil kit
+  // and the swatch stays re-openable in the generator for hex tweaks.
+  gen: z
+    .object({
+      styleId: z.string().min(1).max(64),
+      colors: z.array(hex).max(8),
+      option: z.string().max(64).optional(),
+      splatterCount: z.number().int().min(0).max(12).optional(),
+      baseKind: z.enum(["opaque", "translucent"]).optional(),
+    })
+    .optional(),
+  // Hidden = not offered to artists right now. Never deleted — pressed
+  // records keep their history.
+  hidden: z.boolean().optional(),
 });
 export type VinylSwatch = z.infer<typeof vinylSwatchSchema>;
 
@@ -47,6 +62,14 @@ export const vinylCategorySchema = z.object({
   kind: swatchKindSchema,
   swatches: z.array(vinylSwatchSchema).max(400),
   sizes: z.array(vinylSizeIdSchema).max(3),
+  // Set when the style was created through the generator — locks every color
+  // added to this style to one stencil style (handoff/press-vinyl-styles).
+  genStyleId: z.string().max(64).optional(),
+  // Finish styles only: which finishes this style offers artists.
+  // Undefined = all of the style's finishes.
+  offeredFinishes: z.array(z.string().max(64)).max(24).optional(),
+  // Hidden from the artist-facing picker — stays here for the press.
+  hidden: z.boolean().optional(),
 });
 export type VinylCategory = z.infer<typeof vinylCategorySchema>;
 

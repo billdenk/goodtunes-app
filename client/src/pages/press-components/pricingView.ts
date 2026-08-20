@@ -3,10 +3,11 @@
 // rendering the component.
 import type { PricingRow, VinylSizeId } from "@shared/pressComponents";
 
+// Largest-first, no marketing words — size-pill canon (Aug 2026).
 export const SIZE_CHIPS: { id: VinylSizeId; size: string; note: string }[] = [
-  { id: '7"', size: "7″", note: "Single" },
-  { id: '10"', size: "10″", note: "EP" },
-  { id: '12"', size: "12″", note: "LP" },
+  { id: '12"', size: "12″", note: "" },
+  { id: '10"', size: "10″", note: "" },
+  { id: '7"', size: "7″", note: "" },
 ];
 
 /** A row shows under a size when its type/color is pressed in that size;

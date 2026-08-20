@@ -461,7 +461,7 @@ export function AdminDashboard() {
               title={<span>{timeGreeting()}, {firstName}.</span>}
               subtitle={isArtist ? "Your releases and recent fan activity." : (attentionCount(ops, pendingPayouts) > 0 ? `${attentionCount(ops, pendingPayouts)} thing${attentionCount(ops, pendingPayouts) === 1 ? "" : "s"} need${attentionCount(ops, pendingPayouts) === 1 ? "s" : ""} you before anything else.` : "Nothing needs you before anything else.")}
               testId="heading-admin-dashboard"
-              actions={<div className="flex items-center gap-3"><RangeSwitcher value={range} onChange={setRange} />{isSuperAdmin && <button type="button" className="gt-primary-pill" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-run-payouts-header"><Banknote className="w-4 h-4" />Run payouts</button>}</div>}
+              actions={<div className="flex items-center gap-3"><RangeSwitcher value={range} onChange={setRange} />{isSuperAdmin && <button type="button" className="gt-quiet-pill" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-run-payouts-header"><Banknote className="w-4 h-4" />Run payouts</button>}</div>}
             />
           </SectionBoundary>
 
@@ -611,13 +611,13 @@ function AttentionSection({ ops, pending }: { ops?: OpsData; pending?: ReferralP
                 <p className="text-[13.5px] text-[var(--apple-subink)] leading-relaxed flex-1 mb-5">{c.detail}</p>
                 {c.href === "#" ? (
                   <span className="flex items-center gap-4">
-                    <button type="button" className="gt-primary-mini" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-attention-run-payouts">{c.action}<ArrowRight className="w-3.5 h-3.5" /></button>
+                    <button type="button" className="gt-quiet-pill" onClick={() => window.dispatchEvent(new Event("gt:run-payouts"))} data-testid="button-attention-run-payouts">{c.action}<ArrowRight className="w-3.5 h-3.5" /></button>
                     <button type="button" className="gt-quiet-link" onClick={() => window.dispatchEvent(new Event("gt:preview-payouts"))} data-testid="button-referral-payouts-preview">Preview<ChevronRight className="w-3.5 h-3.5" /></button>
                   </span>
                 ) : c.link ? (
                   <Link href={c.href} className="gt-quiet-link">{c.action}<ChevronRight className="w-3.5 h-3.5" /></Link>
                 ) : (
-                  <Link href={c.href} className="gt-primary-mini self-start">{c.action}<ArrowRight className="w-3.5 h-3.5" /></Link>
+                  <Link href={c.href} className="gt-quiet-pill self-start">{c.action}<ArrowRight className="w-3.5 h-3.5" /></Link>
                 )}
               </article>
             );

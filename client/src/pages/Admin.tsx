@@ -498,7 +498,7 @@ function PromotePanel() {
         <button
           type="submit"
           disabled={promote.isPending || !username.trim()}
-          className="px-2.5 py-1 rounded-md bg-[var(--brand-blue)] text-white text-xs font-medium hover:bg-[var(--brand-blue)]/90 disabled:opacity-40"
+          className="px-2.5 py-1 rounded-md border border-[var(--brand-blue)] text-[var(--brand-blue)] text-xs font-medium hover:bg-[var(--brand-blue)]/10 disabled:opacity-40"
           data-testid="button-promote-admin"
         >
           {promote.isPending ? "…" : "Add"}
