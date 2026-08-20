@@ -46,12 +46,20 @@ function LoadingRow() {
 export function PressVinylComponentTab({ pressId }: { pressId: string }) {
   const { data, isLoading } = usePressComponents(pressId);
   const save = useSavePressComponent(pressId, "vinyl");
+  // Serialize + coalesce whole-config PUTs (same as Stickers/Pricing) so a
+  // slow earlier save can never complete after — and overwrite — a newer one.
+  const saveRef = useRef(save);
+  saveRef.current = save;
+  const serialVinylSave = useMemo(
+    () => createSerialSaver<VinylComponentConfig>((config) => saveRef.current.mutateAsync(config)),
+    [pressId],
+  );
   if (isLoading || !data) return <LoadingRow />;
   return (
     <PressVinylStylesComponent
       payload={data}
       canEdit={data.canEdit}
-      save={(config: VinylComponentConfig) => save.mutate(config)}
+      save={serialVinylSave}
       saving={save.isPending}
     />
   );

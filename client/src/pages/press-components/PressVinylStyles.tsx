@@ -795,6 +795,8 @@ type Category = {
   /** Set when the type was created through the generator ("Create type").
       Locks every color added to this type to one stencil style. */
   genStyleId?: string;
+  /** Press-supplied photo shown on the style tile (type editor upload). */
+  customImg?: string;
   /** Finish styles only: which finishes this style offers artists.
       Undefined = all of the style's finishes. One shared truth — the main
       page's Finish bar and the sheet edit the same list. (Bill, Aug 20 2026.) */
@@ -896,7 +898,7 @@ function TypeEditorPopover({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   trigger: ReactNode;
-  onSave: (name: string, sizes: SizeId[]) => void;
+  onSave: (name: string, sizes: SizeId[], customImg?: string) => void;
   onRemove?: () => void;
   /** Generator-made types: reopen the stencil sheet on the type's color. */
   onEditColor?: () => void;
@@ -908,8 +910,9 @@ function TypeEditorPopover({
 }) {
   const [name, setName] = useState(category.name);
   const [sizes, setSizes] = useState<SizeId[]>(category.sizes);
-  // Mock-only preview image for the type card (no real upload / not persisted).
-  const [customImg, setCustomImg] = useState<string | undefined>(undefined);
+  // Press-supplied preview image for the type card — persisted on the
+  // category (real upload via uploadPreviewImageFile).
+  const [customImg, setCustomImg] = useState<string | undefined>(category.customImg);
 
   const canSave = name.trim().length > 0 && sizes.length > 0;
 
@@ -919,12 +922,12 @@ function TypeEditorPopover({
   const seed = () => {
     setName(category.name);
     setSizes(category.sizes);
-    setCustomImg(undefined);
+    setCustomImg(category.customImg);
   };
 
   const submit = () => {
     if (!canSave) return;
-    onSave(name.trim(), sizes);
+    onSave(name.trim(), sizes, customImg);
     onOpenChange(false);
   };
 
@@ -1147,7 +1150,7 @@ function CategoryCard({
   /** The size currently picked in the "Pick a size" step. */
   pageSize: SizeId;
   onSelect: () => void;
-  onSaveType: (name: string, sizes: SizeId[]) => void;
+  onSaveType: (name: string, sizes: SizeId[], customImg?: string) => void;
   onRemoveType?: () => void;
   onDuplicateType?: () => void;
   onEditColor?: () => void;
@@ -4756,8 +4759,8 @@ export function PressVinylStylesComponent({
   };
 
   // Rename a type / set its type-level sizes from the ⋯ menu on its card.
-  const updateCategory = (catId: CategoryId, name: string, sizes: SizeId[]) => {
-    setCategories((prev) => prev.map((c) => (c.id === catId ? { ...c, name, sizes } : c)));
+  const updateCategory = (catId: CategoryId, name: string, sizes: SizeId[], customImg?: string) => {
+    setCategories((prev) => prev.map((c) => (c.id === catId ? { ...c, name, sizes, customImg } : c)));
   };
 
   // Hide/show a type for artists — it stays here for the press either way.
@@ -5084,7 +5087,7 @@ export function PressVinylStylesComponent({
                     active={c.id === categoryId}
                     pageSize={`${selectedSizeId}"` as SizeId}
                     onSelect={() => chooseCategory(c.id)}
-                    onSaveType={(name, sizes) => updateCategory(c.id, name, sizes)}
+                    onSaveType={(name, sizes, customImg) => updateCategory(c.id, name, sizes, customImg)}
                     onRemoveType={categories.length > 1 ? () => removeCategory(c.id) : undefined}
                     onDuplicateType={c.genStyleId ? () => duplicateCategory(c.id) : undefined}
                     onEditColor={c.swatches[0]?.gen

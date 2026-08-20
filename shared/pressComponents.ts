@@ -70,6 +70,9 @@ export const vinylCategorySchema = z.object({
   offeredFinishes: z.array(z.string().max(64)).max(24).optional(),
   // Hidden from the artist-facing picker — stays here for the press.
   hidden: z.boolean().optional(),
+  // Optional press-supplied photo shown on the style tile (type editor's
+  // "Change image" upload) — an /objects/uploads/... URL.
+  customImg: z.string().max(500).optional(),
 });
 export type VinylCategory = z.infer<typeof vinylCategorySchema>;
 
