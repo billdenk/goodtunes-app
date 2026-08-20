@@ -56,7 +56,7 @@ import { uploadAdminDoc, uploadAdminDocWithProgress } from '@/lib/adminUpload';
 import { saveLiveTestDraft, loadLiveTestDraft, clearLiveTestDraft, type LiveTestDraft } from './draftStore';
 import { templateTestPath } from './apiPaths';
 import { useAdminDark } from '@/lib/adminAppearance';
-import { computeCropCanvasSize, PT_PER_MM } from './cropDimensions';
+import { computeCropCanvasSize } from './cropDimensions';
 import { computePdfArtRect } from './artPlacement';
 // ZONE_ORDER/zoneSort + side grouping live in sidePillGroups.ts (Task #3163)
 // so the consolidation rule is testable without jsdom.
@@ -68,6 +68,9 @@ import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, 
 import { loadPdfjs, renderPage, extractGtLayers, shrinkDataUrl, zoneColor, type GtLayer } from './gtOverlayEngine';
 export type { GtLayer } from './gtOverlayEngine';
 import { createFullSharpController } from './fullSharpRender';
+// Bounded-retry hi-DPI crop render (Task #3213) — never strands the viewer on
+// the blurry base raster silently.
+import { renderCropOnce, runWithRetry } from './cropSharpRender';
 type Theme = {
   canvas: string; rail: string; card: string; soft: string; hairline: string;
   ink: string; subink: string; faint: string; blue: string;
@@ -219,6 +222,9 @@ export default function PressTemplateLiveTest({
   // spine/front/back don't appear blurry at the heavy magnification the CSS
   // transform applies (e.g. ~90× for a 3.5 mm spine). null = use template.img.
   const [cropImg, setCropImg] = useState<string | null>(null);
+  // Task #3213 — the crop render exhausted its retries: keep the blurry base
+  // raster visible but say so with a subtle pill instead of failing silently.
+  const [cropFailed, setCropFailed] = useState(false);
   // Monotonic counter incremented every time a new template is loaded —
   // used as a crop-effect dependency so replacing a same-size PDF still
   // triggers a fresh high-DPI render (template dimensions alone don't change).
@@ -1323,36 +1329,26 @@ export default function PressTemplateLiveTest({
   // to ≤ MAX_CROP_PX — a naive approach that only caps width produces a
   // 140 000-px-tall canvas for a 3.5 mm × 120 mm spine (browser crash / freeze).
   useEffect(() => {
-    if (!template || !focus || viewArea === 'full') { setCropImg(null); return; }
+    if (!template || !focus || viewArea === 'full') { setCropImg(null); setCropFailed(false); return; }
     const doc = pdfDocRef.current;
-    if (!doc) return;
+    if (!doc) { setCropFailed(false); return; }
     const seq = ++cropRenderSeq.current;
+    setCropFailed(false);
     // Desired: enough pixels to look sharp at max zoom on a 1440px display.
     const desiredPx = Math.round(1440 * ZOOMS[ZOOMS.length - 1] * (window.devicePixelRatio || 1));
-    const { targetW, targetH, scale } = computeCropCanvasSize(focus.w, focus.h, desiredPx);
+    const f = { x: focus.x, y: focus.y, w: focus.w, h: focus.h };
+    // Task #3213 — bounded retry: a single transient pdf.js failure right
+    // after a fresh upload used to strand the tab on the blurry base raster
+    // forever (silent catch, no retry). Retry a few times; if it genuinely
+    // can't render, surface the "Sharp preview unavailable" pill instead.
     void (async () => {
-      try {
-        const page = await doc.getPage(1);
-        const vp = page.getViewport({ scale });
-        const canvas = document.createElement('canvas');
-        canvas.width = targetW;
-        canvas.height = targetH;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, targetW, targetH);
-        // Translate so that (focus.x, focus.y) in the full-page render maps to
-        // canvas (0, 0). pdf.js renders with Y=0 at the PDF page top, so the
-        // focus y offset is simply focus.y * PT_PER_MM * scale pixels from the top.
-        ctx.translate(
-          -(focus.x * PT_PER_MM * scale),
-          -(focus.y * PT_PER_MM * scale),
-        );
-        await (page.render({ canvas, canvasContext: ctx as CanvasRenderingContext2D, viewport: vp } as Parameters<typeof page.render>[0])).promise;
-        if (cropRenderSeq.current === seq) setCropImg(canvas.toDataURL('image/png'));
-      } catch {
-        // Best-effort — fall back to the base 1400px raster silently.
-      }
+      const res = await runWithRetry(
+        () => renderCropOnce(doc, f, desiredPx),
+        () => cropRenderSeq.current === seq,
+      );
+      if (cropRenderSeq.current !== seq) return;
+      if (res.ok) setCropImg(res.value);
+      else if (!res.superseded) setCropFailed(true);
     })();
   // templateGen tracks template identity (not just dimensions) so replacing a
   // same-size PDF still triggers a fresh crop render.
@@ -2533,6 +2529,17 @@ export default function PressTemplateLiveTest({
                   onPointerUp={() => { dragRef.current = null; }}
                   onPointerCancel={() => { dragRef.current = null; }}
                 >
+                  {/* Task #3213 — crop render exhausted its retries: subtle pill,
+                      blurry base raster stays visible underneath. */}
+                  {cropFailed && viewArea !== 'full' && (
+                    <div
+                      className="absolute bottom-2 left-2 z-10 pointer-events-none rounded-full px-2.5 py-1 text-xs font-medium"
+                      style={{ backgroundColor: 'rgba(0,0,0,0.55)', color: '#ffffff' }}
+                      data-testid="pill-crop-sharp-unavailable"
+                    >
+                      Sharp preview unavailable
+                    </div>
+                  )}
                  <div
                   className="absolute top-0 left-0 w-full"
                   style={{

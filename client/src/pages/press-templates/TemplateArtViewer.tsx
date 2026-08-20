@@ -16,8 +16,11 @@ import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
 import type * as pdfjs from 'pdfjs-dist';
 import { zoneColor, shapePath, renderPage, type GtLayer } from './gtOverlayEngine';
 import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, type SideName, type FamilyGroup } from './sidePillGroups';
-import { computeCropCanvasSize, PT_PER_MM } from './cropDimensions';
+import { computeCropCanvasSize } from './cropDimensions';
 import { createFullSharpController } from './fullSharpRender';
+// Bounded-retry hi-DPI crop render (Task #3213) — never strands the viewer on
+// the blurry base raster silently.
+import { renderCropOnce, runWithRetry } from './cropSharpRender';
 import { computePdfArtRect } from './artPlacement';
 
 export type ViewerTemplate = { img: string; wMm: number; hMm: number; layers: GtLayer[] };
@@ -82,6 +85,9 @@ export function TemplateArtViewer({
   const [showLayers, setShowLayers] = useState(false);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [cropImg, setCropImg] = useState<string | null>(null);
+  // Task #3213 — the crop render exhausted its retries: keep the blurry base
+  // raster visible but say so with a subtle pill instead of failing silently.
+  const [cropFailed, setCropFailed] = useState(false);
   const cropRenderSeq = useRef(0);
   // Sharp Full-Template raster (Task #3212) — mirrors the press page: the base
   // 1400px render goes blurry under a 200–400% CSS zoom (× Retina DPR), so a
@@ -167,32 +173,28 @@ export function TemplateArtViewer({
 
   // Sharp raster for crop views — re-render the focus sub-region from the PDF.
   useEffect(() => {
-    if (!focus || viewArea === 'full') { setCropImg(null); return; }
+    if (!focus || viewArea === 'full') { setCropImg(null); setCropFailed(false); return; }
     const doc = pdfDoc;
-    if (!doc) return;
+    if (!doc) { setCropFailed(false); return; }
     const seq = ++cropRenderSeq.current;
+    setCropFailed(false);
     const desiredPx = Math.round(1440 * ZOOMS[ZOOMS.length - 1] * (window.devicePixelRatio || 1));
-    const { targetW, targetH, scale } = computeCropCanvasSize(focus.w, focus.h, desiredPx);
+    const f = { x: focus.x, y: focus.y, w: focus.w, h: focus.h };
+    // Task #3213 — bounded retry: a single transient pdf.js failure right
+    // after a fresh upload used to strand the tab on the blurry base raster
+    // forever (silent catch, no retry). Retry a few times; if it genuinely
+    // can't render, surface the "Sharp preview unavailable" pill instead.
     void (async () => {
-      try {
-        const page = await doc.getPage(1);
-        const vp = page.getViewport({ scale });
-        const canvas = document.createElement('canvas');
-        canvas.width = targetW;
-        canvas.height = targetH;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, targetW, targetH);
-        ctx.translate(-(focus.x * PT_PER_MM * scale), -(focus.y * PT_PER_MM * scale));
-        await (page.render({ canvas, canvasContext: ctx as CanvasRenderingContext2D, viewport: vp } as Parameters<typeof page.render>[0])).promise;
-        if (cropRenderSeq.current === seq) setCropImg(canvas.toDataURL('image/png'));
-      } catch {
-        // Best-effort — fall back to the base raster silently.
-      }
+      const res = await runWithRetry(
+        () => renderCropOnce(doc, f, desiredPx),
+        () => cropRenderSeq.current === seq,
+      );
+      if (cropRenderSeq.current !== seq) return;
+      if (res.ok) setCropImg(res.value);
+      else if (!res.superseded) setCropFailed(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewArea, pdfDoc, focus?.x, focus?.y, focus?.w, focus?.h]);
+  }, [viewArea, pdfDoc, template.img, focus?.x, focus?.y, focus?.w, focus?.h]);
 
   // ── Sharp Full-Template render (Task #3212) — press page verbatim. ──
   // Debounced across rapid zoom steps, cached per zoom tier (keyed on the
@@ -824,6 +826,17 @@ export function TemplateArtViewer({
           onPointerUp={() => { dragRef.current = null; }}
           onPointerCancel={() => { dragRef.current = null; }}
         >
+          {/* Task #3213 — crop render exhausted its retries: subtle pill,
+              blurry base raster stays visible underneath. */}
+          {cropFailed && viewArea !== 'full' && (
+            <div
+              className="absolute bottom-2 left-2 z-10 pointer-events-none rounded-full px-2.5 py-1 text-xs font-medium"
+              style={{ backgroundColor: 'rgba(0,0,0,0.55)', color: '#ffffff' }}
+              data-testid="pill-crop-sharp-unavailable"
+            >
+              Sharp preview unavailable
+            </div>
+          )}
           <div
             className="absolute top-0 left-0 w-full"
             style={{
