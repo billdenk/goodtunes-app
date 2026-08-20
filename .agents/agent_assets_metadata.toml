@@ -29,270 +29,315 @@ id = "tQG0d2lnGEkyn2Eoeh5Rz"
 uri = "file://docs/launch-plan.md"
 type = "text"
 title = "GoodTunes Launch Plan — v1 (May 18, 2026)"
+logical_id = "7ee1e70c-bf41-4fb8-81d4-8f3d64ef4ce9"
 
 [[outputs]]
 id = "X09q7yu14XfohdKnnQSod"
 uri = "file://attached_assets/screenshots/5293185b-8e25-4d4f-b8b2-dc5494b9adc6-00-2smdxrpg586m8_kirk_replit_dev_mockup_preview_how-to-play_Glass.png"
 type = "image"
 title = "How-to-Play variants — open the canvas to compare A · Glass / B · Light brand / C · Listen-on rows"
+logical_id = "26e28ea4-e58c-4aa8-9ba6-842efafa2bf9"
 
 [[outputs]]
 id = "0L40n7dO4fEtOL9MHQ9nQ"
 uri = "file://SoulChef-Escapism-Instrumentals-Estimate.docx"
 type = "word_document"
 title = "SoulChef — Escapism: Instrumentals — Pricing Estimate"
+logical_id = "67d9f822-f65f-4039-a658-4fe7cbdd874d"
 
 [[outputs]]
 id = "LkfHIGmX2DSRTQQhZR7le"
 uri = "file://exports/sample-gooddeed-certificate-letter.pdf"
 type = "pdf"
 title = "GoodDeed Certificate — Letter"
+logical_id = "33026140-781a-4b06-9ccb-1ee804d4e481"
 
 [[outputs]]
 id = "8Rmu--ZULQNVb5TwuEsDX"
 uri = "file://exports/sample-gooddeed-certificate-a4.pdf"
 type = "pdf"
 title = "GoodDeed Cert — A4 (print PDF)"
+logical_id = "25c26016-e0d2-4f32-9f07-475cd47fdda7"
 
 [[outputs]]
 id = "GechCfh1p9_LMei0_tEAY"
 uri = "file://exports/preview-letter.png"
 type = "image"
 title = "GoodDeed Certificate — Letter (full preview)"
+logical_id = "f86ad093-a657-4811-8d13-ed608f57ca9e"
 
 [[outputs]]
 id = "xQubgKvsgBkyWo7ZDVHaz"
 uri = "file://exports/preview-a4.png"
 type = "image"
 title = "GoodDeed Cert — A4 (preview)"
+logical_id = "1e63f56c-e7cc-42f5-96f4-78969153fe89"
 
 [[outputs]]
 id = "AXrwp_er27ebKyK3NmjWe"
 uri = "file://exports/preview-v1-asis-1line.png"
 type = "image"
 title = "Version 1 — As-is (single line)"
+logical_id = "2a931f29-7a73-40b8-aaa5-cde7960d0ad8"
 
 [[outputs]]
 id = "Yhs0bq_1bkt9gBjFZpP5o"
 uri = "file://exports/preview-v2-dynamic-2line.png"
 type = "image"
 title = "Version 2 — Dynamic (long name, two lines)"
+logical_id = "f43f1e74-4922-467e-a96f-c52719efc743"
 
 [[outputs]]
 id = "bRB_wyAlHMXaidgmz31FG"
 uri = "file://exports/preview-v3-fixed-1line.png"
 type = "image"
 title = "Version 3 — Fixed slot (single line)"
+logical_id = "ecbd0684-23f7-4ada-94d1-d8ba704b7d44"
 
 [[outputs]]
 id = "hJt_KRqCTb8qEQA0M_Zcv"
 uri = "file://exports/preview-v3-fixed-2line.png"
 type = "image"
 title = "Version 3 — Fixed slot (long name, two lines)"
+logical_id = "4fc6fb5c-6873-49d6-b5c7-6eab82c73a5b"
 
 [[outputs]]
 id = "yqt31JabU9giSu2XoxN3s"
 uri = "file://exports/compare-1-asis-1line.pdf"
 type = "pdf"
 title = "PDF — V1 As-is (single line)"
+logical_id = "3f5a7979-cf9b-4218-b668-01908cad4c39"
 
 [[outputs]]
 id = "ohbrcUOnwzq9Te0XWAOQW"
 uri = "file://exports/compare-2-dynamic-2line.pdf"
 type = "pdf"
 title = "PDF — V2 Dynamic (two lines)"
+logical_id = "7a2a5075-ed5a-4320-abe5-7e4f8c48afb9"
 
 [[outputs]]
 id = "suf4CRNJ2GpKUETo-SVyU"
 uri = "file://exports/compare-3-fixed-1line.pdf"
 type = "pdf"
 title = "PDF — Fixed, one line"
+logical_id = "2de8d6a9-60c8-4144-bba2-22369375968c"
 
 [[outputs]]
 id = "lD7D86P_o8CscDmjvhmL6"
 uri = "file://exports/compare-3-fixed-2line.pdf"
 type = "pdf"
 title = "PDF — Fixed, two lines"
+logical_id = "ccb8fc98-919f-4efa-837c-e31e2b2e6208"
 
 [[outputs]]
 id = "js9_oDErgayNQ6IiCTZyo"
 uri = "file://exports/preview-letter-band.png"
 type = "image"
 title = "Lower band — signature restored to agreed fixed position"
+logical_id = "ff7c6b36-9ed1-4143-a20b-864025555113"
 
 [[outputs]]
 id = "BKMe8HUIIIQesMhJcRXKH"
 uri = "file://exports/band-compare-3-fixed-1line.png"
 type = "image"
 title = "Fixed — one line (short name)"
+logical_id = "05f2f67f-2b7b-47c0-bca9-8d3d455f5f7d"
 
 [[outputs]]
 id = "anI3yoS0lmQ7NzukVInDH"
 uri = "file://exports/band-compare-3-fixed-2line.png"
 type = "image"
 title = "Fixed — two lines (long name)"
+logical_id = "a0eb81eb-60a4-4138-aeab-ee606466b2b5"
 
 [[outputs]]
 id = "d1g7m5RB3SUaXKOQLzPyq"
 uri = "file://exports/preview-border-quarter.png"
 type = "image"
 title = "Border ¼\" (recommended)"
+logical_id = "234f86ea-0dd1-4fa6-b890-1b73e2d18c2b"
 
 [[outputs]]
 id = "0n-tYXOEENl83xCaitn8D"
 uri = "file://exports/preview-border-eighth.png"
 type = "image"
 title = "Border ⅛\""
+logical_id = "159c69eb-62fb-4dab-993f-c9f5748cd736"
 
 [[outputs]]
 id = "VXcNTKnb0-Q2dJHrXXVCD"
 uri = "file://exports/border-quarter.pdf"
 type = "pdf"
 title = "PDF — ¼\" border"
+logical_id = "536cd74f-8d45-4f53-ad4a-22111ac41b0f"
 
 [[outputs]]
 id = "luPLVaRSd4HMkNsI7_pdx"
 uri = "file://exports/border-eighth.pdf"
 type = "pdf"
 title = "PDF — ⅛\" border"
+logical_id = "9c96ad2c-80f8-444f-b90d-4ed0772f2720"
 
 [[outputs]]
 id = "98yEH_MvntBroMG7xv_I2"
 uri = "file://exports/a4-today.pdf"
 type = "pdf"
 title = "A4 — as it is today (old centered layout)"
+logical_id = "f77406d8-2295-4f24-b4e9-a357919b4220"
 
 [[outputs]]
 id = "iNTiP6f7L-cafLCk-Bhwk"
 uri = "file://exports/a4-new.pdf"
 type = "pdf"
 title = "GoodDeed Certificate — A4 (footnote baseline aligned)"
+logical_id = "6ae1acd5-c8b2-485e-850f-9bb208056036"
 
 [[outputs]]
 id = "V5RT9KwTWxoGOERIZ_vgb"
 uri = "file://docs/fan-checkout-walkthrough.md"
 type = "text"
 title = "Fan checkout — screen-by-screen walkthrough"
+logical_id = "c01f33f2-8826-4796-993b-32f4f112ca1f"
 
 [[outputs]]
 id = "nBMaqAzmxF1L9VLl-ClU6"
 uri = "file://.local/goodtunes-ios-for-github.tar.gz"
 type = "unspecified"
 title = "GoodTunes iOS files for GitHub (ios/ + package.json + lockfile + capacitor.config.ts)"
+logical_id = "38eab0dd-7b06-4540-8f12-29121f81a49d"
 
 [[outputs]]
 id = "RD-4mYsX_gM7o090d3w66"
 uri = "file://codemagic.yaml"
 type = "unspecified"
 title = "codemagic.yaml (beta group → GoGoods Test Group)"
+logical_id = "87b895e2-6b36-457f-adb1-21ea9e0bfadb"
 
 [[outputs]]
 id = "EodysdVICd5SEFcBLuL_L"
 uri = "file://attached_assets/screenshots/5293185b-8e25-4d4f-b8b2-dc5494b9adc6-00-2smdxrpg586m8-if7eip2y_kirk_replit_dev_3000_mockup_preview_gear-rig-cards_GearSheet.png"
 type = "image"
 title = "Gear sheet — instrument hero + Apple-style Rig cards"
+logical_id = "e53f4d19-834e-4389-9f2b-9e65f3612e6b"
 
 [[outputs]]
 id = "VCxJ8ykcaA9anvVC2LJfk"
 uri = "file://attached_assets/screenshots/5293185b-8e25-4d4f-b8b2-dc5494b9adc6-00-2smdxrpg586m8-if7eip2y_kirk_replit_dev_3000_mockup_preview_gear-rig-cards_RigDetail.png"
 type = "image"
 title = "Rig detail — instrument, accessories + \"Request this rig\" CTA"
+logical_id = "cbc90431-d6f8-4cf3-a9c0-06eeca274f25"
 
 [[outputs]]
 id = "PJ_moeGK8pXOWHf-31am6"
 uri = "file://attached_assets/screenshots/rig-final/2-rig-detail-full-page.png"
 type = "image"
 title = "Rig detail — Apple-HIG chevrons (Instrument no chevron, Accessories See All, Tracks no chevron)"
+logical_id = "96f76844-69d7-4cdf-89b6-2a6d5ed82a28"
 
 [[outputs]]
 id = "Tjg56CdkQfMYYJD8vmxBe"
 uri = "file://attached_assets/screenshots/rig-final/1-gear-sheet.png"
 type = "image"
 title = "Gear Sheet — instrument hero + 'Played on this guitar' rail"
+logical_id = "7285bfe3-d1b9-4a6f-991e-ba2e5a598f3d"
 
 [[outputs]]
 id = "SEVTLQ_cz5hgVe6dd54c0"
 uri = "file://attached_assets/screenshots/rig-final/3-cta-full.png"
 type = "image"
 title = "CTA — in stock (one shop, with Norman's logo)"
+logical_id = "7f0f4d44-218e-4696-b495-5eabe7bef05f"
 
 [[outputs]]
 id = "kFwjZQ7ozBdQxRuYv42nx"
 uri = "file://attached_assets/screenshots/rig-final/4-cta-partial.png"
 type = "image"
 title = "CTA — partial (pieces split across 3 shops)"
+logical_id = "80cd35d8-c0bd-4297-bf79-cf0274903635"
 
 [[outputs]]
 id = "kJM9jYYC2Ww4tWh1Bc0Mf"
 uri = "file://attached_assets/screenshots/rig-final/5-cta-none.png"
 type = "image"
 title = "CTA — not in stock (request a hunt)"
+logical_id = "ae0d50b7-5909-4938-950d-346fb8ba9767"
 
 [[outputs]]
 id = "6QGfL4gzc4_fw4WUt9CAW"
 uri = "file://attached_assets/screenshots/rig-final/6-accessories-see-all.png"
 type = "image"
 title = "Accessories — two-up See All page"
+logical_id = "b04a4e6a-3889-48a3-8693-5af5a4b65bd7"
 
 [[outputs]]
 id = "oGjciagXmdu2YW8BAxMxF"
 uri = "file://attached_assets/screenshots/rig-final/5-hunt-cta-agnostic.png"
 type = "image"
 title = "Hunt CTA — agnostic copy (\"Track down this guitar\")"
+logical_id = "481e0cfb-f2a1-412c-b64f-f0f5dd288eee"
 
 [[outputs]]
 id = "CxFMFZE7pVOgmK4oPUkEo"
 uri = "file://early-access-launch-letter.txt"
 type = "text"
 title = "Updated launch letter (reflects what shipped)"
+logical_id = "ebc9e9a0-765f-412f-9796-0c21a6e325a4"
 
 [[outputs]]
 id = "wVc8kpAwKoMCaBVJoUd5t"
 uri = "file://.local/proof/hellbender-record-swatches-proof.png"
 type = "image"
 title = "Hellbender record swatches — proof (all 35 colors)"
+logical_id = "b7a7f345-1a09-49fa-be2f-5ca0c8e8e09b"
 
 [[outputs]]
 id = "VoOdNo5CZUHnS5XXMeqey"
 uri = "file://.local/splatter_loaded.png"
 type = "image"
 title = "Hellbender 12\" Splatter — 32 disc swatches now loaded"
+logical_id = "0ef2f5a1-1f72-4c44-818b-0d323602152d"
 
 [[outputs]]
 id = "VUqxF6CRxsnaanTUWJg-_"
 uri = "file://attached_assets/GoodDeed-Hope-2_1781912691192.pdf"
 type = "pdf"
 title = "GoodDeed — Hope (Nightbirde)"
+logical_id = "c29ee98f-b8aa-447e-aeb8-ddda01764b4b"
 
 [[outputs]]
 id = "sXdByM6RAgbpjkRoORsG_"
 uri = "file://.local/tasks/why-presses-chose-us-slide.md"
 type = "text"
 title = "Why Presses Chose Us — Slide Copy"
+logical_id = "b333d6a7-c544-4c4d-84f9-e54c04090146"
 
 [[outputs]]
 id = "hY405MpiGazHy9pqWQaR4"
 uri = "file://.local/tasks/investor-what-we-built.md"
 type = "text"
 title = "GoodTunes — What We've Built (Investor Summary)"
+logical_id = "03c9570b-bdd2-46fa-b02e-d0b58bdc1363"
 
 [[outputs]]
 id = "T-omSNfu0L6v9RTlTnqWz"
 uri = "file://attached_assets/screenshots/5293185b-8e25-4d4f-b8b2-dc5494b9adc6-00-2smdxrpg586m8-hv0i4msx_kirk_replit_dev_mockup_preview_admin-album-status_StatusPlacements.png"
 type = "image"
 title = "Admin album header — status placement options (Today, A, B, C)"
+logical_id = "0e48e841-9b54-4128-9600-ae1f2e9a36b7"
 
 [[outputs]]
 id = "HnY97U4ayzcwX25ctsq1O"
 uri = "file://exports/carplay-android-auto-mockups.jpg"
 type = "image"
 title = "CarPlay + Android Auto — All Screens (JPEG)"
+logical_id = "a19e457b-c874-49bc-8074-93bc8e51c62d"
 
 [[outputs]]
 id = "opU_YqG5qsqkUaBV4qpoB"
 uri = "file://docs/sales/investor-overview.md"
 type = "text"
 title = "Investor Overview — docs/sales/investor-overview.md"
+logical_id = "489167db-76e9-4adc-bb6f-7f3ff99cf051"
 
 [[outputs]]
 id = "hVMcDDr2bazClTUZpNuCy"
@@ -300,12 +345,14 @@ uri = "file://docs/design-system.md"
 type = "text"
 title = "GoodTunes design system rules"
 description = "Standing design-system rules, including the partner-surfaces reuse rule and status icon+word requirements."
+logical_id = "ba2e1673-b357-46c8-8510-1de0fb738cb9"
 
 [[outputs]]
 id = "rNEiz3d2pgW4dGTewUTi9"
 uri = "file://docs/admin-conventions.md"
 type = "text"
 title = "Admin Conventions (patterns, dialogs, partner-portal rules)"
+logical_id = "d818a74f-af75-4a96-a181-e58944071d0b"
 
 [[outputs]]
 id = "1bqNDTfYBYzsg7uG2tNSU"
@@ -313,6 +360,7 @@ uri = "file://attached_assets/exports/goodtunes-design-system-pack.zip"
 type = "unspecified"
 title = "GoodTunes Design System Pack (Super-Admin)"
 description = "Self-contained handoff bundle: README for AI design tools, full design-system + admin-conventions docs, live CSS tokens (incl. the gt-admin light theme), and the style-guide components."
+logical_id = "3fb72c3d-ed21-4331-9b4a-c31543ad9dbf"
 
 [[outputs]]
 id = "0sMMRuEv5gY3_mV-h-xUW"
@@ -320,6 +368,7 @@ uri = "file://.local/tasks/press-print-spec-design-brief.md"
 type = "text"
 title = "Press Print-Spec Design Brief (for Ruby)"
 description = "Design brief for the press spec-entry cards and upgraded artwork check dialog — includes the design-system mandate (build from existing stylesheets, no new visual language)."
+logical_id = "f7dfdd7f-f9d7-4e1e-ac1c-b371a4e3fe3a"
 
 [[outputs]]
 id = "bsdBMZo5tOaiD7xnhRVBD"
@@ -327,6 +376,7 @@ uri = "file://handoff/art-blocks/README.md"
 type = "text"
 title = "Art Blocks brief — amended per Bill's memo (ready for Ruby)"
 description = "Updated brief: Release/format-tab IA, no format picker, Draft vs Converted states, press-assignment precedence, thresholds-vs-geometry spec model, dual-theme ruling."
+logical_id = "7feb25bb-7ae4-4f04-8c64-14ac3cfbced8"
 
 [[outputs]]
 id = "i2OxPLDtpkBppya4dxkQu"
@@ -334,3 +384,4 @@ uri = "file://handoff/style-guide/apple-canon.md"
 type = "text"
 title = "Apple canon style guide (design direction Ruby works from)"
 description = "The visual canon governing all GoodTunes admin/partner surfaces — theming, typography, components, breakpoints."
+logical_id = "410b8170-ee50-46b9-a632-ae71c6e501fc"
