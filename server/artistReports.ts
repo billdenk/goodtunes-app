@@ -81,6 +81,21 @@ export async function resolveArtistScope(req: Request): Promise<ArtistScope | { 
   let personId: string | null = null;
   if (info.role === "super_admin") {
     personId = (req.query.personId as string) || null;
+    // Task #3183 — god-view fallback: an operator following the art-test
+    // link from the admin completed-art panel arrives with only the album
+    // id in the URL. Resolve the artist scope server-side from the album's
+    // primary artist so the page shells up instead of 400ing; an explicit
+    // ?personId= still wins (existing drill-in links unchanged).
+    if (!personId) {
+      const albumId = (req.query.albumId as string) || null;
+      if (albumId) {
+        const row = await db.execute<{ primary_artist_id: string | null }>(sql`
+          SELECT primary_artist_id FROM albums WHERE id = ${albumId}
+        `);
+        personId = ((row as any).rows?.[0]?.primary_artist_id as string | null) ?? null;
+        if (!personId) return { error: "Album has no primary artist to scope to", status: 400 };
+      }
+    }
     if (!personId) return { error: "Super-admin must pass ?personId=", status: 400 };
   } else if (info.role === "artist") {
     personId = info.roleScopeId;

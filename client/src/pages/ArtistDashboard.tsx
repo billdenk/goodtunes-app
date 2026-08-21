@@ -229,6 +229,15 @@ export function ArtistDashboard() {
     const params = new URLSearchParams(window.location.search);
     const personId = params.get("personId");
     if (personId) u.set("personId", personId);
+    // Task #3183 — god-view fallback: an operator following the art-test
+    // (or embedded album) link arrives with only the album id in the path.
+    // Thread it so the server can resolve the artist scope from the album's
+    // primary artist instead of 400ing "pass ?personId=". Ignored for
+    // artist-role callers (server scopes them off their own roleScopeId).
+    if (!personId) {
+      const m = window.location.pathname.match(/^\/artist\/albums\/([^/]+)/);
+      if (m) u.set("albumId", m[1]);
+    }
     return u.toString();
   }, [range]);
 
@@ -253,6 +262,24 @@ export function ArtistDashboard() {
   const [, setLocation] = useLocation();
   const albumViewId = isAlbumView ? (albumRouteParams?.id ?? null) : null;
 
+  // Task #3183 — operator god-view. When a super-admin is on this portal
+  // (drilled in via ?personId= or the art-test/album deep link resolved
+  // server-side off the album), tab clicks that leave the deep view must
+  // carry the resolved artist scope with them or the portal home would
+  // land on the "pass ?personId=" gate. Cheap + cached (OperatorShell
+  // makes the same query for its search scope key).
+  const { data: meRole } = useQuery<{ role?: string; roleScopeId?: string | null }>({
+    queryKey: ["/api/me/role"],
+    staleTime: Infinity,
+  });
+  const isOperatorView = meRole?.role === "super_admin";
+  const godPersonIdParam = (() => {
+    if (!isOperatorView) return "";
+    const urlPersonId = new URLSearchParams(window.location.search).get("personId");
+    const pid = urlPersonId ?? me.data?.personId ?? null;
+    return pid ? `&personId=${encodeURIComponent(pid)}` : "";
+  })();
+
   // Friendly error surface — artist accounts that aren't fully wired
   // (no person scope) or fans landing here get an actionable message
   // instead of a blank page.
@@ -271,13 +298,38 @@ export function ArtistDashboard() {
       : msg.includes("Unauthorized")
       ? "Sign in with your artist account to continue."
       : "We couldn't load your artist scope. Please try again.";
+    // Task #3183 — the gate renders INSIDE the portal shell (rail + top
+    // strip stay put) so the page never appears without chrome. Same shell
+    // props as the loaded state, with fallback identity while `me` is
+    // unavailable.
     return (
-      <main className="min-h-screen bg-[color:var(--apple-tile)] text-[color:var(--apple-ink)] flex items-center justify-center p-6">
-        <div className="max-w-md text-center" data-testid="artist-dashboard-gate">
-          <h1 className="text-2xl font-bold mb-2">Artist dashboard</h1>
-          <p className="text-[color:var(--apple-subink)] text-sm">{errorCopy}</p>
+      <OperatorShell
+        testId="artist-shell"
+        roleLabel="Artist dashboard"
+        name="Artist dashboard"
+        logoUrl={null}
+        fallbackIcon={UserIcon}
+        logoShape="circle"
+        hideHeaderIdentity
+        superAdminView={isOperatorView}
+        tabs={ARTIST_TABS}
+        activeTab={tab}
+        onTabChange={(newTab) => {
+          setTab(newTab);
+          const sp = new URLSearchParams(window.location.search);
+          sp.set("tab", newTab);
+          history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
+        }}
+        spaceContent
+        layout="leftnav"
+      >
+        <div className="min-h-[50vh] flex items-center justify-center p-6">
+          <div className="max-w-md text-center" data-testid="artist-dashboard-gate">
+            <h1 className="text-2xl font-bold mb-2">Artist dashboard</h1>
+            <p className="text-[color:var(--apple-subink)] text-sm">{errorCopy}</p>
+          </div>
         </div>
-      </main>
+      </OperatorShell>
     );
   }
 
@@ -306,13 +358,17 @@ export function ArtistDashboard() {
       // control — every other tab (Releases, Orders, Referrals, Shopify,
       // Settings) has no time-series, so it gets no range toolbar.
       hideHeaderIdentity
+      superAdminView={isOperatorView}
       tabs={ARTIST_TABS}
       activeTab={albumViewId || isArtTestView ? "catalog" : tab}
       onTabChange={(newTab) => {
         // In the embedded album view, a tab click leaves the album and lands on
         // the portal home for that tab.
         if (albumViewId || isArtTestView) {
-          setLocation(`/artist?tab=${newTab}`);
+          // Task #3183 — carry the resolved god-view scope out of the deep
+          // view so an operator's tab click doesn't land on the ?personId=
+          // gate (no-op for artists: godPersonIdParam is "").
+          setLocation(`/artist?tab=${newTab}${godPersonIdParam}`);
           return;
         }
         setTab(newTab);
