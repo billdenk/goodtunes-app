@@ -14,7 +14,7 @@
 // while keeping the blurry fallback visible underneath.
 
 import type * as pdfjs from 'pdfjs-dist';
-import { computeCropCanvasSize, PT_PER_MM } from './cropDimensions';
+import { computeCropCanvasSize, computeCropTransform, cropRenderedRectMm, type Mat2D } from './cropDimensions';
 
 /** Backoff before retry #1 and retry #2 (3 attempts total). */
 export const CROP_RETRY_DELAYS_MS = [300, 1000];
@@ -51,17 +51,31 @@ export async function runWithRetry<T>(
 
 export type CropFocus = { x: number; y: number; w: number; h: number };
 
+export type CropRender = {
+  img: string;
+  /** The mm rect (top-left origin, overlay frame) the raster ACTUALLY covers
+   *  post canvas-size rounding — stretch the <img> over THIS, not the focus. */
+  rectMm: { x: number; y: number; w: number; h: number };
+};
+
 /**
  * One hi-DPI render of the focus sub-region (mm, top-left origin) of page 1.
  * Throws on any failure — retry/fallback policy belongs to the caller.
+ *
+ * Task #3290 — the render shares the overlay's coordinate frame provably:
+ * the ctx transform is derived from the page's ACTUAL viewport transform
+ * (rotation + MediaBox origin included) so that user-space content lands at
+ * exactly (overlayMm − focus origin)·k, matching extractGtLayers' mm frame;
+ * and the returned rectMm reflects the exact rendered canvas extent.
  */
 export async function renderCropOnce(
   doc: pdfjs.PDFDocumentProxy,
   focus: CropFocus,
   desiredPx: number,
-): Promise<string> {
+): Promise<CropRender> {
   const { targetW, targetH, scale } = computeCropCanvasSize(focus.w, focus.h, desiredPx);
   const page = await doc.getPage(1);
+  const vp1 = page.getViewport({ scale: 1 }); // overlay mm frame flips Y with THIS height
   const vp = page.getViewport({ scale });
   const canvas = document.createElement('canvas');
   canvas.width = targetW;
@@ -70,9 +84,10 @@ export async function renderCropOnce(
   if (!ctx) throw new Error('canvas 2d context unavailable');
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, targetW, targetH);
-  // Translate so that (focus.x, focus.y) in the full-page render maps to
-  // canvas (0, 0). pdf.js renders with Y=0 at the PDF page top.
-  ctx.translate(-(focus.x * PT_PER_MM * scale), -(focus.y * PT_PER_MM * scale));
+  // P = N·T⁻¹ — after pdf.js multiplies the viewport transform T on top, the
+  // effective mapping equals the overlay-frame matrix N for ANY page geometry.
+  const p = computeCropTransform(focus, scale, vp1.height, vp.transform as Mat2D);
+  ctx.setTransform(p[0], p[1], p[2], p[3], p[4], p[5]);
   await (page.render({ canvas, canvasContext: ctx as CanvasRenderingContext2D, viewport: vp } as Parameters<typeof page.render>[0])).promise;
-  return canvas.toDataURL('image/png');
+  return { img: canvas.toDataURL('image/png'), rectMm: cropRenderedRectMm(focus, targetW, targetH, scale) };
 }

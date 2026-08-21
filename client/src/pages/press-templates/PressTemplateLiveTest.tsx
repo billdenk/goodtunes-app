@@ -70,7 +70,7 @@ export type { GtLayer } from './gtOverlayEngine';
 import { createFullSharpController } from './fullSharpRender';
 // Bounded-retry hi-DPI crop render (Task #3213) — never strands the viewer on
 // the blurry base raster silently.
-import { renderCropOnce, runWithRetry } from './cropSharpRender';
+import { renderCropOnce, runWithRetry, type CropRender } from './cropSharpRender';
 type Theme = {
   canvas: string; rail: string; card: string; soft: string; hairline: string;
   ink: string; subink: string; faint: string; blue: string;
@@ -221,7 +221,7 @@ export default function PressTemplateLiveTest({
   // High-DPI crop raster — re-rendered when the crop view changes so the
   // spine/front/back don't appear blurry at the heavy magnification the CSS
   // transform applies (e.g. ~90× for a 3.5 mm spine). null = use template.img.
-  const [cropImg, setCropImg] = useState<string | null>(null);
+  const [cropImg, setCropImg] = useState<CropRender | null>(null);
   // Task #3213 — the crop render exhausted its retries: keep the blurry base
   // raster visible but say so with a subtle pill instead of failing silently.
   const [cropFailed, setCropFailed] = useState(false);
@@ -2562,15 +2562,18 @@ export default function PressTemplateLiveTest({
                       as a % of the world div so it covers exactly the focus rectangle. */}
                   {(!art || showTemplate) && cropImg && focus && viewArea !== 'full' && (
                     <img
-                      src={cropImg}
+                      src={cropImg.img}
                       alt=""
                       draggable={false}
                       className="absolute pointer-events-none"
                       style={{
-                        left: pct(focus.x, template.wMm),
-                        top: pct(focus.y, template.hMm),
-                        width: pct(focus.w, template.wMm),
-                        height: pct(focus.h, template.hMm),
+                        // Task #3290 — stretch over the EXACT rect the raster
+                        // covers (post canvas-size rounding), so raster and
+                        // overlay share one coordinate frame and can't diverge.
+                        left: pct(cropImg.rectMm.x, template.wMm),
+                        top: pct(cropImg.rectMm.y, template.hMm),
+                        width: pct(cropImg.rectMm.w, template.wMm),
+                        height: pct(cropImg.rectMm.h, template.hMm),
                       }}
                     />
                   )}
