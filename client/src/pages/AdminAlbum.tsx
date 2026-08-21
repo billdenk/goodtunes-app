@@ -106,7 +106,8 @@ import { SplitsImportSheet, TrackSplitsEditor } from "@/components/admin/SplitsP
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
-import { apiRequest, getAuthToken, apiErrorStatus, fetchBlob, FetchBlobError } from "@/lib/queryClient";
+import { apiRequest, getAuthToken, apiErrorStatus, fetchBlob } from "@/lib/queryClient";
+import { masterDownloadErrorMessage } from "@/lib/masterDownload";
 import { enqueueAudioBatch, enqueueVideoBatch } from "@/context/UploadManagerContext";
 import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
@@ -521,17 +522,9 @@ async function downloadMasterViaApi(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
-// Toast copy for a failed master download. Auth/transport failures are
-// distinguished from the route's classifier reasons (which arrive as the
-// server's own actionable message).
-function masterDownloadErrorMessage(e: unknown): string {
-  if (e instanceof FetchBlobError) {
-    if (e.status === 401) return "Your session expired — sign in again and retry.";
-    if (e.status === 403) return "Your account doesn't have access to this album's masters.";
-    return e.message || "Download failed.";
-  }
-  return (e as any)?.message ?? "Download failed — check your connection and retry.";
-}
+// Toast copy for a failed master download lives in @/lib/masterDownload
+// (Task #3287 — shared with PressPanel's View Masters dialog so all
+// per-track surfaces surface the same reason-coded messages).
 
 // Legacy "Migrate to Mux" admin action — removed 2026-05 once auto-ingest
 // (POST/PUT/Dropbox-import hooks + boot-time backfill in server/routes.ts)

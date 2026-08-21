@@ -22,6 +22,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
 import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Check, X, AudioLines, Palette, Truck } from "lucide-react";
 import { apiRequest, queryClient, fetchBlob } from "@/lib/queryClient";
+import { masterDownloadErrorMessage } from "@/lib/masterDownload";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, resolveVendorIdForPress, isGenericVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -1211,7 +1212,7 @@ export function PressPanel({
                                 type="button"
                                 onClick={() =>
                                   downloadOne(s).catch((e: any) =>
-                                    toast({ title: `Couldn't download "${s.title}"`, description: e?.message ?? "Unknown error", variant: "destructive" }),
+                                    toast({ title: `Couldn't download "${s.title}"`, description: masterDownloadErrorMessage(e), variant: "destructive" }),
                                   )
                                 }
                                 className="inline-flex items-center gap-1 text-[var(--brand-blue)] hover:underline opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100 transition-opacity"
