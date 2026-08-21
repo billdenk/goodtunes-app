@@ -151,6 +151,9 @@ function AdminShopifyInner() {
     }
   };
 
+  // Task #3259 — per-store historical backfill panel toggle.
+  const [backfillOpenStoreId, setBackfillOpenStoreId] = useState<string | null>(null);
+
   // Per-store digital unit fee inline edit state
   const [editingFeeStoreId, setEditingFeeStoreId] = useState<string | null>(null);
   const [feeInputValue, setFeeInputValue] = useState("");
@@ -548,8 +551,8 @@ Get your music now
             {(stores ?? []).map((s) => {
               const live = !s.uninstalledAt;
               return (
+                <div key={s.id}>
                 <div
-                  key={s.id}
                   className={`rounded-lg border bg-white px-4 py-3 flex items-center gap-3 ${
                     s.id === justInstalledId ? "border-[var(--brand-mint)] bg-emerald-50/40" : "border-slate-200"
                   }`}
@@ -612,6 +615,18 @@ Get your music now
                       </button>
                     )}
                   </div>
+                  {live && (
+                    <button
+                      type="button"
+                      onClick={() => setBackfillOpenStoreId(backfillOpenStoreId === s.id ? null : s.id)}
+                      className="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1 shrink-0"
+                      title="Backfill historical orders / release held emails"
+                      data-testid={`button-toggle-backfill-${s.id}`}
+                    >
+                      History
+                      {backfillOpenStoreId === s.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => {
@@ -626,11 +641,207 @@ Get your music now
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
+                {backfillOpenStoreId === s.id && <StoreBackfillPanel storeId={s.id} shopDomain={s.shopDomain} />}
+                </div>
               );
             })}
           </div>
         </section>
       </div>
     </AdminFrame>
+  );
+}
+
+// Task #3259 — Historical-order backfill + coordinated email release for one
+// connected store. Dry-run preview first (count / date range / projected
+// GoodDeed numbers), explicit confirm to mint, then a clearly-labeled batch
+// release for the redemption emails that backfill held (so the artist can
+// announce before fans get their links).
+function StoreBackfillPanel({ storeId, shopDomain }: { storeId: string; shopDomain: string }) {
+  const { toast } = useToast();
+  const [preview, setPreview] = useState<null | {
+    totalFetched: number;
+    skipped: { cancelled: number; refunded: number; unmapped: number; noEmail: number };
+    alreadyMaterialized: number;
+    newCount: number;
+    dateRange: { from: string; to: string } | null;
+    assignments: Array<{
+      shopifyOrderId: string;
+      orderName: string | null;
+      createdAt: string;
+      email: string | null;
+      albumTitle: string | null;
+      quantity: number;
+      projectedGoodDeedNumber: number | null;
+      alreadyMaterialized: boolean;
+    }>;
+  }>(null);
+
+  const heldQuery = useQuery<{ count: number; orders: Array<{ orderId: string; buyerEmail: string | null; goodDeedNumber: number | null; albumTitle: string | null }> }>({
+    queryKey: [`/api/admin/shopify/stores/${storeId}/held-emails`],
+  });
+
+  const runPreview = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("GET", `/api/admin/shopify/stores/${storeId}/backfill-preview`);
+      return r.json();
+    },
+    onSuccess: (j) => setPreview(j),
+    onError: (e: any) => toast({ title: "Preview failed", description: e?.message, variant: "destructive" }),
+  });
+
+  const runBackfill = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/shopify/stores/${storeId}/backfill`);
+      return r.json() as Promise<{ minted: number; skippedExisting: number; failures: Array<{ shopifyOrderId: string; error: string }> }>;
+    },
+    onSuccess: (j) => {
+      toast({
+        title: `Backfill complete — ${j.minted} order${j.minted === 1 ? "" : "s"} minted`,
+        description:
+          (j.skippedExisting ? `${j.skippedExisting} already existed. ` : "") +
+          (j.failures.length ? `${j.failures.length} FAILED — check server logs.` : "Emails are HELD until you release them below."),
+        variant: j.failures.length ? "destructive" : undefined,
+      });
+      setPreview(null);
+      heldQuery.refetch();
+    },
+    onError: (e: any) => toast({ title: "Backfill failed", description: e?.message, variant: "destructive" }),
+  });
+
+  const releaseEmails = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/shopify/stores/${storeId}/release-emails`);
+      return r.json() as Promise<{ released: number; failed: number }>;
+    },
+    onSuccess: (j) => {
+      toast({
+        title: `${j.released} redemption email${j.released === 1 ? "" : "s"} sent`,
+        description: j.failed ? `${j.failed} failed — release again to retry just those.` : undefined,
+        variant: j.failed ? "destructive" : undefined,
+      });
+      heldQuery.refetch();
+    },
+    onError: (e: any) => toast({ title: "Release failed", description: e?.message, variant: "destructive" }),
+  });
+
+  const heldCount = heldQuery.data?.count ?? 0;
+  const fmtDate = (s: string) => new Date(s).toLocaleDateString();
+
+  return (
+    <div className="mt-1 mb-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 space-y-3" data-testid={`panel-backfill-${storeId}`}>
+      <div>
+        <div className="text-sm font-semibold text-slate-900">Historical order backfill</div>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Numbers this store's past paid orders by their original order date (earliest purchaser gets the lowest
+          GoodDeed number). Backfilled orders send <span className="font-semibold">no email</span> until you release
+          them below. Safe to re-run — already-imported orders are skipped.
+        </p>
+        <div className="flex items-center gap-2 mt-2">
+          <button
+            type="button"
+            onClick={() => runPreview.mutate()}
+            disabled={runPreview.isPending}
+            className="text-xs font-medium rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+            data-testid={`button-backfill-preview-${storeId}`}
+          >
+            {runPreview.isPending ? "Fetching from Shopify…" : "Preview (dry run)"}
+          </button>
+          {preview && preview.newCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  confirm(
+                    `Backfill ${preview.newCount} historical order${preview.newCount === 1 ? "" : "s"} from ${shopDomain}?\n\nGoodDeed numbers are assigned by original order date. NO emails are sent until you release them.`,
+                  )
+                ) {
+                  runBackfill.mutate();
+                }
+              }}
+              disabled={runBackfill.isPending}
+              className="text-xs font-medium rounded-md bg-slate-900 px-2.5 py-1.5 text-white hover:bg-slate-700 disabled:opacity-50"
+              data-testid={`button-backfill-run-${storeId}`}
+            >
+              {runBackfill.isPending ? "Backfilling…" : `Backfill ${preview.newCount} orders`}
+            </button>
+          )}
+        </div>
+        {preview && (
+          <div className="mt-2 text-xs text-slate-600 space-y-1" data-testid={`backfill-preview-summary-${storeId}`}>
+            <div>
+              Fetched {preview.totalFetched} paid orders · <span className="font-semibold">{preview.newCount} new to import</span>
+              {preview.alreadyMaterialized > 0 && ` · ${preview.alreadyMaterialized} already imported`}
+              {preview.skipped.refunded > 0 && ` · ${preview.skipped.refunded} refunded (skipped)`}
+              {preview.skipped.cancelled > 0 && ` · ${preview.skipped.cancelled} cancelled (skipped)`}
+              {preview.skipped.unmapped > 0 && ` · ${preview.skipped.unmapped} unmapped (skipped)`}
+              {preview.skipped.noEmail > 0 && ` · ${preview.skipped.noEmail} without email (skipped)`}
+            </div>
+            {preview.dateRange && (
+              <div>
+                Order dates {fmtDate(preview.dateRange.from)} – {fmtDate(preview.dateRange.to)}
+              </div>
+            )}
+            {preview.newCount > 0 && (
+              <div className="max-h-40 overflow-y-auto rounded border border-slate-200 bg-white">
+                <table className="w-full text-xs">
+                  <thead className="text-slate-400 text-left">
+                    <tr>
+                      <th className="px-2 py-1 font-medium">Order</th>
+                      <th className="px-2 py-1 font-medium">Date</th>
+                      <th className="px-2 py-1 font-medium">Email</th>
+                      <th className="px-2 py-1 font-medium">Album</th>
+                      <th className="px-2 py-1 font-medium text-right">GoodDeed #</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.assignments.filter((a) => !a.alreadyMaterialized).map((a) => (
+                      <tr key={a.shopifyOrderId} className="border-t border-slate-100">
+                        <td className="px-2 py-1">{a.orderName ?? a.shopifyOrderId}</td>
+                        <td className="px-2 py-1 whitespace-nowrap">{fmtDate(a.createdAt)}</td>
+                        <td className="px-2 py-1 truncate max-w-[160px]">{a.email}</td>
+                        <td className="px-2 py-1 truncate max-w-[140px]">{a.albumTitle}</td>
+                        <td className="px-2 py-1 text-right font-semibold">{a.projectedGoodDeedNumber}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {preview.newCount === 0 && <div className="text-slate-500">Nothing new to import.</div>}
+          </div>
+        )}
+      </div>
+      <div className="border-t border-slate-200 pt-3">
+        <div className="text-sm font-semibold text-slate-900">Held redemption emails</div>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Backfilled orders whose redemption email hasn't been sent yet. Release when the artist has announced.
+        </p>
+        <div className="flex items-center gap-3 mt-2">
+          <span className="text-xs text-slate-600" data-testid={`held-email-count-${storeId}`}>
+            {heldQuery.isLoading ? "…" : `${heldCount} held`}
+          </span>
+          {heldCount > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  confirm(
+                    `Send ${heldCount} held redemption email${heldCount === 1 ? "" : "s"} now?\n\nEach fan gets their personal "Get my music" link. This can't be un-sent.`,
+                  )
+                ) {
+                  releaseEmails.mutate();
+                }
+              }}
+              disabled={releaseEmails.isPending}
+              className="text-xs font-medium rounded-md bg-emerald-600 px-2.5 py-1.5 text-white hover:bg-emerald-500 disabled:opacity-50"
+              data-testid={`button-release-emails-${storeId}`}
+            >
+              {releaseEmails.isPending ? "Sending…" : `Release ${heldCount} email${heldCount === 1 ? "" : "s"}`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

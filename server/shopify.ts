@@ -17,7 +17,7 @@ import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, 
 import { promisify } from "util";
 import { and, desc, eq, inArray, isNotNull, isNull, not, sql } from "drizzle-orm";
 import { jwtVerify } from "jose";
-import { db } from "./db";
+import { db, pool } from "./db";
 import {
   albums,
   albumAddons,
@@ -975,6 +975,9 @@ type ShopifyLineItem = {
 type ShopifyOrder = {
   id: number;
   order_number: number;
+  // Present on webhook payloads and synthesized for historical-backfill
+  // orders (Task #3259) — the original Shopify order timestamp.
+  created_at?: string | null;
   // Per-order unguessable token. Shopify exposes this on the buyer's
   // order status page; we use it to gate the public code lookup.
   token?: string | null;
@@ -1152,7 +1155,16 @@ async function materializeShopifyPlusFulfillmentOnly(args: {
 // GoodTunes order + line items + (maybe) album unlock + GoodDeed number
 // + redemption code. Idempotent by shopifyOrderId — a webhook replay
 // re-fetches the same row and no-ops.
-async function materializeOrderFromShopify(store: ShopifyStore, payload: ShopifyOrder): Promise<{ orderId: string; code: string } | null> {
+// Task #3259 — `opts.backfill` puts the materializer in historical-backfill
+// mode: the order row keeps its ORIGINAL Shopify created_at (so numbering ran
+// in true order-date sequence), the redemption email is HELD (stamped
+// redemption_email_held_at, released later by the operator batch control),
+// and the pass stays read-only against Shopify + fulfillment (no metafield /
+// note_attributes writes, no Order Desk push — these orders were already
+// fulfilled by the store long ago).
+type MaterializeOpts = { backfill?: { sourceCreatedAt: Date } };
+async function materializeOrderFromShopify(store: ShopifyStore, payload: ShopifyOrder, opts?: MaterializeOpts): Promise<{ orderId: string; code: string } | null> {
+  const backfill = opts?.backfill ?? null;
   const shopifyOrderId = String(payload.id);
   const buyerEmail = payload.email?.trim().toLowerCase() ?? null;
   if (!buyerEmail) {
@@ -1161,10 +1173,20 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   }
 
   // Idempotency: if we already materialized this order, return its code.
+  // Task #3259 — a CODELESS existing order means a prior materialize crashed
+  // between the order insert and the code mint (the code is deliberately
+  // minted last). Returning null here would strand that purchaser forever
+  // (held-email release inner-joins codes). Instead, RESUME the pipeline
+  // with the existing order row: every later side-step is idempotent per
+  // orderId (onConflictDoNothing / explicit guards), so the rerun completes
+  // exactly the missing tail — items, unlock, and the code.
+  let resumeExisting: typeof orders.$inferSelect | null = null;
   const [existing] = await db.select().from(orders).where(eq(orders.shopifyOrderId, shopifyOrderId));
   if (existing) {
     const [code] = await db.select().from(shopifyRedemptionCodes).where(eq(shopifyRedemptionCodes.orderId, existing.id));
-    return code ? { orderId: existing.id, code: code.code } : null;
+    if (code) return { orderId: existing.id, code: code.code };
+    console.warn(`[shopify] order ${shopifyOrderId} exists without a redemption code — resuming partial materialization`);
+    resumeExisting = existing;
   }
 
   // Resolve every line item against our mappings on this store. We pick
@@ -1273,6 +1295,13 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // no fan-sale pool / early-cut accrual, and fulfillment/cert gated by the
   // album toggles.
   if (isShopifyPlus && !matchedMapping.offersDigitalUnlock) {
+    // Task #3259 — a HISTORICAL fulfillment-only order has nothing for us to
+    // do: it was fulfilled by the store long ago and mints no unlock/number.
+    // Never create a fulfillment row or push Order Desk from a backfill.
+    if (backfill) {
+      console.log(`[shopify-backfill] skipping shopify_plus fulfillment-only historical order ${shopifyOrderId}`);
+      return null;
+    }
     await materializeShopifyPlusFulfillmentOnly({
       store,
       payload,
@@ -1363,7 +1392,13 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   const labelSnapshotId = albumRow?.labelId ?? null;
 
   const { withRetryOnGoodDeedCollision } = await import("./commerce");
-  const order = await withRetryOnGoodDeedCollision(albumId, async () => {
+  // Task #3259 — serialize numbering against a running historical backfill:
+  // a live webhook mint waits on the album's advisory lock (held by the
+  // backfill for its whole chronological pass) so it can never take a number
+  // BETWEEN two historical orders. In backfill mode the CALLER (the backfill
+  // route) already holds the lock on its own session — re-acquiring here
+  // would self-deadlock, so the mint runs bare.
+  const mintOrder = async () => withRetryOnGoodDeedCollision(albumId, async () => {
     const goodDeedNumber = await assignNextGoodDeedNumberForAlbum(albumId);
     const [row] = await db
       .insert(orders)
@@ -1398,15 +1433,24 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
         // album only routes per-order goods when its fulfillment toggle is
         // on (otherwise the finished run is dropshipped, nothing per order).
         // Task #2859 — QA test orders never enter fulfillment routing.
+        // Task #3259 — backfilled historical orders were fulfilled by the
+        // store long before we connected; never re-enter fulfillment.
         fulfillmentStatus:
-          !isQaTestOrder && isPhysicalSkuKind(skuKind) && (!isShopifyPlus || spAlbum?.shopifyPlusFulfillment)
+          !isQaTestOrder && !backfill && isPhysicalSkuKind(skuKind) && (!isShopifyPlus || spAlbum?.shopifyPlusFulfillment)
             ? "pending"
             : null,
+        // Task #3259 — backfill keeps the original Shopify order timestamp
+        // (reports/rosters show the true purchase date) and holds the
+        // redemption email for the coordinated operator release.
+        ...(backfill
+          ? { createdAt: backfill.sourceCreatedAt, redemptionEmailHeldAt: new Date() }
+          : {}),
       })
       .onConflictDoNothing({ target: orders.shopifyOrderId })
       .returning();
     return row;
   });
+  const order = resumeExisting ?? (backfill ? await mintOrder() : await withGoodDeedNumberingLocks([albumId], mintOrder));
   // Task #79 — first paid order stamps the post-sale lock on the album.
   // Task #2859 — QA test orders don't lock the QA album's metadata.
   if (order && !isQaTestOrder) {
@@ -1447,7 +1491,14 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
       quantity: 1,
     });
   }
-  await db.insert(orderItems).values(itemRows);
+  // On a resumed partial materialize the items may already exist — a plain
+  // re-insert would duplicate them, so only write when the order has none.
+  const existingItems = resumeExisting
+    ? await db.select({ id: orderItems.id }).from(orderItems).where(eq(orderItems.orderId, order.id)).limit(1)
+    : [];
+  if (existingItems.length === 0) {
+    await db.insert(orderItems).values(itemRows);
+  }
 
   // Task #533 — accrue this paid Shopify sale's per-unit press earmark
   // into the album's early-cut funding pool. Idempotent per order.
@@ -1487,6 +1538,22 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
       .onConflictDoNothing({ target: platformWholesaleLedger.orderId });
   } catch (e: any) {
     console.error(`[shopify] wholesale accrual failed for ${order.id}: ${e?.message ?? e}`);
+  }
+
+  // Task #3259 — per-album NPO beneficiary credits (e.g. EndoFound $1/unit)
+  // now mint on Shopify-sourced orders too — webhook AND backfill — once the
+  // operator configures the album's beneficiary split. Idempotent per
+  // (order, org); best-effort, never unwinds the materialized order.
+  if (!isQaTestOrder) {
+    try {
+      const { mintAlbumNpoCreditsForOrder } = await import("./commerce");
+      await mintAlbumNpoCreditsForOrder(
+        { id: order.id, artistSnapshotId: order.artistSnapshotId, currency: order.currency },
+        albumId,
+      );
+    } catch (e: any) {
+      console.error(`[shopify] NPO credit mint failed for ${order.id}: ${e?.message ?? e}`);
+    }
   }
 
   // Task #246 — Mint a cert_reservations row if the order carries the
@@ -1541,16 +1608,23 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // status) can display it directly. Fire-and-forget: a failure is logged
   // but never blocks the webhook response. The extension handles the
   // not-yet-written state with a "being prepared" placeholder card.
-  writeRedemptionMetafield(store, shopifyOrderId, code).catch((e: any) => {
-    console.error(`[shopify] metafield write failed order=${shopifyOrderId}: ${e?.message ?? e}`);
-  });
+  // Task #3259 — backfill mode never writes back to Shopify (the merchant's
+  // historical orders stay untouched) and never emails at mint time.
+  if (!backfill) {
+    writeRedemptionMetafield(store, shopifyOrderId, code).catch((e: any) => {
+      console.error(`[shopify] metafield write failed order=${shopifyOrderId}: ${e?.message ?? e}`);
+    });
+  }
 
   // Phase 1c — email the fan their personal redemption link directly.
   // Guaranteed day-one path regardless of whether the merchant's checkout
   // renders the UI Extension yet. Runs ONLY on a fresh code mint (webhook
   // replays early-return above with the existing code, so this can't
   // double-send). Fire-and-forget: mail failure never unwinds the order.
-  if (payload.email) {
+  // Task #3259 — a backfilled order sends NO email now; the operator
+  // releases the whole batch via POST /stores/:id/release-emails once
+  // the artist has announced.
+  if (payload.email && !backfill) {
     (async () => {
       const appUrl = (process.env.APP_URL ?? `https://${process.env.GOODTUNES_HOST ?? "my.goodtunes.music"}`).replace(/\/$/, "");
       const redeemUrl = `${appUrl}/redeem/${code}`;
@@ -1603,7 +1677,7 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // bypassing the deliberate auto-push gate that plain Shopify/direct orders
   // wait on until the press-run quantity is confirmed.
   // Task #2859 — QA test orders never reach Order Desk / fulfillment.
-  const shouldPushToOrderDesk = !isQaTestOrder && (isShopifyPlus
+  const shouldPushToOrderDesk = !isQaTestOrder && !backfill && (isShopifyPlus
     ? isPhysicalSkuKind(skuKind) && !!spAlbum?.shopifyPlusFulfillment
     : isPhysicalSkuKind(skuKind) && orderDeskAutoPushEnabled());
   if (shouldPushToOrderDesk) {
@@ -1620,7 +1694,7 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // (e.g. write_orders scope not granted on an older install) shouldn't
   // unwind the materialized order; the order-status page CTA still
   // works either way.
-  try {
+  if (!backfill) try {
     const appUrl = process.env.APP_URL ?? `https://${process.env.GOODTUNES_HOST ?? "my.goodtunes.music"}`;
     const redeemUrl = `${appUrl.replace(/\/$/, "")}/redeem/${code}`;
     const [albumRow] = await db.select({ title: albums.title }).from(albums).where(eq(albums.id, albumId));
@@ -1633,6 +1707,359 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   }
 
   return { orderId: order.id, code };
+}
+
+// ─── Task #3259 — historical-order backfill (Niina go-live) ────────────
+// Connecting a store that already sold mapped products would otherwise hand
+// GoodDeed #1 to the first NEW webhook order. The backfill pages the store's
+// historical paid orders, sorts them by original order date, and mints them
+// through the exact same materializer as the webhook path (idempotent by
+// shopifyOrderId, collision-retried numbering) — earliest purchaser gets the
+// lowest number, and later webhook orders keep numbering above the floor.
+const HISTORICAL_ORDERS_QUERY = /* GraphQL */ `
+  query historicalOrders($cursor: String, $q: String!) {
+    orders(first: 50, after: $cursor, query: $q, sortKey: CREATED_AT) {
+      pageInfo { hasNextPage endCursor }
+      nodes {
+        legacyResourceId
+        name
+        createdAt
+        cancelledAt
+        displayFinancialStatus
+        email
+        currencyCode
+        totalPriceSet { shopMoney { amount } }
+        customer { firstName lastName phone }
+        billingAddress { name address1 address2 city provinceCode zip countryCodeV2 }
+        shippingAddress { name address1 address2 city provinceCode zip countryCodeV2 }
+        lineItems(first: 50) {
+          nodes {
+            title
+            quantity
+            originalUnitPriceSet { shopMoney { amount } }
+            product { legacyResourceId }
+            variant { legacyResourceId }
+          }
+        }
+      }
+    }
+  }
+`;
+
+type GqlHistoricalOrder = {
+  legacyResourceId: string;
+  name: string | null;
+  createdAt: string;
+  cancelledAt: string | null;
+  displayFinancialStatus: string | null;
+  email: string | null;
+  currencyCode: string | null;
+  totalPriceSet?: { shopMoney?: { amount?: string | null } | null } | null;
+  customer?: { firstName?: string | null; lastName?: string | null; phone?: string | null } | null;
+  billingAddress?: GqlBackfillAddress | null;
+  shippingAddress?: GqlBackfillAddress | null;
+  lineItems?: { nodes?: Array<{
+    title: string;
+    quantity: number;
+    originalUnitPriceSet?: { shopMoney?: { amount?: string | null } | null } | null;
+    product?: { legacyResourceId?: string | null } | null;
+    variant?: { legacyResourceId?: string | null } | null;
+  }> | null } | null;
+};
+type GqlBackfillAddress = {
+  name?: string | null; address1?: string | null; address2?: string | null;
+  city?: string | null; provinceCode?: string | null; zip?: string | null; countryCodeV2?: string | null;
+};
+
+function gqlBackfillAddressToRest(a: GqlBackfillAddress | null | undefined): ShopifyAddress | null {
+  if (!a) return null;
+  return {
+    name: a.name ?? null,
+    address1: a.address1 ?? null,
+    address2: a.address2 ?? null,
+    city: a.city ?? null,
+    province_code: a.provinceCode ?? null,
+    zip: a.zip ?? null,
+    country_code: a.countryCodeV2 ?? null,
+  };
+}
+
+// Map a GraphQL order node back to the REST webhook payload shape the
+// materializer was written against (numeric ids ride legacyResourceId —
+// same bridging approach as the Phase 3-6 helpers above).
+function gqlHistoricalOrderToRest(n: GqlHistoricalOrder): ShopifyOrder {
+  return {
+    id: Number(n.legacyResourceId),
+    order_number: Number((n.name ?? "").replace(/[^0-9]/g, "")) || 0,
+    created_at: n.createdAt,
+    token: null,
+    confirmation_number: null,
+    email: n.email ?? null,
+    total_price: n.totalPriceSet?.shopMoney?.amount ?? "0",
+    currency: (n.currencyCode ?? "USD").toLowerCase(),
+    customer: n.customer
+      ? { first_name: n.customer.firstName ?? null, last_name: n.customer.lastName ?? null, phone: n.customer.phone ?? null }
+      : null,
+    billing_address: gqlBackfillAddressToRest(n.billingAddress),
+    shipping_address: gqlBackfillAddressToRest(n.shippingAddress),
+    line_items: (n.lineItems?.nodes ?? []).map((li) => ({
+      id: null,
+      product_id: li.product?.legacyResourceId ? Number(li.product.legacyResourceId) : null,
+      variant_id: li.variant?.legacyResourceId ? Number(li.variant.legacyResourceId) : null,
+      title: li.title,
+      quantity: li.quantity ?? 1,
+      price: li.originalUnitPriceSet?.shopMoney?.amount ?? "0",
+    })),
+  };
+}
+
+// ── GoodDeed-numbering serialization (backfill vs live webhooks) ──
+// assignNextGoodDeedNumber is MAX()+1 with a collision-retry, which keeps
+// numbers UNIQUE under concurrency but not ORDERED: a live webhook landing
+// mid-backfill could grab a number between two historical orders. Both the
+// webhook mint and the backfill run therefore take a per-album Postgres
+// advisory lock (session-scoped, dedicated connection): the backfill holds
+// its albums' locks for the WHOLE chronological pass, so a concurrent
+// webhook mint simply waits and numbers above the finished backfill floor.
+// (Shopify retries webhook deliveries, and the materializer is idempotent,
+// so a webhook request timing out while it waits is harmless.)
+const GOODDEED_LOCK_NS = "gd-numbering";
+async function withGoodDeedNumberingLocks<T>(albumIds: string[], fn: () => Promise<T>): Promise<T> {
+  const ids = Array.from(new Set(albumIds)).sort(); // stable order → no deadlocks
+  if (ids.length === 0) return fn();
+  const client = await pool.connect();
+  try {
+    for (const id of ids) {
+      await client.query("SELECT pg_advisory_lock(hashtext($1), hashtext($2))", [GOODDEED_LOCK_NS, id]);
+    }
+    try {
+      return await fn();
+    } finally {
+      for (const id of ids) {
+        await client.query("SELECT pg_advisory_unlock(hashtext($1), hashtext($2))", [GOODDEED_LOCK_NS, id]).catch(() => {});
+      }
+    }
+  } finally {
+    client.release();
+  }
+}
+
+// Hard page cap: 60 pages × 50 = 3,000 historical orders per run. A store
+// bigger than that fails loudly rather than silently truncating (the operator
+// would re-run after we raise the cap — never a partial-looking success).
+const BACKFILL_MAX_PAGES = 60;
+
+async function fetchHistoricalPaidOrders(store: ShopifyStore): Promise<Array<{ payload: ShopifyOrder; node: GqlHistoricalOrder }>> {
+  const out: Array<{ payload: ShopifyOrder; node: GqlHistoricalOrder }> = [];
+  let cursor: string | null = null;
+  for (let page = 0; ; page++) {
+    if (page >= BACKFILL_MAX_PAGES) {
+      throw new Error(
+        `Store has more than ${BACKFILL_MAX_PAGES * 50} historical paid orders — backfill page cap hit; raise BACKFILL_MAX_PAGES before re-running`,
+      );
+    }
+    const data = await shopifyGraphql<{
+      orders: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: GqlHistoricalOrder[] } | null;
+    }>(store, HISTORICAL_ORDERS_QUERY, { cursor, q: "financial_status:paid" });
+    const nodes = data.orders?.nodes ?? [];
+    for (const n of nodes) out.push({ payload: gqlHistoricalOrderToRest(n), node: n });
+    if (!data.orders?.pageInfo?.hasNextPage) break;
+    cursor = data.orders.pageInfo.endCursor;
+  }
+  return out;
+}
+
+export type BackfillPlanEntry = {
+  shopifyOrderId: string;
+  orderName: string | null;
+  createdAt: string;
+  email: string | null;
+  albumId: string;
+  albumTitle: string | null;
+  quantity: number;
+  projectedGoodDeedNumber: number | null; // null = already materialized
+  alreadyMaterialized: boolean;
+  payload: ShopifyOrder;
+};
+
+export type BackfillPlan = {
+  totalFetched: number;
+  skippedCancelled: number;
+  skippedRefunded: number;
+  skippedUnmapped: number;
+  skippedNoEmail: number;
+  entries: BackfillPlanEntry[]; // sorted ascending by original order date
+};
+
+// Shared by preview (dry run) and execute. Applies the SAME primary-mapping
+// match the webhook uses (exact variant pin beats product-wide, addon
+// mappings never match as primary), skips cancelled/refunded orders, and
+// projects the number each new order would receive in strict date order.
+async function planHistoricalBackfill(store: ShopifyStore): Promise<BackfillPlan> {
+  const fetched = await fetchHistoricalPaidOrders(store);
+  const mappings = await db
+    .select()
+    .from(shopifyProductMappings)
+    .where(eq(shopifyProductMappings.storeId, store.id));
+  const plan: BackfillPlan = {
+    totalFetched: fetched.length,
+    skippedCancelled: 0,
+    skippedRefunded: 0,
+    skippedUnmapped: 0,
+    skippedNoEmail: 0,
+    entries: [],
+  };
+  const candidates: Array<Omit<BackfillPlanEntry, "projectedGoodDeedNumber" | "alreadyMaterialized" | "albumTitle">> = [];
+  for (const { payload, node } of fetched) {
+    if (node.cancelledAt) { plan.skippedCancelled++; continue; }
+    const fin = (node.displayFinancialStatus ?? "").toUpperCase();
+    if (fin.includes("REFUNDED") || fin === "VOIDED") { plan.skippedRefunded++; continue; }
+    // Same primary-line resolution as the webhook materializer.
+    let hit: { albumId: string; line: ShopifyLineItem } | null = null;
+    for (const li of payload.line_items) {
+      const pid = String(li.product_id ?? "");
+      if (!pid) continue;
+      const vid = li.variant_id != null ? String(li.variant_id) : null;
+      const exact = mappings.find((m) => m.shopifyProductId === pid && m.shopifyVariantId === vid && !m.isSignedGooddeedAddon);
+      const wide = mappings.find((m) => m.shopifyProductId === pid && m.shopifyVariantId === null && !m.isSignedGooddeedAddon);
+      const m = exact ?? wide;
+      if (m) { hit = { albumId: m.albumId, line: li }; break; }
+    }
+    if (!hit) { plan.skippedUnmapped++; continue; }
+    if (!payload.email?.trim()) { plan.skippedNoEmail++; continue; }
+    candidates.push({
+      shopifyOrderId: String(payload.id),
+      orderName: node.name ?? null,
+      createdAt: node.createdAt,
+      email: payload.email.trim().toLowerCase(),
+      albumId: hit.albumId,
+      quantity: hit.line.quantity ?? 1,
+      payload,
+    });
+  }
+  // Strict original-order-date sequence — earliest purchaser gets the
+  // lowest number.
+  candidates.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  const ids = candidates.map((c) => c.shopifyOrderId);
+  // Task #3259 — an order only counts as materialized when its redemption
+  // code exists too. A codeless row is a PARTIAL materialize (crash between
+  // order insert and code mint); the plan keeps it as a to-do so a rerun
+  // resumes it (materializeOrderFromShopify completes the missing tail).
+  const existing = ids.length
+    ? await db
+        .select({ shopifyOrderId: orders.shopifyOrderId })
+        .from(orders)
+        .innerJoin(shopifyRedemptionCodes, eq(shopifyRedemptionCodes.orderId, orders.id))
+        .where(inArray(orders.shopifyOrderId, ids))
+    : [];
+  const existingSet = new Set(existing.map((e) => e.shopifyOrderId));
+
+  const albumIds = Array.from(new Set(candidates.map((c) => c.albumId)));
+  const albumRows = albumIds.length
+    ? await db.select({ id: albums.id, title: albums.title }).from(albums).where(inArray(albums.id, albumIds))
+    : [];
+  const titleById = new Map(albumRows.map((a) => [a.id, a.title]));
+
+  // Project numbers per album off the CURRENT floor (dry-run only — the
+  // real mint recomputes under the collision-retry helper).
+  const nextByAlbum = new Map<string, number>();
+  for (const albumId of albumIds) {
+    nextByAlbum.set(albumId, await assignNextGoodDeedNumberForAlbum(albumId));
+  }
+  for (const c of candidates) {
+    const already = existingSet.has(c.shopifyOrderId);
+    let projected: number | null = null;
+    if (!already) {
+      projected = nextByAlbum.get(c.albumId) ?? 1;
+      nextByAlbum.set(c.albumId, projected + 1);
+    }
+    plan.entries.push({
+      ...c,
+      albumTitle: titleById.get(c.albumId) ?? null,
+      projectedGoodDeedNumber: projected,
+      alreadyMaterialized: already,
+    });
+  }
+  return plan;
+}
+
+// Send the held redemption email for one backfilled order — the same
+// builder/hero ladder as the live webhook send, with the format classified
+// from the snapshotted order_items line title.
+async function sendHeldRedemptionEmailForOrder(orderRow: typeof orders.$inferSelect, code: string): Promise<{ ok: boolean; reason?: string }> {
+  if (!orderRow.buyerEmail) return { ok: false, reason: "order has no buyer email" };
+  const appUrl = (process.env.APP_URL ?? `https://${process.env.GOODTUNES_HOST ?? "my.goodtunes.music"}`).replace(/\/$/, "");
+  const redeemUrl = `${appUrl}/redeem/${code}`;
+  const [mailAlbumRow] = await db
+    .select({ title: albums.title, artwork: albums.artwork, emailAppearance: albums.emailAppearance })
+    .from(albums)
+    .where(eq(albums.id, orderRow.albumId));
+  const [formatItem] = await db
+    .select({ label: orderItems.label })
+    .from(orderItems)
+    .where(and(eq(orderItems.orderId, orderRow.id), eq(orderItems.kind, "format")));
+  const { classifyShopifyLineFormatKind } = await import("./orderDesk");
+  const heroFormatKind = classifyShopifyLineFormatKind(formatItem?.label ?? null, null, null);
+  const appear = mailAlbumRow?.emailAppearance ?? null;
+  const { sendShopifyRedemptionEmail, resolveRedemptionHeroUrl } = await import("./mail");
+  const heroImageUrl = resolveRedemptionHeroUrl(
+    appear as { heroDefaultUrl?: string | null; heroByFormat?: Record<string, string> | null } | null,
+    mailAlbumRow?.artwork,
+    heroFormatKind,
+    appUrl,
+  );
+  return sendShopifyRedemptionEmail(orderRow.buyerEmail, mailAlbumRow?.title ?? null, redeemUrl, {
+    heroImageUrl,
+    buttonColor: (appear as { buttonColor?: string | null } | null)?.buttonColor ?? null,
+  });
+}
+
+// Release every held redemption email for a store. Crash-safety model:
+// the whole batch runs under a store-scoped advisory lock (no two release
+// runs can interleave, so nothing double-sends within normal operation),
+// each email is SENT FIRST and `redemption_email_released_at` is stamped
+// only AFTER the provider accepts it. A crash between send and stamp
+// therefore re-sends that one email on the next release (at-least-once) —
+// a duplicate "your music is ready" mail is benign, whereas the inverse
+// (stamp-then-send) would permanently strand a fan whose send was lost.
+// `sendFn` is a test seam; production uses the real mail send.
+async function releaseHeldEmailsForStore(
+  storeId: string,
+  sendFn: (orderRow: typeof orders.$inferSelect, code: string) => Promise<{ ok: boolean; reason?: string }> = sendHeldRedemptionEmailForOrder,
+): Promise<{ released: number; failed: number; failures: Array<{ orderId: string; error: string }> }> {
+  return withGoodDeedNumberingLocks([`release-emails:${storeId}`], async () => {
+    const held = await db
+      .select({ o: orders, code: shopifyRedemptionCodes.code })
+      .from(orders)
+      .innerJoin(shopifyRedemptionCodes, eq(shopifyRedemptionCodes.orderId, orders.id))
+      .where(and(
+        eq(orders.shopifyStoreId, storeId),
+        isNotNull(orders.redemptionEmailHeldAt),
+        isNull(orders.redemptionEmailReleasedAt),
+        inArray(orders.status, ["paid", "external_paid"]),
+      ))
+      .orderBy(orders.createdAt);
+    let released = 0;
+    const failures: Array<{ orderId: string; error: string }> = [];
+    for (const { o, code } of held) {
+      try {
+        const r = await sendFn(o, code);
+        if (r.ok) {
+          await db
+            .update(orders)
+            .set({ redemptionEmailReleasedAt: new Date() })
+            .where(and(eq(orders.id, o.id), isNull(orders.redemptionEmailReleasedAt)));
+          released++;
+        } else {
+          failures.push({ orderId: o.id, error: r.reason ?? "mail delivery failed" });
+        }
+      } catch (e: any) {
+        failures.push({ orderId: o.id, error: e?.message ?? String(e) });
+      }
+    }
+    return { released, failed: failures.length, failures };
+  });
 }
 
 // ─── Refund GraphQL plumbing (Phase 6 migration) ───────────────────────
@@ -3366,6 +3793,127 @@ export function registerShopifyRoutes(app: Express) {
     res.json({ ...updated, accessToken: undefined });
   });
 
+  // ─── Task #3259 — historical-order backfill + coordinated email release ──
+
+  // Dry-run preview: pages the store's historical paid orders from Shopify,
+  // filters to mapped products, and projects the number each order would
+  // receive in strict order-date sequence. Writes NOTHING.
+  app.get("/api/admin/shopify/stores/:id/backfill-preview", requireAdmin, async (req, res) => {
+    const store = await getStoreById(String(req.params.id));
+    if (!store) return res.status(404).json({ message: "Store not found" });
+    if (store.uninstalledAt || !store.accessToken) {
+      return res.status(409).json({ message: "Store is uninstalled — reconnect it before backfilling" });
+    }
+    try {
+      const plan = await planHistoricalBackfill(store);
+      const newEntries = plan.entries.filter((e) => !e.alreadyMaterialized);
+      res.json({
+        totalFetched: plan.totalFetched,
+        skipped: {
+          cancelled: plan.skippedCancelled,
+          refunded: plan.skippedRefunded,
+          unmapped: plan.skippedUnmapped,
+          noEmail: plan.skippedNoEmail,
+        },
+        alreadyMaterialized: plan.entries.length - newEntries.length,
+        newCount: newEntries.length,
+        dateRange: newEntries.length
+          ? { from: newEntries[0].createdAt, to: newEntries[newEntries.length - 1].createdAt }
+          : null,
+        assignments: plan.entries.map(({ payload: _p, ...rest }) => rest),
+      });
+    } catch (e: any) {
+      console.error(`[shopify-backfill] preview failed for ${store.shopDomain}: ${e?.message ?? e}`);
+      res.status(502).json({ message: `Couldn't build the backfill preview: ${e?.message ?? "Shopify fetch failed"}` });
+    }
+  });
+
+  // Execute the backfill. Re-plans (so the preview can't go stale under it),
+  // then mints strictly SEQUENTIALLY in ascending order-date order through
+  // the same materializer as the webhook path — idempotent by shopifyOrderId,
+  // emails held (redemption_email_held_at), no Shopify/fulfillment writes.
+  // Re-running is safe: already-materialized orders no-op.
+  app.post("/api/admin/shopify/stores/:id/backfill", requireAdmin, async (req, res) => {
+    const store = await getStoreById(String(req.params.id));
+    if (!store) return res.status(404).json({ message: "Store not found" });
+    if (store.uninstalledAt || !store.accessToken) {
+      return res.status(409).json({ message: "Store is uninstalled — reconnect it before backfilling" });
+    }
+    try {
+      const plan = await planHistoricalBackfill(store);
+      let minted = 0;
+      let skippedExisting = 0;
+      const failures: Array<{ shopifyOrderId: string; error: string }> = [];
+      // Hold every involved album's numbering lock for the WHOLE
+      // chronological pass — a live webhook arriving mid-backfill waits and
+      // then numbers above the finished floor (never between two
+      // historical orders).
+      await withGoodDeedNumberingLocks(plan.entries.map((e) => e.albumId), async () => {
+        for (const entry of plan.entries) {
+          if (entry.alreadyMaterialized) { skippedExisting++; continue; }
+          try {
+            const r = await materializeOrderFromShopify(store, entry.payload, {
+              backfill: { sourceCreatedAt: new Date(entry.createdAt) },
+            });
+            if (r) minted++;
+            else skippedExisting++; // raced/duplicate/fulfillment-only edge — materializer logged why
+          } catch (e: any) {
+            failures.push({ shopifyOrderId: entry.shopifyOrderId, error: e?.message ?? String(e) });
+          }
+        }
+      });
+      console.log(
+        `[shopify-backfill] ${store.shopDomain}: minted=${minted} skippedExisting=${skippedExisting} failures=${failures.length}`,
+      );
+      res.json({ minted, skippedExisting, failures, totalPlanned: plan.entries.length });
+    } catch (e: any) {
+      console.error(`[shopify-backfill] execute failed for ${store.shopDomain}: ${e?.message ?? e}`);
+      res.status(502).json({ message: `Backfill failed: ${e?.message ?? "Shopify fetch failed"}` });
+    }
+  });
+
+  // Held redemption emails for this store — backfilled orders whose email
+  // has not been released yet. Backs the count confirmation in the UI.
+  app.get("/api/admin/shopify/stores/:id/held-emails", requireAdmin, async (req, res) => {
+    const storeId = String(req.params.id);
+    const rows = await db
+      .select({ o: orders, code: shopifyRedemptionCodes.code, albumTitle: albums.title })
+      .from(orders)
+      .leftJoin(shopifyRedemptionCodes, eq(shopifyRedemptionCodes.orderId, orders.id))
+      .leftJoin(albums, eq(albums.id, orders.albumId))
+      .where(and(
+        eq(orders.shopifyStoreId, storeId),
+        isNotNull(orders.redemptionEmailHeldAt),
+        isNull(orders.redemptionEmailReleasedAt),
+        inArray(orders.status, ["paid", "external_paid"]),
+      ))
+      .orderBy(orders.createdAt);
+    res.json({
+      count: rows.length,
+      orders: rows.map((r) => ({
+        orderId: r.o.id,
+        shopifyOrderId: r.o.shopifyOrderId,
+        buyerEmail: r.o.buyerEmail,
+        goodDeedNumber: r.o.goodDeedNumber,
+        createdAt: r.o.createdAt,
+        albumTitle: r.albumTitle,
+        hasCode: !!r.code,
+      })),
+    });
+  });
+
+  // Release the held redemption emails as one batch. Each row is claimed via
+  // an atomic conditional UPDATE before sending, so a double-click (or two
+  // operators) can never double-send; a failed send un-claims the row so a
+  // re-release retries just the failures. Refunded orders never release
+  // (status filter above).
+  app.post("/api/admin/shopify/stores/:id/release-emails", requireAdmin, async (req, res) => {
+    const storeId = String(req.params.id);
+    const result = await releaseHeldEmailsForStore(storeId);
+    console.log(`[shopify-backfill] release-emails store=${storeId}: released=${result.released} failed=${result.failed}`);
+    res.json(result);
+  });
+
   // ─── Install-link tracking (Task #2892) ───────────────────────────
   // Backs the progressive install flow on /admin/shopify: copying an
   // install link (or starting a direct install) records the target shop
@@ -4801,4 +5349,11 @@ export const __internal = {
   fetchSuggestedRefund,
   issueRefundCreate,
   webhookTopicToEnum: WEBHOOK_TOPIC_TO_ENUM,
+  // Task #3259 — historical backfill plumbing, exported for hermetic tests.
+  gqlHistoricalOrderToRest,
+  fetchHistoricalPaidOrders,
+  planHistoricalBackfill,
+  sendHeldRedemptionEmailForOrder,
+  releaseHeldEmailsForStore,
+  withGoodDeedNumberingLocks,
 };

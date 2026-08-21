@@ -33117,10 +33117,24 @@ export async function registerRoutes(
       if (!(EMAIL_HERO_FORMAT_KINDS as readonly string[]).includes(fmt)) {
         return res.status(400).json({ message: `Unknown format "${fmt}"` });
       }
-      const caller = await storage.getUser(req.session.userId!);
-      const toEmail = (caller?.email ?? "").trim();
-      if (!toEmail) {
-        return res.status(400).json({ message: "Your admin account has no email address to send the test to" });
+      // Task #3259 — optional named recipient (e.g. send the preview to Ruby
+      // for sign-off). Still [Test]-stamped with a placeholder code — the
+      // link can't unlock anything, so mailing an operator-entered address is
+      // no more powerful than forwarding the test. Defaults to the calling
+      // admin's own account email when omitted.
+      const rawRecipient = typeof req.body?.recipient === "string" ? req.body.recipient.trim() : "";
+      let toEmail: string;
+      if (rawRecipient) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawRecipient)) {
+          return res.status(400).json({ message: "That recipient doesn't look like an email address" });
+        }
+        toEmail = rawRecipient.toLowerCase();
+      } else {
+        const caller = await storage.getUser(req.session.userId!);
+        toEmail = (caller?.email ?? "").trim();
+        if (!toEmail) {
+          return res.status(400).json({ message: "Your admin account has no email address to send the test to" });
+        }
       }
       const [row] = await db
         .select({ title: albums.title, artwork: albums.artwork, emailAppearance: albums.emailAppearance })

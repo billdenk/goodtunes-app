@@ -5263,3 +5263,47 @@ async function handleRefund(paymentIntentId: string): Promise<void> {
     await db.delete(userAlbums).where(and(eq(userAlbums.userId, order.customerId), eq(userAlbums.albumId, order.albumId)));
   }
 }
+
+// Task #3259 — NPO beneficiary credits for Shopify-sourced orders. The direct
+// checkout path accrues these inline in materializeOrderFromSession above;
+// Shopify webhook + historical-backfill orders call this helper instead so the
+// EndoFound-style per-album $1/unit split mints regardless of sale channel.
+// Only the explicit album_npo_beneficiaries branch applies here — the legacy
+// people.referred_by_org_id fallback and the artist/press referral branches
+// stay direct-checkout-only (they model GoodTunes-sold referrals). Idempotent
+// via the partial unique (order_id, referrer_org_id) WHERE kind='non_profit'.
+export async function mintAlbumNpoCreditsForOrder(order: {
+  id: string;
+  artistSnapshotId: string | null;
+  currency: string | null;
+}, albumId: string): Promise<number> {
+  // referral_credits.referred_artist_id is NOT NULL — an album with no
+  // primary-artist snapshot can't carry a credit row. Log and bail.
+  if (!order.artistSnapshotId) return 0;
+  const benRows = await db.execute<{ organization_id: string; per_unit_cents: number }>(sql`
+    SELECT organization_id, per_unit_cents
+    FROM album_npo_beneficiaries
+    WHERE album_id = ${albumId}
+    ORDER BY created_at ASC
+  `);
+  const beneficiaries = ((benRows as any).rows ?? []) as { organization_id: string; per_unit_cents: number }[];
+  if (beneficiaries.length === 0) return 0;
+  const currency = (order.currency || "usd").toLowerCase();
+  const u = await db.execute<{ units: number }>(sql`
+    SELECT COALESCE(SUM(quantity), 0)::int AS units
+    FROM order_items WHERE order_id = ${order.id} AND kind = 'format'
+  `);
+  const units = ((u as any).rows?.[0]?.units ?? 0) as number;
+  const safeUnits = units > 0 ? units : 1;
+  let minted = 0;
+  for (const b of beneficiaries) {
+    const amountCents = b.per_unit_cents * safeUnits;
+    await db.execute(sql`
+      INSERT INTO referral_credits (order_id, referred_artist_id, referrer_kind, referrer_org_id, amount_cents, currency, status, units)
+      VALUES (${order.id}, ${order.artistSnapshotId}, 'non_profit', ${b.organization_id}, ${amountCents}, ${currency}, 'pending_payout', ${safeUnits})
+      ON CONFLICT (order_id, referrer_org_id) WHERE referrer_kind = 'non_profit' DO NOTHING
+    `);
+    minted++;
+  }
+  return minted;
+}

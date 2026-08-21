@@ -248,15 +248,21 @@ function EmailPreviewDialog({
     enabled: open,
   });
   const { toast } = useToast();
+  // Task #3259 — optional named recipient (e.g. Ruby) instead of the
+  // logged-in admin. Empty = send to your own account email.
+  const [recipient, setRecipient] = useState("");
   const sendTest = useMutation({
     mutationFn: async () => {
-      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/email-preview/send`, { format });
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/email-preview/send`, {
+        format,
+        ...(recipient.trim() ? { recipient: recipient.trim() } : {}),
+      });
       return r.json();
     },
     onSuccess: (resp: { sentTo?: string }) => {
       toast({
         title: "Test email sent",
-        description: resp?.sentTo ? `Sent to ${resp.sentTo} — check your inbox.` : "Check your inbox.",
+        description: resp?.sentTo ? `Sent to ${resp.sentTo}.` : "Check your inbox.",
       });
     },
     onError: (e: any) => {
@@ -319,6 +325,14 @@ function EmailPreviewDialog({
             The "Get my music" link in the real email is unique per order —
             the preview uses a placeholder.
           </p>
+          <input
+            type="email"
+            value={recipient}
+            onChange={(e) => setRecipient(e.target.value)}
+            placeholder="Recipient (optional — defaults to you)"
+            className="h-7 w-56 shrink-0 rounded border border-slate-200 px-2 text-xs focus:outline-none focus:border-[var(--brand-blue)]"
+            data-testid="input-email-test-recipient"
+          />
           <Button
             type="button"
             variant="outline"

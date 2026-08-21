@@ -12765,3 +12765,29 @@ backfill_press_logo_acls() {
 }
 backfill_press_logo_acls dev  "${DATABASE_URL:-}"
 backfill_press_logo_acls prod "${PROD_DATABASE_URL:-}"
+
+# Task #3259 — coordinated-release redemption emails for historical Shopify
+# backfills. Backfilled orders stamp redemption_email_held_at at mint time and
+# redemption_email_released_at when the operator releases the batch. Idempotent
+# on BOTH DBs so the schema-drift guard stays green and publish diffs stay empty.
+migrate_redemption_email_hold() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping redemption_email_hold migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS redemption_email_held_at     timestamp,
+  ADD COLUMN IF NOT EXISTS redemption_email_released_at timestamp;
+COMMIT;
+SQL
+  then
+    echo "post-merge: redemption_email_hold migration ok on $label"
+  else
+    echo "post-merge: WARNING — redemption_email_hold migration failed on $label (continuing)"
+  fi
+}
+migrate_redemption_email_hold dev  "${DATABASE_URL:-}"
+migrate_redemption_email_hold prod "${PROD_DATABASE_URL:-}"

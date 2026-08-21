@@ -3518,6 +3518,15 @@ export const orders = pgTable("orders", {
   // so two concurrent materializations (webhook vs. /welcome fetch)
   // can never dispatch two receipts for one order.
   receiptEmailSentAt: timestamp("receipt_email_sent_at"),
+  // Task #3259 — coordinated-release redemption emails for historical
+  // Shopify backfills. A backfilled order stamps `redemption_email_held_at`
+  // at mint time (NO email is sent) so the operator can announce first and
+  // release the batch deliberately. The release endpoint claims each row
+  // via an atomic conditional UPDATE (… WHERE redemption_email_released_at
+  // IS NULL) before sending, so a double-click can't double-send. Both NULL
+  // = normal live-webhook order (emailed inline at materialization).
+  redemptionEmailHeldAt: timestamp("redemption_email_held_at"),
+  redemptionEmailReleasedAt: timestamp("redemption_email_released_at"),
   // Task #1467 — fan-confirmed name for the DIGITAL GoodDeed certificate.
   // The physical signed-cert add-on confirms its name on a real
   // `signed_cert_certificates` row; digital-only owners never get one,
