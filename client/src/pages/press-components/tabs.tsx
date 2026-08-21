@@ -271,7 +271,12 @@ export function PressVinylFormatTab({ pressId, initial }: { pressId: string; ini
   return (
     <div className="min-w-0" data-testid="press-vinyl-format-tab">
       {/* ONE segmented control (Templates' Vinyl/CD/Cassette device) — chrome
-          only; the per-segment pages are untouched. */}
+          only; the per-segment pages are untouched. The wrapper mirrors the
+          component bodies' content column (mx-auto, maxWidth 1240, 40px inset)
+          so the control's left edge lines up with the breadcrumb/heading at
+          every width (gogoods, Aug 21 2026); overflow-x-auto keeps narrow
+          panes from scrolling the whole page. */}
+      <div className="mx-auto w-full overflow-x-auto" style={{ maxWidth: 1240, paddingLeft: 40, paddingRight: 40 }}>
       <div
         className="inline-flex items-center rounded-full flex-shrink-0 mb-5"
         style={{ padding: 3, backgroundColor: segTheme.track }}
@@ -303,6 +308,7 @@ export function PressVinylFormatTab({ pressId, initial }: { pressId: string; ini
             </button>
           );
         })}
+      </div>
       </div>
       {visited["vinyl"] && <div hidden={seg !== "vinyl"}><PressVinylComponentTab pressId={pressId} /></div>}
       {visited["jackets"] && <div hidden={seg !== "jackets"}><PressJacketsComponentTab pressId={pressId} /></div>}
