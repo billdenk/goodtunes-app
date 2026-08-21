@@ -696,6 +696,14 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
   return sendViaResend("customer-welcome-back", toEmail, subject, html, text);
 }
 
+export type PressEmailBrand = {
+  pressName?: string | null;
+  logoUrl?: string | null; // LIGHT-background logo (email cards are white)
+  accentColor?: string | null; // "#RRGGBB"
+  cornerStyle?: string | null; // "rounded" | "square"
+  contactLine?: string | null; // one short contact line, no link farm
+};
+
 // ── Press client estimate email (Ruby handoff e86b169, Task #3271) ──────
 // The fully-designed estimate email the platform pushes when a press sends
 // a client their estimate. 600px single dark column, table-based, inline
@@ -2102,8 +2110,13 @@ export function buildAdminInviteEmail(opts: {
   ttlDays: number;
   inviterPhotoUrl?: string | null;
   onBehalfOf?: string | null;
+  // Task #3257 — press white-label branding for press-referred invites:
+  // press logo replaces the GoodTunes header logo, the accept button takes
+  // the press accent + corner style, and a short welcome line points the
+  // new artist at the builder. Absent/empty = today's GoodTunes email.
+  brand?: PressEmailBrand | null;
 }): { subject: string; text: string; html: string } {
-  const { acceptUrl, inviterName, roleLabel, ttlDays, inviterPhotoUrl, onBehalfOf } = opts;
+  const { acceptUrl, inviterName, roleLabel, ttlDays, inviterPhotoUrl, onBehalfOf, brand } = opts;
   const esc = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const safeName = esc(inviterName);
@@ -2115,8 +2128,13 @@ export function buildAdminInviteEmail(opts: {
   const headline = `${safeName} is inviting you to GoodTunes${safeBehalfSuffix}!`;
   // Strip CRLF so a stray newline in a name/org can't smuggle a header.
   const subject = `${inviterName} invited you to GoodTunes${behalfSuffix}`.replace(/[\r\n]+/g, " ");
+  const brandPressName = (brand?.pressName ?? "").trim();
+  const welcomeLine = brandPressName
+    ? `Once you're in, ${brandPressName} will meet you in the project builder to get your record moving.`
+    : "";
   const text = [
     `${inviterName} is inviting you to join GoodTunes as a ${roleLabel}${behalfSuffix}.`,
+    ...(welcomeLine ? [``, welcomeLine] : []),
     ``,
     `Accept the invite (expires in ${ttlDays} days):`,
     acceptUrl,
@@ -2130,7 +2148,7 @@ export function buildAdminInviteEmail(opts: {
     : "";
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      ${emailLogoImg("color")}
+      ${brandLogoImg(brand)}
       <div style="font-size: 14px; color: #666; letter-spacing: 0.5px; text-transform: uppercase;">Invitation</div>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin: 12px 0 16px;">
         <tr>
@@ -2139,11 +2157,13 @@ export function buildAdminInviteEmail(opts: {
         </tr>
       </table>
       <p style="font-size: 16px; line-height: 1.5; color: #333;">You've been invited to join GoodTunes as a <strong>${roleLabel}</strong>.</p>
+      ${welcomeLine ? `<p style="font-size: 14px; line-height: 1.5; color: #555;">${esc(welcomeLine)}</p>` : ""}
       <div style="margin: 28px 0;">
-        ${bulletproofButton(acceptUrl, "Accept invitation", { bgColor: "#319ED8", paddingV: 12, paddingH: 24, borderRadius: 8 })}
+        ${bulletproofButton(acceptUrl, "Accept invitation", { bgColor: brandAccent(brand), paddingV: 12, paddingH: 24, borderRadius: brandRadius(brand, 8) })}
       </div>
       <p style="font-size: 13px; color: #888; line-height: 1.5;">Or paste this URL into your browser:<br /><span style="color: #319ED8; word-break: break-all;">${acceptUrl}</span></p>
       <p style="font-size: 13px; color: #888; margin-top: 24px;">This link expires in <strong>${ttlDays} days</strong>. If you weren't expecting this email, you can ignore it.</p>
+      ${brandFooterHtml(brand)}
     </div>
   `;
   return { subject, text, html };
@@ -2157,8 +2177,11 @@ export async function sendAdminInviteEmail(
   ttlDays: number,
   inviterPhotoUrl?: string | null,
   onBehalfOf?: string | null,
+  // Task #3257 — optional trailing param so the 9 existing call sites are
+  // untouched; only press-referred invite sends pass a brand.
+  brand?: PressEmailBrand | null,
 ): Promise<SendResult> {
-  const { subject, text, html } = buildAdminInviteEmail({ acceptUrl, inviterName, roleLabel, ttlDays, inviterPhotoUrl, onBehalfOf });
+  const { subject, text, html } = buildAdminInviteEmail({ acceptUrl, inviterName, roleLabel, ttlDays, inviterPhotoUrl, onBehalfOf, brand });
   return sendViaResend("admin-invite", toEmail, subject, html, text);
 }
 
@@ -2356,3 +2379,36 @@ export async function sendReferralOtpEmail(
   `;
   return sendViaResend("referral-otp", toEmail, subject, html, text);
 }
+
+function brandLogoImg(brand: PressEmailBrand | null | undefined): string {
+  const url = brand?.logoUrl;
+  if (typeof url === "string" && /^https?:\/\//i.test(url)) {
+    const name = escapeHtml(brand?.pressName ?? "");
+    return `<img src="${escapeHtml(url)}" alt="${name}" height="40" style="display:block;max-height:40px;max-width:200px;width:auto;height:40px;border:0;outline:none;text-decoration:none;margin:0 0 18px;object-fit:contain;" />`;
+  }
+  return emailLogoImg("color");
+}
+
+function brandRadius(brand: PressEmailBrand | null | undefined, roundedRadius: number): number {
+  return brand?.cornerStyle === "square" ? 8 : roundedRadius;
+}
+
+function brandAccent(brand: PressEmailBrand | null | undefined, fallback = "#319ED8"): string {
+  const a = brand?.accentColor;
+  return typeof a === "string" && /^#[0-9a-fA-F]{6}$/.test(a) ? a : fallback;
+}
+
+function brandFooterHtml(brand: PressEmailBrand | null | undefined): string {
+  if (!brand || (!brand.logoUrl && !brand.accentColor && !brand.contactLine)) return "";
+  const lines: string[] = [];
+  const name = (brand.pressName ?? "").trim();
+  const contact = (brand.contactLine ?? "").trim();
+  if (name || contact) {
+    lines.push(
+      `<p style="font-size: 12px; color: #888; line-height: 1.55; margin: 0;">${[name ? `<strong style="color:#666;">${escapeHtml(name)}</strong>` : "", contact ? escapeHtml(contact) : ""].filter(Boolean).join(" · ")}</p>`,
+    );
+  }
+  lines.push(`<p style="font-size: 11px; color: #aaa; letter-spacing: 0.4px; text-transform: uppercase; margin: 8px 0 0;">Powered by GoodTunes&reg;</p>`);
+  return `<div style="margin-top: 28px; padding-top: 16px; border-top: 1px solid #ececf0;">${lines.join("")}</div>`;
+}
+

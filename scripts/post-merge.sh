@@ -12801,3 +12801,31 @@ migrate_redemption_email_hold prod "${PROD_DATABASE_URL:-}"
 # is never overwritten.
 run_sql_both "alter table if exists manufacturers add column if not exists email_branding jsonb" || true
 run_sql_both "update manufacturers set email_branding = '{\"accent\":\"#D6A63F\",\"buttonInk\":\"#1d1d1f\"}'::jsonb where email_branding is null and website_url ilike '%memphisrecordpressing.com%'" || true
+
+# Task #3257 — press white-label branding engine: per-press accent hex,
+# corner style (rounded|square), and ONE customer-facing contact line on
+# manufacturers. Nullable text columns; all-null = GoodTunes defaults.
+# Hand-apply on BOTH dev and prod so the schema-drift guard stays green
+# and the publish dev→prod diff is empty. Idempotent.
+migrate_press_whitelabel_branding_task_3257() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press white-label branding migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS brand_accent_color text,
+  ADD COLUMN IF NOT EXISTS brand_corner_style text,
+  ADD COLUMN IF NOT EXISTS brand_contact_line text;
+COMMIT;
+SQL
+  then
+    echo "post-merge: press white-label branding migration ok on $label"
+  else
+    echo "post-merge: WARNING — press white-label branding migration failed on $label (continuing)"
+  fi
+}
+migrate_press_whitelabel_branding_task_3257 dev  "${DATABASE_URL:-}"
+migrate_press_whitelabel_branding_task_3257 prod "${PROD_DATABASE_URL:-}"

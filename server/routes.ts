@@ -88,7 +88,7 @@ import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCol
 import { adminLoginPasswordOk, isLinkableEmail, isProviderVerifiedEmailForLink } from "./auth/identityLink";
 import { applyAppleFirstAuthName } from "./auth/appleName";
 import { getUserRole, getUserMemberships, pickPrimaryMembership } from "./auth/roles";
-import { resolveInviterBranding } from "./inviteBranding";
+import { resolveInviterBranding, resolvePressInviteBrand } from "./inviteBranding";
 import {
   parsePdfBoxes,
   resolveFinishedRectPx,
@@ -28255,6 +28255,7 @@ export async function registerRoutes(
         INVITE_TTL_DAYS,
         branding.photoUrl,
         branding.onBehalfOf,
+        await resolvePressInviteBrand(inviteDefaultPressId),
       );
       // Mail failures are logged centrally as `[mail-failure]` from server/mail.ts.
       emailDelivered = result.ok;
@@ -28512,7 +28513,7 @@ export async function registerRoutes(
         `);
       }
     }
-    const result = await sendAdminInviteEmail(invite.email, acceptUrl, inviterName, ROLE_LABELS[invite.role] || invite.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf);
+    const result = await sendAdminInviteEmail(invite.email, acceptUrl, inviterName, ROLE_LABELS[invite.role] || invite.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf, await resolvePressInviteBrand((invite as any).defaultPressId));
     await db.execute(sql`
       UPDATE admin_invites
       SET review_status = 'approved', reviewed_by_user_id = ${req.session.userId!}, reviewed_at = NOW()
@@ -28762,7 +28763,7 @@ export async function registerRoutes(
     const inviter = await storage.getUser(req.session.userId!);
     const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes artist";
     const branding = await resolveInviterBranding(req.session.userId!);
-    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf);
+    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf, await resolvePressInviteBrand((updated as any).defaultPressId));
     res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
   });
 
@@ -28891,7 +28892,7 @@ export async function registerRoutes(
     const inviter = await storage.getUser(req.session.userId!);
     const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes label";
     const branding = await resolveInviterBranding(req.session.userId!);
-    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf);
+    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf, await resolvePressInviteBrand((updated as any).defaultPressId));
     res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
   });
 
@@ -29551,7 +29552,7 @@ export async function registerRoutes(
     const inviter = await storage.getUser(req.session.userId!);
     const inviterName = inviter?.displayName || inviter?.email || "A GoodTunes admin";
     const branding = await resolveInviterBranding(req.session.userId!);
-    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf);
+    const result = await sendAdminInviteEmail(updated.email, acceptUrl, inviterName, ROLE_LABELS[updated.role] || updated.role, INVITE_TTL_DAYS, branding.photoUrl, branding.onBehalfOf, await resolvePressInviteBrand((updated as any).defaultPressId));
     res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
   });
 
@@ -29596,6 +29597,34 @@ export async function registerRoutes(
       label: "Label",
     };
     const ir = (invite as any).inviteRole as string | null;
+    // Task #3257 — sanitized white-label brand for press-referred invites so
+    // the accept/create-login screen can carry the press's look. Display-only
+    // fields (name/logos/accent/corner) — never the press id or anything
+    // operator-internal. Null when the invite carries no press.
+    let pressBrand: {
+      pressName: string;
+      logoUrl: string | null;
+      lightLogoUrl: string | null;
+      accentColor: string | null;
+      cornerStyle: string | null;
+    } | null = null;
+    const dpid = (invite as any).defaultPressId as string | null | undefined;
+    if (dpid) {
+      const r = await db.execute<any>(sql`
+        SELECT name, logo_url, light_logo_url, brand_accent_color, brand_corner_style
+        FROM manufacturers WHERE id = ${dpid} LIMIT 1
+      `);
+      const p = ((r as any).rows ?? [])[0];
+      if (p) {
+        pressBrand = {
+          pressName: p.name,
+          logoUrl: p.logo_url ?? null,
+          lightLogoUrl: p.light_logo_url ?? null,
+          accentColor: p.brand_accent_color ?? null,
+          cornerStyle: p.brand_corner_style ?? null,
+        };
+      }
+    }
     res.json({
       email: invite.email,
       role: invite.role,
@@ -29605,6 +29634,7 @@ export async function registerRoutes(
       targetPersonName,
       preFlightedAlbumId: (invite as any).preFlightedAlbumId ?? null,
       preFlightedAlbumTitle,
+      pressBrand,
     });
   });
 

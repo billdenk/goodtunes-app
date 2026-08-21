@@ -12,6 +12,28 @@
 // can use it without the latter importing routes.ts (circular dependency).
 import { sql } from "drizzle-orm";
 import { db } from "./db";
+import type { PressEmailBrand } from "./mail";
+
+// Task #3257 — white-label brand for a press-referred invite email. Keyed
+// off admin_invites.default_press_id (the same stamp the accept handler
+// homes the person/label with). Returns null when the invite carries no
+// press or the press hasn't configured branding, so the email falls back
+// to today's GoodTunes look. Best-effort: a lookup failure never blocks
+// the invite send.
+export async function resolvePressInviteBrand(
+  defaultPressId: string | null | undefined,
+): Promise<PressEmailBrand | null> {
+  if (!defaultPressId) return null;
+  try {
+    const { storage } = await import("./storage");
+    const { pressEmailBrand } = await import("./pressPortal");
+    const press = await storage.getManufacturerById(String(defaultPressId));
+    return pressEmailBrand(press);
+  } catch (e: any) {
+    console.warn(`[invite] press brand lookup failed: ${e?.message}`);
+    return null;
+  }
+}
 
 export async function resolveInviterBranding(
   userId: string,

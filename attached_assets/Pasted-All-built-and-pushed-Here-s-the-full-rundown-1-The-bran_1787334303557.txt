@@ -1,0 +1,21 @@
+All built and pushed. Here's the full rundown:
+
+**1. The "brandon@…" line** — that whole top card is mock-only "inbox chrome" so we can see the sending story; it's not part of the email itself. The address is illustrative: the platform actually sends from a GoodTunes address *on behalf of* MRP, with reply-to set to Brandon so "Just reply" lands in his inbox. A true `From: brandon@memphisvinyl.com` needs per-press DNS setup (SPF/DKIM) — I flagged that in the handoff as a later work item, not a blocker.
+
+**2. Yes, Otis can build this** — and I've already pushed the package to the repo (commit `e86b169`, `handoff/press-client-estimate-email/`: both email files, all assets, and a README with the sending model, email rules, and acceptance). Copy/paste for Otis:
+
+---
+
+**New handoff to wire: `handoff/press-client-estimate-email/` (commit e86b169).** This is the email the platform pushes when a press sends a client their estimate — the companion to the client estimate page. Two files: `PressClientEstimateEmail.tsx` (GoodTunes-branded) and `PressClientEstimateEmailMRP.tsx` (the same email in Memphis Record Pressing's white-label gold — first of the per-press twins). Copy the design verbatim per the standing handoff law, then translate to a real table-based HTML email template with inline styles — the visual design is the contract. Read the README fully before starting: it covers the sending model (send via GoodTunes on behalf of the press, **reply-to = the press contact who prepared the estimate**), the one-button rule, and why everything is expanded and static. The top From/To/Subject card in the mocks is inbox chrome for reference — not part of the email body. Log the SHA in docs/STATUS.md.
+
+---
+
+**3. The MRP white-label view — done, first pass.** GoodStudio now has a press dropdown top-right: **GoodTunes® / Memphis Record Pressing**. Pick MRP and the studio itself switches to a fresh MRP page — warm canvas, MRP logo, same search — showing MRP's screens:
+
+https://a73d0c61-c3b1-4830-8603-85e3d862b9b3-00-3kab9vb4qfu9b.riker.replit.dev/__mockup/src/ds/goodtunes-design-system/#/FlowLauncher
+
+Two MRP screens live in it so far, both keeping your dark look with MRP's gold (`#D6A63F`, matched to their "Get a quote" button — gold with dark ink, the way MRP does it):
+- **Client estimate — MRP**: `#/PressClientEstimateMRP`
+- **Estimate email — MRP**: `#/PressClientEstimateEmailMRP`
+
+As we design the artist portal flow and other surfaces for white-labeling, each one gets an MRP twin that shows up under that dropdown — the GoodTunes originals stay untouched. When you're ready, we can pick the next surface to MRP-ify (the artist portal walk would be my suggestion).

@@ -17,7 +17,18 @@ type InviteInfo = {
   inviteRole?: "identity" | "manager" | "team" | "label" | "npo_ambassador" | "npo_staff" | "publisher" | null;
   targetPersonName?: string | null;
   preFlightedAlbumTitle?: string | null;
+  // Task #3257 — sanitized press white-label brand for press-referred
+  // invites; null/absent = plain GoodTunes page exactly as before.
+  pressBrand?: {
+    pressName: string;
+    logoUrl: string | null;
+    lightLogoUrl: string | null;
+    accentColor: string | null;
+    cornerStyle: string | null;
+  } | null;
 };
+
+const GT_BLUE = "#319ED8";
 
 export default function AcceptInvite() {
   const { token } = useParams<{ token: string }>();
@@ -113,10 +124,23 @@ export default function AcceptInvite() {
     );
   }
 
+  // Task #3257 — white-label skin for press-referred invites. Page is light,
+  // so prefer the dark-on-light logo (logoUrl); accent tints the focus rings
+  // + submit button. Invalid/missing accent falls back to GoodTunes blue.
+  const brand = data.pressBrand ?? null;
+  const accent = brand?.accentColor && /^#[0-9a-fA-F]{6}$/.test(brand.accentColor) ? brand.accentColor : GT_BLUE;
+  const cornerClass = brand?.cornerStyle === "square" ? "rounded-md" : "rounded-lg";
+  const brandLogo = brand?.logoUrl || brand?.lightLogoUrl || null;
+  const focusStyle = { "--tw-ring-color": `${accent}33`, borderColor: undefined } as React.CSSProperties;
+
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <form onSubmit={handleSubmit} className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8" data-testid="form-accept-invite">
-        <img src={gtLogo} alt="GoodTunes" className="h-10 w-auto mb-6" />
+      <form onSubmit={handleSubmit} className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8" style={{ "--wl-accent": accent, "--wl-accent-soft": `${accent}33` } as React.CSSProperties} data-testid="form-accept-invite">
+        {brandLogo ? (
+          <img src={brandLogo} alt={brand?.pressName || "Press"} className="h-10 w-auto mb-6 object-contain" data-testid="img-press-brand-logo" />
+        ) : (
+          <img src={gtLogo} alt="GoodTunes" className="h-10 w-auto mb-6" />
+        )}
         <h1 className="text-2xl font-bold text-slate-900 mb-1" data-testid="text-invite-hero">
           {data.inviteRole === "team" ? "You're on the team"
             : data.inviteRole === "manager" ? "You're a manager"
@@ -134,6 +158,11 @@ export default function AcceptInvite() {
             <>Set up your <span className="font-semibold">{data.roleLabel}</span> account for <span className="font-semibold">{data.email}</span>.</>
           )}
         </p>
+        {brand && (
+          <div className={`mb-5 border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 ${cornerClass}`} data-testid="banner-press-welcome">
+            Welcome from <span className="font-semibold">{brand.pressName}</span> — once you&rsquo;re in, they&rsquo;ll meet you in the project builder to get your record moving.
+          </div>
+        )}
         {data.preFlightedAlbumTitle && (
           <div className="mb-5 rounded-lg border border-[color:var(--brand-blue)]/30 bg-[color:var(--brand-blue)]/5 px-3 py-2 text-xs text-slate-700" data-testid="banner-preflight-album">
             An album draft is waiting for you: <span className="font-semibold">{data.preFlightedAlbumTitle}</span>. We'll drop you straight into it after sign-up.
@@ -147,12 +176,12 @@ export default function AcceptInvite() {
           onChange={(e) => setDisplayName(e.target.value)}
           required
           autoComplete="name"
-          className="w-full px-3 py-2.5 mb-4 rounded-lg border border-slate-300 focus:border-[#319ED8] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/20"
+          className={`w-full px-3 py-2.5 mb-4 ${cornerClass} border border-slate-300 focus:border-[color:var(--wl-accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--wl-accent-soft)]`}
           data-testid="input-display-name"
         />
 
         <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">Username</label>
-        <div className="flex items-center mb-4 rounded-lg border border-slate-300 focus-within:border-[#319ED8] focus-within:ring-2 focus-within:ring-[#319ED8]/20 overflow-hidden">
+        <div className={`flex items-center mb-4 ${cornerClass} border border-slate-300 focus-within:border-[color:var(--wl-accent)] focus-within:ring-2 focus-within:ring-[color:var(--wl-accent-soft)] overflow-hidden`}>
           <span className="pl-3 text-slate-400 select-none">@</span>
           <input
             type="text"
@@ -174,7 +203,7 @@ export default function AcceptInvite() {
           required
           minLength={8}
           autoComplete="new-password"
-          className="w-full px-3 py-2.5 mb-1 rounded-lg border border-slate-300 focus:border-[#319ED8] focus:outline-none focus:ring-2 focus:ring-[#319ED8]/20"
+          className={`w-full px-3 py-2.5 mb-1 ${cornerClass} border border-slate-300 focus:border-[color:var(--wl-accent)] focus:outline-none focus:ring-2 focus:ring-[color:var(--wl-accent-soft)]`}
           data-testid="input-password"
         />
         <p className="text-xs text-slate-500 mb-6">At least 8 characters.</p>
@@ -212,7 +241,8 @@ export default function AcceptInvite() {
             password.length < 8 ||
             (data.inviteRole === "identity" && !!data.targetPersonName && !identityConfirmed)
           }
-          className="w-full bg-[#319ED8] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold rounded-lg py-2.5 transition-colors"
+          className={`w-full bg-[#319ED8] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold ${cornerClass} py-2.5 transition-colors`}
+          style={accent !== GT_BLUE ? { backgroundColor: accent } : undefined}
           data-testid="button-accept-invite"
         >
           {submitting ? "Creating account…" : "Accept invitation"}

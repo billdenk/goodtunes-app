@@ -35,6 +35,15 @@ type LinkEstimate = {
   size: string | null;
   totalCents: number | null;
   builderState: Record<string, any> | null;
+  // Task #3257 — press white-label brand (sanitized, display-only). All-null
+  // = the page renders its neutral/GoodTunes defaults exactly as before.
+  brand?: {
+    logoUrl: string | null; // dark-background logo (this page is dark-only)
+    lightLogoUrl: string | null;
+    accentColor: string | null;
+    cornerStyle: string | null; // 'rounded' | 'square'
+    contactLine: string | null;
+  } | null;
 };
 
 // Per-unit line items at the 1,000-unit tier (handoff curve — scaled so the
@@ -198,14 +207,23 @@ const fieldStyle: React.CSSProperties = {
   width: '100%', height: 38, borderRadius: 10, padding: '0 12px', fontSize: 13.5,
   background: CANVAS, border: `1px solid ${HAIRLINE}`, color: INK, outline: 'none',
 };
-// Confirm earns its blue only once the user has done something actionable.
-const confirmBtn = (earned: boolean): React.CSSProperties => ({
-  padding: '10px 22px', borderRadius: 999, fontSize: 13.5, fontWeight: 600,
+// Confirm earns its accent only once the user has done something actionable.
+// Task #3257 — accent + corner radius follow the press's white-label brand.
+const confirmBtn = (earned: boolean, accent: string = BLUE, radius: number = 999): React.CSSProperties => ({
+  padding: '10px 22px', borderRadius: radius, fontSize: 13.5, fontWeight: 600,
   cursor: earned ? 'pointer' : 'not-allowed',
-  background: earned ? BLUE : 'transparent',
+  background: earned ? accent : 'transparent',
   border: earned ? '1px solid transparent' : `1px solid ${HAIRLINE}`,
   color: earned ? '#fff' : SUBINK,
 });
+
+// #RRGGBB → rgba() tint for the totals-card gradient.
+function hexTint(hex: string, alpha: number): string {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return BLUE_TINT_TOP;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+}
 
 export default function PressClientEstimate() {
   const { token } = useParams<{ token: string }>();
@@ -228,6 +246,16 @@ export default function PressClientEstimate() {
   const pressName = data?.pressName ?? '';
   const jobTitle = data?.title ?? '';
   const spec = data?.build ?? '';
+
+  // Task #3257 — white-label brand. Invalid/missing accent falls back to
+  // GoodTunes blue; missing corner style stays the rounded (pill) default.
+  // The "Always GoodTunes" surfaces (shimmer hook + explainer button) keep
+  // GoodTunes blue deliberately.
+  const brand = data?.brand ?? null;
+  const ACCENT = brand?.accentColor && /^#[0-9a-fA-F]{6}$/.test(brand.accentColor) ? brand.accentColor : BLUE;
+  const PILL = brand?.cornerStyle === 'square' ? 10 : 999;
+  const ACCENT_TINT_TOP = ACCENT === BLUE ? BLUE_TINT_TOP : hexTint(ACCENT, 0.10);
+  const brandLogoUrl = brand?.logoUrl || null;
 
   // Anchor the curve to the real quoted number: the sent estimate's
   // totalCents at its chosen run size is exact; other tiers follow the
@@ -400,15 +428,15 @@ export default function PressClientEstimate() {
                     padding: '14px 10px',
                     borderRadius: 12,
                     background: active ? CARD_RAISED : CARD,
-                    border: active ? `1.5px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+                    border: active ? `1.5px solid ${ACCENT}` : `1px solid ${HAIRLINE}`,
                     cursor: 'pointer',
                     textAlign: 'center',
                     color: INK,
                   }}
                 >
-                  <div style={{ fontSize: 16, fontWeight: 700, color: active ? BLUE : INK }}>{q.toLocaleString()}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: active ? ACCENT : INK }}>{q.toLocaleString()}</div>
                   <div style={{ fontSize: 10.5, color: SUBINK, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 1 }}>units</div>
-                  <div style={{ fontSize: 12.5, marginTop: 6, color: active ? BLUE : SUBINK, fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 12.5, marginTop: 6, color: active ? ACCENT : SUBINK, fontVariantNumeric: 'tabular-nums' }}>
                     {money2(unitCostAt(q))} /unit
                   </div>
                 </button>
@@ -501,10 +529,10 @@ export default function PressClientEstimate() {
             </div>
             <div style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{money(SETUP_TOTAL)}</div>
           </div>
-          <div style={{ padding: '18px', borderTop: `1px solid ${HAIRLINE}`, background: `linear-gradient(180deg, ${BLUE_TINT_TOP} 0%, ${CARD} 100%)` }}>
+          <div style={{ padding: '18px', borderTop: `1px solid ${HAIRLINE}`, background: `linear-gradient(180deg, ${ACCENT_TINT_TOP} 0%, ${CARD} 100%)` }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: BLUE }}>Estimate total</div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: ACCENT }}>Estimate total</div>
                 <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 2 }}>If {clientFirst} presses the full run</div>
               </div>
               <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: -0.6, fontVariantNumeric: 'tabular-nums' }}>{money(total)}</div>
@@ -569,8 +597,8 @@ export default function PressClientEstimate() {
                 onClick={() => setStartOpen(true)}
                 data-testid="estimate-start-project"
                 style={{
-                  padding: '12px 26px', borderRadius: 999, border: 'none', cursor: 'pointer',
-                  background: BLUE, color: '#fff', fontSize: 14.5, fontWeight: 600,
+                  padding: '12px 26px', borderRadius: PILL, border: 'none', cursor: 'pointer',
+                  background: ACCENT, color: '#fff', fontSize: 14.5, fontWeight: 600,
                 }}
               >
                 Start this project
@@ -588,14 +616,21 @@ export default function PressClientEstimate() {
           {/* Press identity — letterhead-style close. Quiet: modest logo,
               subink name. (Address only when we know it.) */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, paddingBottom: 22, marginBottom: 22, borderBottom: `1px solid ${HAIRLINE}` }}>
-            {/^memphis/i.test(pressName) && (
+            {/* Task #3257 — the press's own logo kit + contact line drive the
+                letterhead; the old hardcoded MRP demo assets remain ONLY as
+                the fallback for Memphis when no logo is configured. */}
+            {brandLogoUrl ? (
+              <img src={brandLogoUrl} alt={pressName} style={{ maxHeight: 40, maxWidth: 180, objectFit: 'contain', opacity: 0.95 }} data-testid="estimate-brand-logo" />
+            ) : /^memphis/i.test(pressName) ? (
               <img src={mrpLogoAsset} alt={pressName} style={{ width: 40, height: 40, filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
-            )}
+            ) : null}
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: INK }}>{pressName}</div>
-              {/^memphis record pressing$/i.test(pressName.trim()) && (
+              {brand?.contactLine ? (
+                <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 2 }} data-testid="estimate-brand-contact">{brand.contactLine}</div>
+              ) : /^memphis record pressing$/i.test(pressName.trim()) ? (
                 <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 2 }}>3015 Brother Blvd · Memphis, TN · memphisvinyl.com</div>
-              )}
+              ) : null}
             </div>
           </div>
           <p style={{ margin: 0 }}>All orders are subject to +/- 10% and billed accordingly.</p>
@@ -626,7 +661,7 @@ export default function PressClientEstimate() {
                 <button
                   type="button"
                   disabled={!shareEarned}
-                  style={confirmBtn(shareEarned)}
+                  style={confirmBtn(shareEarned, ACCENT, PILL)}
                   onClick={() => { if (!shareEarned) return; setShareSent(true); window.setTimeout(closeShare, 1400); }}
                   data-testid="button-share-send"
                 >
@@ -667,7 +702,7 @@ export default function PressClientEstimate() {
                 <button
                   type="button"
                   disabled={askMsg.trim() === ''}
-                  style={confirmBtn(askMsg.trim() !== '')}
+                  style={confirmBtn(askMsg.trim() !== '', ACCENT, PILL)}
                   onClick={() => { if (askMsg.trim() !== '') setAskSent(true); }}
                   data-testid="button-ask-send"
                 >
@@ -704,7 +739,7 @@ export default function PressClientEstimate() {
                 <button
                   type="button"
                   disabled={acctPassword.trim() === ''}
-                  style={{ ...confirmBtn(acctPassword.trim() !== ''), width: '100%' }}
+                  style={{ ...confirmBtn(acctPassword.trim() !== '', ACCENT, PILL), width: '100%' }}
                   onClick={() => { if (acctPassword.trim() !== '') setStartStep('done'); }}
                   data-testid="button-create-account"
                 >
@@ -725,7 +760,7 @@ export default function PressClientEstimate() {
                 and lets {firstName} know you&rsquo;re ready. Nothing is billed yet.
               </p>
               <div style={{ marginTop: 22, display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" style={confirmBtn(true)} onClick={() => setStartStep('account')} data-testid="button-start-confirm">
+                <button type="button" style={confirmBtn(true, ACCENT, PILL)} onClick={() => setStartStep('account')} data-testid="button-start-confirm">
                   Start project
                 </button>
               </div>

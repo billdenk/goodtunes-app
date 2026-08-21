@@ -5007,6 +5007,22 @@ export const manufacturers = pgTable("manufacturers", {
   // email template never string-matches press names — this field is the
   // ONLY flavor switch, so future per-press twins are additive data.
   emailBranding: jsonb("email_branding").$type<{ accent?: string; buttonInk?: string }>(),
+  // Task #3257 — press white-label branding engine. ONE accent (ratified,
+  // Ruby's Aug 19 handoff): the chrome stays ours, the press's accent applies
+  // only where the system already uses accent (confirms, links, status
+  // icons) on the CUSTOMER-facing surfaces: the estimate email, the public
+  // /e/:token viewer, and press-referred invite email + accept screen.
+  // All three null = surface renders today's GoodTunes defaults exactly.
+  //   brandAccentColor — "#RRGGBB" hex, validated at the write boundary.
+  //   brandCornerStyle — "rounded" (pill buttons, today's look) | "square".
+  //   brandContactLine — ONE short line under the press name on customer
+  //     surfaces ("3015 Brother Blvd · Memphis, TN · memphisvinyl.com").
+  //     Deliberately a single line: minimal header/footer, no link farm.
+  // Logos intentionally NOT duplicated here — the estimate/invite surfaces
+  // read the existing logo kit (logoUrl/lightLogoUrl/square variants).
+  brandAccentColor: text("brand_accent_color"),
+  brandCornerStyle: text("brand_corner_style"),
+  brandContactLine: text("brand_contact_line"),
   // handoff/cd-cassette-catalog — per-press CD and cassette catalogs. CD and
   // cassette have a FIXED product structure (CD: case → print → booklet →
   // run pricing; cassette: case → shell → imprint → run pricing), so unlike

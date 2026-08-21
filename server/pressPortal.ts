@@ -16,6 +16,8 @@
 import type { Express, Request, Response } from "express";
 import crypto from "crypto";
 import { sendPressClientEstimateEmail, resolvePressEstimateAccent } from "./mail";
+import { type PressEmailBrand } from "./mail";
+import { extractPaletteFromHtml } from "./brandPalette";
 import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import * as dnsLookup from "dns/promises";
@@ -73,6 +75,16 @@ async function ppAssertPublic(u: URL) {
   for (const { address } of all) {
     if (ppIsPrivateIp(address)) throw new Error(`Refusing to fetch private/loopback host (${address})`);
   }
+}
+
+function ppAbsoluteUrl(u: string | null | undefined): string | null {
+  if (!u || typeof u !== "string") return null;
+  if (/^https?:\/\//i.test(u)) return u;
+  if (u.startsWith("/")) {
+    const base = (process.env.PUBLIC_ORIGIN || "https://admin.goodtunes.music").replace(/\/+$/, "");
+    return `${base}${u}`;
+  }
+  return null;
 }
 async function ppSafeFetch(url: string, init?: RequestInit, maxHops = 5): Promise<globalThis.Response> {
   let current = url;
@@ -751,6 +763,114 @@ export function registerPressPortalRoutes(
       labelBgColor: (press as any).labelBgColor ?? null,
     });
   });
+
+  // ── Task #3257 — press white-label branding config ─────────────────────
+  // GET returns the saved brand (accent hex, corner style, contact line)
+  // plus canEdit so the White Label tab renders read-only for Staff. PUT is
+  // editor-gated; every field nullable (null = fall back to GoodTunes
+  // defaults on the customer-facing surfaces).
+  app.get("/api/press/:id/branding", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Press not found" });
+    const { pressUserCanEdit } = await import("./auth/partnerPermissions");
+    const canEdit = await pressUserCanEdit(req.session.userId!, pressId);
+    res.json({
+      accentColor: (press as any).brandAccentColor ?? null,
+      cornerStyle: (press as any).brandCornerStyle ?? null,
+      contactLine: (press as any).brandContactLine ?? null,
+      canEdit,
+    });
+  });
+
+  const brandingBodySchema = z.object({
+    accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Accent must be a #RRGGBB hex").nullable().optional(),
+    cornerStyle: z.enum(["rounded", "square"]).nullable().optional(),
+    contactLine: z.string().trim().max(160, "Keep the contact line short — one line").nullable().optional(),
+  });
+  app.put("/api/press/:id/branding", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+    const pressId = String(req.params.id);
+    const body = brandingBodySchema.safeParse(req.body ?? {});
+    if (!body.success) return res.status(400).json({ message: body.error.issues[0]?.message ?? "Invalid branding" });
+    if (!(await resolvePress(pressId))) return res.status(404).json({ message: "Press not found" });
+    const set: Record<string, any> = {};
+    if (body.data.accentColor !== undefined) set.brandAccentColor = body.data.accentColor;
+    if (body.data.cornerStyle !== undefined) set.brandCornerStyle = body.data.cornerStyle;
+    if (body.data.contactLine !== undefined) set.brandContactLine = body.data.contactLine ? body.data.contactLine : null;
+    if (Object.keys(set).length === 0) return res.status(400).json({ message: "Nothing to save" });
+    const [row] = await db
+      .update(manufacturers)
+      .set(set)
+      .where(eq(manufacturers.id, pressId))
+      .returning({
+        accentColor: manufacturers.brandAccentColor,
+        cornerStyle: manufacturers.brandCornerStyle,
+        contactLine: manufacturers.brandContactLine,
+      });
+    if (!row) return res.status(404).json({ message: "Press not found" });
+    res.json(row);
+  });
+
+  // POST /api/press/:id/brand-suggest — Task #3257. Paste-a-URL prefill for
+  // the White Label tab: SSRF-safe fetch of the press's own site, returning
+  // a logo candidate + a suggested accent palette (theme-color + frequent
+  // saturated hexes). SUGGESTION ONLY — nothing here persists; the operator
+  // confirms in the tab and saves via PUT /branding.
+  app.post("/api/press/:id/brand-suggest", requireAdmin, requirePressScope, async (req, res) => {
+    const url = String(req.body?.url ?? "").trim();
+    if (!url || !/^https?:\/\//i.test(url)) {
+      return res.status(400).json({ message: "A full https:// URL is required" });
+    }
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return res.status(400).json({ message: "Malformed URL" }); }
+    const host = parsed.hostname.replace(/^www\./, "");
+    if (/(^|\.)instagram\.com$/.test(host) || /(^|\.)facebook\.com$/.test(host)) {
+      return res.status(400).json({ message: "Instagram/Facebook pages can't be scraped — paste the press's own website." });
+    }
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 10_000);
+      const html = await ppSafeFetch(url, {
+        signal: ctrl.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; GoodTunesBot/1.0; +https://goodtunes.app)",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+      }).then((r: globalThis.Response) => {
+        if (!r.ok) throw new Error(`Page returned ${r.status}`);
+        return r.text();
+      }).finally(() => clearTimeout(t));
+
+      // Same meta/logo resolution the label scrape uses.
+      const meta: Record<string, string> = {};
+      const re1 = /<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>/gi;
+      const re2 = /<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']([^"']+)["'][^>]*>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = re1.exec(html))) { const k = m[1].toLowerCase(); if (!(k in meta)) meta[k] = m[2]; }
+      while ((m = re2.exec(html))) { const k = m[2].toLowerCase(); if (!(k in meta)) meta[k] = m[1]; }
+
+      let logoUrl: string | null = null;
+      const touchA = /<link[^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+      const touchB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*apple-touch-icon[^"']*["'][^>]*>/i.exec(html);
+      if (touchA) logoUrl = touchA[1];
+      else if (touchB) logoUrl = touchB[1];
+      if (!logoUrl) logoUrl = meta["og:image:secure_url"] || meta["og:image"] || meta["twitter:image"] || null;
+      if (!logoUrl) {
+        const iconA = /<link[^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]+href=["']([^"']+)["'][^>]*>/i.exec(html);
+        const iconB = /<link[^>]+href=["']([^"']+)["'][^>]+rel=["'][^"']*(?:shortcut )?icon[^"']*["'][^>]*>/i.exec(html);
+        if (iconA) logoUrl = iconA[1];
+        else if (iconB) logoUrl = iconB[1];
+      }
+      if (logoUrl?.startsWith("//")) logoUrl = `https:${logoUrl}`;
+      if (logoUrl?.startsWith("/")) logoUrl = `${parsed.origin}${logoUrl}`;
+
+      const palette = extractPaletteFromHtml(html);
+      return res.json({ domain: host, websiteUrl: meta["og:url"] || url, logoUrl, palette });
+    } catch (e: any) {
+      return res.status(502).json({ message: e?.message || "Failed to read page" });
+    }
+  });
+
 
   // GET /api/press/:id/customers — artists + labels homed to this press.
   //
@@ -1852,6 +1972,8 @@ export function registerPressPortalRoutes(
         "Artist",
         INVITE_TTL_DAYS,
         press?.logoUrl ?? null,
+        undefined,
+        pressEmailBrand(press),
       );
       res.json({ id: invite.id, email: invite.email, acceptUrl, emailDelivered: result.ok });
     },
@@ -1924,6 +2046,8 @@ export function registerPressPortalRoutes(
       roleLabel,
       INVITE_TTL_DAYS,
       press?.logoUrl ?? null,
+      undefined,
+      pressEmailBrand(press),
     );
     res.json({ id: invite.id, email: invite.email, acceptUrl, emailDelivered: result.ok });
   });
@@ -2082,6 +2206,8 @@ export function registerPressPortalRoutes(
         roleLabel,
         INVITE_TTL_DAYS,
         press?.logoUrl ?? null,
+        undefined,
+        pressEmailBrand(press),
       );
       res.json({ id: updated.id, acceptUrl, emailDelivered: result.ok });
     },
@@ -2326,8 +2452,14 @@ export function registerPressPortalRoutes(
     location: string | null;
     websiteUrl: string | null;
     logoUrl: string | null;
+    lightLogoUrl: string | null;
     emailBranding: { accent?: string; buttonInk?: string } | null;
+    brandAccentColor: string | null;
+    brandCornerStyle: string | null;
+    brandContactLine: string | null;
   } | null> {
+    // Task #3257 — also carry the white-label brand fields so the send
+    // paths can skin customer-facing emails without a second lookup.
     const rows = await db
       .select({
         name: manufacturers.name,
@@ -2335,7 +2467,11 @@ export function registerPressPortalRoutes(
         location: manufacturers.location,
         websiteUrl: manufacturers.websiteUrl,
         logoUrl: manufacturers.logoUrl,
+        lightLogoUrl: manufacturers.lightLogoUrl,
         emailBranding: manufacturers.emailBranding,
+        brandAccentColor: manufacturers.brandAccentColor,
+        brandCornerStyle: manufacturers.brandCornerStyle,
+        brandContactLine: manufacturers.brandContactLine,
       })
       .from(manufacturers)
       .where(eq(manufacturers.id, pressId))
@@ -2493,7 +2629,12 @@ export function registerPressPortalRoutes(
     const token = String(req.params.token ?? "").trim();
     if (token.length < 24 || token.length > 128) return res.status(404).json({ message: "Estimate not found" });
     const found = await db.execute<any>(sql`
-      SELECT e.*, m.name AS press_name
+      SELECT e.*, m.name AS press_name,
+             m.logo_url AS press_logo_url,
+             m.light_logo_url AS press_light_logo_url,
+             m.brand_accent_color AS brand_accent_color,
+             m.brand_corner_style AS brand_corner_style,
+             m.brand_contact_line AS brand_contact_line
       FROM press_estimates e
       JOIN manufacturers m ON m.id = e.press_id
       WHERE e.kind = 'estimate' AND e.payload->>'shareToken' = ${token}
@@ -2521,6 +2662,15 @@ export function registerPressPortalRoutes(
       size: payload.size ?? null,
       totalCents: payload.totalCents ?? null,
       builderState: payload.builderState ?? null,
+      // Task #3257 — white-label brand for the public viewer. Display-only
+      // fields; all-null = the page renders its GoodTunes/neutral defaults.
+      brand: {
+        logoUrl: row.press_logo_url ?? null, // dark-background logo (viewer is dark)
+        lightLogoUrl: row.press_light_logo_url ?? null,
+        accentColor: row.brand_accent_color ?? null,
+        cornerStyle: row.brand_corner_style ?? null,
+        contactLine: row.brand_contact_line ?? null,
+      },
     });
   });
 
@@ -3733,4 +3883,15 @@ async function assertAlbumBelongsToPress(albumId: string, pressId: string) {
   `);
   const row = ((r as any).rows ?? [])[0];
   return row ?? null;
+}
+
+export function pressEmailBrand(press: any): PressEmailBrand | null {
+  if (!press) return null;
+  const accentColor = press.brandAccentColor ?? null;
+  const cornerStyle = press.brandCornerStyle ?? null;
+  const contactLine = press.brandContactLine ?? null;
+  if (!accentColor && !cornerStyle && !contactLine) return null;
+  // Email cards are white — prefer the light-background logo variants.
+  const logoUrl = ppAbsoluteUrl(press.lightLogoUrl ?? press.lightNavLogoUrl ?? press.lightSquareLogoUrl ?? press.logoUrl ?? null);
+  return { pressName: press.name ?? null, logoUrl, accentColor, cornerStyle, contactLine };
 }

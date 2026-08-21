@@ -7,11 +7,14 @@
 // story, the fan player, "Powered by GoodTunes®" footer.
 // Canon: word + icon statuses (Bill is colorblind), quiet pills, "Save
 // changes" EARNS its blue only after something changes, real ®, theme-aware.
-// NOTE: config is front-end-local for now (no persistence endpoint yet) —
-// same staging posture as the estimate page's Share/Ask/Start sheets.
-import { useMemo, useState, type ReactNode, type ComponentType } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Check, AlertCircle, Globe, Upload, Mail, Award } from "lucide-react";
+// Task #3257 — config now PERSISTS: GET/PUT /api/press/:id/branding (accent,
+// corner style, contact line; logos stay on the existing Details logo kit).
+// A site-URL prefill (POST /api/press/:id/brand-suggest) suggests the logo +
+// an accent palette; nothing saves until the operator hits Save changes.
+import { useEffect, useMemo, useState, type ReactNode, type ComponentType } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { Check, AlertCircle, Globe, Upload, Mail, Award, Sparkles } from "lucide-react";
 
 const BLUE = "#319ED8";
 const INK = "var(--apple-ink)";
@@ -29,6 +32,20 @@ type PressMeLite = {
   lightLogoUrl?: string | null;
   squareLogoUrl?: string | null;
   lightSquareLogoUrl?: string | null;
+};
+
+type BrandingConfig = {
+  accentColor: string | null;
+  cornerStyle: "rounded" | "square" | null;
+  contactLine: string | null;
+  canEdit?: boolean;
+};
+
+type BrandSuggestion = {
+  domain: string;
+  websiteUrl: string;
+  logoUrl: string | null;
+  palette: string[];
 };
 
 // Accent presets — one is deliberately too light so the contrast rule shows.
@@ -92,13 +109,62 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
   const [customDomain, setCustomDomain] = useState(customDefault);
   const [customTouched, setCustomTouched] = useState(false);
   const [accent, setAccent] = useState(DEFAULT_ACCENT);
+  const [cornerStyle, setCornerStyle] = useState<"rounded" | "square">("rounded");
+  const [contactLine, setContactLine] = useState("");
   const [previewTab, setPreviewTab] = useState<"estimate" | "email">("estimate");
   const [saved, setSaved] = useState(false);
+
+  // Persisted branding config — seed local edit state once when it lands.
+  const queryClient = useQueryClient();
+  const brandingKey = [`/api/press/${pressId}/branding`];
+  const { data: branding } = useQuery<BrandingConfig>({ queryKey: brandingKey });
+  const [seeded, setSeeded] = useState(false);
+  useEffect(() => {
+    if (branding && !seeded) {
+      setAccent(branding.accentColor ?? DEFAULT_ACCENT);
+      setCornerStyle(branding.cornerStyle === "square" ? "square" : "rounded");
+      setContactLine(branding.contactLine ?? "");
+      setSeeded(true);
+    }
+  }, [branding, seeded]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("PUT", `/api/press/${pressId}/branding`, {
+        accentColor: accent.trim(),
+        cornerStyle,
+        contactLine: contactLine.trim(),
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      setSaved(true);
+      queryClient.invalidateQueries({ queryKey: brandingKey });
+    },
+  });
+
+  // URL prefill — suggestion-only; nothing persists until Save.
+  const [siteUrl, setSiteUrl] = useState("");
+  const [siteTouched, setSiteTouched] = useState(false);
+  const siteValue = siteTouched ? siteUrl : (me?.websiteUrl ?? "");
+  const suggestMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/press/${pressId}/brand-suggest`, { url: siteValue.trim() });
+      return (await r.json()) as BrandSuggestion;
+    },
+  });
+  const suggestion = suggestMutation.data ?? null;
 
   // Re-seed the domain suggestion when /me lands, unless the press typed.
   const customValue = customTouched ? customDomain : customDefault;
 
-  const dirty = domainTier !== "sub" || (customTouched && customDomain !== customDefault) || accent.toUpperCase() !== DEFAULT_ACCENT;
+  const savedAccent = branding?.accentColor ?? DEFAULT_ACCENT;
+  const savedCorner: "rounded" | "square" = branding?.cornerStyle === "square" ? "square" : "rounded";
+  const savedContact = branding?.contactLine ?? "";
+  const dirty =
+    accent.trim().toUpperCase() !== savedAccent.toUpperCase() ||
+    cornerStyle !== savedCorner ||
+    contactLine.trim() !== savedContact;
 
   const accentValid = /^#[0-9a-fA-F]{6}$/.test(accent);
   const accentLive = accentValid ? accent : DEFAULT_ACCENT;
@@ -129,8 +195,8 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
         </div>
         <button
           type="button"
-          disabled={!dirty && !saved}
-          onClick={() => { if (dirty) setSaved(true); }}
+          disabled={(!dirty && !saved) || saveMutation.isPending}
+          onClick={() => { if (dirty && !saveMutation.isPending) saveMutation.mutate(); }}
           className="rounded-full flex-shrink-0"
           style={{
             marginTop: 6, padding: "11px 24px", fontSize: 14, fontWeight: 600,
@@ -141,7 +207,7 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
           }}
           data-testid="button-save-changes"
         >
-          {saved && !dirty ? "Saved" : "Save changes"}
+          {saveMutation.isPending ? "Saving…" : saved && !dirty ? "Saved" : "Save changes"}
         </button>
       </div>
 
@@ -263,6 +329,118 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
                 <WordIcon icon={Check}>Readable on light and dark — passes</WordIcon>
               )}
             </div>
+          </section>
+
+          {/* ═══ 2b · PREFILL FROM YOUR SITE ═══ */}
+          <section>
+            <SectionLabel>Prefill from your site</SectionLabel>
+            <p className="text-[13px]" style={{ color: SUBINK, marginTop: 8, maxWidth: 480, lineHeight: 1.6 }}>
+              Paste your website and we&rsquo;ll suggest a logo and accent palette.
+              Suggestions only — nothing changes until you save.
+            </p>
+            <div className="flex items-center gap-2.5 flex-wrap" style={{ marginTop: 12, maxWidth: 480 }}>
+              <input
+                value={siteValue}
+                onChange={(e) => { setSiteTouched(true); setSiteUrl(e.target.value); }}
+                placeholder="https://yourpress.com"
+                className="flex-1 min-w-[220px] focus:outline-none"
+                style={{ height: 36, borderRadius: 10, padding: "0 12px", fontSize: 13, background: CANVAS, border: `1px solid ${HAIRLINE}`, color: INK }}
+                data-testid="input-brand-site-url"
+              />
+              <button
+                type="button"
+                disabled={!siteValue.trim() || suggestMutation.isPending}
+                onClick={() => suggestMutation.mutate()}
+                className="rounded-full inline-flex items-center gap-1.5 flex-shrink-0"
+                style={{ padding: "8px 16px", fontSize: 12.5, fontWeight: 500, border: "1px solid #6e6e73", color: INK, cursor: suggestMutation.isPending ? "default" : "pointer", background: "transparent" }}
+                data-testid="button-brand-suggest"
+              >
+                <Sparkles className="w-3.5 h-3.5" style={{ color: "#a1a1a6" }} />
+                {suggestMutation.isPending ? "Looking…" : "Suggest"}
+              </button>
+            </div>
+            {suggestMutation.isError && (
+              <div style={{ marginTop: 10 }}>
+                <WordIcon icon={AlertCircle}>Couldn&rsquo;t read that site — check the address and try again</WordIcon>
+              </div>
+            )}
+            {suggestion && (
+              <div className="rounded-2xl" style={{ marginTop: 12, padding: "14px 16px", border: `1px solid ${HAIRLINE}`, background: CARD, maxWidth: 480 }} data-testid="brand-suggestion-card">
+                <div className="flex items-center gap-3 flex-wrap">
+                  {suggestion.logoUrl && (
+                    <img src={suggestion.logoUrl} alt="Suggested logo" style={{ width: 40, height: 40, objectFit: "contain", borderRadius: 8, border: `1px solid ${HAIRLINE}`, background: "#ffffff" }} data-testid="img-suggested-logo" />
+                  )}
+                  <div className="text-[12.5px]" style={{ color: SUBINK }}>
+                    {suggestion.domain}{suggestion.logoUrl ? " — logo found (upload it on Details)" : " — no logo found"}
+                  </div>
+                </div>
+                {suggestion.palette.length > 0 && (
+                  <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 10 }}>
+                    <span className="text-[11.5px]" style={{ color: "#a1a1a6" }}>Suggested accents:</span>
+                    {suggestion.palette.map((hex) => (
+                      <button
+                        key={hex}
+                        type="button"
+                        title={hex}
+                        onClick={() => setAccent(hex)}
+                        className="rounded-full flex-shrink-0"
+                        style={{ width: 26, height: 26, padding: 0, cursor: "pointer", background: hex, border: accent.toUpperCase() === hex.toUpperCase() ? `2px solid ${INK}` : `1px solid ${HAIRLINE}` }}
+                        data-testid={`suggested-accent-${hex.replace("#", "")}`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* ═══ 2c · CORNERS ═══ */}
+          <section>
+            <SectionLabel>Corners</SectionLabel>
+            <p className="text-[13px]" style={{ color: SUBINK, marginTop: 8, maxWidth: 480, lineHeight: 1.6 }}>
+              Buttons on your estimates and emails — pill-rounded or squared-off.
+            </p>
+            <div className="flex items-center gap-2.5" style={{ marginTop: 12 }}>
+              {(["rounded", "square"] as const).map((cs) => {
+                const active = cornerStyle === cs;
+                return (
+                  <button
+                    key={cs}
+                    type="button"
+                    onClick={() => setCornerStyle(cs)}
+                    aria-pressed={active}
+                    className="capitalize"
+                    style={{
+                      padding: "9px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                      borderRadius: cs === "square" ? 8 : 999,
+                      background: active ? accentLive : "transparent",
+                      border: active ? "1px solid transparent" : `1px solid ${HAIRLINE}`,
+                      color: active ? "#ffffff" : SUBINK,
+                    }}
+                    data-testid={`corner-style-${cs}`}
+                  >
+                    {cs}
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* ═══ 2d · CONTACT LINE ═══ */}
+          <section>
+            <SectionLabel>Contact line</SectionLabel>
+            <p className="text-[13px]" style={{ color: SUBINK, marginTop: 8, maxWidth: 480, lineHeight: 1.6 }}>
+              One quiet line under your logo on estimates and emails — address,
+              phone, or site. No link farm.
+            </p>
+            <input
+              value={contactLine}
+              onChange={(e) => setContactLine(e.target.value.slice(0, 160))}
+              placeholder="3015 Brother Blvd · Memphis, TN · memphisvinyl.com"
+              className="w-full focus:outline-none"
+              style={{ marginTop: 12, maxWidth: 480, height: 36, borderRadius: 10, padding: "0 12px", fontSize: 13, background: CANVAS, border: `1px solid ${HAIRLINE}`, color: INK }}
+              data-testid="input-contact-line"
+            />
           </section>
 
           {/* ═══ 3 · LOGO KIT ═══ */}
@@ -396,10 +574,15 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
                 type="button"
                 tabIndex={-1}
                 aria-hidden
-                style={{ marginTop: 16, width: "100%", padding: "10px 0", borderRadius: 999, border: "none", background: accentLive, color: accentTooLight ? "#1d1d1f" : "#ffffff", fontSize: 12.5, fontWeight: 600, pointerEvents: "none" }}
+                style={{ marginTop: 16, width: "100%", padding: "10px 0", borderRadius: cornerStyle === "square" ? 8 : 999, border: "none", background: accentLive, color: accentTooLight ? "#1d1d1f" : "#ffffff", fontSize: 12.5, fontWeight: 600, pointerEvents: "none" }}
               >
                 Start this project
               </button>
+              {contactLine.trim() && (
+                <div style={{ marginTop: 12, fontSize: 10.5, color: "#a1a1a6", textAlign: "center" }} data-testid="preview-estimate-contact">
+                  {contactLine.trim()}
+                </div>
+              )}
               <div style={{ marginTop: 12, fontSize: 10.5, color: "#a1a1a6", textAlign: "center", wordBreak: "break-all" }} data-testid="preview-estimate-link">
                 {activeDomain}/e/071526-02
               </div>
@@ -419,10 +602,15 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
                 type="button"
                 tabIndex={-1}
                 aria-hidden
-                style={{ marginTop: 16, padding: "10px 24px", borderRadius: 999, border: "none", background: accentLive, color: accentTooLight ? "#1d1d1f" : "#ffffff", fontSize: 12.5, fontWeight: 600, pointerEvents: "none" }}
+                style={{ marginTop: 16, padding: "10px 24px", borderRadius: cornerStyle === "square" ? 8 : 999, border: "none", background: accentLive, color: accentTooLight ? "#1d1d1f" : "#ffffff", fontSize: 12.5, fontWeight: 600, pointerEvents: "none" }}
               >
                 View estimate
               </button>
+              {contactLine.trim() && (
+                <div className="text-[10.5px]" style={{ color: "#a1a1a6", marginTop: 12 }} data-testid="preview-email-contact">
+                  {contactLine.trim()}
+                </div>
+              )}
               <div className="text-[10.5px]" style={{ color: "#a1a1a6", marginTop: 16 }}>
                 Private link · no account needed
               </div>
