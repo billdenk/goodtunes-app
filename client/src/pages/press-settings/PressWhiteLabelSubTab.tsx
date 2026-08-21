@@ -38,6 +38,10 @@ type BrandingConfig = {
   accentColor: string | null;
   cornerStyle: "rounded" | "square" | null;
   contactLine: string | null;
+  // Task #3258 — assigned white-label subdomain label + minted host.
+  whiteLabelSlug: string | null;
+  whiteLabelHost: string | null;
+  whitelabelApexDomains?: string[];
   canEdit?: boolean;
 };
 
@@ -102,12 +106,14 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
   const { data: me } = useQuery<PressMeLite>({ queryKey: [`/api/press/${pressId}/me`] });
   const pressName = me?.name ?? "Your press";
   const firstWord = pressName.split(/\s+/)[0] || "Your team";
-  const subdomain = `${slugify(pressName)}.goodtunes.music`;
   const customDefault = domainFromWebsite(me?.websiteUrl);
 
   const [domainTier, setDomainTier] = useState<"sub" | "custom">("sub");
   const [customDomain, setCustomDomain] = useState(customDefault);
   const [customTouched, setCustomTouched] = useState(false);
+  // Task #3258 — the press's real assigned makesvinyl.com subdomain label.
+  const [wlSlug, setWlSlug] = useState("");
+  const [slugError, setSlugError] = useState<string | null>(null);
   const [accent, setAccent] = useState(DEFAULT_ACCENT);
   const [cornerStyle, setCornerStyle] = useState<"rounded" | "square">("rounded");
   const [contactLine, setContactLine] = useState("");
@@ -124,22 +130,30 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
       setAccent(branding.accentColor ?? DEFAULT_ACCENT);
       setCornerStyle(branding.cornerStyle === "square" ? "square" : "rounded");
       setContactLine(branding.contactLine ?? "");
+      setWlSlug(branding.whiteLabelSlug ?? "");
       setSeeded(true);
     }
   }, [branding, seeded]);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
+      setSlugError(null);
       const r = await apiRequest("PUT", `/api/press/${pressId}/branding`, {
         accentColor: accent.trim(),
         cornerStyle,
         contactLine: contactLine.trim(),
+        whiteLabelSlug: wlSlug.trim() ? wlSlug.trim().toLowerCase() : null,
       });
       return r.json();
     },
     onSuccess: () => {
       setSaved(true);
       queryClient.invalidateQueries({ queryKey: brandingKey });
+    },
+    onError: (e: any) => {
+      // Surface subdomain validation/uniqueness errors inline (400/409).
+      const msg = String(e?.message ?? "");
+      setSlugError(msg.replace(/^\d+:\s*/, "") || "Couldn't save — try again.");
     },
   });
 
@@ -161,15 +175,22 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
   const savedAccent = branding?.accentColor ?? DEFAULT_ACCENT;
   const savedCorner: "rounded" | "square" = branding?.cornerStyle === "square" ? "square" : "rounded";
   const savedContact = branding?.contactLine ?? "";
+  const savedSlug = branding?.whiteLabelSlug ?? "";
   const dirty =
     accent.trim().toUpperCase() !== savedAccent.toUpperCase() ||
     cornerStyle !== savedCorner ||
-    contactLine.trim() !== savedContact;
+    contactLine.trim() !== savedContact ||
+    wlSlug.trim().toLowerCase() !== savedSlug;
 
   const accentValid = /^#[0-9a-fA-F]{6}$/.test(accent);
   const accentLive = accentValid ? accent : DEFAULT_ACCENT;
   const accentTooLight = useMemo(() => hexLuminance(accentLive) > 0.55, [accentLive]);
 
+  // Task #3258 — the branded host previewed/used in link copy. Live-slug
+  // preview while typing; suggestion from the press name before anything is
+  // assigned; "your own domain" tier stays a later-tier affordance.
+  const slugPreview = wlSlug.trim().toLowerCase() || slugify(pressName);
+  const subdomain = `${slugPreview}.makesvinyl.com`;
   const activeDomain = domainTier === "sub" ? subdomain : (customValue.trim() || subdomain);
 
   // Logo art — dark-background mark preferred for the dark estimate preview;
@@ -218,10 +239,11 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
           <section>
             <SectionLabel>Domain</SectionLabel>
             <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-              <button
-                type="button"
+              <div
                 onClick={() => setDomainTier("sub")}
                 aria-pressed={domainTier === "sub"}
+                role="button"
+                tabIndex={0}
                 className="rounded-2xl text-left w-full"
                 style={{ padding: "16px 18px", cursor: "pointer", background: CARD, border: domainTier === "sub" ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
                 data-testid="domain-tier-sub"
@@ -230,13 +252,35 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
                   <div className="flex items-center gap-2.5 min-w-0">
                     <Globe className="w-4 h-4 flex-shrink-0" style={{ color: "#a1a1a6" }} />
                     <div className="min-w-0">
-                      <div className="text-[14px] font-semibold" style={{ color: INK }}>GoodTunes subdomain</div>
-                      <div className="text-[12.5px]" style={{ color: SUBINK, marginTop: 1 }}>{subdomain}</div>
+                      <div className="text-[14px] font-semibold" style={{ color: INK }}>Your press subdomain</div>
+                      <div className="text-[12.5px]" style={{ color: SUBINK, marginTop: 1 }} data-testid="text-whitelabel-host">
+                        {savedSlug ? `${savedSlug}.makesvinyl.com` : "Not assigned yet — pick one below"}
+                      </div>
                     </div>
                   </div>
-                  <WordIcon icon={Check}>Ready now</WordIcon>
+                  {savedSlug ? <WordIcon icon={Check}>Assigned</WordIcon> : <WordIcon icon={AlertCircle}>Pick a name</WordIcon>}
                 </div>
-              </button>
+                <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 12 }}>
+                  <input
+                    value={wlSlug}
+                    onChange={(e) => { setSlugError(null); setWlSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "")); setDomainTier("sub"); }}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder={slugify(pressName) || "yourpress"}
+                    className="min-w-[140px] focus:outline-none"
+                    style={{ height: 36, borderRadius: 10, padding: "0 12px", fontSize: 13, background: CANVAS, border: `1px solid ${slugError ? "#e0574f" : HAIRLINE}`, color: INK, width: 180 }}
+                    data-testid="input-whitelabel-slug"
+                  />
+                  <span className="text-[13px]" style={{ color: SUBINK }}>.makesvinyl.com</span>
+                </div>
+                {slugError ? (
+                  <p className="text-[12px]" style={{ color: "#e0574f", marginTop: 8 }} data-testid="text-whitelabel-slug-error">{slugError}</p>
+                ) : (
+                  <p className="text-[12px]" style={{ color: "#a1a1a6", marginTop: 8 }}>
+                    2–40 lowercase letters, numbers, or hyphens. Also answers at {slugPreview}.pressesvinyl.com.
+                    Save to assign — estimate links and invites switch to this address immediately.
+                  </p>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={() => setDomainTier("custom")}
@@ -276,7 +320,10 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
               </button>
             </div>
             <p className="text-[12px]" style={{ color: "#a1a1a6", marginTop: 8 }}>
-              Estimate links, your portal, and email links all use this address.
+              Estimate links, invites, and email links use this address once assigned.
+              makesvinyl.com and pressesvinyl.com are operated by GoodTunes — DNS for
+              both apex domains is managed platform-side (GoDaddy), so there's nothing
+              to configure on your end.
             </p>
           </section>
 
@@ -590,7 +637,7 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
           ) : (
             <div className="rounded-2xl" style={{ marginTop: 14, background: "#ffffff", border: `1px solid ${HAIRLINE}`, padding: "28px 24px", textAlign: "center" }} data-testid="preview-email">
               <div className="text-[10.5px]" style={{ color: "#a1a1a6" }} data-testid="preview-email-from">
-                {firstWord} at {pressName} · {domainTier === "sub" ? "via goodtunes.music" : activeDomain}
+                {firstWord} at {pressName} · {activeDomain}
               </div>
               {lightBgLogo
                 ? <img src={lightBgLogo} alt="" aria-hidden style={{ width: 40, height: 40, margin: "18px auto 0", objectFit: "contain" }} />

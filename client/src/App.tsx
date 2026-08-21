@@ -16,7 +16,8 @@ import { markBootSucceeded } from "@/lib/bootHeal";
 import { initPushNotifications } from "@/lib/pushNotifications";
 import { useTrackInAppNavigation } from "@/lib/navHistory";
 import { useAuth } from "@/hooks/useAuth";
-import { useAuthKind, isStoreHost } from "@/hooks/useAuthKind";
+import { useAuthKind, isStoreHost, onWhitelabelHost } from "@/hooks/useAuthKind";
+import WhitelabelLanding from "@/pages/WhitelabelLanding";
 import { STOREFRONT_LAUNCH_ALBUM_ID } from "@shared/schema";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -1227,7 +1228,12 @@ function Router() {
             resolver. Disjoint from the two-part route above (segment count). */}
         <Route path="/:slug" component={ShareSlugOne} />
         <Route path="/">
-          {isStoreHost() ? (
+          {onWhitelabelHost() ? (
+            // Task #3258 — bare press white-label host (mrp.makesvinyl.com)
+            // lands on the press-branded page; unknown subdomains and the
+            // bare apexes get the neutral page, never a login bounce.
+            <WhitelabelLanding />
+          ) : isStoreHost() ? (
             <Redirect to="/store" />
           ) : user ? (
             <Redirect to="/admin" />

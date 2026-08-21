@@ -26577,22 +26577,32 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: INK }}>GoodTunes subdomain</div>"
+    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: INK }}>Your press subdomain</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
-    "snippet": "<div className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 1 }}>{subdomain}</div>"
+    "snippet": "<div className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 1 }} data-testid=\"text-whitelabel-host\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: INK }}>Your own domain</div>"
+    "snippet": "<span className=\"text-[13px]\" style={{ color: SUBINK }}>.makesvinyl.com</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ color: \"#e0574f\", marginTop: 8 }} data-testid=\"text-whitelabel-slug-error\">{slugError}</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
     "snippet": "<p className=\"text-[12px]\" style={{ color: \"#a1a1a6\", marginTop: 8 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: INK }}>Your own domain</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -29608,5 +29618,25 @@
     "rule": "fan-text-tone",
     "file": "client/src/pages/WelcomeInvitee.tsx",
     "snippet": "<p className=\"mt-6 text-xs text-slate-500 text-center\" data-testid=\"text-welcome-footnote\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/WhitelabelLanding.tsx",
+    "snippet": "<p className=\"text-[15px]\" style={{ color: \"#a1a1a6\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/WhitelabelLanding.tsx",
+    "snippet": "className=\"mt-8 inline-flex items-center justify-center px-8 h-11 text-[15px] font-semibold text-white\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/WhitelabelLanding.tsx",
+    "snippet": "<p className=\"mt-10 text-[12.5px]\" style={{ color: \"#6e6e73\" }}>{brand.contactLine}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/WhitelabelLanding.tsx",
+    "snippet": "<p className=\"mt-3 text-[13px]\" style={{ color: \"#6e6e73\" }}>"
   }
 ]

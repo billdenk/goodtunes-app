@@ -39,6 +39,13 @@ import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 import { computeQuotePendingIds, invalidQuoteBuilderState, computeQuoteEmailBreakdown } from "@shared/quotePricing";
 import { registerPressTemplateFlowRoutes } from "./pressTemplatesPortal";
 import { registerPressComponentRoutes } from "./pressComponents";
+import {
+  isValidWhitelabelSlug,
+  whitelabelOriginForSlug,
+  whitelabelHostForSlug,
+  parseWhitelabelHost,
+  WHITELABEL_APEX_DOMAINS,
+} from "@shared/whitelabelHost";
 
 // SSRF-safe fetch helpers (mirrors the same logic in routes.ts registerRoutes).
 function ppIsPrivateIp(ip: string): boolean {
@@ -657,11 +664,33 @@ async function lockedQuoteForAlbum(albumId: string, pressId: string): Promise<{ 
   return { totalCents: Number(row.total_cents) || 0, quantity: Number(row.quantity) || 0 };
 }
 
+// Task #3258 — the branded origin for a press's customer-facing links.
+// Returns https://<slug>.makesvinyl.com when the press has a white-label
+// slug saved, else null (caller falls back to the request host). Production
+// only: in dev / *.replit.dev the branded host isn't routable, and a minted
+// link must open in the environment that minted it.
+export function whitelabelOriginForPress(press: { whiteLabelSlug?: string | null } | null | undefined): string | null {
+  const slug = (press as any)?.whiteLabelSlug;
+  if (process.env.NODE_ENV !== "production") return null;
+  if (typeof slug !== "string" || !isValidWhitelabelSlug(slug)) return null;
+  return whitelabelOriginForSlug(slug);
+}
+
 // Build the public origin (proto + host) for invite accept links. The
 // press portal puts the resulting URL on a "Copy link" affordance so
 // the operator can paste it into Messenger / iMessage / Slack when
 // email delivery is iffy.
-function pressInviteAcceptBase(req: Request): string {
+// Task #3258 — when the press has a white-label subdomain configured, the
+// invite link lives on that branded host instead of the host serving this
+// request (the /invite route ships in the same SPA bundle on every host).
+async function pressInviteAcceptBase(req: Request, pressId?: string): Promise<string> {
+  if (pressId) {
+    try {
+      const press = await storage.getManufacturerById(pressId);
+      const branded = whitelabelOriginForPress(press);
+      if (branded) return branded;
+    } catch { /* fall back to request host */ }
+  }
   const proto =
     (req.headers["x-forwarded-proto"] as string) ||
     (req as any).protocol ||
@@ -779,6 +808,11 @@ export function registerPressPortalRoutes(
       accentColor: (press as any).brandAccentColor ?? null,
       cornerStyle: (press as any).brandCornerStyle ?? null,
       contactLine: (press as any).brandContactLine ?? null,
+      // Task #3258 — assigned white-label subdomain (label only) plus the
+      // full host we mint links on, and the apex family for the DNS card.
+      whiteLabelSlug: (press as any).whiteLabelSlug ?? null,
+      whiteLabelHost: (press as any).whiteLabelSlug ? whitelabelHostForSlug((press as any).whiteLabelSlug) : null,
+      whitelabelApexDomains: [...WHITELABEL_APEX_DOMAINS],
       canEdit,
     });
   });
@@ -787,6 +821,10 @@ export function registerPressPortalRoutes(
     accentColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Accent must be a #RRGGBB hex").nullable().optional(),
     cornerStyle: z.enum(["rounded", "square"]).nullable().optional(),
     contactLine: z.string().trim().max(160, "Keep the contact line short — one line").nullable().optional(),
+    // Task #3258 — the press's makesvinyl.com subdomain label. Lowercased on
+    // write; format + reserved-word validated below; uniqueness enforced
+    // with an explicit case-insensitive check (friendly 409 beats 23505).
+    whiteLabelSlug: z.string().trim().toLowerCase().max(40).nullable().optional(),
   });
   app.put("/api/press/:id/branding", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
@@ -797,6 +835,24 @@ export function registerPressPortalRoutes(
     if (body.data.accentColor !== undefined) set.brandAccentColor = body.data.accentColor;
     if (body.data.cornerStyle !== undefined) set.brandCornerStyle = body.data.cornerStyle;
     if (body.data.contactLine !== undefined) set.brandContactLine = body.data.contactLine ? body.data.contactLine : null;
+    if (body.data.whiteLabelSlug !== undefined) {
+      const slug = body.data.whiteLabelSlug ? body.data.whiteLabelSlug : null;
+      if (slug !== null) {
+        if (!isValidWhitelabelSlug(slug)) {
+          return res.status(400).json({ message: "Subdomain must be 2–40 lowercase letters, numbers, or hyphens (and not a reserved word)." });
+        }
+        // Friendly uniqueness check — one slug maps to exactly one press.
+        const clash = await db.execute<any>(sql`
+          SELECT id FROM manufacturers
+          WHERE lower(white_label_slug) = ${slug} AND id <> ${pressId}
+          LIMIT 1
+        `);
+        if (((clash as any).rows ?? []).length > 0) {
+          return res.status(409).json({ message: "That subdomain is already taken by another press." });
+        }
+      }
+      set.whiteLabelSlug = slug;
+    }
     if (Object.keys(set).length === 0) return res.status(400).json({ message: "Nothing to save" });
     const [row] = await db
       .update(manufacturers)
@@ -806,9 +862,56 @@ export function registerPressPortalRoutes(
         accentColor: manufacturers.brandAccentColor,
         cornerStyle: manufacturers.brandCornerStyle,
         contactLine: manufacturers.brandContactLine,
+        whiteLabelSlug: manufacturers.whiteLabelSlug,
       });
     if (!row) return res.status(404).json({ message: "Press not found" });
     res.json(row);
+  });
+
+  // ── Task #3258 — public white-label host branding ───────────────────────
+  // No auth: the login / neutral landing / invite surfaces on a press
+  // subdomain (mrp.makesvinyl.com) need the skin before any session exists.
+  // Resolves the REQUEST host's slug → press and returns only what those
+  // surfaces render (name, logos, accent, corner, contact line) — nothing
+  // operator-internal, no pricing, no press id enumeration by slug guessing
+  // beyond what the public estimate page already shows.
+  // Dev fallback: `?slug=` lets the branded surfaces be exercised on hosts
+  // that can't carry a subdomain (*.replit.dev) — non-production only.
+  app.get("/api/whitelabel/branding", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const rawHost = ((req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.headers.host || "").trim();
+    const parsed = parseWhitelabelHost(rawHost);
+    let slug = parsed?.slug ?? null;
+    if (!slug && process.env.NODE_ENV !== "production") {
+      const qs = String(req.query.slug ?? "").trim().toLowerCase();
+      if (qs && isValidWhitelabelSlug(qs)) slug = qs;
+    }
+    // Not a white-label host at all → the client shouldn't be asking, but
+    // answer honestly instead of erroring.
+    if (!parsed && !slug) return res.json({ whitelabel: false, known: false });
+    if (!slug) return res.json({ whitelabel: true, known: false });
+    const found = await db.execute<any>(sql`
+      SELECT id, name, logo_url, light_logo_url, nav_logo_url, light_nav_logo_url,
+             square_logo_url, light_square_logo_url,
+             brand_accent_color, brand_corner_style, brand_contact_line
+      FROM manufacturers
+      WHERE lower(white_label_slug) = ${slug}
+      LIMIT 1
+    `);
+    const m = ((found as any).rows ?? [])[0];
+    // Unknown subdomain → neutral page, never an error.
+    if (!m) return res.json({ whitelabel: true, known: false });
+    res.json({
+      whitelabel: true,
+      known: true,
+      pressName: m.name ?? null,
+      // Dark-surface logo first (customer shell is dark), light variants too.
+      logoUrl: m.logo_url ?? m.nav_logo_url ?? m.square_logo_url ?? null,
+      lightLogoUrl: m.light_logo_url ?? m.light_nav_logo_url ?? m.light_square_logo_url ?? null,
+      accentColor: m.brand_accent_color ?? null,
+      cornerStyle: m.brand_corner_style ?? null,
+      contactLine: m.brand_contact_line ?? null,
+    });
   });
 
   // POST /api/press/:id/brand-suggest — Task #3257. Paste-a-URL prefill for
@@ -919,7 +1022,7 @@ export function registerPressPortalRoutes(
         AND ai.used_at IS NULL AND ai.revoked_at IS NULL
         AND ai.expires_at > NOW()
     `);
-    const acceptUrlBase = pressInviteAcceptBase(req);
+    const acceptUrlBase = await pressInviteAcceptBase(req, pressId);
     const invited = ((invitedRows as any).rows ?? []).map((r: any) => ({
       kind: r.role === "label" ? "label" : "artist",
       id: r.scope_id ?? r.id,
@@ -1197,7 +1300,7 @@ export function registerPressPortalRoutes(
         AND ai.expires_at > NOW()
       ORDER BY ai.created_at DESC
     `);
-    const inviteBase = pressInviteAcceptBase(req);
+    const inviteBase = await pressInviteAcceptBase(req, pressId);
     const invited = { rows: ((invitedRaw as any).rows ?? []).map((r: any) => ({
       id: r.id,
       email: r.email,
@@ -1588,7 +1691,7 @@ export function registerPressPortalRoutes(
       if (irow) {
         pendingInvite = {
           inviteId: irow.id,
-          acceptUrl: `${pressInviteAcceptBase(req)}/invite/${irow.token}`,
+          acceptUrl: `${await pressInviteAcceptBase(req, pressId)}/invite/${irow.token}`,
           expiresAt: irow.expires_at ? new Date(irow.expires_at).toISOString() : null,
           reviewStatus: irow.review_status ?? null,
         };
@@ -1921,7 +2024,7 @@ export function registerPressPortalRoutes(
         return res.status(200).json({
           id: existingRow.id,
           email: lower,
-          acceptUrl: `${pressInviteAcceptBase(req)}/invite/${existingRow.token}`,
+          acceptUrl: `${await pressInviteAcceptBase(req, pressId)}/invite/${existingRow.token}`,
           emailDelivered: false,
           alreadyPending: true,
         });
@@ -1962,7 +2065,7 @@ export function registerPressPortalRoutes(
         UPDATE admin_invites SET default_press_id = ${pressId} WHERE id = ${invite.id}
       `);
 
-      const acceptUrl = `${pressInviteAcceptBase(req)}/invite/${token}`;
+      const acceptUrl = `${await pressInviteAcceptBase(req, pressId)}/invite/${token}`;
       const press = await storage.getManufacturerById(pressId);
       const inviterName = press?.name ?? "Your press partner";
       const result = await sendAdminInviteEmail(
@@ -2035,7 +2138,7 @@ export function registerPressPortalRoutes(
       UPDATE admin_invites SET default_press_id = ${pressId} WHERE id = ${invite.id}
     `);
 
-    const acceptUrl = `${pressInviteAcceptBase(req)}/invite/${token}`;
+    const acceptUrl = `${await pressInviteAcceptBase(req, pressId)}/invite/${token}`;
     const press = await storage.getManufacturerById(pressId);
     const inviterName = press?.name ?? "Your press partner";
     const roleLabel = role === "artist" ? "Artist" : "Label";
@@ -2194,7 +2297,7 @@ export function registerPressPortalRoutes(
       const newExpiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
       const updated = await storage.resendAdminInvite(existing.id, newToken, newExpiresAt);
       if (!updated) return res.status(500).json({ message: "Resend failed" });
-      const acceptUrl = `${pressInviteAcceptBase(req)}/invite/${newToken}`;
+      const acceptUrl = `${await pressInviteAcceptBase(req, pressId)}/invite/${newToken}`;
       const { sendAdminInviteEmail } = await import("./mail");
       const press = await storage.getManufacturerById(pressId);
       const inviterName = press?.name ?? "Your press partner";
@@ -2457,6 +2560,7 @@ export function registerPressPortalRoutes(
     brandAccentColor: string | null;
     brandCornerStyle: string | null;
     brandContactLine: string | null;
+    whiteLabelSlug: string | null;
   } | null> {
     // Task #3257 — also carry the white-label brand fields so the send
     // paths can skin customer-facing emails without a second lookup.
@@ -2472,6 +2576,9 @@ export function registerPressPortalRoutes(
         brandAccentColor: manufacturers.brandAccentColor,
         brandCornerStyle: manufacturers.brandCornerStyle,
         brandContactLine: manufacturers.brandContactLine,
+        // Task #3258 — the estimate send/resend paths mint the /e/:token
+        // link on the press's white-label host when a slug is assigned.
+        whiteLabelSlug: manufacturers.whiteLabelSlug,
       })
       .from(manufacturers)
       .where(eq(manufacturers.id, pressId))
@@ -2774,9 +2881,11 @@ export function registerPressPortalRoutes(
       const freshPayload = (freshRow.payload ?? {}) as Record<string, any>;
       const existingToken = typeof freshPayload.shareToken === "string" && freshPayload.shareToken.length >= 24 ? freshPayload.shareToken : null;
       if (!existingToken) return res.status(409).json({ message: "This estimate was sent without a share link — duplicate it into a new draft and send that instead." });
+      // Task #3258 — branded host when the press has a white-label slug.
       const proto0 = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https";
       const host0 = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
-      const linkUrl0 = `${proto0}://${host0}/e/${existingToken}`;
+      const base0 = whitelabelOriginForPress(press) ?? `${proto0}://${host0}`;
+      const linkUrl0 = `${base0}/e/${existingToken}`;
       const recipients0 = body.data.recipients.map((r) => ({ name: r.name, email: r.email }));
       const results0 = await Promise.all(
         recipients0.map(async (r) => sendPressClientEstimateEmail(r.email, await composeEstimateEmail(freshRow, freshPayload, linkUrl0, r, null))),
@@ -2847,11 +2956,12 @@ export function registerPressPortalRoutes(
       return resendExisting(fresh[0]);
     }
 
-    // Private link lives on the host that served this request — the client
-    // route (/e/:token) ships in the same SPA bundle on every host.
+    // Private link lives on the press's white-label host when one is
+    // configured (Task #3258), else on the host that served this request —
+    // the client route (/e/:token) ships in the same SPA bundle on every host.
     const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https";
     const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
-    const linkUrl = `${proto}://${host}/e/${shareToken}`;
+    const linkUrl = `${whitelabelOriginForPress(press) ?? `${proto}://${host}`}/e/${shareToken}`;
 
     // Best-effort mail — a transport failure must not lose the Sent state,
     // but the caller needs to know (mail.ts records failures for ops).

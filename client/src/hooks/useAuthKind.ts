@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { isWhitelabelHost } from "@shared/whitelabelHost";
 
 export type AuthKind = "admin" | "customer";
 
@@ -20,7 +21,23 @@ export function detectAuthKind(host: string, pathname: string): AuthKind {
   if (h === CUSTOMER_HOST) return "customer";
   if (h === STORE_HOST) return "customer";
   if (h === GET_HOST) return "customer";
+  // Task #3258 — press white-label hosts (*.makesvinyl.com /
+  // *.pressesvinyl.com) intentionally fall through to the path-based rule,
+  // like dev/preview hosts: the branded surfaces are customer-flavored, but
+  // press-invited partners accept ADMIN-kind accounts and use the portal on
+  // the same branded host, so /admin* must resolve to admin there.
   return pathname.startsWith("/admin") ? "admin" : "customer";
+}
+
+// True when the page is served from the press white-label family
+// (mrp.makesvinyl.com etc., incl. the bare apexes). Used to land bare-host
+// visitors on the press-branded neutral page instead of the login bounce,
+// and to skin the login/estimate/invite surfaces.
+export function onWhitelabelHost(host?: string): boolean {
+  const h = (host ?? (typeof window === "undefined" ? "" : window.location.host))
+    .toLowerCase()
+    .split(":")[0];
+  return isWhitelabelHost(h);
 }
 
 // True when the page is served from the fan-facing store launch host. Used to

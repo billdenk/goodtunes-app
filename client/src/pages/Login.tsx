@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useAuthKind } from "@/hooks/useAuthKind";
 import { useLocation } from "wouter";
 import { GoodTunesLogo } from "@/components/GoodTunesLogo";
+import { useWhitelabelBrand } from "@/hooks/useWhitelabelBrand";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, setAuthToken, queryClient, apiErrorBody, apiErrorStatus } from "@/lib/queryClient";
 import { track } from "@/lib/analytics";
@@ -359,9 +360,39 @@ function DevLoginDropdown() {
   );
 }
 
+// Task #3258 — on a press white-label host (mrp.makesvinyl.com) the customer
+// login shows that press's logo/name instead of the GoodTunes mark. Admin
+// logins and every goodtunes.music host are untouched.
+function LoginBrandMark({ isAdmin }: { isAdmin: boolean }) {
+  const { onWhitelabel, brand } = useWhitelabelBrand();
+  if (onWhitelabel && brand?.known) {
+    // Task #3258 — the ADMIN login is the returning press-partner sign-in on
+    // a branded host (landing CTA → /admin/login), so it gets the press mark
+    // too. Admin chrome is light, so prefer the light-background logo there.
+    const logo = isAdmin ? (brand.lightLogoUrl ?? brand.logoUrl) : brand.logoUrl;
+    return logo ? (
+      <img
+        src={logo}
+        alt={brand.pressName ?? "Logo"}
+        className="max-h-14 max-w-[200px] object-contain"
+        data-testid="img-whitelabel-login-logo"
+      />
+    ) : (
+      <div
+        className={`text-xl font-semibold ${isAdmin ? "text-slate-900" : "text-white"}`}
+        data-testid="text-whitelabel-login-name"
+      >
+        {brand.pressName}
+      </div>
+    );
+  }
+  return <GoodTunesLogo size="lg" variant={isAdmin ? "color" : "white"} />;
+}
+
 export function Login() {
   const kind = useAuthKind();
   const isAdmin = kind === "admin";
+  const { onWhitelabel: onWhitelabelLoginHost, brand: whitelabelBrand } = useWhitelabelBrand();
   const s = isAdmin ? ADMIN_CHROME : CUSTOMER_CHROME;
   const inputBg = inputBgStyle(kind);
   // Customer card text is white-on-dark; admin card text is slate-on-white.
@@ -1196,7 +1227,7 @@ export function Login() {
     return (
       <main className={s.page}>
         <div className={s.card}>
-          <div className="flex flex-col items-center mb-6"><GoodTunesLogo size="lg" variant={isAdmin ? "color" : "white"} /></div>
+          <div className="flex flex-col items-center mb-6"><LoginBrandMark isAdmin={isAdmin} /></div>
           <h1 className={`text-xl font-semibold text-center mb-2 ${titleColor}`}>Set up 2FA</h1>
           <p className={`${isAdmin ? "text-slate-500" : "text-white/55"} text-sm text-center mb-6`}>
             Admin accounts require an authenticator app (Google Authenticator, 1Password, Authy, etc.). Scan this QR code, then enter the 6-digit code to confirm.
@@ -1251,7 +1282,7 @@ export function Login() {
     return (
       <main className={s.page}>
         <div className={s.card}>
-          <div className="flex flex-col items-center mb-6"><GoodTunesLogo size="lg" variant={isAdmin ? "color" : "white"} /></div>
+          <div className="flex flex-col items-center mb-6"><LoginBrandMark isAdmin={isAdmin} /></div>
           <h1 className={`text-xl font-semibold text-center mb-2 ${titleColor}`}>Check your email</h1>
           <p className={`${isAdmin ? "text-slate-500" : "text-white/55"} text-sm text-center mb-2`}>
             We emailed a 6-digit code to <span className={`${isAdmin ? "text-slate-800" : "text-white/85"} font-medium`}>{emailOtpInfo?.email ?? "your inbox"}</span>. Enter it below — it expires in 10 minutes.
@@ -1325,7 +1356,7 @@ export function Login() {
     return (
       <main className={s.page}>
         <div className={s.card}>
-          <div className="flex flex-col items-center mb-6"><GoodTunesLogo size="lg" variant={isAdmin ? "color" : "white"} /></div>
+          <div className="flex flex-col items-center mb-6"><LoginBrandMark isAdmin={isAdmin} /></div>
           <h1 className={`text-xl font-semibold text-center mb-2 ${titleColor}`}>Two-factor required</h1>
           <p className={`${isAdmin ? "text-slate-500" : "text-white/55"} text-sm text-center mb-6`}>
             Enter the 6-digit code from your authenticator app.
@@ -1395,9 +1426,13 @@ export function Login() {
     <main className={s.page}>
       <div className={s.card}>
         <div className="flex flex-col items-center mb-6">
-          <GoodTunesLogo size="lg" variant={isAdmin ? "color" : "white"} />
+          <LoginBrandMark isAdmin={isAdmin} />
           <p className={s.subtitle}>
-            {isAdmin ? "Sign in to GoodTunes Admin" : "Sign in to your GoodTunes account"}
+            {isAdmin
+              ? "Sign in to GoodTunes Admin"
+              : onWhitelabelLoginHost && whitelabelBrand?.known
+                ? "Sign in to continue"
+                : "Sign in to your GoodTunes account"}
           </p>
         </div>
 

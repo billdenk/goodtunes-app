@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
+import { isWhitelabelHost } from "@shared/whitelabelHost";
 
 export type AuthKind = "admin" | "customer";
 
@@ -42,7 +43,17 @@ export function kindFromRequest(req: Request): { kind: AuthKind; hostKnown: bool
   if (host === CUSTOMER_HOST) return { kind: "customer", hostKnown: true };
   if (host === STORE_HOST) return { kind: "customer", hostKnown: true };
   if (host === GET_HOST) return { kind: "customer", hostKnown: true };
-  // Dev / preview fallback — path-based.
+  // Task #3258 — the white-label family (*.makesvinyl.com /
+  // *.pressesvinyl.com, incl. the bare apexes) intentionally falls through
+  // to the path-based resolution below with hostKnown=false, exactly like a
+  // *.replit.dev preview host. These hosts serve BOTH sides: the branded
+  // landing/login/estimate surfaces are customer-flavored, but press invite
+  // links mint ADMIN-kind partner accounts and the invited artist's
+  // accept + portal session must work on the same branded host — forcing
+  // customer-kind here made getAuthFromRequest reject the freshly-minted
+  // admin identity. hostKnown=false relaxes the host/kind boundary (same as
+  // dev previews); role gates (requireAdmin etc.) still apply.
+  // Dev / preview / white-label fallback — path-based.
   const path = req.path || "";
   const looksAdmin =
     path.startsWith("/api/admin") ||
@@ -52,7 +63,14 @@ export function kindFromRequest(req: Request): { kind: AuthKind; hostKnown: bool
     // *.replit.dev preview hosts (no canonical host match) would treat
     // them as customer and 403 the password-leg admin sign-in flow.
     path.startsWith("/api/auth/email-otp") ||
-    path.startsWith("/api/auth/factor-preference");
+    path.startsWith("/api/auth/factor-preference") ||
+    // Task #3258 — an OAuth start carrying an invite token is accepting a
+    // partner (admin-kind) invitation: the callback's invite-grant branch
+    // only runs when the signed state bag says kind=admin. Without this,
+    // OAuth invite-accept started from a white-label (or dev/preview) host
+    // resolved to customer and silently skipped the grant. On the admin
+    // canonical host the host match above already yields admin.
+    (path.startsWith("/api/auth/") && path.endsWith("/start") && typeof req.query?.invite === "string");
   // Allow explicit override via ?kind= on OAuth start endpoints (so the
   // login page in dev can specify which side it wants).
   const override = (req.query?.kind as string | undefined);
@@ -121,6 +139,13 @@ export function callbackOrigin(req: Request, kind: AuthKind): string {
     if (kind === "customer") {
       const host = (req.headers.host || "").toLowerCase().split(":")[0];
       if (CUSTOMER_HOSTS.has(host)) return `https://${host}`;
+      // Task #3258 — a press white-label host keeps its own origin too: the
+      // OAuth round-trip must land back on the same branded host because
+      // the session cookie is host-scoped and the redirect_uri must match
+      // the IdP registration for that exact host. (Bill must register
+      // https://<slug>.makesvinyl.com/api/auth/{google,apple}/callback with
+      // each IdP; email/password + invite-token flows work regardless.)
+      if (isWhitelabelHost(host)) return `https://${host}`;
     }
     return originForKind(kind, req);
   }

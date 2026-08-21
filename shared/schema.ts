@@ -5045,6 +5045,13 @@ export const manufacturers = pgTable("manufacturers", {
   brandAccentColor: text("brand_accent_color"),
   brandCornerStyle: text("brand_corner_style"),
   brandContactLine: text("brand_contact_line"),
+  // Task #3258 — white-label host family (makesvinyl.com / pressesvinyl.com).
+  // The press's assigned subdomain label (e.g. "mrp" → mrp.makesvinyl.com).
+  // Null = no branded host; estimate/invite links fall back to the request
+  // host. Validated + uniqueness-enforced at the write boundary (PUT
+  // /api/press/:id/branding) against shared/whitelabelHost.ts rules; a
+  // case-insensitive unique index backs it in the DB (post-merge.sh).
+  whiteLabelSlug: text("white_label_slug"),
   // handoff/cd-cassette-catalog — per-press CD and cassette catalogs. CD and
   // cassette have a FIXED product structure (CD: case → print → booklet →
   // run pricing; cassette: case → shell → imprint → run pricing), so unlike

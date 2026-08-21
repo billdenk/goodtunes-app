@@ -12864,3 +12864,31 @@ SQL
 }
 migrate_press_whitelabel_branding_task_3257 dev  "${DATABASE_URL:-}"
 migrate_press_whitelabel_branding_task_3257 prod "${PROD_DATABASE_URL:-}"
+
+# Task #3258 — white-label host family (makesvinyl.com / pressesvinyl.com):
+# per-press subdomain label on manufacturers, with a case-insensitive
+# unique index so one slug maps to exactly one press. Hand-apply on BOTH
+# dev and prod (schema-drift guard + empty publish diff). Idempotent.
+migrate_press_whitelabel_slug_task_3258() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping white-label slug migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS white_label_slug text;
+CREATE UNIQUE INDEX IF NOT EXISTS manufacturers_white_label_slug_uniq
+  ON manufacturers (lower(white_label_slug))
+  WHERE white_label_slug IS NOT NULL;
+COMMIT;
+SQL
+  then
+    echo "post-merge: white-label slug migration ok on $label"
+  else
+    echo "post-merge: WARNING — white-label slug migration failed on $label (continuing)"
+  fi
+}
+migrate_press_whitelabel_slug_task_3258 dev  "${DATABASE_URL:-}"
+migrate_press_whitelabel_slug_task_3258 prod "${PROD_DATABASE_URL:-}"
