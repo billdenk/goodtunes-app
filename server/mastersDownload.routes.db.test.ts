@@ -35,6 +35,12 @@ let httpServer: HttpServer | undefined;
 let albumId = "";
 let adminId = "";
 let adminToken = "";
+// Task #3256 — auth-mode + partner-scope coverage.
+let artistPersonId = "";
+let artistUserId = "";
+let artistToken = "";
+let outsiderUserId = "";
+let outsiderToken = "";
 
 const tag = randomUUID().slice(0, 8);
 const WAV_BYTES = Buffer.from("RIFFxxxxWAVEfmt t3197-original-wav-bytes");
@@ -97,12 +103,22 @@ before(async () => {
   app.use(express.urlencoded({ extended: false }));
   httpServer = createServer(app);
   await registerRoutes(httpServer, app);
+  // Task #3256 — test-only seam: park a verified admin session the way a
+  // finished 2FA login would, so we can prove the download route accepts
+  // SESSION-cookie auth (it used to be bearer-only and 401'd cookie logins).
+  app.post("/__test/login", (req, res) => {
+    req.session.userId = req.body?.userId;
+    (req.session as any).kind = "admin";
+    req.session.save(() => res.json({ ok: true }));
+  });
   await new Promise<void>((resolve) => httpServer!.listen(0, "127.0.0.1", resolve));
   const addr = httpServer!.address();
   baseUrl = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}`;
 
   albumId = randomUUID();
-  await exec(sql`INSERT INTO albums (id, title, artist, artwork) VALUES (${albumId}, ${"t3197 album"}, ${"t3197"}, ${"/x.png"})`);
+  artistPersonId = randomUUID();
+  await exec(sql`INSERT INTO people (id, name) VALUES (${artistPersonId}, ${"t3256 artist " + tag})`);
+  await exec(sql`INSERT INTO albums (id, title, artist, artwork, primary_artist_id) VALUES (${albumId}, ${"t3197 album"}, ${"t3197"}, ${"/x.png"}, ${artistPersonId})`);
 
   adminId = randomUUID();
   await exec(sql`
@@ -111,6 +127,23 @@ before(async () => {
   `);
   adminToken = "t3197tok_" + randomUUID().replace(/-/g, "");
   await storage.createAuthToken(adminToken, adminId, "admin");
+
+  // The album's own artist partner (legacy role columns → synthesized
+  // membership) and an unrelated artist partner scoped elsewhere.
+  artistUserId = randomUUID();
+  await exec(sql`
+    INSERT INTO users (id, username, password, display_name, email, is_admin, role, role_scope_id)
+    VALUES (${artistUserId}, ${"t3256a_" + tag}, ${"x"}, ${"t3256 artist"}, ${"t3256a_" + tag + "@example.test"}, true, ${"artist"}, ${artistPersonId})
+  `);
+  artistToken = "t3256atok_" + randomUUID().replace(/-/g, "");
+  await storage.createAuthToken(artistToken, artistUserId, "admin");
+  outsiderUserId = randomUUID();
+  await exec(sql`
+    INSERT INTO users (id, username, password, display_name, email, is_admin, role, role_scope_id)
+    VALUES (${outsiderUserId}, ${"t3256o_" + tag}, ${"x"}, ${"t3256 outsider"}, ${"t3256o_" + tag + "@example.test"}, true, ${"artist"}, ${randomUUID()})
+  `);
+  outsiderToken = "t3256otok_" + randomUUID().replace(/-/g, "");
+  await storage.createAuthToken(outsiderToken, outsiderUserId, "admin");
 
   songBoth = await seedSong({ audioUrl: FLAC_URL, audioSourceUrl: WAV_URL, track: 1 });
   songServedOnly = await seedSong({ audioUrl: FLAC_URL, track: 2 });
@@ -123,8 +156,9 @@ before(async () => {
 after(async () => {
   await exec(sql`DELETE FROM songs WHERE album_id = ${albumId}`);
   await exec(sql`DELETE FROM albums WHERE id = ${albumId}`);
-  await exec(sql`DELETE FROM auth_tokens WHERE token = ${adminToken}`).catch(() => {});
-  await exec(sql`DELETE FROM users WHERE id = ${adminId}`);
+  await exec(sql`DELETE FROM auth_tokens WHERE token IN (${adminToken}, ${artistToken}, ${outsiderToken})`).catch(() => {});
+  await exec(sql`DELETE FROM users WHERE id IN (${adminId}, ${artistUserId}, ${outsiderUserId})`);
+  await exec(sql`DELETE FROM people WHERE id = ${artistPersonId}`).catch(() => {});
   await Promise.all([deleteObject(WAV_NAME), deleteObject(FLAC_NAME)]);
   await new Promise<void>((resolve) => (httpServer ? httpServer.close(() => resolve()) : resolve()));
   await pool.end();
@@ -181,6 +215,45 @@ test("object pointer but object gone → 404 missing_object", async () => {
   const j = await r.json();
   assert.equal(j.code, "missing_object");
   assert.match(j.message, /missing from storage/i);
+});
+
+// Task #3256 — the route must accept SESSION-cookie auth too: operators who
+// signed in without a localStorage bearer token were 401'd by the old
+// bearer-only guard and every Physical-tab download failed.
+test("session-cookie (no bearer) operator download works", async () => {
+  // Secure session cookie + trust proxy: present as https via the proxy
+  // header or express-session refuses to set the cookie over plain http.
+  const login = await fetch(`${baseUrl}/__test/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-forwarded-proto": "https" },
+    body: JSON.stringify({ userId: adminId }),
+  });
+  assert.equal(login.status, 200);
+  const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0];
+  assert.ok(cookie.startsWith("connect.sid="), `expected a session cookie, got: ${login.headers.get("set-cookie")}`);
+  const r = await fetch(`${baseUrl}/api/admin/albums/${albumId}/masters/${songBoth}/download`, {
+    headers: { cookie, "x-forwarded-proto": "https" },
+  });
+  assert.equal(r.status, 200);
+  assert.deepEqual(Buffer.from(await r.arrayBuffer()), WAV_BYTES);
+  const h = await fetch(`${baseUrl}/api/admin/albums/${albumId}/masters/health`, {
+    headers: { cookie, "x-forwarded-proto": "https" },
+  });
+  assert.equal(h.status, 200);
+});
+
+// Task #3256 — the album's OWN artist partner can download; an unrelated
+// artist-scoped partner stays rejected.
+test("album's own artist partner can download; out-of-scope partner 403s", async () => {
+  const ok = await fetch(`${baseUrl}/api/admin/albums/${albumId}/masters/${songBoth}/download`, {
+    headers: { Authorization: `Bearer ${artistToken}` },
+  });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(Buffer.from(await ok.arrayBuffer()), WAV_BYTES);
+  const denied = await fetch(`${baseUrl}/api/admin/albums/${albumId}/masters/${songBoth}/download`, {
+    headers: { Authorization: `Bearer ${outsiderToken}` },
+  });
+  assert.equal(denied.status, 403);
 });
 
 test("unauthenticated download → 401", async () => {

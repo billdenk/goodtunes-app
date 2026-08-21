@@ -467,12 +467,26 @@ export function PressPanel({
         ? `Your browser will save each file. Skipping ${skipped} track${skipped === 1 ? "" : "s"} whose master file is missing from storage.`
         : "Your browser will save each file.",
     });
+    const failed: string[] = [];
     for (const s of downloadable) {
       try {
         await downloadOne(s);
       } catch (e: any) {
+        failed.push(s.title);
         toast({ title: `Couldn't download "${s.title}"`, description: e?.message ?? "Unknown error", variant: "destructive" });
       }
+    }
+    // Task #3256 — honest end-of-run summary: name what didn't make it
+    // (skipped-missing + failed) instead of ending silently.
+    if (failed.length > 0 || skipped > 0) {
+      const bits: string[] = [];
+      if (failed.length > 0) bits.push(`${failed.length} failed (${failed.slice(0, 5).join(", ")}${failed.length > 5 ? ", …" : ""})`);
+      if (skipped > 0) bits.push(`${skipped} skipped (master missing from storage)`);
+      toast({
+        title: `Downloaded ${downloadable.length - failed.length} of ${withMaster.length} masters`,
+        description: bits.join(" · "),
+        variant: failed.length > 0 ? "destructive" : undefined,
+      });
     }
   }
 

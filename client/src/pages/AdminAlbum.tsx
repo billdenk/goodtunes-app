@@ -106,7 +106,7 @@ import { SplitsImportSheet, TrackSplitsEditor } from "@/components/admin/SplitsP
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
-import { apiRequest, getAuthToken, apiErrorStatus } from "@/lib/queryClient";
+import { apiRequest, getAuthToken, apiErrorStatus, fetchBlob, FetchBlobError } from "@/lib/queryClient";
 import { enqueueAudioBatch, enqueueVideoBatch } from "@/context/UploadManagerContext";
 import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
@@ -489,6 +489,48 @@ function SectionDot({
       className={["inline-block h-[7px] w-[7px] rounded-full", cls].join(" ")}
     />
   );
+}
+
+// Task #3256 — masters are PRIVATE objects: a bare <a href> straight at the
+// /objects/... path carries no auth, 404s at the edge, and saves a 0-byte
+// file. Every admin download control must fetch through the authed
+// download route into a blob (same pattern as PressPanel). The route
+// streams the artist's ORIGINAL upload (audioSourceUrl) when one is on
+// file, falling back to the served master; failures come back with a
+// reason-specific message (no master / external-only link / file missing
+// from storage) that the caller surfaces in a toast.
+async function downloadMasterViaApi(
+  albumId: string,
+  song: { id: string; title: string; trackNumber: number | null; audioUrl?: string | null; audioSourceUrl?: string | null },
+) {
+  const preferred =
+    (song.audioSourceUrl ?? "").trim().startsWith("/objects/")
+      ? song.audioSourceUrl!.trim()
+      : (song.audioUrl ?? "").trim().startsWith("/objects/")
+        ? song.audioUrl!.trim()
+        : (song.audioSourceUrl ?? song.audioUrl ?? "");
+  const ext = preferred.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
+  const blob = await fetchBlob(`/api/admin/albums/${albumId}/masters/${song.id}/download`);
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${String(song.trackNumber ?? 0).padStart(2, "0")} ${song.title}${ext}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+// Toast copy for a failed master download. Auth/transport failures are
+// distinguished from the route's classifier reasons (which arrive as the
+// server's own actionable message).
+function masterDownloadErrorMessage(e: unknown): string {
+  if (e instanceof FetchBlobError) {
+    if (e.status === 401) return "Your session expired — sign in again and retry.";
+    if (e.status === 403) return "Your account doesn't have access to this album's masters.";
+    return e.message || "Download failed.";
+  }
+  return (e as any)?.message ?? "Download failed — check your connection and retry.";
 }
 
 // Legacy "Migrate to Mux" admin action — removed 2026-05 once auto-ingest
@@ -10157,15 +10199,25 @@ function TrackRow({
               );
             })()}
             {(() => {
-              const downloadHref = song.audioSourceUrl ?? song.audioUrl!;
+              // Task #3256 — download via the authed route (bare /objects/
+              // anchors saved 0-byte files). Extension mirrors the server's
+              // source preference (original upload first).
               const downloadExt =
-                downloadHref.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
+                (song.audioSourceUrl ?? song.audioUrl ?? "").match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
               const isOriginal = !!song.audioSourceUrl;
               return (
-                <a
-                  href={downloadHref}
-                  download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${downloadExt}`}
-                  onClick={(e) => e.stopPropagation()}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    downloadMasterViaApi(albumId, song).catch((err) =>
+                      showToast({
+                        title: `Couldn't download "${song.title}"`,
+                        description: masterDownloadErrorMessage(err),
+                        variant: "destructive",
+                      }),
+                    );
+                  }}
                   className="inline-flex items-center justify-center w-7 h-7 rounded-md text-[var(--apple-faint)] hover:bg-[var(--apple-track)] focus:outline-none focus:ring-2 focus:ring-slate-300 flex-shrink-0"
                   aria-label={`Download master for ${song.title}`}
                   title={
@@ -10176,7 +10228,7 @@ function TrackRow({
                   data-testid={`button-download-master-${song.id}`}
                 >
                   <Download className="w-3.5 h-3.5" />
-                </a>
+                </button>
               );
             })()}
           </div>
@@ -15370,20 +15422,29 @@ function AudioEditor({
                   download fires the browser save dialog without
                   opening a tab. */}
               {song.audioUrl && (() => {
-                const href = song.audioSourceUrl ?? song.audioUrl!;
-                const ext = href.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
+                // Task #3256 — authed fetch→blob download (bare /objects/
+                // anchors carried no auth and saved 0-byte files).
+                const ext = (song.audioSourceUrl ?? song.audioUrl ?? "").match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
                 const isOriginal = !!song.audioSourceUrl;
                 return (
-                  <a
-                    href={href}
-                    download={`${String(song.trackNumber).padStart(2, "0")} ${song.title}${ext}`}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      downloadMasterViaApi(albumId, song).catch((err) =>
+                        showToast({
+                          title: `Couldn't download "${song.title}"`,
+                          description: masterDownloadErrorMessage(err),
+                          variant: "destructive",
+                        }),
+                      )
+                    }
                     className="w-8 h-8 rounded-md text-[var(--apple-subink)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center flex-shrink-0"
                     aria-label="Download master"
                     title={isOriginal ? `Download original master (${ext.slice(1).toUpperCase()})` : "Download master"}
                     data-testid={`button-download-master-inline-${song.id}`}
                   >
                     <Download className="w-4 h-4" />
-                  </a>
+                  </button>
                 );
               })()}
               <Popover>

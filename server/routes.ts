@@ -34658,7 +34658,11 @@ export async function registerRoutes(
   // it's a pipeline-made FLAC). Failure reasons are distinguished (no master
   // uploaded / un-mirrored external link / file missing from storage) so the
   // per-track toast is actionable. Shared classification: server/mastersHealth.ts.
-  app.get("/api/admin/albums/:id/masters/:songId/download", requireAdminBearer, async (req, res) => {
+  // Task #3256 — session-OR-bearer (requireAdmin), NOT requireAdminBearer:
+  // this is a read (no CSRF concern), and operators who signed in via a
+  // session cookie only (OAuth / dev-login, no localStorage token) were
+  // 401'd by the bearer-only guard → "Couldn't download …" on every track.
+  app.get("/api/admin/albums/:id/masters/:songId/download", requireAdmin, async (req, res) => {
     if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
     const song = await storage.getSongById(req.params.songId);
     if (!song || song.albumId !== req.params.id) return res.status(404).json({ message: "Song not found on this album." });
@@ -34714,8 +34718,9 @@ export async function registerRoutes(
   // Task #3197 — per-album masters pre-flight for the Press panel: classify
   // each track's master (ok_original / ok_served / no_master / external /
   // missing_object, probing storage for /objects/ pointers) so broken rows
-  // are flagged BEFORE a plant clicks download. Same gate as the download.
-  app.get("/api/admin/albums/:id/masters/health", requireAdminBearer, async (req, res) => {
+  // are flagged BEFORE a plant clicks download. Same gate as the download
+  // (session-or-bearer + operator/press/own-partner scope — Task #3256).
+  app.get("/api/admin/albums/:id/masters/health", requireAdmin, async (req, res) => {
     if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
     try {
       const albumSongs = await storage.getSongsByAlbum(req.params.id);
@@ -34743,8 +34748,9 @@ export async function registerRoutes(
   // Task #3197 — catalog-wide masters health for operators: last background
   // sweep (storage probed off the request path). `?refresh=1` forces a
   // fresh sweep. Operator-only — this is a whole-catalog view, and
-  // requireAdminBearer alone admits partner accounts.
-  app.get("/api/admin/masters/health", requireAdminBearer, async (req, res) => {
+  // requireAdmin alone admits partner accounts (session-or-bearer per
+  // Task #3256; the role check below keeps it operator-only).
+  app.get("/api/admin/masters/health", requireAdmin, async (req, res) => {
     const role = (await getUserRole(req.session.userId!))?.role;
     if (role !== "super_admin" && role !== "admin") {
       return res.status(403).json({ message: "Operators only." });
