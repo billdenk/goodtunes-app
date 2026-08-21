@@ -223,7 +223,9 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // 2026): the press's estimate + package builders, between Clients and
   // Projects per the handoff PRESS_NAV order.
   { id: "estimates",  label: "Estimates",        icon: FileText,         section: "create", roles: ["press"] },
-  { id: "packages",   label: "Packages",         icon: Package,          section: "create", roles: ["press"] },
+  // Saved-builds transition (Task #3233): the Create→Packages entry collapsed
+  // into the Product Specs "«Press» Packages" leaf below — one Packages
+  // destination. Old ?tab=packages deep links keep resolving (same tab id).
   { id: "albums",     label: "Projects",         icon: Disc3,            roles: ["press"] },
   // Acquisition removed from press portals (gogoods, Aug 19 2026): the buying
   // funnel is fan-level marketing data for an artist's release — that belongs
@@ -235,11 +237,16 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // supersedes the Aug 11 rail). Children in canon order: GoodTunes
   // Packages, GoodDeed Certificates, Specs, Templates. White Label moved
   // to top-level above Settings.
-  // "MRP Packages" (Ruby handoff, Aug 19 2026): the catalog leaf is the
+  // "MRP Packages" (Ruby handoff, Aug 19 2026): the Packages leaf is the
   // press's OWN built packages, not GoodTunes' set — label carries the
   // press's short name. Call sites override via pressPackagesLabel(name);
   // this static fallback matches the handoff's sample press.
-  { id: "catalog",    label: "MRP Packages",          icon: Package,    section: "productSpecs", roles: ["press"] },
+  // Saved-builds transition (Task #3233): this leaf now opens the component-
+  // based saved-builds index (tab id "packages"), NOT the legacy per-size
+  // "Build your GoodTunes packages" pricing catalog (tab id "catalog", which
+  // left the press rail — operators still reach it via the god-view Legacy
+  // packages row on /admin/manufacturers/:id).
+  { id: "packages",   label: "MRP Packages",          icon: Package,    section: "productSpecs", roles: ["press"] },
   { id: "pricing",    label: "GoodDeed® Certificates", icon: Award,     section: "productSpecs", roles: ["press"] },
   { id: "specs",      label: "Specs",                 icon: AudioLines, section: "productSpecs", roles: ["press"] },
   // Press-templates flow (Ruby handoff, Aug 2026): template ingestion +

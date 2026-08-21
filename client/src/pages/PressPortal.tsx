@@ -107,7 +107,10 @@ type TabId = "dashboard" | "details" | "people" | "estimates" | "packages" | "ca
 // Note: "acquisition" is intentionally NOT a press tab (gogoods, Aug 19 2026) —
 // the fan buying funnel belongs to the artist/label/manager who own the
 // release, not the plant. Kept in TabId only so god-view/other roles compile.
-const PRESS_TAB_IDS: TabId[] = ["dashboard", "details", "people", "estimates", "packages", "catalog", "specs", "templates", "comp-vinyl", "comp-cd", "comp-cassette", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing", "albums", "pipeline", "reports", "pricing", "referrals", "settings"];
+// "catalog" (the legacy GoodTunes Packages pricing page) left the press set
+// per the saved-builds transition (Task #3233) — presses land on "packages";
+// god-view keeps it reachable via extraTabIds (AdminManufacturer.tsx).
+const PRESS_TAB_IDS: TabId[] = ["dashboard", "details", "people", "estimates", "packages", "specs", "templates", "comp-vinyl", "comp-cd", "comp-cassette", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing", "albums", "pipeline", "reports", "pricing", "referrals", "settings"];
 
 interface MeRole { role: string; roleScopeId: string | null; }
 export interface PressMe {
@@ -282,7 +285,12 @@ export function usePressPortalNav(opts?: {
   const resolveTab = (t: string | null, sub: string | null): string => {
     const extra = opts?.resolveExtra?.(t, params);
     if (extra) return extra;
-    if (t === "settings" && sub === "catalog") return "catalog";
+    // Saved-builds transition (Task #3233): the legacy packages catalog left
+    // the press rail; every old catalog deep link (?tab=catalog and the older
+    // ?tab=settings&settings=catalog) lands on the saved-builds Packages tab.
+    // God-view keeps plain ?tab=catalog via resolveExtra above.
+    if (t === "settings" && sub === "catalog") return "packages";
+    if (t === "catalog") return "packages";
     // "GoodDeed Certificates" (the pricing tab) is visible to press logins
     // again per the press-specs handoff rail (Bill, Aug 11 2026 — supersedes
     // the Task #2222 hide), so ?tab=pricing resolves normally for everyone.
@@ -305,7 +313,22 @@ export function usePressPortalNav(opts?: {
   const [openPersonId, setOpenPersonId] = useState<string | null>(() => personFromUrl ?? null);
 
   useEffect(() => {
-    setTab(resolveTab(tabFromUrl, settingsSubFromUrl));
+    const resolved = resolveTab(tabFromUrl, settingsSubFromUrl);
+    setTab(resolved);
+    // Saved-builds transition (Task #3233): rewrite legacy catalog links to
+    // the canonical ?tab=packages form (replace, not push) — but only when
+    // the host actually resolved them there (god-view keeps ?tab=catalog).
+    const legacyCatalogLink =
+      tabFromUrl === "catalog" ||
+      (tabFromUrl === "settings" && settingsSubFromUrl === "catalog");
+    if (legacyCatalogLink && resolved === "packages") {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set("tab", "packages");
+      sp.delete("view");
+      sp.delete("section");
+      sp.delete("settings");
+      history.replaceState(null, "", `${window.location.pathname}?${sp}`);
+    }
     // Rewrite legacy comp-* links to the canonical ?tab=comp-vinyl&comp=<seg>
     // form (replace, not push) so refreshes/feedback links stay canonical.
     if (tabFromUrl && tabFromUrl in LEGACY_COMP_SEGMENT) {
@@ -438,7 +461,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   // Spread-preserve the row so icon/section survive (rebuilding rows strips
   // them from the rail).
   const tabs = modulesForRole("press").map((m) =>
-    m.id === "catalog" ? { ...m, label: pressPackagesLabel(me?.name) } : m,
+    m.id === "packages" ? { ...m, label: pressPackagesLabel(me?.name) } : m,
   ) as ReadonlyArray<{ id: TabId; label: string; soon?: boolean }>;
 
   return (

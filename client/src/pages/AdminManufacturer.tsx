@@ -31,6 +31,7 @@ import {
   Upload,
   X,
   Zap,
+  Package,
 } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
 import { resolveVinylColor, DEFAULT_JACKET_UPGRADE, type VinylColorOption } from "@shared/pressing";
@@ -264,15 +265,22 @@ export function AdminManufacturer() {
   // own module mounts (PressTabBody), so the two surfaces can't drift.
   const ADMIN_EXTRA_TABS = ["overview", "contacts", "analytics"] as const;
   const nav = usePressPortalNav({
-    extraTabIds: ADMIN_EXTRA_TABS,
+    // "catalog" (the legacy GoodTunes Packages pricing page) is operator-only
+    // since the saved-builds transition (Task #3233) — presses land on the
+    // Packages saved-builds tab; god-view keeps the legacy page reachable
+    // here as the "Legacy packages" rail row. It renders via PressTabBody's
+    // catalog branch, so it is NOT in ADMIN_EXTRA_TABS (those skip the body).
+    extraTabIds: [...ADMIN_EXTRA_TABS, "catalog"],
     resolveExtra: (t, sp) => {
       // Legacy admin deep links from before the mirror restructure:
-      // ?tab=catalog&section=specs|gooddeeds. (Plain ?tab=catalog now means
-      // the press's GoodTunes Packages catalog, same as the portal.)
+      // ?tab=catalog&section=specs|gooddeeds.
       const section = sp.get("section");
       if (t === "catalog" && section === "specs") return "specs";
       // The operator GoodDeed printing editor moved onto Overview.
       if (t === "catalog" && section === "gooddeeds") return "overview";
+      // Plain ?tab=catalog stays the legacy pricing catalog for operators
+      // (claim it here before the shared hook redirects it to "packages").
+      if (t === "catalog") return "catalog";
       return null;
     },
   });
@@ -301,7 +309,7 @@ export function AdminManufacturer() {
   for (const rawMod of modulesForRole("press")) {
     // "MRP Packages" (Ruby handoff, Aug 19 2026) — the catalog leaf names
     // THIS press's own packages; mirror the portal's per-press label.
-    const mod = rawMod.id === "catalog" ? { ...rawMod, label: pressPackagesLabel(pressMe?.name) } : rawMod;
+    const mod = rawMod.id === "packages" ? { ...rawMod, label: pressPackagesLabel(pressMe?.name) } : rawMod;
     if (mod.section) {
       const last = rail[rail.length - 1];
       if (last && last.kind === "group" && last.section === mod.section) {
@@ -628,6 +636,10 @@ export function AdminManufacturer() {
         {railRow({ id: "overview", label: "Overview", icon: Info })}
         {railRow({ id: "contacts", label: "Contacts", icon: Contact })}
         {railRow({ id: "analytics", label: "Analytics", icon: BarChart3 })}
+        {/* Saved-builds transition (Task #3233): the legacy GoodTunes
+            Packages pricing catalog left the press rail — operators keep a
+            reference route to the tier×jacket ladder data here. */}
+        {railRow({ id: "catalog", label: "Legacy packages", icon: Package })}
       </nav>
 
       {/* Settings — pinned to the rail bottom (rail standard). */}
@@ -650,7 +662,7 @@ export function AdminManufacturer() {
             {activeGroup
               ? `${activeGroup.label} · ${activeGroup.children.find((c) => c.id === tab)?.label ?? tab}`
               : (rail.find((e) => e.kind === "tab" && e.id === tab) as any)?.label
-                ?? (tab === "overview" ? "Overview" : tab === "contacts" ? "Contacts" : tab === "analytics" ? "Analytics" : settingsEntry && tab === settingsEntry.id ? settingsEntry.label : tab)}
+                ?? (tab === "overview" ? "Overview" : tab === "contacts" ? "Contacts" : tab === "analytics" ? "Analytics" : tab === "catalog" ? "Legacy packages" : settingsEntry && tab === settingsEntry.id ? settingsEntry.label : tab)}
           </span>
         </div>
 
