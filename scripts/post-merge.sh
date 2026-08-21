@@ -12892,3 +12892,28 @@ SQL
 }
 migrate_press_whitelabel_slug_task_3258 dev  "${DATABASE_URL:-}"
 migrate_press_whitelabel_slug_task_3258 prod "${PROD_DATABASE_URL:-}"
+
+# Task #3280 — previous-slug alias so a white-label subdomain rename can't
+# silently break already-sent estimate/invite links: the outgoing slug is
+# parked on previous_white_label_slug and the public branding lookup falls
+# back to it (current slugs win). Hand-apply on BOTH dev and prod. Idempotent.
+migrate_press_whitelabel_prev_slug_task_3280() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping white-label previous-slug migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS previous_white_label_slug text;
+COMMIT;
+SQL
+  then
+    echo "post-merge: white-label previous-slug migration ok on $label"
+  else
+    echo "post-merge: WARNING — white-label previous-slug migration failed on $label (continuing)"
+  fi
+}
+migrate_press_whitelabel_prev_slug_task_3280 dev  "${DATABASE_URL:-}"
+migrate_press_whitelabel_prev_slug_task_3280 prod "${PROD_DATABASE_URL:-}"

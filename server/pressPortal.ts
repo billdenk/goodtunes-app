@@ -812,6 +812,8 @@ export function registerPressPortalRoutes(
       // full host we mint links on, and the apex family for the DNS card.
       whiteLabelSlug: (press as any).whiteLabelSlug ?? null,
       whiteLabelHost: (press as any).whiteLabelSlug ? whitelabelHostForSlug((press as any).whiteLabelSlug) : null,
+      // Task #3280 — previous-slug alias (still skins already-sent links).
+      previousWhiteLabelSlug: (press as any).previousWhiteLabelSlug ?? null,
       whitelabelApexDomains: [...WHITELABEL_APEX_DOMAINS],
       canEdit,
     });
@@ -830,7 +832,8 @@ export function registerPressPortalRoutes(
     const pressId = String(req.params.id);
     const body = brandingBodySchema.safeParse(req.body ?? {});
     if (!body.success) return res.status(400).json({ message: body.error.issues[0]?.message ?? "Invalid branding" });
-    if (!(await resolvePress(pressId))) return res.status(404).json({ message: "Press not found" });
+    const existing = await resolvePress(pressId);
+    if (!existing) return res.status(404).json({ message: "Press not found" });
     const set: Record<string, any> = {};
     if (body.data.accentColor !== undefined) set.brandAccentColor = body.data.accentColor;
     if (body.data.cornerStyle !== undefined) set.brandCornerStyle = body.data.cornerStyle;
@@ -852,6 +855,31 @@ export function registerPressPortalRoutes(
         }
       }
       set.whiteLabelSlug = slug;
+      // Task #3280 — a rename (or removal) must not silently break links
+      // already sent on the OLD subdomain: park the outgoing slug as a
+      // previous-slug alias so /api/whitelabel/branding still resolves the
+      // skin there. Current slugs always win over aliases; re-claiming your
+      // own alias just swaps the two.
+      const oldSlug = (existing.whiteLabelSlug ?? "").toLowerCase() || null;
+      if (oldSlug && oldSlug !== slug) {
+        set.previousWhiteLabelSlug = oldSlug;
+      } else if (oldSlug && oldSlug === slug) {
+        // No-op save of the same slug — leave the alias untouched.
+        delete set.previousWhiteLabelSlug;
+      }
+      if (slug !== null) {
+        // If the claimed slug was some OTHER press's parked alias, the new
+        // owner takes it outright — clear the stale alias so the old press's
+        // links stop skinning as them (the links still open, neutral shell).
+        await db.execute(sql`
+          UPDATE manufacturers SET previous_white_label_slug = NULL
+          WHERE lower(previous_white_label_slug) = ${slug} AND id <> ${pressId}
+        `);
+        // And if the press re-claims its own alias, don't keep it duplicated.
+        if ((existing.previousWhiteLabelSlug ?? "").toLowerCase() === slug) {
+          set.previousWhiteLabelSlug = oldSlug && oldSlug !== slug ? oldSlug : null;
+        }
+      }
     }
     if (Object.keys(set).length === 0) return res.status(400).json({ message: "Nothing to save" });
     const [row] = await db
@@ -863,6 +891,7 @@ export function registerPressPortalRoutes(
         cornerStyle: manufacturers.brandCornerStyle,
         contactLine: manufacturers.brandContactLine,
         whiteLabelSlug: manufacturers.whiteLabelSlug,
+        previousWhiteLabelSlug: manufacturers.previousWhiteLabelSlug,
       });
     if (!row) return res.status(404).json({ message: "Press not found" });
     res.json(row);
@@ -890,12 +919,19 @@ export function registerPressPortalRoutes(
     // answer honestly instead of erroring.
     if (!parsed && !slug) return res.json({ whitelabel: false, known: false });
     if (!slug) return res.json({ whitelabel: true, known: false });
+    // Task #3280 — current slugs win; a press's parked previous slug (see
+    // previous_white_label_slug, written on rename) still resolves branding
+    // so links sent before a rename keep their skin instead of dropping to
+    // the neutral shell.
     const found = await db.execute<any>(sql`
       SELECT id, name, logo_url, light_logo_url, nav_logo_url, light_nav_logo_url,
              square_logo_url, light_square_logo_url,
-             brand_accent_color, brand_corner_style, brand_contact_line
+             brand_accent_color, brand_corner_style, brand_contact_line,
+             (lower(white_label_slug) = ${slug}) AS current_match
       FROM manufacturers
       WHERE lower(white_label_slug) = ${slug}
+         OR lower(previous_white_label_slug) = ${slug}
+      ORDER BY (lower(white_label_slug) = ${slug}) DESC
       LIMIT 1
     `);
     const m = ((found as any).rows ?? [])[0];
@@ -2561,6 +2597,7 @@ export function registerPressPortalRoutes(
     brandCornerStyle: string | null;
     brandContactLine: string | null;
     whiteLabelSlug: string | null;
+    previousWhiteLabelSlug: string | null;
   } | null> {
     // Task #3257 — also carry the white-label brand fields so the send
     // paths can skin customer-facing emails without a second lookup.
@@ -2579,6 +2616,9 @@ export function registerPressPortalRoutes(
         // Task #3258 — the estimate send/resend paths mint the /e/:token
         // link on the press's white-label host when a slug is assigned.
         whiteLabelSlug: manufacturers.whiteLabelSlug,
+        // Task #3280 — carried so the branding PUT can park the outgoing
+        // slug as the previous-slug alias on rename.
+        previousWhiteLabelSlug: manufacturers.previousWhiteLabelSlug,
       })
       .from(manufacturers)
       .where(eq(manufacturers.id, pressId))

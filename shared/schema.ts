@@ -5052,6 +5052,14 @@ export const manufacturers = pgTable("manufacturers", {
   // /api/press/:id/branding) against shared/whitelabelHost.ts rules; a
   // case-insensitive unique index backs it in the DB (post-merge.sh).
   whiteLabelSlug: text("white_label_slug"),
+  // Task #3280 — previous-slug alias so a subdomain RENAME can't silently
+  // break already-sent estimate/invite links. The /e/:token and /invite/:token
+  // routes ship in the SPA bundle on every host, so old links still WORK — but
+  // without this alias the old subdomain loses its skin (neutral "nothing at
+  // this address" shell). On rename the outgoing slug is parked here; the
+  // public branding lookup falls back to it (current slugs always win). A
+  // press claiming a slug clears any other press's alias on that slug.
+  previousWhiteLabelSlug: text("previous_white_label_slug"),
   // handoff/cd-cassette-catalog — per-press CD and cassette catalogs. CD and
   // cassette have a FIXED product structure (CD: case → print → booklet →
   // run pricing; cassette: case → shell → imprint → run pricing), so unlike

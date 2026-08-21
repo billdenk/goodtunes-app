@@ -13,5 +13,6 @@ Press white-label hosts serve `<slug>.makesvinyl.com` (pressesvinyl.com aliases;
 - Bare apexes / unknown / reserved subdomains render a NEUTRAL page — no GoodTunes branding, no press enumeration, never an error, never a 301 (unknown-host redirects killed deploy health probes before).
 - Slug is per-press, case-insensitively unique, validated with a friendly 400/409 at the API boundary before the DB index.
 - DNS: apexes link to the deployment plus a wildcard CNAME per apex, so new press slugs need zero DNS work.
+- Slug RENAMES park the outgoing slug on `previous_white_label_slug` (one-deep alias) so already-sent estimate/invite links keep their skin; the public branding lookup falls back to the alias (current slugs always win), and a press claiming another press's parked alias clears that stale alias. The White Label tab shows a rename note instead of blocking.
 
 **How to apply:** any new white-label surface reads the shared parser + the public no-auth branding endpoint; any new press-outbound link builder goes through the branded-origin-or-request-host helper. Invite-flow regressions are locked in by a DB test accepting an invite under a whitelabel Host header.

@@ -41,6 +41,9 @@ type BrandingConfig = {
   // Task #3258 — assigned white-label subdomain label + minted host.
   whiteLabelSlug: string | null;
   whiteLabelHost: string | null;
+  // Task #3280 — previous subdomain kept as an alias after a rename so
+  // already-sent estimate/invite links keep their branding.
+  previousWhiteLabelSlug?: string | null;
   whitelabelApexDomains?: string[];
   canEdit?: boolean;
 };
@@ -176,6 +179,10 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
   const savedCorner: "rounded" | "square" = branding?.cornerStyle === "square" ? "square" : "rounded";
   const savedContact = branding?.contactLine ?? "";
   const savedSlug = branding?.whiteLabelSlug ?? "";
+  // Task #3280 — rename awareness: warn before saving a different slug, and
+  // surface the kept alias after a rename.
+  const aliasSlug = branding?.previousWhiteLabelSlug ?? "";
+  const isRenaming = Boolean(savedSlug) && wlSlug.trim().toLowerCase() !== savedSlug;
   const dirty =
     accent.trim().toUpperCase() !== savedAccent.toUpperCase() ||
     cornerStyle !== savedCorner ||
@@ -279,6 +286,23 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
                     2–40 lowercase letters, numbers, or hyphens. Also answers at {slugPreview}.pressesvinyl.com.
                     Save to assign — estimate links and invites switch to this address immediately.
                   </p>
+                )}
+                {/* Task #3280 — renaming keeps the old subdomain as an alias, so
+                    links already sent keep their branding. Say so up front. */}
+                {isRenaming && (
+                  <div style={{ marginTop: 8 }} data-testid="text-whitelabel-rename-note">
+                    <WordIcon icon={AlertCircle}>
+                      Renaming from {savedSlug}.makesvinyl.com — links you&rsquo;ve already sent
+                      there keep working and keep your branding after you save.
+                    </WordIcon>
+                  </div>
+                )}
+                {!isRenaming && aliasSlug && (
+                  <div style={{ marginTop: 8 }} data-testid="text-whitelabel-alias-note">
+                    <WordIcon icon={Check}>
+                      Previously {aliasSlug}.makesvinyl.com — older links there still carry your branding.
+                    </WordIcon>
+                  </div>
                 )}
               </div>
               <button
