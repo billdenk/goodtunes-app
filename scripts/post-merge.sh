@@ -12739,6 +12739,8 @@ run_sql_both "alter table if exists orders add column if not exists redemption_e
 run_sql_both "alter table if exists manufacturers add column if not exists brand_accent_color text" || true
 run_sql_both "alter table if exists manufacturers add column if not exists brand_corner_style text" || true
 run_sql_both "alter table if exists manufacturers add column if not exists brand_contact_line text" || true
+run_sql_both "alter table if exists manufacturers add column if not exists email_branding jsonb" || true
+run_sql_both "alter table if exists songs add column if not exists source_url text" || true
 
 # Task #3254 — one-shot: set the public ACL on every object referenced by a
 # manufacturer logo/image column (press profile logos uploaded via signed-PUT
