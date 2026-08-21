@@ -2450,7 +2450,7 @@ function PressDashboardTab({
       <div className="flex items-end justify-between gap-3 flex-wrap">
         <div className="min-w-0">
           <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: "-0.03em", color: PD_INK }} data-testid="heading-press-dashboard">
-            {pdGreeting()}{me?.name ? `, ${me.name}` : ""}
+            {pdGreeting()}{firstName ? `, ${firstName}` : me?.name ? `, ${me.name}` : ""}
           </h1>
           <p className="text-[13.5px] mt-1" style={{ color: PD_SUBINK }}>
             Nothing needs you right now — the shop is running clean.
