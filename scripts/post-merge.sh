@@ -12726,6 +12726,31 @@ fi # ── end migration suite part 2 ──
 # and runs LAST so an over-budget sync can never drop migrations.
 sync_github_build_mirror
 
+# run_sql_both <sql> — run one idempotent statement against BOTH databases.
+# Several late-suite migrations below (Tasks #3248/#3257/#3259/#3275, dedupe
+# index) call this; it was previously undefined, so every call died as
+# "command not found" and was swallowed by `|| true` — the migrations never
+# ran on any DB that wasn't altered by hand. Failures are surfaced as loud
+# WARNINGs (post-merge convention: warn and continue, never abort siblings).
+run_sql_both() {
+  local stmt="$1" rc=0 label url
+  for label in dev prod; do
+    if [ "$label" = "dev" ]; then url="${DATABASE_URL:-}"; else url="${PROD_DATABASE_URL:-}"; fi
+    if [ -z "$url" ]; then
+      echo "post-merge: WARNING — run_sql_both skipped on $label (no URL set): $stmt"
+      rc=1
+      continue
+    fi
+    if psql "$url" -v ON_ERROR_STOP=1 -c "$stmt" >/dev/null 2>&1; then
+      echo "post-merge: run_sql_both ok on $label: $stmt"
+    else
+      echo "post-merge: WARNING — run_sql_both FAILED on $label: $stmt"
+      rc=1
+    fi
+  done
+  return $rc
+}
+
 # Race-safe Spotify-import dedupe: one active Person per Spotify URL.
 run_sql_both "create unique index if not exists people_spotify_url_active_uniq on people (spotify_url) where spotify_url is not null and deleted_at is null" || true
 
@@ -12741,6 +12766,16 @@ run_sql_both "alter table if exists manufacturers add column if not exists brand
 run_sql_both "alter table if exists manufacturers add column if not exists brand_contact_line text" || true
 run_sql_both "alter table if exists manufacturers add column if not exists email_branding jsonb" || true
 run_sql_both "alter table if exists songs add column if not exists source_url text" || true
+# Task #3275 — Shopify platform-fee defaults ladder: artist-level default fee
+# + release-level override (both nullable; accrual coalesces at mint time).
+run_sql_both "alter table if exists people add column if not exists shopify_unit_fee_cents integer" || true
+run_sql_both "alter table if exists shopify_product_mappings add column if not exists unit_fee_override_cents integer" || true
+# The old NOT NULL DEFAULT 350 on the store fee stamped every install with an
+# "explicit" $3.50 that would shadow the artist default forever. Null = inherit.
+# (One-time 350→null rewrite already applied by hand to dev+prod on 2026-08-21;
+# not repeated here so operator-set explicit $3.50 rates are never clobbered.)
+run_sql_both "alter table if exists shopify_stores alter column digital_unit_fee_cents drop not null" || true
+run_sql_both "alter table if exists shopify_stores alter column digital_unit_fee_cents drop default" || true
 
 # Task #3254 — one-shot: set the public ACL on every object referenced by a
 # manufacturer logo/image column (press profile logos uploaded via signed-PUT

@@ -103,7 +103,22 @@ type Mapping = {
   // Task #2912 — live flag from the mappings endpoint: the pinned variant
   // no longer exists on Shopify (deleted after linking).
   variantRemoved?: boolean;
+  // Task #3275 — release-level per-unit platform fee override + the fee an
+  // order on this mapping would actually accrue, with its provenance.
+  unitFeeOverrideCents?: number | null;
+  effectiveUnitFeeCents?: number;
+  effectiveUnitFeeSource?: "release_override" | "store" | "artist_default" | "platform_default";
 };
+
+// Task #3275 — human label for where the resolved platform fee comes from.
+export function feeSourceLabel(source: string | undefined): string {
+  switch (source) {
+    case "release_override": return "release override";
+    case "store": return "store rate";
+    case "artist_default": return "inherited from artist default";
+    default: return "platform default";
+  }
+}
 // Resolved type kept for paste-URL path inside the picker dialog (server shape).
 type Resolved = {
   storeId: string;
@@ -209,6 +224,9 @@ export function ShopifyPanel({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [configVariant, setConfigVariant] = useState<PickedVariant | null>(null);
   const [editMappingId, setEditMappingId] = useState<string | null>(null);
+  // Task #3275 — release-level platform-fee override edit state (dollars
+  // string; empty = no override, inherit store/artist/platform ladder).
+  const [feeOverrideInput, setFeeOverrideInput] = useState("");
 
   // Task #2892 — visible save lifecycle. On success the configure panel
   // closes, the new row lands at the top of the list with a brief "Saved"
@@ -456,7 +474,22 @@ export function ShopifyPanel({
       const r = await apiRequest(
         "PATCH",
         `/api/admin/albums/${albumId}/shopify-mappings/${editMappingId}`,
-        { offerSignedCert: offerCert },
+        {
+          offerSignedCert: offerCert,
+          // Task #3275 — empty input clears the release-level override
+          // (falls back to store fee → artist default → $3.50 ladder).
+          // Operator-only financial control: partners never send the field
+          // at all (the server 403s its presence — including null — for
+          // non-operators), so their mapping edits leave the fee untouched.
+          ...(partnerViewer
+            ? {}
+            : {
+                unitFeeOverrideCents:
+                  feeOverrideInput.trim() === ""
+                    ? null
+                    : Math.round(parseFloat(feeOverrideInput) * 100),
+              }),
+        },
       );
       return r.json() as Promise<Mapping>;
     },
@@ -468,6 +501,7 @@ export function ShopifyPanel({
       setPanelMode("list");
       setEditMappingId(null);
       setOfferCert(false);
+      setFeeOverrideInput("");
       setSaveError(null);
       setJustSavedMappingId(row.id);
     },
@@ -711,6 +745,9 @@ export function ShopifyPanel({
               onEdit={() => {
                 setEditMappingId(m.id);
                 setOfferCert(m.offerSignedCert);
+                setFeeOverrideInput(
+                  m.unitFeeOverrideCents != null ? (m.unitFeeOverrideCents / 100).toFixed(2) : "",
+                );
                 setSaveError(null);
                 setPanelMode("edit");
               }}
@@ -851,6 +888,35 @@ export function ShopifyPanel({
                   </span>
                 </label>
               </div>
+            )}
+
+            {/* Task #3275 — release-level platform fee override. Operator-only
+                financial control: hidden for partner viewers (server rejects
+                the field from non-operators regardless). */}
+            {!partnerViewer && (
+            <div>
+              <label className="block text-[13px] text-slate-800 mb-1">Platform fee override (per unit)</label>
+              <div className="flex items-center gap-2">
+                <span className="text-[13px] text-slate-500">$</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={feeOverrideInput}
+                  onChange={(e) => setFeeOverrideInput(e.target.value)}
+                  placeholder={
+                    m.effectiveUnitFeeCents != null && m.effectiveUnitFeeSource !== "release_override"
+                      ? `${(m.effectiveUnitFeeCents / 100).toFixed(2)} (${feeSourceLabel(m.effectiveUnitFeeSource)})`
+                      : "3.50"
+                  }
+                  className="h-9 w-32 rounded-md border border-[#e2e8f0] px-2.5 text-[13px] text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#1f7fb8]"
+                  data-testid="input-mapping-fee-override"
+                />
+              </div>
+              <p className="text-[11.5px] text-slate-400 mt-1 leading-snug">
+                Wins over the store rate and the artist default for orders on this release. Leave blank to inherit.
+              </p>
+            </div>
             )}
 
             {saveError && (
@@ -1645,6 +1711,18 @@ function MappingListRow({
           ) : (
             <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500">
               Digital + PDF GoodDeed
+            </span>
+          )}
+          {/* Task #3275 — resolved per-unit platform fee + provenance */}
+          {m.effectiveUnitFeeCents != null && (
+            <span
+              className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500"
+              title={`Platform fee: ${feeSourceLabel(m.effectiveUnitFeeSource)}`}
+              data-testid={`chip-mapping-fee-${m.id}`}
+            >
+              ${(m.effectiveUnitFeeCents / 100).toFixed(2)}/unit
+              {m.effectiveUnitFeeSource === "release_override" && " · override"}
+              {m.effectiveUnitFeeSource === "artist_default" && " · artist default"}
             </span>
           )}
           {justSaved && (

@@ -23,6 +23,11 @@ type Store = {
   installedAt: string | null;
   uninstalledAt: string | null;
   digitalUnitFeeCents: number | null;
+  // Task #3275 — resolved fee (store explicit → artist default → $3.50)
+  // and its provenance, computed server-side.
+  personName: string | null;
+  effectiveUnitFeeCents: number;
+  effectiveUnitFeeSource: "store" | "artist_default" | "platform_default";
 };
 
 type AlbumLite = { id: string; title: string; artist: string };
@@ -601,16 +606,32 @@ Get your music now
                       <button
                         type="button"
                         onClick={() => {
-                          const current = s.digitalUnitFeeCents ?? 350;
+                          const current = s.effectiveUnitFeeCents ?? s.digitalUnitFeeCents ?? 350;
                           setFeeInputValue((current / 100).toFixed(2));
                           setEditingFeeStoreId(s.id);
                           setTimeout(() => feeInputRef.current?.focus(), 50);
                         }}
                         className="text-xs text-slate-500 hover:text-slate-900 flex items-center gap-1 group"
-                        title="Edit digital unit fee"
+                        title={
+                          s.effectiveUnitFeeSource === "artist_default"
+                            ? `Inherited from ${s.personName ?? "artist"} default — click to set an explicit store rate`
+                            : s.effectiveUnitFeeSource === "platform_default"
+                              ? "Platform default — click to set an explicit store rate"
+                              : "Edit digital unit fee"
+                        }
                         data-testid={`button-edit-fee-${s.id}`}
                       >
-                        ${((s.digitalUnitFeeCents ?? 350) / 100).toFixed(2)}/unit
+                        ${((s.effectiveUnitFeeCents ?? s.digitalUnitFeeCents ?? 350) / 100).toFixed(2)}/unit
+                        {s.effectiveUnitFeeSource === "artist_default" && (
+                          <span className="text-[10px] text-slate-400" data-testid={`text-fee-source-${s.id}`}>
+                            (artist default)
+                          </span>
+                        )}
+                        {s.effectiveUnitFeeSource === "platform_default" && (
+                          <span className="text-[10px] text-slate-400" data-testid={`text-fee-source-${s.id}`}>
+                            (default)
+                          </span>
+                        )}
                         <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60" />
                       </button>
                     )}

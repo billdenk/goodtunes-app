@@ -12312,6 +12312,26 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<label className=\"block text-[13px] text-slate-800 mb-1\">Platform fee override (per unit)</label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<span className=\"text-[13px] text-slate-500\">$</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"h-9 w-32 rounded-md border border-[#e2e8f0] px-2.5 text-[13px] text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#1f7fb8]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "<p className=\"text-[11.5px] text-slate-400 mt-1 leading-snug\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<p className=\"text-[12px] text-rose-600\" data-testid=\"text-edit-save-error\">"
   },
   {
@@ -12548,6 +12568,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/ShopifyPanel.tsx",
     "snippet": "<span className=\"inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/ShopifyPanel.tsx",
+    "snippet": "className=\"inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-500\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -19107,6 +19132,41 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<div className=\"text-slate-900 text-[13px] font-semibold\">Default platform fee</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11.5px] leading-snug mt-0.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<span className=\"text-[13px] text-slate-500\">$</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "className=\"text-emerald-600 hover:text-emerald-700 text-[12.5px] font-medium disabled:opacity-50\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "className=\"text-slate-400 hover:text-slate-600 text-[12.5px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "className=\"text-[13px] text-slate-600 hover:text-slate-900 inline-flex items-center gap-1.5 shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
+    "snippet": "<p className=\"text-slate-400 text-[11.5px] mt-2\" data-testid=\"text-person-shopify-effective-fee\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminPerson.tsx",
     "snippet": "<h2 className=\"text-slate-900 text-[14px] font-bold\">Release mapping</h2>"
   },
   {
@@ -20218,6 +20278,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminShopify.tsx",
     "snippet": "<div className=\"text-[14px] font-medium text-slate-900 truncate flex items-center gap-1.5\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminShopify.tsx",
+    "snippet": "<span className=\"text-[10px] text-slate-400\" data-testid={`text-fee-source-${s.id}`}>"
   },
   {
     "rule": "hardcoded-font-size",

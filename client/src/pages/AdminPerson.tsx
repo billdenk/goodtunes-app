@@ -2796,6 +2796,10 @@ interface PersonShopifyStore {
   shopDomain: string;
   storeName: string | null;
   connected: boolean;
+  // Task #3275 — store explicit fee + resolved effective fee/provenance.
+  digitalUnitFeeCents: number | null;
+  effectiveUnitFeeCents: number;
+  effectiveUnitFeeSource: "store" | "artist_default" | "platform_default";
 }
 interface PersonShopifyAlbum {
   id: string;
@@ -2806,6 +2810,8 @@ interface PersonShopifyAlbum {
 }
 interface PersonShopifyStatus {
   configured: boolean;
+  // Task #3275 — artist-level default per-unit platform fee (cents).
+  defaultUnitFeeCents: number | null;
   store: PersonShopifyStore | null;
   unattachedStores: { id: string; shopDomain: string; storeName: string | null }[];
   albums: PersonShopifyAlbum[];
@@ -2828,6 +2834,9 @@ function PersonShopifyPanel({ person }: { person: PersonFull }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [shopInput, setShopInput] = useState("");
+  // Task #3275 — artist default platform fee edit state.
+  const [feeEditing, setFeeEditing] = useState(false);
+  const [feeInput, setFeeInput] = useState("");
   const [attachId, setAttachId] = useState("");
   const [browseOpen, setBrowseOpen] = useState(false);
 
@@ -2861,6 +2870,20 @@ function PersonShopifyPanel({ person }: { person: PersonFull }) {
     },
     onError: (e: any) =>
       toast({ title: "Couldn't attach store", description: e?.message, variant: "destructive" }),
+  });
+
+  // Task #3275 — save/clear the artist-level default platform fee.
+  const saveDefaultFee = useMutation({
+    mutationFn: async (cents: number | null) => {
+      await apiRequest("PATCH", `/api/admin/people/${personId}/shopify-fee`, { shopifyUnitFeeCents: cents });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/people", personId, "shopify"] });
+      setFeeEditing(false);
+      toast({ title: "Default platform fee saved" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save fee", description: e?.message, variant: "destructive" }),
   });
 
   const detach = useMutation({
@@ -3051,6 +3074,92 @@ function PersonShopifyPanel({ person }: { person: PersonFull }) {
             )}
           </div>
         )}
+
+        {/* Task #3275 — artist-level default per-unit platform fee. Works
+            even with NO store connected: the default applies to any store
+            of this artist the moment its first order mints. */}
+        <div className="px-6 py-4 border-t border-slate-100" data-testid="section-person-shopify-fee">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-slate-900 text-[13px] font-semibold">Default platform fee</div>
+              <p className="text-slate-400 text-[11.5px] leading-snug mt-0.5">
+                Per-unit wholesale fee for {person.name}'s Shopify orders. Applies to any of her stores
+                without an explicit store rate — including stores connected later. Release-level
+                overrides win over this. Blank = platform default ($3.50).
+              </p>
+            </div>
+            {feeEditing ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const trimmed = feeInput.trim();
+                  if (trimmed === "") {
+                    saveDefaultFee.mutate(null);
+                    return;
+                  }
+                  const val = Number.parseFloat(trimmed.replace(/[^0-9.]/g, ""));
+                  if (!Number.isFinite(val) || val < 0) return;
+                  saveDefaultFee.mutate(Math.round(val * 100));
+                }}
+                className="flex items-center gap-2 shrink-0"
+              >
+                <span className="text-[13px] text-slate-500">$</span>
+                <Input
+                  type="text"
+                  value={feeInput}
+                  onChange={(e) => setFeeInput(e.target.value)}
+                  placeholder="3.50"
+                  className="w-24 h-9"
+                  autoFocus
+                  data-testid="input-person-shopify-fee"
+                />
+                <button
+                  type="submit"
+                  disabled={saveDefaultFee.isPending}
+                  className="text-emerald-600 hover:text-emerald-700 text-[12.5px] font-medium disabled:opacity-50"
+                  data-testid="button-person-shopify-fee-save"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFeeEditing(false)}
+                  className="text-slate-400 hover:text-slate-600 text-[12.5px]"
+                  data-testid="button-person-shopify-fee-cancel"
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setFeeInput(data.defaultUnitFeeCents != null ? (data.defaultUnitFeeCents / 100).toFixed(2) : "");
+                  setFeeEditing(true);
+                }}
+                className="text-[13px] text-slate-600 hover:text-slate-900 inline-flex items-center gap-1.5 shrink-0"
+                data-testid="button-person-shopify-fee-edit"
+              >
+                {data.defaultUnitFeeCents != null
+                  ? `$${(data.defaultUnitFeeCents / 100).toFixed(2)}/unit`
+                  : "$3.50/unit (platform default)"}
+                <Pencil className="w-3.5 h-3.5 opacity-60" />
+              </button>
+            )}
+          </div>
+          {store && (
+            <p className="text-slate-400 text-[11.5px] mt-2" data-testid="text-person-shopify-effective-fee">
+              {store.storeName || store.shopDomain} currently accrues $
+              {(store.effectiveUnitFeeCents / 100).toFixed(2)}/unit (
+              {store.effectiveUnitFeeSource === "store"
+                ? "explicit store rate"
+                : store.effectiveUnitFeeSource === "artist_default"
+                  ? "inherited from artist default"
+                  : "platform default"}
+              ).
+            </p>
+          )}
+        </div>
       </Card>
 
       {/* Per-release mapping summary */}

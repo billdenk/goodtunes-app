@@ -1246,6 +1246,14 @@ export const people = pgTable("people", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   photoUrl: text("photo_url"),
+  // Task #3275 — artist-level default per-unit Shopify platform fee (cents).
+  // Applies to any of this artist's stores whose row has no explicit
+  // digitalUnitFeeCents — including stores connected later, so the operator
+  // can lock in a deal rate BEFORE the install lands. Null = no default
+  // (falls through to the $3.50 platform default). Release-level overrides
+  // on shopify_product_mappings win over this. Label-level defaults are a
+  // deliberate future seam — person-level only for now.
+  shopifyUnitFeeCents: integer("shopify_unit_fee_cents"),
   // Optional wide background image for the artist hero — mirrors
   // `vendors.coverUrl` / `labels.coverUrl` so when the fan-side artist
   // page lands we already have a place to put a banner. The initial
@@ -3634,7 +3642,17 @@ export const shopifyStores = pgTable("shopify_stores", {
   // (350 cents); per-deal overrides go up or down from there. Nullable for
   // backwards compatibility — a null row reads as the $3.50 platform default
   // at accrual time (coalesce in the webhook handler).
-  digitalUnitFeeCents: integer("digital_unit_fee_cents").default(350),
+  // Explicit per-store rate. Nullable ON PURPOSE (Task #3275): the old
+  // NOT NULL DEFAULT 350 stamped every install with an "explicit" $3.50,
+  // which would shadow the artist default forever. Null = inherit.
+  digitalUnitFeeCents: integer("digital_unit_fee_cents"),
+  // NOTE (Task #3275): a NULL digitalUnitFeeCents no longer coalesces
+  // straight to $3.50 — accrual resolves through a ladder:
+  //   release override (mapping.unitFeeOverrideCents)
+  //   → store explicit fee (this column)
+  //   → artist default (people.shopifyUnitFeeCents of personId)
+  //   → $3.50 platform default.
+  // See resolveShopifyUnitFee() in server/shopify.ts.
   // Which Partner-Dashboard app this store installed under: 'public' (the
   // App-Store-reviewed GoodTunes app) or 'custom' (the review-bypass
   // custom-distribution bridge app, locked to one store — first user:
@@ -3700,6 +3718,10 @@ export const shopifyProductMappings = pgTable(
     // creation from the Shopify product's onlineStoreUrl so the operator
     // doesn't have to copy it manually.
     shopifyProductUrl: text("shopify_product_url"),
+    // Task #3275 — release-level per-unit platform fee override (cents).
+    // Wins over BOTH the store's explicit digitalUnitFeeCents and the
+    // artist default when this mapping's order mints. Null = no override.
+    unitFeeOverrideCents: integer("unit_fee_override_cents"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   // No table-level uniqueness here — Postgres treats NULL variantId as

@@ -29,6 +29,7 @@ import {
   FlaskConical,
   HeartHandshake,
   ShoppingBag,
+  ShoppingCart,
   PanelRightClose,
   PanelRightOpen,
   Bell,
@@ -1006,6 +1007,17 @@ export function AdminFrame({
                 active={active === "fulfillment"}
                 onClick={() => navigate("/admin/fulfillment-partners")}
                 testId="nav-fulfillment"
+              />
+              {/* Task #3275 — /admin/shopify was an orphan page (entity key
+                  existed, no sidebar row). Connected-store management sits
+                  with the other partner org types. */}
+              <SidebarLink
+                icon={ShoppingCart}
+                label="Shopify"
+                count={-1}
+                active={active === "shopify"}
+                onClick={() => navigate("/admin/shopify")}
+                testId="nav-shopify"
               />
               {/* Team accounts — account-centric roster: every partner
                   sign-in and the scope(s) it represents, whether it came

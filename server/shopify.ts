@@ -1019,6 +1019,38 @@ function snapshotAddress(a: ShopifyAddress | null | undefined) {
 // orders. Concurrent-race protection lives in the same module via
 // withRetryOnGoodDeedCollision, which the call sites below wrap around
 // the actual insert.
+// ─── Task #3275 — per-unit platform fee resolution ladder ────────────
+// One helper shared by the live webhook mint and the historical backfill
+// (both funnel through materializeOrderFromShopify) AND the display
+// endpoints, so what accrues is exactly what the admin UI shows.
+// Ladder: release override (mapping.unitFeeOverrideCents)
+//   → store explicit fee (shopify_stores.digital_unit_fee_cents)
+//   → artist default (people.shopify_unit_fee_cents of store.personId)
+//   → $3.50 platform default.
+// The artist default is read live at mint time so a default set BEFORE the
+// store exists (or before it flips Live) still applies to the first order.
+export const PLATFORM_DEFAULT_UNIT_FEE_CENTS = 350;
+export type UnitFeeSource = "release_override" | "store" | "artist_default" | "platform_default";
+async function resolveShopifyUnitFee(
+  store: { digitalUnitFeeCents: number | null; personId: string | null },
+  mapping?: { unitFeeOverrideCents: number | null } | null,
+): Promise<{ unitFeeCents: number; source: UnitFeeSource }> {
+  if (mapping && mapping.unitFeeOverrideCents != null) {
+    return { unitFeeCents: mapping.unitFeeOverrideCents, source: "release_override" };
+  }
+  if (store.digitalUnitFeeCents != null) {
+    return { unitFeeCents: store.digitalUnitFeeCents, source: "store" };
+  }
+  if (store.personId) {
+    const [person] = await db
+      .select({ fee: people.shopifyUnitFeeCents })
+      .from(people)
+      .where(eq(people.id, store.personId));
+    if (person?.fee != null) return { unitFeeCents: person.fee, source: "artist_default" };
+  }
+  return { unitFeeCents: PLATFORM_DEFAULT_UNIT_FEE_CENTS, source: "platform_default" };
+}
+
 async function assignNextGoodDeedNumberForAlbum(albumId: string): Promise<number> {
   const { assignNextGoodDeedNumber } = await import("./commerce");
   return assignNextGoodDeedNumber(albumId);
@@ -1180,6 +1212,9 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // with the existing order row: every later side-step is idempotent per
   // orderId (onConflictDoNothing / explicit guards), so the rerun completes
   // exactly the missing tail — items, unlock, and the code.
+  //
+  // (Task #3275 — the per-unit platform fee this order accrues is resolved
+  // through resolveShopifyUnitFee(), not a bare store-fee coalesce.)
   let resumeExisting: typeof orders.$inferSelect | null = null;
   const [existing] = await db.select().from(orders).where(eq(orders.shopifyOrderId, shopifyOrderId));
   if (existing) {
@@ -1514,8 +1549,8 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   }
 
   // Wholesale platform charge accrual. Every order that mints a digital
-  // unlock accrues the store's digitalUnitFeeCents rate (default $3.50) per
-  // unit into the wholesale ledger — the per-unit wholesale charge for
+  // unlock accrues the resolved per-unit rate (Task #3275 ladder: release
+  // override → store fee → artist default → $3.50) into the wholesale ledger — the per-unit wholesale charge for
   // GoodTunes platform access, billed through our standing vendor
   // relationship with the artist. Idempotent
   // (the orderId UNIQUE constraint on the ledger table silences replays).
@@ -1523,7 +1558,7 @@ async function materializeOrderFromShopify(store: ShopifyStore, payload: Shopify
   // the digital unlock and GoodDeed, so the platform fee applies.
   // Task #2859 — QA test orders never bill the wholesale platform charge.
   if (!isQaTestOrder) try {
-    const unitFeeCents = store.digitalUnitFeeCents ?? 350;
+    const { unitFeeCents } = await resolveShopifyUnitFee(store, matchedMapping);
     const qty = matchedLine.quantity ?? 1;
     await db
       .insert(platformWholesaleLedger)
@@ -3664,11 +3699,37 @@ export function registerShopifyRoutes(app: Express) {
   // attribute each store to its label without a second round-trip.
   app.get("/api/admin/shopify/stores", requireAdmin, async (_req, res) => {
     const rows = await db
-      .select({ s: shopifyStores, labelName: labels.name })
+      .select({
+        s: shopifyStores,
+        labelName: labels.name,
+        personName: people.name,
+        personFeeCents: people.shopifyUnitFeeCents,
+      })
       .from(shopifyStores)
       .leftJoin(labels, eq(shopifyStores.labelId, labels.id))
+      .leftJoin(people, eq(shopifyStores.personId, people.id))
       .orderBy(desc(shopifyStores.installedAt));
-    res.json(rows.map((r) => ({ ...r.s, accessToken: undefined, labelName: r.labelName ?? null })));
+    // Task #3275 — effective per-unit fee + provenance for the list UI.
+    // Same ladder as accrual (no mapping at store level): store explicit
+    // fee → artist default → $3.50 platform default.
+    res.json(
+      rows.map((r) => {
+        const effective =
+          r.s.digitalUnitFeeCents != null
+            ? { unitFeeCents: r.s.digitalUnitFeeCents, source: "store" as const }
+            : r.personFeeCents != null
+              ? { unitFeeCents: r.personFeeCents, source: "artist_default" as const }
+              : { unitFeeCents: PLATFORM_DEFAULT_UNIT_FEE_CENTS, source: "platform_default" as const };
+        return {
+          ...r.s,
+          accessToken: undefined,
+          labelName: r.labelName ?? null,
+          personName: r.personName ?? null,
+          effectiveUnitFeeCents: effective.unitFeeCents,
+          effectiveUnitFeeSource: effective.source,
+        };
+      }),
+    );
   });
 
   app.delete("/api/admin/shopify/stores/:id", requireAdmin, async (req, res) => {
@@ -3775,6 +3836,17 @@ export function registerShopifyRoutes(app: Express) {
   // digital unlock). Returns the updated store row minus the access token.
   app.patch("/api/admin/shopify/stores/:id", requireAdmin, async (req, res) => {
     const storeId = String(req.params.id);
+    // Task #3275 — the store fee is a FINANCIAL control snapshotted into the
+    // wholesale ledger at mint time. requireAdmin admits ALL partner accounts,
+    // so gate the whole route (its only field is the fee) on an operator role.
+    {
+      const userId = ((req as any).adminUser?.id as string | undefined) ?? req.session?.userId;
+      const { getUserRole } = await import("./auth/roles");
+      const role = userId ? await getUserRole(userId) : null;
+      if (role?.role !== "super_admin" && role?.role !== "admin") {
+        return res.status(403).json({ message: "Only operators can change the platform fee" });
+      }
+    }
     const parsed = z.object({
       digitalUnitFeeCents: z.number().int().min(0).max(100_000).nullable().optional(),
     }).safeParse(req.body);
@@ -4245,7 +4317,10 @@ export function registerShopifyRoutes(app: Express) {
   // operator attach an already-connected store with no person context yet.
   app.get("/api/admin/people/:id/shopify", requireAdmin, async (req, res) => {
     const personId = String(req.params.id);
-    const [person] = await db.select({ id: people.id, name: people.name }).from(people).where(eq(people.id, personId));
+    const [person] = await db
+      .select({ id: people.id, name: people.name, shopifyUnitFeeCents: people.shopifyUnitFeeCents })
+      .from(people)
+      .where(eq(people.id, personId));
     if (!person) return res.status(404).json({ message: "Person not found" });
 
     const [store] = await db
@@ -4285,8 +4360,18 @@ export function registerShopifyRoutes(app: Express) {
     }
 
     const albumSummary = artistAlbums.map((a) => ({ ...a, mapped: mappedIds.has(a.id) }));
+    // Task #3275 — artist-level default fee + what the connected store would
+    // effectively accrue (store explicit fee wins over the artist default).
+    const storeEffective = store
+      ? store.digitalUnitFeeCents != null
+        ? { unitFeeCents: store.digitalUnitFeeCents, source: "store" as const }
+        : person.shopifyUnitFeeCents != null
+          ? { unitFeeCents: person.shopifyUnitFeeCents, source: "artist_default" as const }
+          : { unitFeeCents: PLATFORM_DEFAULT_UNIT_FEE_CENTS, source: "platform_default" as const }
+      : null;
     res.json({
       configured: shopifyConfigured(),
+      defaultUnitFeeCents: person.shopifyUnitFeeCents,
       store: store
         ? {
             id: store.id,
@@ -4296,6 +4381,9 @@ export function registerShopifyRoutes(app: Express) {
             installedAt: store.installedAt,
             uninstalledAt: store.uninstalledAt,
             connected: store.uninstalledAt == null,
+            digitalUnitFeeCents: store.digitalUnitFeeCents,
+            effectiveUnitFeeCents: storeEffective!.unitFeeCents,
+            effectiveUnitFeeSource: storeEffective!.source,
           }
         : null,
       unattachedStores: unattached,
@@ -4321,6 +4409,24 @@ export function registerShopifyRoutes(app: Express) {
     await db.update(shopifyStores).set({ personId: null }).where(eq(shopifyStores.personId, personId));
     await db.update(shopifyStores).set({ personId }).where(eq(shopifyStores.id, storeId));
     res.json({ ok: true });
+  });
+
+  // Task #3275 — set/clear the artist-level default per-unit platform fee.
+  // Operator-only (fee terms are a GoodTunes↔artist deal, never partner
+  // self-serve — requireAdmin alone admits all partner accounts).
+  app.patch("/api/admin/people/:id/shopify-fee", requireAdmin, requireRole("super_admin", "admin"), async (req, res) => {
+    const personId = String(req.params.id);
+    const parsed = z
+      .object({ shopifyUnitFeeCents: z.number().int().min(0).max(100_000).nullable() })
+      .safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid body" });
+    const [row] = await db
+      .update(people)
+      .set({ shopifyUnitFeeCents: parsed.data.shopifyUnitFeeCents })
+      .where(eq(people.id, personId))
+      .returning({ id: people.id, shopifyUnitFeeCents: people.shopifyUnitFeeCents });
+    if (!row) return res.status(404).json({ message: "Person not found" });
+    res.json(row);
   });
 
   // Disassociate this artist's store(s). The store row + its order history
@@ -4452,15 +4558,26 @@ export function registerShopifyRoutes(app: Express) {
     );
 
     res.json(
-      rows.map((r) => ({
-        ...r.m,
-        storeName: r.s?.storeName ?? r.s?.shopDomain ?? null,
-        shopDomain: r.s?.shopDomain ?? null,
-        // Task #2909 — cached at creation time for Sale URL prefill.
-        shopifyProductUrl: r.m.shopifyProductUrl ?? null,
-        // Task #2912 — live "this variant no longer exists" flag.
-        variantRemoved: removedIds.has(r.m.id),
-      })),
+      await Promise.all(
+        rows.map(async (r) => {
+          // Task #3275 — resolved per-unit platform fee + provenance so the
+          // album Shopify panel shows exactly what an order would accrue.
+          const fee = r.s
+            ? await resolveShopifyUnitFee(r.s, r.m)
+            : { unitFeeCents: PLATFORM_DEFAULT_UNIT_FEE_CENTS, source: "platform_default" as const };
+          return {
+            ...r.m,
+            storeName: r.s?.storeName ?? r.s?.shopDomain ?? null,
+            shopDomain: r.s?.shopDomain ?? null,
+            // Task #2909 — cached at creation time for Sale URL prefill.
+            shopifyProductUrl: r.m.shopifyProductUrl ?? null,
+            // Task #2912 — live "this variant no longer exists" flag.
+            variantRemoved: removedIds.has(r.m.id),
+            effectiveUnitFeeCents: fee.unitFeeCents,
+            effectiveUnitFeeSource: fee.source,
+          };
+        }),
+      ),
     );
   });
 
@@ -4522,6 +4639,19 @@ export function registerShopifyRoutes(app: Express) {
     {
       const { gateAlbumRoute } = await import("./auth/partnerPermissions");
       if (await gateAlbumRoute(req, res, "map_shopify", albumId)) return;
+    }
+    // Task #3275 — the release-level fee override is operator-only (financial
+    // control, snapshotted into the wholesale ledger). The insert schema
+    // includes the column, so a map_shopify partner could otherwise create a
+    // mapping with an arbitrary fee. Any presence — including null — 403s
+    // for non-operators, mirroring the mapping PATCH.
+    if (req.body && Object.prototype.hasOwnProperty.call(req.body, "unitFeeOverrideCents")) {
+      const userId = ((req as any).adminUser?.id as string | undefined) ?? req.session?.userId;
+      const { getUserRole } = await import("./auth/roles");
+      const role = userId ? await getUserRole(userId) : null;
+      if (role?.role !== "super_admin" && role?.role !== "admin") {
+        return res.status(403).json({ message: "Only operators can change the platform fee override" });
+      }
     }
     const parsed = insertShopifyProductMappingSchema.safeParse({ ...req.body, albumId });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid body" });
@@ -4617,9 +4747,26 @@ export function registerShopifyRoutes(app: Express) {
         offersDigitalUnlock: z.boolean().optional(),
         offerSignedCert: z.boolean().optional(),
         signedCertPriceCents: z.number().int().min(0).nullable().optional(),
+        // Task #3275 — release-level per-unit platform fee override; wins
+        // over store fee and artist default at accrual time. Null clears.
+        unitFeeOverrideCents: z.number().int().min(0).max(100_000).nullable().optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: parsed.error.errors[0]?.message ?? "Invalid body" });
+
+    // Task #3275 — the platform-fee override is a FINANCIAL control, not a
+    // mapping edit: it directly changes what the wholesale ledger accrues.
+    // map_shopify-scoped partners can edit their mapping but must never set
+    // (or clear) the fee, so any presence of the field — including null —
+    // requires an operator role, mirroring the artist-default fee endpoint.
+    if (parsed.data.unitFeeOverrideCents !== undefined) {
+      const userId = ((req as any).adminUser?.id as string | undefined) ?? req.session?.userId;
+      const { getUserRole } = await import("./auth/roles");
+      const role = userId ? await getUserRole(userId) : null;
+      if (role?.role !== "super_admin" && role?.role !== "admin") {
+        return res.status(403).json({ message: "Only operators can change the platform fee override" });
+      }
+    }
 
     const [existing] = await db
       .select()
@@ -4644,6 +4791,10 @@ export function registerShopifyRoutes(app: Express) {
         parsed.data.signedCertPriceCents === undefined
           ? existing.signedCertPriceCents
           : parsed.data.signedCertPriceCents,
+      unitFeeOverrideCents:
+        parsed.data.unitFeeOverrideCents === undefined
+          ? existing.unitFeeOverrideCents
+          : parsed.data.unitFeeOverrideCents,
     };
 
     if (next.offerSignedCert && existing.isSignedGooddeedAddon) {
@@ -4675,7 +4826,16 @@ export function registerShopifyRoutes(app: Express) {
     // Mirror the list GET's shape (storeName/shopDomain joined in) so the
     // client can write the response straight into the query cache.
     const store = await getStoreById(row.storeId);
-    res.json({ ...row, storeName: store?.storeName ?? null, shopDomain: store?.shopDomain ?? null });
+    const fee = store
+      ? await resolveShopifyUnitFee(store, row)
+      : { unitFeeCents: PLATFORM_DEFAULT_UNIT_FEE_CENTS, source: "platform_default" as const };
+    res.json({
+      ...row,
+      storeName: store?.storeName ?? null,
+      shopDomain: store?.shopDomain ?? null,
+      effectiveUnitFeeCents: fee.unitFeeCents,
+      effectiveUnitFeeSource: fee.source,
+    });
   });
 
   app.delete("/api/admin/albums/:albumId/shopify-mappings/:id", requireAdmin, async (req, res) => {
@@ -5323,6 +5483,7 @@ export function registerShopifyRoutes(app: Express) {
 // callers outside this file today.
 export const __internal = {
   generateRedemptionCode,
+  resolveShopifyUnitFee,
   materializeOrderFromShopify,
   handleShopifyRefund,
   // Phase 3 GraphQL plumbing, exported for hermetic tests.
