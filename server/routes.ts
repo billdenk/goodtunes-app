@@ -24417,7 +24417,14 @@ export async function registerRoutes(
     opts?: { freshUpload?: boolean },
   ) {
     if (!isMuxConfigured() || !audioUrl) return;
-    if (!audioUrl.startsWith("/objects/")) return;
+    // Two ingestable shapes: our own object-storage masters (signed on
+    // the fly below) and absolute external URLs (legacy rows that
+    // predate the "mirror external links at save" rule — e.g. a pasted
+    // Dropbox master). Mux fetches the URL server-side either way;
+    // anything else (relative non-object paths) is skipped.
+    const isObjectPath = audioUrl.startsWith("/objects/");
+    const isExternalUrl = /^https?:\/\//i.test(audioUrl);
+    if (!isObjectPath && !isExternalUrl) return;
     // Task #2020 — stamp the auto-GoodSync claim slot on FRESH uploads
     // only (new song, master swap, Dropbox import). The orchestrator
     // fires off the Mux "ready" transition, gated by an atomic claim that
@@ -24440,7 +24447,9 @@ export async function registerRoutes(
         // Autoscale cold boots, (c) duplicate clicks of the retry route.
         const claimed = await storage.claimSongForMuxIngest(songId);
         if (!claimed) return;
-        const publicUrl = await objectStorage.getSignedDownloadUrl(audioUrl);
+        const publicUrl = isObjectPath
+          ? await objectStorage.getSignedDownloadUrl(audioUrl)
+          : audioUrl;
         const asset = await createAssetFromUrl(publicUrl);
         await storage.updateSong(songId, {
           muxAssetId: asset.assetId,
@@ -25253,7 +25262,13 @@ export async function registerRoutes(
       const candidates = all2.filter(
         (s: any) =>
           typeof s.audioUrl === "string" &&
-          s.audioUrl.startsWith("/objects/") &&
+          // Object-storage masters AND legacy absolute external URLs
+          // (pre-"mirror at save" rows, e.g. a pasted Dropbox master) —
+          // Mux fetches either shape server-side. Keeping externals out
+          // of this sweep left such rows permanently un-ingested, so the
+          // admin player fell back to a raw file the browser can't play.
+          (s.audioUrl.startsWith("/objects/") ||
+            /^https?:\/\//i.test(s.audioUrl)) &&
           (s.muxStatus !== "ready" || !s.muxPlaybackId) &&
           (!s.muxAssetId || s.muxStatus === "errored"),
       );

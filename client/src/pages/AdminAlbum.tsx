@@ -113,6 +113,7 @@ import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import Hls from "hls.js";
 import {
   attachAdminAudio,
+  adminAudioBannerText,
   useAdminTrackAudioSource,
   type AdminAudioReason,
 } from "@/hooks/useAdminTrackAudioSource";
@@ -11634,9 +11635,10 @@ function GoodSyncPanel({
                 className="px-3 pt-2 text-xs text-amber-700"
                 data-testid={`status-goodsync-audio-${song.id}`}
               >
-                {audioReason.code === "encoding" || audioReason.code === "unplayable"
-                  ? "This master is still encoding — try the play button again in a moment."
-                  : audioReason.message}
+                {adminAudioBannerText(audioReason, {
+                  encodingText:
+                    "This master is still encoding — try the play button again in a moment.",
+                })}
               </div>
             )}
 
@@ -14256,7 +14258,7 @@ function RichPreviewEditor({
       // the precise text from the helper.
       toast({
         title:
-          audioReason.code === "encoding" || audioReason.code === "unplayable"
+          audioReason.code === "encoding"
             ? "Master is still encoding"
             : "Couldn't play preview",
         description: audioReason.message,
@@ -14374,9 +14376,10 @@ function RichPreviewEditor({
           className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800"
           data-testid={`status-preview-audio-${song.id}`}
         >
-          {audioReason.code === "encoding" || audioReason.code === "unplayable"
-            ? "This master is still encoding — preview-play will light up once Mux finishes (usually under a minute)."
-            : audioReason.message}
+          {adminAudioBannerText(audioReason, {
+            encodingText:
+              "This master is still encoding — preview-play will light up once Mux finishes (usually under a minute).",
+          })}
         </div>
       )}
 
