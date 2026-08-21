@@ -1105,7 +1105,7 @@ function TypeEditorPopover({
             {category.hidden
               ? <Eye className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
               : <EyeOff className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />}
-            <span>{category.hidden ? `Offer ${category.name}` : `Don\u2019t offer ${category.name}`}</span>
+            <span>{category.hidden ? "Offer" : "Don\u2019t offer"}</span>
           </button>
         )}
         {/* Archive — Apple convention: destructive-adjacent action gets its own
@@ -2202,7 +2202,7 @@ function SwatchTile({
                     hidden
                       ? <Eye className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
                       : <EyeOff className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />,
-                    hidden ? `Offer ${swatch.name}` : `Don't offer ${swatch.name}`,
+                    hidden ? "Offer" : "Don't offer",
                     onToggleHidden)}
                 </div>
               )}
