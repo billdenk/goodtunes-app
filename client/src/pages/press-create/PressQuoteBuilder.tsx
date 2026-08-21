@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useAdminDark } from '@/lib/adminAppearance';
 import type { PressComponentsPayload } from '@shared/pressComponents';
+import { makeQuotePricer, pricedSum, pendingLines, type QuoteLine } from './quotePricing';
 import { PressLogoImg, usePressBrand, usePressCatalogSwatches } from './PressPackageBuilder';
 import californialandCover from './assets/californialand-cover.jpg';
 import californialandInnerSleeve from './assets/californialand-inner-sleeve.png';
@@ -2482,81 +2483,19 @@ function SplitSection({ left, right }: { left: ReactNode; right: ReactNode }) {
   );
 }
 
-// ─── Pricing defaults + per-press overlay ─────────────────────────────
+// ─── Honest per-press pricing (Task #3243) ────────────────────────────
 // Blind-quote flow (Bill, Aug 16 2026): staff builds without a client, then
 // searches the real client roster at save time (see the useQuery in the page).
 //
-// Demo defaults (per unit, before the run-size discount on the vinyl itself).
-// Prices are the at-1,000-unit anchor, calibrated to the frozen client
-// estimate (MRP 071526-02): ruby vinyl 2.30 · label 0.25 · jacket 0.81 ·
-// sleeve 0.81 · insert 0.67 · assembly 0.36 · shrinkwrap 0.17 = 5.37/unit.
-// These are DOCUMENTED DEMO DEFAULTS — real per-press prices overlay on top
-// (see priceOverlay below) when the press has set them in its components.
-const DEFAULT_WEIGHT_UP = { '140': 0, '180': 0.40 } as Record<string, number>;
-const DEFAULT_LABEL_PRICE = { blank: 0.10, bw: 0.18, color: 0.25 } as Record<LabelKind, number>;
-const DEFAULT_JACKET_PRICE = { single: 0.81, gatefold: 1.26, trifold: 1.62, discobag: 0.54 } as Record<string, number>;
-const DEFAULT_SLEEVE_PRICE = { printed: 0.81, unprinted: 0.24, polylined: 0.30 } as Record<string, number>;
-const DEFAULT_INSERT_PRICE = { none: 0, sheet: 0.67, gatefold: 0.98, booklet: 1.44, poster: 1.65 } as Record<string, number>;
+// The hard-coded demo defaults (calibrated to the frozen MRP 071526-02
+// estimate) are GONE. Every line now resolves ONLY from the press's Pricing
+// component rows via makeQuotePricer (quotePricing.ts): a component with no
+// real price is an explicit "Pricing pending / custom quote" line — excluded
+// from the total, and it blocks the send-to-artist path (drafts still save).
+//
 // Press minimum (Bill, Aug 16 2026): the press won't run splatter under 300
 // units — those quantity cards gray out as "Unavailable", no price shown.
 const DEFAULT_KIND_MIN_QTY: Record<string, number> = { splatter: 300 };
-const DEFAULT_ASSEMBLY_PRICE = 0.36; // insert placed on top before shrink
-const DEFAULT_SHRINK_PRICE = 0.17;   // retail-ready seal
-const DEFAULT_STICKER_PRICE = { none: 0, rect: 0.30, square: 0.35, circle: 0.45, upc: 0.18 } as Record<string, number>;
-
-// Overlay rule (Bill, Aug 17 2026): a priceCents present in the press's
-// components config replaces the matching demo default (cents → dollars);
-// anything the press hasn't set keeps the default. The DB's only per-row
-// price source today is the Pricing component's `rows` (kinds: labels,
-// stickers, type, color) — jacket/sleeve/insert/weight rows have no override
-// slot yet, so those keep their defaults. Pure + defensive: never throws when
-// `components` is undefined (still loading) or a config is missing.
-type PricingTables = {
-  weightUp: Record<string, number>;
-  labelPrice: Record<LabelKind, number>;
-  jacketPrice: Record<string, number>;
-  sleevePrice: Record<string, number>;
-  insertPrice: Record<string, number>;
-  stickerPrice: Record<string, number>;
-};
-
-function priceOverlay(components: PressComponentsPayload | undefined): PricingTables {
-  const tables: PricingTables = {
-    weightUp: { ...DEFAULT_WEIGHT_UP },
-    labelPrice: { ...DEFAULT_LABEL_PRICE },
-    jacketPrice: { ...DEFAULT_JACKET_PRICE },
-    sleevePrice: { ...DEFAULT_SLEEVE_PRICE },
-    insertPrice: { ...DEFAULT_INSERT_PRICE },
-    stickerPrice: { ...DEFAULT_STICKER_PRICE },
-  };
-  const rows = components?.pricing?.rows;
-  if (!Array.isArray(rows)) return tables;
-  // A row's dollar price: prefer legacy single priceCents, else any per-size
-  // price set (first non-null). null/absent → skip (keeps the default).
-  const dollarsOf = (row: { priceCents?: number | null; pricesBySize?: Record<string, number | null> }): number | null => {
-    if (typeof row.priceCents === 'number') return row.priceCents / 100;
-    const bySize = row.pricesBySize ?? {};
-    for (const v of Object.values(bySize)) {
-      if (typeof v === 'number') return v / 100;
-    }
-    return null;
-  };
-  for (const row of rows) {
-    if (!row || typeof row.key !== 'string') continue;
-    const parts = row.key.split(':');
-    const dollars = dollarsOf(row);
-    if (dollars == null) continue;
-    // labels:<id>  → per-style label price
-    if (parts[0] === 'labels' && parts[1] && parts[1] in tables.labelPrice) {
-      tables.labelPrice[parts[1] as LabelKind] = dollars;
-    }
-    // stickers:<shape>[:<size>] → per-shape sticker price (shape-level)
-    else if (parts[0] === 'stickers' && parts[1] && parts[1] in tables.stickerPrice) {
-      tables.stickerPrice[parts[1]] = dollars;
-    }
-  }
-  return tables;
-}
 
 // ═══════════════════════════════════════════════════════════════════
 // PAGE
@@ -2586,7 +2525,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   const { data: components } = useQuery<PressComponentsPayload>({
     queryKey: [`/api/press/${pressId}/components`],
   });
-  const prices = useMemo(() => priceOverlay(components), [components]);
+  const pricer = useMemo(() => makeQuotePricer(components?.pricing?.rows), [components]);
 
   // ── Shared state — the record size flows through every section ──
   const [sizeId, setSizeId] = useState<SizeId>('12');
@@ -2636,7 +2575,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
     ...(emailOk(sendEmail) && pendingClient ? [{ name: pendingClient.name, email: sendEmail.trim() }] : []),
     ...(emailOk(mgrEmail) ? [{ name: mgrName.trim(), email: mgrEmail.trim() }] : []),
   ];
-  const sendEarned = !!pendingClient && sendRecipients.length >= 1;
+  const sendEarnedBase = !!pendingClient && sendRecipients.length >= 1;
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -2806,26 +2745,41 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   const minRun = vinylDone ? (DEFAULT_KIND_MIN_QTY[color.kind] ?? 0) : 0;
   const tierFactor = (q: number) => qtyScale(q) / 0.70;
   const unitFactor = tierFactor(picked('qty') ? qty : 1000);
-  const baseUnit =
-    (vinylDone ? (color.price + prices.weightUp[weightId]) * discs : 0) +
-    (picked('label') ? prices.labelPrice[labelId] * discs : 0) +
-    (picked('jacket') ? prices.jacketPrice[jacketType.id] : 0) +
-    (picked('sleeve') ? prices.sleevePrice[sleeveType.id] : 0) +
-    (picked('insert') ? prices.insertPrice[insertType.id] : 0) +
-    (picked('sticker') && stickerShapeId !== 'none' ? prices.stickerPrice[stickerShapeId] : 0) +
-    (vinylDone ? DEFAULT_ASSEMBLY_PRICE + DEFAULT_SHRINK_PRICE : 0);
+  // Per-unit line prices — real Pricing-component rows ONLY. null = pending
+  // (never a demo default): the line renders "Pricing pending", stays out of
+  // the total, and blocks send-to-artist (Task #3243).
+  const quoteLines: QuoteLine[] = [
+    vinylDone ? (() => { const p = pricer.vinyl(color.name, color.kindNote, sizeId, weightId); return { id: 'vinyl', name: `${VINYL_SIZES.find((s) => s.id === sizeId)?.label ?? ''} · ${weightId}g ${color.name}`, note: discs > 1 ? `${discs} LP per record` : 'Vinyl', v: p == null ? null : p * discs }; })() : null,
+    picked('label') ? (() => { const p = pricer.flat(`labels:${labelId}`); return { id: 'label', name: `${labelStyle.name} label`, note: discs > 1 ? 'Both discs' : undefined, v: p == null ? null : p * discs }; })() : null,
+    picked('jacket') ? { id: 'jacket', name: `${jacketType.name} jacket`, v: pricer.flat(`jackets:${jacketType.id}`) } : null,
+    picked('sleeve') ? { id: 'sleeve', name: `${sleeveType.name} sleeve`, v: pricer.flat(`sleeves:${sleeveType.id}`) } : null,
+    picked('insert') && insertType.id !== 'none' ? { id: 'insert', name: insertType.name, v: pricer.flat(`inserts:${insertType.id}`) } : null,
+    picked('sticker') && stickerShapeId !== 'none' ? { id: 'sticker', name: `${stickerShape?.name ?? 'Sticker'} sticker`, v: pricer.flat(`stickers:${stickerShapeId}`) } : null,
+    vinylDone ? { id: 'assembly', name: 'Assembly', note: 'Insert placed on top before shrink', v: pricer.flat('service:assembly') } : null,
+    vinylDone ? { id: 'shrink', name: 'Shrinkwrap', note: 'Retail-ready seal', v: pricer.flat('service:shrink') } : null,
+  ].filter((x): x is QuoteLine => x !== null);
+  const baseUnit = pricedSum(quoteLines);
   const perUnit = baseUnit * unitFactor;
-  // Fixed setup costs (same MRP numbers as the client estimate) — one-time,
-  // quantity-independent, now part of the quote math (Bill, Aug 16 2026).
+  // One-time setup costs — also real-price-only now: each line resolves from
+  // a `service:<id>` pricing row (0 renders "Included"); missing = pending.
   const QB_SETUP_LINES = [
-    { id: 'cutting', name: 'Lacquer cutting', amount: 650 },
-    { id: 'plating', name: 'Lacquer plating', amount: 375 },
-    { id: 'test', name: 'Test pressing', amount: 175, note: 'Includes 2-day domestic shipping' },
-    { id: 'stampers', name: 'Stampers', amount: 0 },
-    { id: 'colorfee', name: 'Color setup fee', amount: 95 },
+    { id: 'cutting', name: 'Lacquer cutting', amount: pricer.flat('service:cutting') },
+    { id: 'plating', name: 'Lacquer plating', amount: pricer.flat('service:plating') },
+    { id: 'test', name: 'Test pressing', amount: pricer.flat('service:test'), note: 'Includes 2-day domestic shipping' },
+    { id: 'stampers', name: 'Stampers', amount: pricer.flat('service:stampers') },
+    { id: 'colorfee', name: 'Color setup fee', amount: pricer.flat('service:colorfee') },
   ];
-  const QB_SETUP_TOTAL = QB_SETUP_LINES.reduce((acc, l) => acc + l.amount, 0);
+  const QB_SETUP_TOTAL = QB_SETUP_LINES.reduce((acc, l) => acc + (l.amount ?? 0), 0);
   const total = picked('qty') ? perUnit * qty + QB_SETUP_TOTAL : 0;
+  // Any picked line (or setup line) without a real price ⇒ the quote is
+  // incomplete: total is flagged, and the firm send path is blocked.
+  const pendingQuoteLines = pendingLines(quoteLines);
+  const setupPending = QB_SETUP_LINES.some((l) => l.amount == null);
+  const pricingPending = pendingQuoteLines.length > 0 || setupPending;
+  const pendingCount = pendingQuoteLines.length + QB_SETUP_LINES.filter((l) => l.amount == null).length;
+  // Send earns its blue only with an artist + valid recipient AND a fully
+  // priced build — unpriced components downgrade to draft-only (Task #3243).
+  const sendEarned = sendEarnedBase && !pricingPending;
 
   const perUnitAt = (q: number) => baseUnit * tierFactor(q);
 
@@ -2838,6 +2792,10 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   // on mount restores the exact configuration the operator was building.
   const builderState = {
     sizeId, discs, qty, weightId, colorId, colorKind,
+    // Catalog color + tier NAMES ride along so the server /send gate can
+    // re-resolve the vinyl price row by name exactly like the pricer does.
+    colorName: vinylDone ? color.name : null,
+    colorTierName: vinylDone ? color.kindNote : null,
     jacketId, jacketVariantId, sleeveId, sleeveVariantId, useArtistArt,
     labelId, holeId, insertId, insertVariantId,
     stickerShapeId, stickerSizeId,
@@ -2909,6 +2867,9 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
       direction: 'Outbound',
       source: 'Builder',
       totalCents,
+      // Honest-quote flag (Task #3243): true when any picked component line
+      // has no real price. The server refuses to send while it's set.
+      pricingPending,
     };
     const run = async (): Promise<{ id?: string } | null> => {
       setSaving(true);
@@ -2938,7 +2899,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
     const next = persistChainRef.current.catch(() => null).then(run);
     persistChainRef.current = next.catch(() => null);
     return next;
-  }, [canEdit, builderState, build, sizeId, totalCents, clientName, pressId]);
+  }, [canEdit, builderState, build, sizeId, totalCents, pricingPending, clientName, pressId]);
 
   return (
     <div className="q-create-root font-sans" style={{ color: INK }}>
@@ -2992,6 +2953,11 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
           <span className="text-[12.5px]" style={{ color: SUBINK }}>
             Est. <span className="font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }}>{fmt(perUnit)}</span> / unit
           </span>
+          {picked('size') && pricingPending && (
+            <span className="text-[11.5px] font-semibold rounded-full" style={{ padding: '3px 10px', background: '#b25e0918', color: '#b25e09' }} data-testid="strip-pricing-pending">
+              Pricing pending
+            </span>
+          )}
           <span className="text-[13px] font-semibold rounded-full" style={{ padding: '4px 14px', background: `${PRESS_ACCENT}1f`, color: 'var(--q-accent-ink)', fontVariantNumeric: 'tabular-nums' }}>
             {fmt(total)}
           </span>
@@ -3738,22 +3704,17 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                   </button>
                   {qbDetailsOpen && (
                     <div style={{ background: 'var(--q-canvas, #fafafa)' }}>
-                      {[
-                        vinylDone ? { id: 'vinyl', name: `${sizeLabel} · ${weightId}g ${color.name}`, note: discs > 1 ? `${discs} LP per record` : 'Vinyl', v: (color.price + prices.weightUp[weightId]) * discs * unitFactor } : null,
-                        picked('label') ? { id: 'label', name: `${labelStyle.name} label`, note: discs > 1 ? `Both discs` : undefined, v: prices.labelPrice[labelId] * discs * unitFactor } : null,
-                        picked('jacket') ? { id: 'jacket', name: `${jacketType.name} jacket`, v: prices.jacketPrice[jacketType.id] * unitFactor } : null,
-                        picked('sleeve') ? { id: 'sleeve', name: `${sleeveType.name} sleeve`, v: prices.sleevePrice[sleeveType.id] * unitFactor } : null,
-                        picked('insert') && insertType.id !== 'none' ? { id: 'insert', name: insertType.name, v: prices.insertPrice[insertType.id] * unitFactor } : null,
-                        picked('sticker') && stickerShapeId !== 'none' && stickerShape ? { id: 'sticker', name: `${stickerShape.name} sticker`, v: prices.stickerPrice[stickerShapeId] * unitFactor } : null,
-                        vinylDone ? { id: 'assembly', name: 'Assembly', note: 'Insert placed on top before shrink', v: DEFAULT_ASSEMBLY_PRICE * unitFactor } : null,
-                        vinylDone ? { id: 'shrink', name: 'Shrinkwrap', note: 'Retail-ready seal', v: DEFAULT_SHRINK_PRICE * unitFactor } : null,
-                      ].filter((x): x is { id: string; name: string; note?: string; v: number } => x !== null).map((l) => (
+                      {quoteLines.map((l) => (
                         <div key={l.id} className="flex items-center justify-between gap-4" style={{ padding: '9px 20px 9px 34px', borderTop: `1px solid ${HAIRLINE}` }}>
                           <div>
                             <div className="text-[12.5px] font-medium" style={{ color: INK }}>{l.name}</div>
                             {l.note && <div className="text-[11px]" style={{ color: '#a1a1a6', marginTop: 1 }}>{l.note}</div>}
                           </div>
-                          <span className="text-[12.5px]" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(l.v)} <span style={{ color: '#a1a1a6', fontSize: 11 }}>/unit</span></span>
+                          {l.v == null ? (
+                            <span className="text-[12px] font-medium" style={{ color: '#b25e09', whiteSpace: 'nowrap' }} data-testid={`quote-line-pending-${l.id}`}>Pricing pending · custom quote</span>
+                          ) : (
+                            <span className="text-[12.5px]" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(l.v * unitFactor)} <span style={{ color: '#a1a1a6', fontSize: 11 }}>/unit</span></span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -3792,15 +3753,20 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                             <div className="text-[12px]" style={{ color: SUBINK }}>{l.name}</div>
                             {l.note && <div className="text-[11px]" style={{ color: '#a1a1a6', marginTop: 1, opacity: 0.8 }}>{l.note}</div>}
                           </div>
-                          <span className="text-[12px]" style={{ color: l.amount === 0 ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums' }}>{l.amount === 0 ? 'Included' : fmt(l.amount)}</span>
+                          <span className="text-[12px]" style={{ color: l.amount == null ? '#b25e09' : l.amount === 0 ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums' }}>{l.amount == null ? 'Pricing pending' : l.amount === 0 ? 'Included' : fmt(l.amount)}</span>
                         </div>
                       ))}
                     </div>
                   )}
                   <div className="flex items-end justify-between gap-4" style={{ padding: '16px 20px 18px', borderTop: `1px solid ${HAIRLINE}`, background: 'linear-gradient(180deg, rgba(49,158,216,0.10) 0%, rgba(49,158,216,0.02) 100%)' }}>
                     <div>
-                      <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BLUE }}>Estimate total</div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BLUE }}>Estimate total{pricingPending ? ' · incomplete' : ''}</div>
                       <div className="text-[11.5px]" style={{ marginTop: 3, color: SUBINK }}>If {clientFirst} presses the full run</div>
+                      {pricingPending && (
+                        <div className="text-[11.5px] font-medium" style={{ marginTop: 4, color: '#b25e09', maxWidth: 320 }} data-testid="quote-total-pending-note">
+                          Excludes {pendingCount} line{pendingCount === 1 ? '' : 's'} awaiting pricing — this build can be saved as a draft, but not sent as a firm quote yet.
+                        </div>
+                      )}
                     </div>
                     <span className="font-semibold tracking-tight" style={{ fontSize: 34, lineHeight: 1, color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-total-hero">{fmt(total)}</span>
                   </div>
@@ -3900,6 +3866,11 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                           <div style={{ fontSize: 12.5, color: '#a1a1a6', marginTop: 14, lineHeight: 1.6 }}>
                             This estimate will live on their profile — they'll see it there when you invite them.
                           </div>
+                          {pricingPending && (
+                            <div role="note" style={{ fontSize: 12.5, color: '#f2a35c', marginTop: 12, lineHeight: 1.6 }} data-testid="quote-send-pending-block">
+                              This build includes {pendingCount} component{pendingCount === 1 ? '' : 's'} awaiting pricing — it's saved as a draft, but it can't be sent as a firm quote until every line has a real price.
+                            </div>
+                          )}
                           <input
                             value={sendEmail}
                             onChange={(e) => setSendEmail(e.target.value)}

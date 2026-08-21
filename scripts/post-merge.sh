@@ -12524,6 +12524,28 @@ seed_viryl_services_2026() {
 seed_viryl_services_2026 dev  "${DATABASE_URL:-}"
 seed_viryl_services_2026 prod "${PROD_DATABASE_URL:-}"
 
+# Task #3243 — Viryl per-component pricing backfill from the 2026 sheet.
+# Marker-guarded inside the script (viryl_component_pricing_2026_v1) +
+# per-cell guard (never clobbers a press-typed price). Custom Quote rows
+# (wide-spine/double-gatefold jacket) deliberately stay blank.
+backfill_viryl_component_pricing() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping viryl component pricing on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/backfill-viryl-component-pricing.ts 2>&1); then
+    echo "post-merge: viryl component pricing ok on $label"
+    echo "$out" | tail -4
+  else
+    echo "post-merge: WARNING — viryl component pricing failed on $label (continuing, marker withheld so next merge retries)"
+    echo "$out" | tail -10
+  fi
+}
+backfill_viryl_component_pricing dev  "${DATABASE_URL:-}"
+backfill_viryl_component_pricing prod "${PROD_DATABASE_URL:-}"
+
 # Task #3226 — tier pricing-mode (surcharge) columns + named price lists.
 # Idempotent DDL on BOTH DBs (keeps the schema-drift guard green).
 add_press_pricing_mode_ddl() {

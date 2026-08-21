@@ -220,6 +220,68 @@ export function seedPricingFromVinyl(vinyl: VinylComponentConfig): PricingCompon
   return { rows };
 }
 
+/**
+ * Standard flat pricing rows for every non-vinyl line the component quote
+ * builder charges (Task #3243): labels, jackets, sleeves, inserts, stickers,
+ * and the per-unit + one-time service lines. Seeding them (price cells EMPTY)
+ * makes every builder-required line manageable on the Components → Pricing
+ * page — a press types real numbers there, and until it does the quote
+ * builder shows "Pricing pending" and send-to-artist stays blocked.
+ * Keys mirror the builder's `flat(...)` lookups exactly.
+ */
+export function seedQuoteFlatRows(labels: LabelsComponentConfig): PricingRow[] {
+  const flat = (key: string, kind: PricingRow["kind"], label: string, detail: string): PricingRow => ({
+    key,
+    label,
+    detail,
+    kind,
+    sizes: [],
+    priceCents: null,
+    pricesBySize: {},
+  });
+  const rows: PricingRow[] = [];
+  for (const s of labels.styles) {
+    rows.push(flat(`labels:${s.id}`, "labels", `${s.name} label`, "Center labels"));
+  }
+  const jackets: [string, string][] = [
+    ["single", "Single Jacket"],
+    ["gatefold", "Gatefold Jacket"],
+    ["trifold", "Tri-Fold Gatefold Jacket"],
+    ["discobag", "Discobag"],
+  ];
+  for (const [id, name] of jackets) rows.push(flat(`jackets:${id}`, "jackets", name, "Jackets"));
+  const sleeves: [string, string][] = [
+    ["printed", "Printed sleeve"],
+    ["unprinted", "Unprinted sleeve"],
+    ["polylined", "Poly-lined sleeve"],
+  ];
+  for (const [id, name] of sleeves) rows.push(flat(`sleeves:${id}`, "sleeves", name, "Inner sleeves"));
+  const inserts: [string, string][] = [
+    ["sheet", "Insert sheet"],
+    ["gatefold", "Gatefold insert"],
+    ["booklet", "Booklet"],
+    ["poster", "Poster"],
+  ];
+  for (const [id, name] of inserts) rows.push(flat(`inserts:${id}`, "inserts", name, "Inserts"));
+  const stickers: [string, string][] = [
+    ["rect", "Rectangle sticker"],
+    ["square", "Square sticker"],
+    ["circle", "Circle sticker"],
+    ["upc", "UPC sticker"],
+  ];
+  for (const [id, name] of stickers) rows.push(flat(`stickers:${id}`, "stickers", name, "Stickers"));
+  const services: [string, string, string][] = [
+    ["assembly", "Assembly", "Per unit"],
+    ["shrink", "Shrinkwrap", "Per unit"],
+    ["cutting", "Lacquer cutting", "One-time setup"],
+    ["plating", "Lacquer plating", "One-time setup"],
+    ["test", "Test pressing", "One-time setup"],
+    ["stampers", "Stampers", "One-time setup"],
+    ["colorfee", "Color setup fee", "One-time setup"],
+  ];
+  for (const [id, name, detail] of services) rows.push(flat(`service:${id}`, "service", name, detail));
+  return rows;
+}
 export function rowHasAnyPrice(r: PricingRow): boolean {
   if (r.priceCents != null) return true;
   return Object.values(r.pricesBySize ?? {}).some((v) => v != null);
@@ -369,7 +431,9 @@ export async function loadPressComponents(pressId: string): Promise<{
   }
 
   let pricing = byKey.get("pricing")?.config as PricingComponentConfig | undefined;
-  const seededPricing = seedPricingFromVinyl(vinyl);
+  const seededPricing: PricingComponentConfig = {
+    rows: [...seedPricingFromVinyl(vinyl).rows, ...seedQuoteFlatRows(labels)],
+  };
   if (!pricing) {
     pricing = seededPricing;
     await upsertComponentRow(pressId, "pricing", pricing as any, { seeded: true });

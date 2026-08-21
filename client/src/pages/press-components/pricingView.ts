@@ -17,7 +17,17 @@ export function rowInSize(r: PricingRow, s: VinylSizeId): boolean {
 }
 
 export function priceForSize(r: PricingRow, s: VinylSizeId): number | null {
-  return r.pricesBySize?.[s] ?? null;
+  // Vinyl rows are strictly per-size. Flat rows (labels, jackets, sleeves,
+  // inserts, stickers, services) carry ONE price regardless of the selected
+  // size chip: any per-size cell (or the legacy flat priceCents) shows —
+  // and counts as priced — under every size.
+  if (r.kind === "type" || r.kind === "color") return r.pricesBySize?.[s] ?? null;
+  const direct = r.pricesBySize?.[s];
+  if (direct != null) return direct;
+  for (const v of Object.values(r.pricesBySize ?? {})) {
+    if (v != null) return v;
+  }
+  return r.priceCents ?? null;
 }
 
 export type PricingGroups = {

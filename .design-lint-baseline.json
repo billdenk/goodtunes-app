@@ -26207,6 +26207,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "<span className=\"text-[11.5px] font-semibold rounded-full\" style={{ padding: '3px 10px', background: '#b25e0918', color: '#b25e09' }} data-testid=\"strip-pricing-pending\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
     "snippet": "<span className=\"text-[13px] font-semibold rounded-full\" style={{ padding: '4px 14px', background: `${PRESS_ACCENT}1f`, color: 'var(--q-accent-ink)', fontVariantNumeric: 'tabular-nums' }}>"
   },
   {
@@ -26387,7 +26392,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<span className=\"text-[12.5px]\" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(l.v)} <span style={{ color: '#a1a1a6', fontSize: 11 }}>/unit</span></span>"
+    "snippet": "<span className=\"text-[12px] font-medium\" style={{ color: '#b25e09', whiteSpace: 'nowrap' }} data-testid={`quote-line-pending-${l.id}`}>Pricing pending · custom quote</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "<span className=\"text-[12.5px]\" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(l.v * unitFactor)} <span style={{ color: '#a1a1a6', fontSize: 11 }}>/unit</span></"
   },
   {
     "rule": "hardcoded-font-size",
@@ -26432,17 +26442,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<span className=\"text-[12px]\" style={{ color: l.amount === 0 ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums' }}>{l.amount === 0 ? 'Included' : fmt(l.amount)}</span>"
+    "snippet": "<span className=\"text-[12px]\" style={{ color: l.amount == null ? '#b25e09' : l.amount === 0 ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums' }}>{l.amount == null ? 'Pricing pending' : l.amount"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: BLUE }}>Estimate total</div>"
+    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: BLUE }}>Estimate total{pricingPending ? ' · incomplete' : ''}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
     "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 3, color: SUBINK }}>If {clientFirst} presses the full run</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "<div className=\"text-[11.5px] font-medium\" style={{ marginTop: 4, color: '#b25e09', maxWidth: 320 }} data-testid=\"quote-total-pending-note\">"
   },
   {
     "rule": "hardcoded-font-size",

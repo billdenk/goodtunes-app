@@ -34,6 +34,7 @@ import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./ea
 import { sqlPersonIdByContactEmail } from "./partnerInvites";
 import { hasArtistShape } from "./lib/personArtistShape";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
+import { computeQuotePendingIds, invalidQuoteBuilderState } from "@shared/quotePricing";
 import { registerPressTemplateFlowRoutes } from "./pressTemplatesPortal";
 import { registerPressComponentRoutes } from "./pressComponents";
 
@@ -2357,6 +2358,11 @@ export function registerPressPortalRoutes(
     if (status !== undefined && !(allowed as readonly string[]).includes(status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
+    // "Sent" is a server-owned transition (the /send route runs the honest-
+    // pricing gate + share-link mint) — never creatable directly.
+    if (kind === "estimate" && status === "Sent") {
+      return res.status(409).json({ message: "Estimates are sent via the send endpoint, not created as Sent." });
+    }
     const finalStatus = status ?? (kind === "estimate" ? "Draft" : "draft");
 
     // displayId minting is serialized per press with a pg advisory xact lock
@@ -2410,6 +2416,28 @@ export function registerPressPortalRoutes(
     if (body.data.status && !(allowed as readonly string[]).includes(body.data.status)) {
       return res.status(400).json({ message: "Invalid status" });
     }
+    // "Sent" is a server-owned transition (the /send route runs the honest-
+    // pricing gate) — a direct status write may not flip a draft to Sent.
+    if (existing[0].kind === "estimate" && body.data.status === "Sent" && existing[0].status !== "Sent") {
+      return res.status(409).json({ message: "Estimates are sent via the send endpoint, not by writing status directly." });
+    }
+    // Send is one-way: once an estimate has left Draft it can never be
+    // downgraded back to Draft (that would reopen the payload for edits while
+    // the artist's share link still resolves to it).
+    if (existing[0].kind === "estimate" && body.data.status === "Draft" && existing[0].status !== "Draft") {
+      return res.status(409).json({ message: "A sent estimate can't go back to draft — duplicate it into a new draft instead." });
+    }
+    // Once an estimate leaves Draft (Sent/Viewed/…), its payload is immutable:
+    // replacing the build after the artist received the quote would silently
+    // change what was quoted (and could strip the builder state the pricing
+    // gate verified). Duplicate into a new draft instead.
+    if (existing[0].kind === "estimate" && body.data.payload !== undefined && existing[0].status !== "Draft") {
+      return res.status(409).json({ message: "A sent estimate's build can't be edited — duplicate it into a new draft instead." });
+    }
+    // Optimistic concurrency: the checks above validated against the status
+    // we READ — the write only lands if the row still has that status, so a
+    // concurrent /send (Draft→Sent) can't be overwritten by a stale draft
+    // save. Losing the race is a 409, same as failing the checks.
     const [row] = await db
       .update(pressEstimates)
       .set({
@@ -2418,8 +2446,9 @@ export function registerPressPortalRoutes(
         ...(body.data.payload !== undefined ? { payload: body.data.payload } : {}),
         updatedAt: new Date(),
       })
-      .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
+      .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId), eq(pressEstimates.status, existing[0].status)))
       .returning();
+    if (!row) return res.status(409).json({ message: "This estimate changed while you were editing — reload and try again." });
     res.json(row);
   });
 
@@ -2510,6 +2539,51 @@ export function registerPressPortalRoutes(
     if (row.kind !== "estimate") return res.status(400).json({ message: "Only estimates can be sent" });
 
     const payload = (row.payload ?? {}) as Record<string, any>;
+
+    // Send is one-way and a sent estimate is immutable: calling /send again on
+    // a Sent/Viewed/… row is a RESEND — it re-emails the already-minted link
+    // and never touches status or payload (a re-send must not regress Viewed
+    // back to Sent, nor restamp recipients/names onto the quoted build).
+    const resendExisting = async (freshRow: typeof row) => {
+      const freshPayload = (freshRow.payload ?? {}) as Record<string, any>;
+      const existingToken = typeof freshPayload.shareToken === "string" && freshPayload.shareToken.length >= 24 ? freshPayload.shareToken : null;
+      if (!existingToken) return res.status(409).json({ message: "This estimate was sent without a share link — duplicate it into a new draft and send that instead." });
+      const proto0 = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https";
+      const host0 = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
+      const linkUrl0 = `${proto0}://${host0}/e/${existingToken}`;
+      const jobTitle0 = String(freshRow.title ?? "your record").trim() || "your record";
+      const recipients0 = body.data.recipients.map((r) => ({ name: r.name, email: r.email }));
+      const results0 = await Promise.all(
+        recipients0.map((r) => sendPressEstimateEmail(r.email, { senderFirst: press.name, pressName: press.name, jobTitle: jobTitle0, linkUrl: linkUrl0 })),
+      );
+      const sentCount0 = results0.filter((r) => r.ok).length;
+      return res.json({ row: freshRow, shareToken: existingToken, linkUrl: linkUrl0, sentCount: sentCount0, attempted: recipients0.length, resend: true });
+    };
+    if (row.status !== "Draft") return resendExisting(row);
+
+    // Honest-quote gate (Task #3243): a build with components awaiting real
+    // pricing can be drafted and iterated, but never sent as a firm quote —
+    // its total would silently omit (or once fabricated) those lines.
+    // Completeness is SERVER-owned: recomputed here from the stored builder
+    // state + the press's CURRENT pricing rows (never the client-supplied
+    // pricingPending flag, which is display-only).
+    // FAIL CLOSED: no builder state = nothing to verify against, so nothing
+    // sends. The client-supplied pricingPending flag is display-only and is
+    // never consulted here.
+    const builderState = payload.builderState;
+    const invalidReason = invalidQuoteBuilderState(builderState);
+    if (invalidReason) {
+      return res.status(409).json({ message: `This estimate's saved build can't be verified (${invalidReason}) — re-save it from the estimate builder before sending.` });
+    }
+    const { loadPressComponents } = await import("./pressComponents");
+    const configs = await loadPressComponents(pressId);
+    const pendingIds = computeQuotePendingIds(builderState, configs.pricing?.rows ?? []);
+    if (pendingIds.length > 0) {
+      return res.status(409).json({
+        message: "This build includes components awaiting pricing — it can be saved as a draft, but not sent as a firm quote yet.",
+        pendingLineIds: pendingIds,
+      });
+    }
     const shareToken: string = typeof payload.shareToken === "string" && payload.shareToken.length >= 24
       ? payload.shareToken
       : crypto.randomBytes(24).toString("base64url");
@@ -2525,11 +2599,34 @@ export function registerPressPortalRoutes(
         ? { ...payload.builderState, clientName: body.data.artistName }
         : payload.builderState,
     };
+    // Sender ("Prepared by") is resolved BEFORE the one-way claim so the
+    // claim is the ONLY write that ever touches a Sent payload.
+    const callerId = ((req as any).adminUserId as string | undefined) ?? req.session?.userId;
+    let senderName = "";
+    if (callerId) {
+      const u = await db.execute<any>(sql`SELECT display_name AS name, email FROM users WHERE id = ${callerId} LIMIT 1`);
+      const uRow = ((u as any).rows ?? [])[0];
+      senderName = String(uRow?.name ?? uRow?.email ?? "").trim();
+    }
+    if (senderName) nextPayload.preparedBy = senderName;
+    // Atomic one-way claim: only a row still in Draft can be transitioned.
+    // If a concurrent /send won the race, we lose the claim, reload the row
+    // and fall through to the resend path so every caller emails the ONE
+    // persisted token (never a second, dead link).
     const [updated] = await db
       .update(pressEstimates)
       .set({ status: "Sent", payload: nextPayload, updatedAt: new Date() })
-      .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
+      .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId), eq(pressEstimates.status, "Draft")))
       .returning();
+    if (!updated) {
+      const fresh = await db
+        .select()
+        .from(pressEstimates)
+        .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
+        .limit(1);
+      if (!fresh[0]) return res.status(404).json({ message: "Estimate not found" });
+      return resendExisting(fresh[0]);
+    }
 
     // Private link lives on the host that served this request — the client
     // route (/e/:token) ships in the same SPA bundle on every host.
@@ -2537,26 +2634,8 @@ export function registerPressPortalRoutes(
     const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
     const linkUrl = `${proto}://${host}/e/${shareToken}`;
 
-    // Sender first name: the signed-in press user's name when we have one
-    // (bearer stamp OR session — same resolution as requirePressEditor).
-    const callerId = ((req as any).adminUserId as string | undefined) ?? req.session?.userId;
-    let senderName = "";
-    if (callerId) {
-      const u = await db.execute<any>(sql`SELECT name, email FROM users WHERE id = ${callerId} LIMIT 1`);
-      const uRow = ((u as any).rows ?? [])[0];
-      senderName = String(uRow?.name ?? uRow?.email ?? "").trim();
-    }
     const senderFirst = senderName ? senderName.split(/[\s@]/)[0] : press.name;
     const jobTitle = String(row.title ?? "your record").trim() || "your record";
-    // Stamp the sender onto the payload so the public page can show
-    // "Prepared by ‹name›" (one more write, same row).
-    if (senderName && nextPayload.preparedBy !== senderName) {
-      nextPayload.preparedBy = senderName;
-      await db
-        .update(pressEstimates)
-        .set({ payload: nextPayload, updatedAt: new Date() })
-        .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)));
-    }
 
     // Best-effort mail — a transport failure must not lose the Sent state,
     // but the caller needs to know (mail.ts records failures for ops).

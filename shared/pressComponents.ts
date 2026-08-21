@@ -194,7 +194,11 @@ export const pricingRowSchema = z.object({
   key: z.string().min(1).max(160),
   label: z.string().min(1).max(160),
   detail: z.string().max(160).default(""),
-  kind: z.enum(["type", "color", "labels", "stickers"]),
+  // "jackets"/"sleeves"/"inserts"/"service" rows are not seeded today — they
+  // exist so a later pricing load (e.g. Viryl's gatefold component price,
+  // Task #3235) can land as a row and flow into the quote builder with no
+  // further code changes. Unpriced components show "Pricing pending" there.
+  kind: z.enum(["type", "color", "labels", "stickers", "jackets", "sleeves", "inserts", "service"]),
   // Sizes this row's type/color is pressed in (drives the size-chip filter).
   // Empty = not size-scoped (labels/stickers/orphan rows show under every size).
   sizes: z.array(vinylSizeIdSchema).max(3).default([]),
