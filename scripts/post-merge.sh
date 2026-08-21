@@ -12732,6 +12732,14 @@ run_sql_both "create unique index if not exists people_spotify_url_active_uniq o
 # Task #3248 — per-format UPC on album SKUs (idempotent, dev + prod).
 run_sql_both "alter table if exists album_skus add column if not exists upc text" || true
 
+# Tasks #3257/#3259 — columns that landed on prod but were skipped on dev
+# (publish diff wanted to DROP them with data). Keep both DBs aligned.
+run_sql_both "alter table if exists orders add column if not exists redemption_email_held_at timestamp" || true
+run_sql_both "alter table if exists orders add column if not exists redemption_email_released_at timestamp" || true
+run_sql_both "alter table if exists manufacturers add column if not exists brand_accent_color text" || true
+run_sql_both "alter table if exists manufacturers add column if not exists brand_corner_style text" || true
+run_sql_both "alter table if exists manufacturers add column if not exists brand_contact_line text" || true
+
 # Task #3254 — one-shot: set the public ACL on every object referenced by a
 # manufacturer logo/image column (press profile logos uploaded via signed-PUT
 # landed with no ACL, so /objects/uploads/:id 404s them). Marker-guarded
