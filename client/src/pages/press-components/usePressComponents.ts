@@ -42,6 +42,7 @@ export type PressComponentsPayload = {
     squareLogoUrl: string | null;
     identityIconUrl: string | null;
     labelLogoUrl: string | null;
+    labelBgColor: string | null;
   };
   vinyl: VinylComponentConfig;
   jackets: JacketsComponentConfig;

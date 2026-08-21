@@ -68,9 +68,15 @@ import type { VinylComponentConfig, OfferOption } from '@shared/pressComponents'
 // never another press's mark. Threaded via context so the verbatim handoff
 // render tree doesn't need brand props at every DiscLabelArt call site.
 const PRESS_LABEL_BG = '#0a0a0a';
-const LabelBrandCtx = createContext<{ logoUrl: string | null }>({ logoUrl: null });
+const LabelBrandCtx = createContext<{ logoUrl: string | null; bgColor: string | null }>({
+  logoUrl: null,
+  bgColor: null,
+});
 
-// Real object-upload flow for swatch reference photos (mask:"disc" round crop).
+function useLabelBg(): string {
+  const { bgColor } = useContext(LabelBrandCtx);
+  return bgColor || PRESS_LABEL_BG;
+}
 async function uploadPreviewImageFile(file: File): Promise<string | null> {
   try {
     const { url } = await postAdminImage(file, { mask: 'disc', noun: 'swatch' });
@@ -203,13 +209,13 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 
 // ─── Vinyl layer kit (from SplatterVinylPreview) ─────────────────────
 const LAYERS = {
-  opaque: '/__mockup/vinyl-layers/opaque-vinyl.png',
-  translucent: '/__mockup/vinyl-layers/translucent-vinyl.png',
-  splatter1: '/__mockup/vinyl-layers/splatter-one.png',
-  splatter2: '/__mockup/vinyl-layers/splatter-two.png',
-  splatter3: '/__mockup/vinyl-layers/splatter-three.png',
-  highlights: '/__mockup/vinyl-layers/vinyl-highlights.png',
-  inner: '/__mockup/vinyl-layers/inner-circle.png',
+  opaque: '/vinyl-layers/opaque-vinyl.png',
+  translucent: '/vinyl-layers/translucent-vinyl.png',
+  splatter1: '/vinyl-layers/splatter-one.png',
+  splatter2: '/vinyl-layers/splatter-two.png',
+  splatter3: '/vinyl-layers/splatter-three.png',
+  highlights: '/vinyl-layers/vinyl-highlights.png',
+  inner: '/vinyl-layers/inner-circle.png',
 };
 
 type CategoryId = string;
@@ -358,6 +364,7 @@ function VinylDisc({
 }) {
   const LABEL_RATIO = labelRatio ?? PSD_LABEL_RATIO;
   const INNER_RATIO = 129 / 1104;
+  const labelBg = useLabelBg();
   // Real configs can carry a style with zero colors (the mock never did) —
   // render nothing rather than crash the whole tab.
   if (!swatch) return null;
@@ -406,6 +413,27 @@ function VinylDisc({
             aria-hidden
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
+          {/* Branded center label composited over the reference photo — the
+              photo replaces the vinyl BODY, but the press's printed label
+              (bg color + white logo mark) still sits on top, exactly like the
+              portal colors page overlays its label on photo swatches. Same
+              size threshold as the rendered discs: logo art only ≥70px so
+              tiny popover/editor thumbnails don't get a noise dot. */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: size * LABEL_RATIO,
+              height: size * LABEL_RATIO,
+              borderRadius: '50%',
+              backgroundColor: labelBg,
+              overflow: 'hidden',
+            }}
+          >
+            {size >= 70 && <DiscLabelArt size={size * LABEL_RATIO} />}
+          </div>
         </div>
         <div
           style={{
@@ -526,7 +554,7 @@ function VinylDisc({
             width: size * LABEL_RATIO,
             height: size * LABEL_RATIO,
             borderRadius: '50%',
-            backgroundColor: PRESS_LABEL_BG,
+            backgroundColor: labelBg,
             overflow: 'hidden',
           }}
         >
@@ -2919,6 +2947,7 @@ function GenDisc({
   const baseKind = gen.baseKind ?? 'opaque';
   const LABEL_RATIO = labelRatio ?? PSD_LABEL_RATIO;
   const labelSize = size * LABEL_RATIO;
+  const labelBg = useLabelBg();
   return (
     <div
       style={{
@@ -2970,7 +2999,7 @@ function GenDisc({
           style={{
             position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             width: labelSize, height: labelSize, borderRadius: '50%',
-            backgroundColor: PRESS_LABEL_BG, boxShadow: '0 0 0 0.5px rgba(0,0,0,0.4)',
+            backgroundColor: labelBg, boxShadow: '0 0 0 0.5px rgba(0,0,0,0.4)',
           }}
         >
           <DiscLabelArt size={labelSize} />
@@ -4606,7 +4635,10 @@ export function PressVinylStylesComponent({
 
   const press = payload.press;
   const PARTNER_NAME = press.name; // shadows the module mock default
-  const labelBrand = useMemo(() => ({ logoUrl: resolvePressMarkLogo(press) }), [press]);
+  const labelBrand = useMemo(
+    () => ({ logoUrl: resolvePressMarkLogo(press), bgColor: press.labelBgColor ?? null }),
+    [press],
+  );
 
   // ── Config-backed state, seeded from the payload's vinyl slice ─────
   // Whole blob saved atomically on every mutation (press_components PUT).

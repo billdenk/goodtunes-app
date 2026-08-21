@@ -425,6 +425,9 @@ export function registerPressComponentRoutes(
           // Center-label mark: each press's own logo on the rendered disc
           // (Hellbender sees the rune mark, never Memphis's skyline).
           labelLogoUrl: (press as any).labelLogoUrl ?? null,
+          // Center-label background: the press's stored brand label color
+          // (e.g. Viryl green) — null falls back to the black default client-side.
+          labelBgColor: (press as any).labelBgColor ?? null,
         },
         ...configs,
       });
