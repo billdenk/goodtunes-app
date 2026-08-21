@@ -1410,6 +1410,11 @@ export type CatalogTier = {
   // Task #2998 — operator-uploaded type-tile disc image (disc-masked upload).
   // Null = the tile falls back to the type's first color swatch.
   previewImageUrl?: string | null;
+  // Task #3226 — "surcharge" tiers price as base color tier + a per-qty
+  // adder; their ladders arrive server-composed. Absent = "priced".
+  pricingMode?: "priced" | "surcharge";
+  surchargeBaseTierId?: string | null;
+  surchargeLadder?: { qty: number; amountCents: number }[];
 };
 export type CatalogFormat = {
   format: AlbumFormat;
@@ -1440,6 +1445,9 @@ export type Catalog = {
   formats: CatalogFormat[];
   jackets: CatalogJacket[];
   defaultJacketId: string | null;
+  // Task #3226 — the press's active named price list, e.g.
+  // "MRP Tier 3 — 09.01.2025" / "Viryl 2026 USD". Null when none recorded.
+  priceList?: { label: string; effectiveDate: string | null } | null;
   // Task #2335 — server-computed editor flag (pressUserCanEdit). Read-only
   // press "Staff" teammates get `false`; absent/undefined is treated as
   // editable (operators + Owner/Admin) so older payloads don't lock out.

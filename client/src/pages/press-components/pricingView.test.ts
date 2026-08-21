@@ -70,7 +70,10 @@ test("pricedCountForSize counts only the selected size's visible priced cells", 
 });
 
 test("defaultSizeChip picks the first chip with rows; 12\" fallback when empty", () => {
-  assert.equal(defaultSizeChip(rows), '7"');
+  // Chips are largest-first (size-pill canon, Aug 2026), so a mixed-size
+  // press opens on 12″; a 7″-only press opens on 7″.
+  assert.equal(defaultSizeChip(rows), '12"');
+  assert.equal(defaultSizeChip([row({ sizes: ['7"'] })]), '7"');
   assert.equal(defaultSizeChip([row({ sizes: ['12"'] })]), '12"');
   assert.equal(defaultSizeChip([]), '12"');
   assert.equal(SIZE_CHIPS.length, 3);

@@ -2766,6 +2766,27 @@ export function PressPackagePricingCatalog({
             <SectionLabel>
               {mediaTab === "cd" ? "CD · Package pricing" : mediaTab === "cassette" ? "Cassette · Package pricing" : "Vinyl · Package pricing"}
             </SectionLabel>
+            {/* Task #3226 — active named price list (label + effective date) */}
+            {mediaTab === "vinyl" && catalog?.priceList && (
+              <div
+                className="inline-flex items-center rounded-full text-xs font-semibold"
+                style={{
+                  marginTop: 8,
+                  padding: "3px 10px",
+                  border: `1px solid ${HAIRLINE}`,
+                  color: SUBINK,
+                  backgroundColor: dark ? CARD_SOFT : "var(--apple-canvas, #f5f5f7)",
+                }}
+                data-testid="badge-price-list"
+              >
+                {catalog.priceList.label}
+                {catalog.priceList.effectiveDate ? (
+                  <span style={{ color: FAINT, fontWeight: 500, marginLeft: 6 }}>
+                    effective {catalog.priceList.effectiveDate}
+                  </span>
+                ) : null}
+              </div>
+            )}
           {!hideHeading ? (
               <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
               <span style={{ color: INK }}>
@@ -3446,6 +3467,31 @@ export function PressPackagePricingCatalog({
                     <span className="font-semibold" style={{ color: INK }}>{selectedTier.name}</span>
                     <span style={{ color: FAINT }}>{colors.length > 0 ? ` · one price covers all ${colors.length} colors` : " · add colors in the step above"}</span>
                   </p>
+                  {/* Task #3226 — surcharge tier: priced as an adder over the
+                      base color tier; the strip below shows the composed
+                      (base + surcharge) prices read-only. */}
+                  {selectedTier.pricingMode === "surcharge" && (selectedTier.surchargeLadder?.length ?? 0) > 0 && (
+                    <div
+                      className="rounded-xl text-xs"
+                      style={{ marginTop: 10, padding: "10px 14px", border: `1px solid ${HAIRLINE}`, backgroundColor: dark ? CARD_SOFT : "var(--apple-canvas, #f5f5f7)", color: SUBINK, lineHeight: 1.5 }}
+                      data-testid="surcharge-tier-note"
+                    >
+                      <span className="font-semibold" style={{ color: INK }}>
+                        Priced as a surcharge over the chosen color tier
+                      </span>
+                      <span style={{ color: FAINT }}>
+                        {" · "}
+                        {(selectedTier.surchargeLadder ?? [])
+                          .slice()
+                          .sort((a, b) => a.qty - b.qty)
+                          .map((r, i, arr) =>
+                            `+$${(r.amountCents / 100).toFixed(2)} at ${r.qty.toLocaleString()}${i === arr.length - 1 ? "+" : ""}`,
+                          )
+                          .join(" · ")}
+                        {" over color"}
+                      </span>
+                    </div>
+                  )}
                   {/* Item 28 — 140 g / 180 g segmented books share run sizes */}
                   <div className="flex items-center justify-between" style={{ marginTop: 10, marginBottom: 8 }}>
                     <div
@@ -3500,12 +3546,12 @@ export function PressPackagePricingCatalog({
                             <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: FAINT }}>units</span>
                           </div>
                           <div className="flex items-center gap-3">
-                            {canEdit && <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"><ModePicker mode={mode} onChange={(m) => setMode(q, m)} qty={q} visible /></div>}
+                            {canEdit && selectedTier.pricingMode !== "surcharge" && <div className="opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity"><ModePicker mode={mode} onChange={(m) => setMode(q, m)} qty={q} visible /></div>}
                             {mode === "priced" ? (
                               <label className={cn("flex items-center justify-center h-9 rounded-lg transition-shadow focus-within:ring-1", dark ? "focus-within:ring-white/25" : "focus-within:ring-slate-300")} style={{ border: `1px solid ${HAIRLINE}`, background: dark ? CARD_SOFT : "#fff", cursor: "text", padding: "0 12px", minWidth: 92 }}>
                                 <span className="text-[13px] font-semibold" style={{ color: FAINT, marginRight: 1 }}>$</span>
                                 <input
-                                  inputMode="decimal" value={cellValue(q)} onChange={(e) => setCellValue(q, e.target.value)} readOnly={!canEdit}
+                                  inputMode="decimal" value={cellValue(q)} onChange={(e) => setCellValue(q, e.target.value)} readOnly={!canEdit || selectedTier.pricingMode === "surcharge"}
                                   className="border-0 bg-transparent p-0 text-[14px] font-semibold tabular-nums focus:outline-none" style={{ width: `${Math.max(cellValue(q).length, 4)}ch`, color: INK }}
                                   data-testid={`input-price-${q}`}
                                 />

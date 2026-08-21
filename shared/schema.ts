@@ -2643,8 +2643,48 @@ export const pressColorTiers = pgTable("press_color_tiers", {
   // disc (disc-masked upload). Null = the tile falls back to the type's
   // first color swatch.
   previewImageUrl: text("preview_image_url"),
+  // Task #3226 — per-tier pricing mode. "priced" (default) = the tier
+  // carries its own ladders. "surcharge" = the tier prices as an ADDER on
+  // top of a base color tier (MRP's Splatter: +$0.75 at 300, +$0.55 at
+  // 500+ over the chosen color). Surcharge tiers resolve as
+  // baseTier ladder + snapped surchargeLadder amount everywhere
+  // (getPressCatalog composes effective ladders; lookupCatalogUnitCents
+  // resolves quotes the same way).
+  pricingMode: text("pricing_mode").notNull().default("priced"),
+  // The representative base tier (same press+format) a surcharge tier
+  // prices over. Null on "priced" tiers.
+  surchargeBaseTierId: varchar("surcharge_base_tier_id"),
+  // Per-qty surcharge amounts, sorted ascending by qty; snapped up like a
+  // price ladder. Example: [{qty:300,amountCents:75},{qty:500,amountCents:55}].
+  surchargeLadder: jsonb("surcharge_ladder")
+    .$type<{ qty: number; amountCents: number }[]>()
+    .notNull()
+    .default(sql`'[]'::jsonb`),
 });
 export type PressColorTier = typeof pressColorTiers.$inferSelect;
+
+// Task #3226 — named price lists. A labeling/provenance layer over a press's
+// pricing ("MRP Tier 3 — 09.01.2025", "Viryl 2026 USD"). One ACTIVE list per
+// press for now; the table shape supports additional lists (MRP Tier 1/2,
+// future Viryl updates) later without schema rework.
+export const pressPriceLists = pgTable(
+  "press_price_lists",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    pressId: varchar("press_id").notNull(),
+    label: text("label").notNull(),
+    // ISO date the list took effect (display + provenance).
+    effectiveDate: text("effective_date"),
+    isActive: boolean("is_active").notNull().default(true),
+    // Seed provenance (e.g. "mrp-tier3-2025"); null = operator-entered.
+    source: text("source"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    pressPriceListUniq: unique("press_price_lists_press_label_uniq").on(t.pressId, t.label),
+  }),
+);
+export type PressPriceList = typeof pressPriceLists.$inferSelect;
 
 export const pressColors = pgTable("press_colors", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

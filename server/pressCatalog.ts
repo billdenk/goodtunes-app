@@ -46,6 +46,7 @@ import {
   pressColors,
   pressJackets,
   pressTierJacketLadders,
+  pressPriceLists,
   pressServiceItems,
   PRESS_SERVICE_CATEGORIES,
   PRESS_SERVICE_UNIT_BASES,
@@ -126,6 +127,13 @@ export type CatalogTier = {
   // Task #2998 — operator-uploaded type-tile disc image. Null = the tile
   // falls back to the type's first color swatch.
   previewImageUrl: string | null;
+  // Task #3226 — "priced" (default) = the ladders above are the tier's own.
+  // "surcharge" = this tier prices as base tier + per-qty adder; the ladders
+  // above are COMPOSED from the base tier's ladders + the snapped surcharge
+  // so every existing consumer (SellPanel, invited-press) keeps working.
+  pricingMode: "priced" | "surcharge";
+  surchargeBaseTierId: string | null;
+  surchargeLadder: { qty: number; amountCents: number }[];
 };
 export type CatalogFormat = {
   format: AlbumFormat;
@@ -157,7 +165,25 @@ export type Catalog = {
   formats: CatalogFormat[];
   jackets: CatalogJacket[];
   defaultJacketId: string | null;
+  // Task #3226 — the press's active named price list ("MRP Tier 3 —
+  // 09.01.2025", "Viryl 2026 USD"). Null when none recorded.
+  priceList: { label: string; effectiveDate: string | null } | null;
 };
+
+// Task #3226 — resolve the surcharge amount for a quantity. Floor
+// semantics: the amount is the LARGEST rung at or below the qty (MRP:
+// +$0.75 at 300, +$0.55 at 500+ → qty 1000 pays $0.55); quantities below
+// the first rung take the first rung's amount. Null on an empty ladder.
+export function snapSurchargeAmountCents(
+  ladder: { qty: number; amountCents: number }[] | null | undefined,
+  qty: number,
+): number | null {
+  if (!Array.isArray(ladder) || ladder.length === 0) return null;
+  const sorted = [...ladder].sort((a, b) => Number(a.qty) - Number(b.qty));
+  let amount = sorted[0].amountCents;
+  for (const r of sorted) if (qty >= Number(r.qty)) amount = r.amountCents;
+  return amount;
+}
 
 // ─── Storage helpers ─────────────────────────────────────────────────
 
@@ -198,7 +224,7 @@ function getFormatDefaultJacketId(
 }
 
 export async function getPressCatalog(pressId: string): Promise<Catalog> {
-  const [fRows, jRows, tRows] = await Promise.all([
+  const [fRows, jRows, tRows, plRows] = await Promise.all([
     db
       .select()
       .from(pressFormats)
@@ -214,7 +240,15 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       .from(pressColorTiers)
       .where(eq(pressColorTiers.pressId, pressId))
       .orderBy(asc(pressColorTiers.position)),
+    // Task #3226 — the active named price list (single active per press
+    // today; ordered so the newest wins if multiples ever coexist).
+    db
+      .select()
+      .from(pressPriceLists)
+      .where(and(eq(pressPriceLists.pressId, pressId), eq(pressPriceLists.isActive, true)))
+      .orderBy(sql`${pressPriceLists.createdAt} DESC`),
   ]);
+  const activePriceList = plRows[0] ?? null;
   const defaultJacket = jRows.find((j) => j.isDefault) ?? jRows[0] ?? null;
   const defaultJacketId = defaultJacket?.id ?? null;
   const tierIds = tRows.map((t) => t.id);
@@ -290,8 +324,44 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       laddersByJacket180: ladders180ByTier.get(t.id) ?? {},
       colors: colorsByTier.get(t.id) ?? [],
       previewImageUrl: (t as any).previewImageUrl ?? null,
+      pricingMode: ((t as any).pricingMode === "surcharge" ? "surcharge" : "priced") as
+        | "priced"
+        | "surcharge",
+      surchargeBaseTierId: ((t as any).surchargeBaseTierId as string | null) ?? null,
+      surchargeLadder: (((t as any).surchargeLadder ?? []) as { qty: number; amountCents: number }[]),
     });
     tiersByFormat.set(t.format, arr);
+  }
+  // Task #3226 — compose surcharge tiers' effective ladders from their base
+  // tier's ladders + the snapped surcharge amount, so every ladder consumer
+  // (SellPanel priceLadder, editor laddersByJacket) sees real all-in prices.
+  const tierRowById = new Map(tRows.map((t) => [t.id, t]));
+  const addSurcharge = (
+    ladder: CatalogLadderRung[],
+    surcharge: { qty: number; amountCents: number }[],
+  ): CatalogLadderRung[] =>
+    ladder.map((r) => {
+      const add = snapSurchargeAmountCents(surcharge, Number(r.qty));
+      return add == null ? { ...r } : { ...r, unitCents: r.unitCents + add };
+    });
+  for (const arr of Array.from(tiersByFormat.values())) {
+    for (const tier of arr) {
+      if (tier.pricingMode !== "surcharge") continue;
+      const base = tier.surchargeBaseTierId ? tierRowById.get(tier.surchargeBaseTierId) : null;
+      if (!base || tier.surchargeLadder.length === 0) continue;
+      const baseLadders = laddersByTier.get(base.id) ?? {};
+      const baseLadders180 = ladders180ByTier.get(base.id) ?? {};
+      const composed: Record<string, CatalogLadderRung[]> = {};
+      for (const [jid, l] of Object.entries(baseLadders)) composed[jid] = addSurcharge(l as CatalogLadderRung[], tier.surchargeLadder);
+      const composed180: Record<string, CatalogLadderRung[]> = {};
+      for (const [jid, l] of Object.entries(baseLadders180)) composed180[jid] = addSurcharge(l as CatalogLadderRung[], tier.surchargeLadder);
+      tier.laddersByJacket = composed;
+      tier.laddersByJacket180 = composed180;
+      const fmtDefaultJacketId = getFormatDefaultJacketId(jRows, base.format);
+      tier.priceLadder =
+        (fmtDefaultJacketId && composed[fmtDefaultJacketId]) ||
+        addSurcharge(((base.priceLadder ?? []) as CatalogLadderRung[]), tier.surchargeLadder);
+    }
   }
   return {
     formats: fRows.map((f) => ({
@@ -313,6 +383,9 @@ export async function getPressCatalog(pressId: string): Promise<Catalog> {
       applicableFormats: (j.applicableFormats as string[] | null) ?? null,
     })),
     defaultJacketId,
+    priceList: activePriceList
+      ? { label: activePriceList.label, effectiveDate: activePriceList.effectiveDate ?? null }
+      : null,
   };
 }
 
@@ -405,6 +478,41 @@ export async function lookupCatalogUnitCents(args: {
       ),
     );
   if (!tier) return null;
+
+  // Task #3226 — a surcharge tier resolves as its BASE tier's ladder price
+  // + the snapped surcharge amount (MRP Splatter = chosen color tier +
+  // $0.55–0.75). Both legs must price or the pick requires a quote.
+  const tierPricingMode = (tier as any).pricingMode as string | undefined;
+  const surchargeBaseTierId = (tier as any).surchargeBaseTierId as string | null | undefined;
+  const surchargeLadder = ((tier as any).surchargeLadder ?? []) as {
+    qty: number;
+    amountCents: number;
+  }[];
+  if (tierPricingMode === "surcharge" && surchargeBaseTierId && surchargeLadder.length > 0) {
+    const base = await lookupCatalogUnitCents({
+      ...args,
+      tierId: surchargeBaseTierId,
+      colorId: null,
+    });
+    let colorName: string | null = null;
+    if (args.colorId) {
+      const [c] = await db
+        .select()
+        .from(pressColors)
+        .where(and(eq(pressColors.id, args.colorId), eq(pressColors.tierId, tier.id)));
+      colorName = c?.name ?? null;
+    }
+    if (!base) return null;
+    const add = snapSurchargeAmountCents(surchargeLadder, base.snappedQty);
+    if (add == null) return null;
+    return {
+      unitCents: base.unitCents + add,
+      snappedQty: base.snappedQty,
+      tierName: tier.name,
+      colorName,
+      requiresQuote: base.requiresQuote,
+    };
+  }
 
   // Task #1998 — resolve jacket: explicit > format-aware press default >
   // legacy tier ladder. Use the first jacket applicable to this format

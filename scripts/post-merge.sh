@@ -12524,14 +12524,85 @@ seed_viryl_services_2026() {
 seed_viryl_services_2026 dev  "${DATABASE_URL:-}"
 seed_viryl_services_2026 prod "${PROD_DATABASE_URL:-}"
 
+# Task #3226 — tier pricing-mode (surcharge) columns + named price lists.
+# Idempotent DDL on BOTH DBs (keeps the schema-drift guard green).
+add_press_pricing_mode_ddl() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press pricing-mode DDL on $label (no URL set)"
+    return 0
+  fi
+  psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null && echo "post-merge: press pricing-mode DDL ok on $label"
+ALTER TABLE press_color_tiers ADD COLUMN IF NOT EXISTS pricing_mode text NOT NULL DEFAULT 'priced';
+ALTER TABLE press_color_tiers ADD COLUMN IF NOT EXISTS surcharge_base_tier_id varchar;
+ALTER TABLE press_color_tiers ADD COLUMN IF NOT EXISTS surcharge_ladder jsonb NOT NULL DEFAULT '[]'::jsonb;
+CREATE TABLE IF NOT EXISTS press_price_lists (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id varchar NOT NULL,
+  label text NOT NULL,
+  effective_date text,
+  is_active boolean NOT NULL DEFAULT true,
+  source text,
+  created_at timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT press_price_lists_press_label_uniq UNIQUE (press_id, label)
+);
+SQL
+}
+add_press_pricing_mode_ddl dev  "${DATABASE_URL:-}"
+add_press_pricing_mode_ddl prod "${PROD_DATABASE_URL:-}"
+
+# Task #3226 — MRP Tier 3 per-record price load + Splatter surcharge tier +
+# named price-list backfill (MRP + Viryl). Marker-guarded inside the script
+# (mrp_tier3_pricing_v1); never clobbers operator-confirmed rungs.
+load_mrp_tier3_pricing() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping MRP Tier 3 pricing on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/load-mrp-tier3-pricing.ts 2>&1); then
+    echo "post-merge: MRP Tier 3 pricing ok on $label"
+    echo "$out" | tail -6
+  else
+    echo "post-merge: WARNING — MRP Tier 3 pricing failed on $label (continuing, fingerprint withheld so next merge retries)"
+    echo "$out" | tail -10
+    PM_MRP_TIER3_FAILED=1
+  fi
+}
+PM_MRP_TIER3_FAILED=0
+load_mrp_tier3_pricing dev  "${DATABASE_URL:-}"
+load_mrp_tier3_pricing prod "${PROD_DATABASE_URL:-}"
+
+# Task #3226 — MRP Setup & Services + print-component ladders from Tier 3.
+# Marker-guarded inside the script (mrp_services_tier3_v1) + per-item guard.
+seed_mrp_services_tier3() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping MRP services seed on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/seed-mrp-services-tier3.ts 2>&1); then
+    echo "post-merge: MRP services seed ok on $label"
+    echo "$out" | tail -4
+  else
+    echo "post-merge: WARNING — MRP services seed failed on $label (continuing, fingerprint withheld so next merge retries)"
+    echo "$out" | tail -10
+    PM_MRP_TIER3_FAILED=1
+  fi
+}
+seed_mrp_services_tier3 dev  "${DATABASE_URL:-}"
+seed_mrp_services_tier3 prod "${PROD_DATABASE_URL:-}"
+
 # ── Stamp the full-run fingerprint (see the skip block at the top) ─────────
 # Reached only on a full pass that survived to here; from now on, merges that
 # don't touch this script skip straight to the mirror sync below.
-if [ "${PM_VIRYL_2026_FAILED:-0}" = "1" ]; then
-  # Task #3220: a viryl 2026 loader/seed failed above — withhold the full-run
-  # fingerprint so the next merge re-runs the whole migration suite and the
-  # marker-guarded loaders get retried instead of being silently skipped.
-  echo "post-merge: NOT stamping full-run fingerprint (viryl 2026 pricing/services failed; next merge retries)"
+if [ "${PM_VIRYL_2026_FAILED:-0}" = "1" ] || [ "${PM_MRP_TIER3_FAILED:-0}" = "1" ]; then
+  # Task #3220/#3226: a pricing loader/seed failed above — withhold the
+  # full-run fingerprint so the next merge re-runs the whole migration suite
+  # and the marker-guarded loaders get retried instead of silently skipped.
+  echo "post-merge: NOT stamping full-run fingerprint (a pricing loader/seed failed; next merge retries)"
 else
   pm_stamp_fp dev  "${DATABASE_URL:-}"
   pm_stamp_fp prod "${PROD_DATABASE_URL:-}"
