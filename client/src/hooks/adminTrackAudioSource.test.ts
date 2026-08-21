@@ -274,3 +274,111 @@ test("un-ingested track falls back to the raw master with source=raw", async () 
   assert.equal((res as any).source, "raw");
   assert.equal(fetchCalls.length, 0, "no playback-url probe for a never-ingested track");
 });
+
+// ── Task #3282: Chrome hls.js failures must be visible + retried ─────
+const { createHlsFatalHandler, streamErrorMessage } = await import(
+  "./useAdminTrackAudioSource"
+);
+const HlsMod = (await import("hls.js")).default;
+
+function fakeHls() {
+  const calls: string[] = [];
+  return {
+    calls,
+    startLoad() {
+      calls.push("startLoad");
+    },
+    recoverMediaError() {
+      calls.push("recoverMediaError");
+    },
+  };
+}
+
+test("network fatal retries startLoad once, then reports with errorType", () => {
+  const hls = fakeHls();
+  const reported: Array<[string, string | undefined]> = [];
+  const handler = createHlsFatalHandler(hls, (d, t) => reported.push([d, t]));
+  const evt = {
+    fatal: true,
+    type: HlsMod.ErrorTypes.NETWORK_ERROR,
+    details: "fragLoadError",
+  };
+  handler(null, evt);
+  assert.deepEqual(hls.calls, ["startLoad"]);
+  assert.equal(reported.length, 0, "first network fatal must retry, not report");
+  handler(null, evt);
+  assert.deepEqual(hls.calls, ["startLoad"], "only one recovery attempt");
+  assert.deepEqual(reported, [["fragLoadError", HlsMod.ErrorTypes.NETWORK_ERROR]]);
+});
+
+test("media fatal retries recoverMediaError once, then reports", () => {
+  const hls = fakeHls();
+  const reported: Array<[string, string | undefined]> = [];
+  const handler = createHlsFatalHandler(hls, (d, t) => reported.push([d, t]));
+  const evt = {
+    fatal: true,
+    type: HlsMod.ErrorTypes.MEDIA_ERROR,
+    details: "bufferAppendError",
+  };
+  handler(null, evt);
+  assert.deepEqual(hls.calls, ["recoverMediaError"]);
+  assert.equal(reported.length, 0);
+  handler(null, evt);
+  assert.deepEqual(hls.calls, ["recoverMediaError"]);
+  assert.deepEqual(reported, [["bufferAppendError", HlsMod.ErrorTypes.MEDIA_ERROR]]);
+});
+
+test("non-fatal hls errors are ignored; other fatals report immediately", () => {
+  const hls = fakeHls();
+  const reported: Array<[string, string | undefined]> = [];
+  const handler = createHlsFatalHandler(hls, (d, t) => reported.push([d, t]));
+  handler(null, { fatal: false, type: HlsMod.ErrorTypes.NETWORK_ERROR, details: "x" });
+  assert.equal(hls.calls.length, 0);
+  assert.equal(reported.length, 0);
+  handler(null, { fatal: true, type: HlsMod.ErrorTypes.OTHER_ERROR, details: "internalException" });
+  assert.equal(hls.calls.length, 0, "no recovery for other-type fatals");
+  assert.deepEqual(reported, [["internalException", HlsMod.ErrorTypes.OTHER_ERROR]]);
+});
+
+test("streamErrorMessage: network fatals hint at a blocking extension, others keep Mux copy", () => {
+  assert.equal(
+    streamErrorMessage(HlsMod.ErrorTypes.NETWORK_ERROR),
+    ADMIN_AUDIO_COPY.streamBlocked,
+  );
+  assert.match(ADMIN_AUDIO_COPY.streamBlocked, /extension/i);
+  assert.equal(streamErrorMessage(HlsMod.ErrorTypes.MEDIA_ERROR), ADMIN_AUDIO_COPY.streamFailed);
+  assert.equal(streamErrorMessage(undefined), ADMIN_AUDIO_COPY.streamFailed);
+});
+
+test("autoplay-block copy exists and tells the operator to press play again", () => {
+  assert.match(ADMIN_AUDIO_COPY.autoplayBlocked, /press play again/i);
+  assert.doesNotMatch(ADMIN_AUDIO_COPY.autoplayBlocked, /still encoding/i);
+});
+
+// ── auth rejections on the signing route get honest copy, no retry ───
+test("401 on playback-url → not-authorized copy, no 800ms retry", async () => {
+  resetStub({ ok: false, status: 401, body: { message: "Authentication required" } });
+  const audio = fakeAudio();
+  const res = await attachAdminAudio(
+    audio,
+    { id: "s10", audioUrl: "/objects/uploads/q.flac", muxPlaybackId: "pb10", muxStatus: "ready" },
+    { hlsRef },
+  );
+  assert.ok("reason" in res);
+  assert.equal((res as any).reason.code, "mux-sign-failed");
+  assert.equal((res as any).reason.message, ADMIN_AUDIO_COPY.notAuthorized);
+  assert.equal(fetchCalls.length, 1, "auth failure must not burn the retry");
+});
+
+test("403 on the stale-encoding probe → not-authorized copy, never encoding", async () => {
+  resetStub({ ok: false, status: 403, body: { message: "Forbidden" } });
+  const audio = fakeAudio();
+  const res = await attachAdminAudio(
+    audio,
+    { id: "s11", audioUrl: "/objects/uploads/p.flac", muxPlaybackId: null, muxStatus: "preparing" },
+    { hlsRef },
+  );
+  assert.ok("reason" in res);
+  assert.equal((res as any).reason.message, ADMIN_AUDIO_COPY.notAuthorized);
+  assert.doesNotMatch((res as any).reason.message, /still encoding/i);
+});

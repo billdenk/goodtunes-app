@@ -116,6 +116,8 @@ import {
   attachAdminAudio,
   adminAudioBannerText,
   useAdminTrackAudioSource,
+  streamErrorMessage,
+  ADMIN_AUDIO_COPY,
   type AdminAudioReason,
 } from "@/hooks/useAdminTrackAudioSource";
 import { cn } from "@/lib/utils";
@@ -5592,6 +5594,18 @@ function TracksPanel({
       const res = await attachAdminAudio(audio, currentSong, {
         hlsRef,
         isStale: () => epoch !== playEpochRef.current,
+        // hls.js fatal after recovery attempts — surface it instead of a
+        // silent no-op (Chrome/MSE path only; Safari uses native HLS).
+        onStreamError: (details, errorType) => {
+          if (epoch !== playEpochRef.current) return;
+          console.error("[admin-dock] stream error", errorType, details);
+          setPlaying(false);
+          toast({
+            title: "Couldn't start playback",
+            description: streamErrorMessage(errorType),
+            variant: "destructive",
+          });
+        },
       });
       if (epoch !== playEpochRef.current) return;
       if ("reason" in res) {
@@ -5609,8 +5623,21 @@ function TracksPanel({
         // (per-row encoding pill, missing-master state) — no toast.
         return;
       }
-      audio.play().catch(() => {
-        if (epoch === playEpochRef.current) setPlaying(false);
+      audio.play().catch((err: unknown) => {
+        if (epoch !== playEpochRef.current) return;
+        setPlaying(false);
+        const name = err instanceof Error ? err.name : String(err);
+        console.error("[admin-dock] play() rejected", name, err);
+        // AbortError = a newer load interrupted this play() — benign.
+        if (name === "AbortError") return;
+        toast({
+          title: "Couldn't start playback",
+          description:
+            name === "NotAllowedError"
+              ? ADMIN_AUDIO_COPY.autoplayBlocked
+              : ADMIN_AUDIO_COPY.streamFailed,
+          variant: "destructive",
+        });
       });
     })();
   }, [

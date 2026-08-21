@@ -12,3 +12,9 @@ Rule: "still encoding" copy may only render when the SERVER confirms an in-progr
 - When client data claims a track is encoding, don't trust it: probe the playback-url route; a success attaches immediately (self-heal), and only a server-confirmed in-progress status may render encoding copy.
 - The playback hook must know which leg attached (Mux stream vs raw master) so a media error maps to accurate stream-rejection vs undecodable-master copy.
 - Related standing rule: external file links should be mirrored into object storage at save (external-file-links-mirror-rule.md); un-mirrored rows are the trigger for this failure class.
+
+## Chrome hls.js failure visibility (added Aug 21 2026)
+- The hls.js/MSE path (Chrome/Firefox) must never fail silently: `createHlsFatalHandler` in useAdminTrackAudioSource.ts retries once per error type (startLoad for network fatals, recoverMediaError for media fatals) before reporting via `onStreamError(details, errorType)`.
+- **Why:** operators saw "nothing happens" on play in Chrome when an extension blocked Mux segment fetches or autoplay was denied; Safari (native HLS) hid the bug.
+- **How to apply:** consumers map errorType via `streamErrorMessage()` — networkError → streamBlocked copy (extension hint), else streamFailed. The dock's play().catch classifies NotAllowedError → autoplayBlocked copy ("press play again"); AbortError is benign. Always console.error the type/details so operators can report them.
+- 401/403 from the playback-url signing route = session problem (expired login, partner-scoped account), not a Mux problem: classified to notAuthorized copy, skips the 800ms sign retry. Repro tip: a console full of admin-endpoint 403s alongside "silent playback" means the session was the root cause.

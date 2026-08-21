@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
-import { apiRequest, apiErrorBody } from "@/lib/queryClient";
+import { apiRequest, apiErrorBody, apiErrorStatus } from "@/lib/queryClient";
 
 export type AdminAudioReason =
   | { code: "no-master"; message: string }
@@ -25,6 +25,12 @@ export const ADMIN_AUDIO_COPY = {
     "Mux couldn't process this master (encoding failed). Re-upload the master or retry the ingest from the track menu.",
   streamFailed:
     "The stream couldn't be loaded — Mux rejected the request. This isn't an encoding delay; check the asset and signing setup.",
+  streamBlocked:
+    "The stream couldn't be loaded — a browser extension (content/ad blocker) may be blocking it. This isn't an encoding delay; try disabling extensions for this site.",
+  autoplayBlocked:
+    "Browser blocked autoplay — press play again.",
+  notAuthorized:
+    "Your session isn't authorized to play this track — sign in again (or switch to an operator account) and retry.",
   unplayable:
     "This master file can't be played directly in the browser, and no streaming copy is ready yet. It will be re-processed automatically — check the track's Mux status.",
 } as const;
@@ -53,9 +59,24 @@ export interface AttachOptions {
   hlsRef: { current: Hls | null };
   isStale?: () => boolean;
   // Fired when hls.js hits a FATAL error after a successful attach —
-  // i.e. Mux rejected/failed to serve the stream. Lets the hook surface
-  // an accurate "stream failed" reason instead of silence.
-  onStreamError?: (details: string) => void;
+  // i.e. Mux rejected/failed to serve the stream — AFTER one recovery
+  // attempt per error type has already been tried. Lets consumers
+  // surface an accurate "stream failed" reason instead of silence.
+  // `errorType` distinguishes network failures (segment fetch blocked/
+  // failed — often a content blocker) from media/other failures so the
+  // copy can hint at the likely cause.
+  onStreamError?: (details: string, errorType?: string) => void;
+}
+
+// Classify an hls.js fatal error into the honest copy an operator
+// should see. Network fatals mean the segment/playlist fetch itself
+// failed — in an admin's Chrome that is very often an extension
+// blocking the Mux request — while everything else keeps the existing
+// "Mux rejected the request" copy.
+export function streamErrorMessage(errorType?: string): string {
+  return errorType === "networkError"
+    ? ADMIN_AUDIO_COPY.streamBlocked
+    : ADMIN_AUDIO_COPY.streamFailed;
 }
 
 export type AttachResult =
@@ -73,6 +94,62 @@ function teardownHls(hlsRef: { current: Hls | null }) {
   }
 }
 
+// Recoverable-hls surface, kept minimal so tests can drive the handler
+// with a fake hls instance (Hls.isSupported() is false under Node).
+export interface HlsRecoverable {
+  startLoad: () => void;
+  recoverMediaError: () => void;
+}
+
+// Build the fatal-error handler for an hls.js instance: one recovery
+// attempt per error type before declaring failure — hls.js's documented
+// recovery dance: `startLoad()` for network fatals, `recoverMediaError()`
+// for media fatals. A transient segment timeout gets a second chance
+// instead of dying silently. After recovery is exhausted the failure
+// (type + details) is logged and reported via onStreamError.
+export function createHlsFatalHandler(
+  hls: HlsRecoverable,
+  onStreamError?: (details: string, errorType?: string) => void,
+) {
+  let retriedNetwork = false;
+  let retriedMedia = false;
+  return (
+    _e: unknown,
+    data: { fatal?: boolean; type?: string; details?: string } | undefined,
+  ) => {
+    if (!data?.fatal) return;
+    const details = String(data.details ?? data.type ?? "fatal");
+    if (data.type === Hls.ErrorTypes.NETWORK_ERROR && !retriedNetwork) {
+      retriedNetwork = true;
+      console.warn(
+        "[admin-audio] hls fatal network error — retrying startLoad()",
+        details,
+      );
+      try {
+        hls.startLoad();
+        return;
+      } catch {
+        /* fall through to report */
+      }
+    }
+    if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !retriedMedia) {
+      retriedMedia = true;
+      console.warn(
+        "[admin-audio] hls fatal media error — retrying recoverMediaError()",
+        details,
+      );
+      try {
+        hls.recoverMediaError();
+        return;
+      } catch {
+        /* fall through to report */
+      }
+    }
+    console.error("[admin-audio] hls fatal", data.type, details);
+    onStreamError?.(details, String(data.type ?? ""));
+  };
+}
+
 function attachUrl(
   audio: HTMLAudioElement,
   url: string,
@@ -88,12 +165,7 @@ function attachUrl(
   ) {
     const hls = new Hls({ enableWorker: true });
     hlsRef.current = hls;
-    hls.on(Hls.Events.ERROR, (_e, data) => {
-      if (data?.fatal) {
-        console.error("[admin-audio] hls fatal", data.type, data.details);
-        onStreamError?.(String(data.details ?? data.type ?? "fatal"));
-      }
-    });
+    hls.on(Hls.Events.ERROR, createHlsFatalHandler(hls, onStreamError));
     hls.loadSource(url);
     hls.attachMedia(audio);
   } else {
@@ -147,6 +219,23 @@ export async function attachAdminAudio(
     };
   }
 
+  // A 401/403 from the signing route means the SESSION can't play this
+  // track (expired login, partner-scoped account) — retrying in 800ms
+  // won't fix auth, and "Mux didn't return a stream URL" would be a lie.
+  const authFailReason = (err: unknown): AttachResult | null => {
+    const status = apiErrorStatus(err);
+    if (status === 401 || status === 403) {
+      console.error("[admin-audio] playback-url rejected", status);
+      return {
+        reason: {
+          code: "mux-sign-failed",
+          message: ADMIN_AUDIO_COPY.notAuthorized,
+        },
+      };
+    }
+    return null;
+  };
+
   const trySign = async () => {
     const r = await apiRequest(
       "POST",
@@ -162,6 +251,8 @@ export async function attachAdminAudio(
     try {
       url = await trySign();
     } catch (firstErr) {
+      const authFail = authFailReason(firstErr);
+      if (authFail) return authFail;
       console.warn(
         "[admin-audio] Mux sign attempt 1 failed; retrying",
         firstErr,
@@ -180,6 +271,8 @@ export async function attachAdminAudio(
       try {
         url = await trySign();
       } catch (e) {
+        const retryAuthFail = authFailReason(e);
+        if (retryAuthFail) return retryAuthFail;
         console.error("[admin-audio] Mux signing failed after retry", e);
         return {
           reason: {
@@ -215,6 +308,8 @@ export async function attachAdminAudio(
       const body = apiErrorBody<{ status?: string | null }>(err);
       const serverStatus = body?.status ?? null;
       detach(audio, opts.hlsRef);
+      const probeAuthFail = authFailReason(err);
+      if (probeAuthFail) return probeAuthFail;
       if (serverStatus === "errored") {
         return {
           reason: {
@@ -325,11 +420,11 @@ export function useAdminTrackAudioSource(song: AdminAudioSongLike): {
       const res = await attachAdminAudio(audio, song, {
         hlsRef,
         isStale: () => epoch !== epochRef.current,
-        onStreamError: () => {
+        onStreamError: (_details, errorType) => {
           if (cancelled || epoch !== epochRef.current) return;
           setReason({
             code: "stream-failed",
-            message: ADMIN_AUDIO_COPY.streamFailed,
+            message: streamErrorMessage(errorType),
           });
           setAttached(false);
         },
