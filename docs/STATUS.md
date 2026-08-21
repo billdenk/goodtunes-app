@@ -1,11 +1,13 @@
 # GoodTunes — Living Status
 
-Last updated: 2026-08-19
+Last updated: 2026-08-21
 
 This file is the current-state summary for the design studio. It is kept
 current, not appended to: stale lines are overwritten when things change.
 
 ## 1. Recent changes
+
+- **"Download all masters" is now one zip named after the album** (Aug 21 2026): on the album Physical → Audio panel, the button saves a single `<Album Title>.zip` (e.g. `Hope.zip`) instead of a pile of loose per-track downloads. New authed streaming route `GET /api/admin/albums/:id/masters/download-all` (operators + the album's assigned press, same gate as per-track): same source preference (original upload first, served playback fallback), unusable tracks (no master / un-mirrored external link / file missing from storage) are skipped inside the archive — the existing pre-flight toast still tells the operator which ones. Entries keep the `NN Title.ext` naming; zip is streamed end-to-end (store, no deflate), never buffered whole — the client mints a short-lived album-scoped signed link (`POST .../download-all/link`) and navigates a plain anchor, so the browser's download manager streams to disk instead of buffering a multi-GB Blob in JS memory (token = stateless HMAC on SESSION_SECRET, ~2-min TTL, access re-checked at download). Per-track downloads in View Masters unchanged. New dep: `archiver`. Route tests in `server/mastersZipDownload.routes.db.test.ts` (10, incl. signed-link auth boundary).
 
 - **Second publish DROP-warning defused** (Aug 21 2026): the republish migration screen wanted to DROP `manufacturers.email_branding` (8 rows) and `songs.source_url` (1,482 rows) — prod-only columns that in-flight task merges had landed on prod but not dev. Both added to dev with matching types (jsonb / text) and idempotent `run_sql_both` guards appended in `scripts/post-merge.sh` so the drift can't recur.
 

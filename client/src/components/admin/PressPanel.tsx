@@ -452,9 +452,10 @@ export function PressPanel({
   }
 
   async function downloadAll() {
-    // Task #3197 — skip rows the pre-flight already knows are gone from
-    // storage (they'd only 404); everything else downloads, continuing
-    // past per-track failures.
+    // Task #3265 — one zip named after the album instead of a pile of
+    // loose per-track downloads. Skip messaging stays pre-flight-driven:
+    // rows the health probe already knows are gone from storage are the
+    // ones the server will skip inside the archive too.
     const downloadable = withMaster.filter((s) => healthBySong.get(s.id) !== "missing_object");
     const skipped = withMaster.length - downloadable.length;
     if (downloadable.length === 0) {
@@ -464,29 +465,25 @@ export function PressPanel({
     toast({
       title: `Downloading ${downloadable.length} master${downloadable.length === 1 ? "" : "s"}`,
       description: skipped > 0
-        ? `Your browser will save each file. Skipping ${skipped} track${skipped === 1 ? "" : "s"} whose master file is missing from storage.`
-        : "Your browser will save each file.",
+        ? `Your browser will save one zip archive. Skipping ${skipped} track${skipped === 1 ? "" : "s"} whose master file is missing from storage.`
+        : "Your browser will save one zip archive.",
     });
-    const failed: string[] = [];
-    for (const s of downloadable) {
-      try {
-        await downloadOne(s);
-      } catch (e: any) {
-        failed.push(s.title);
-        toast({ title: `Couldn't download "${s.title}"`, description: e?.message ?? "Unknown error", variant: "destructive" });
-      }
-    }
-    // Task #3256 — honest end-of-run summary: name what didn't make it
-    // (skipped-missing + failed) instead of ending silently.
-    if (failed.length > 0 || skipped > 0) {
-      const bits: string[] = [];
-      if (failed.length > 0) bits.push(`${failed.length} failed (${failed.slice(0, 5).join(", ")}${failed.length > 5 ? ", …" : ""})`);
-      if (skipped > 0) bits.push(`${skipped} skipped (master missing from storage)`);
-      toast({
-        title: `Downloaded ${downloadable.length - failed.length} of ${withMaster.length} masters`,
-        description: bits.join(" · "),
-        variant: failed.length > 0 ? "destructive" : undefined,
-      });
+    try {
+      // Masters are PRIVATE objects, but a fetch()-into-Blob save would
+      // buffer the whole (possibly multi-GB) zip in JS memory. Instead the
+      // authed call just MINTS a short-lived signed link, and a plain
+      // anchor navigation lets the browser's download manager stream the
+      // archive straight to disk — the server names the file
+      // "<Album Title>.zip" via Content-Disposition.
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/masters/download-all/link`);
+      const { url } = (await r.json()) as { url: string };
+      const a = document.createElement("a");
+      a.href = url;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e: any) {
+      toast({ title: "Couldn't download masters", description: e?.message ?? "Unknown error", variant: "destructive" });
     }
   }
 

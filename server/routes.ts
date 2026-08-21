@@ -54,7 +54,7 @@ import {
 } from "./lib/shopifyGearMapping";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import { scrypt, randomBytes, timingSafeEqual, randomUUID, createHash } from "crypto";
+import { scrypt, randomBytes, timingSafeEqual, randomUUID, createHash, createHmac } from "crypto";
 import {
   MAX_DROPBOX_UNCOMPRESSED_BYTES,
   MAX_DROPBOX_ENTRY_BYTES,
@@ -34713,6 +34713,153 @@ export async function registerRoutes(
       console.error("[masters-download] failed", e);
       return res.status(500).json({ message: "Couldn't stream that master — try again." });
     }
+  });
+
+  // Task #3265 — download ALL of an album's masters as ONE zip named after
+  // the album (e.g. "Hope.zip"). Same access gate (operator or the album's
+  // assigned press), same per-track source preference (original upload
+  // first, served playback fallback) and failure classification as the
+  // per-song route above — unusable tracks (no master / un-mirrored
+  // external link / file missing from storage) are SKIPPED rather than
+  // failing the whole archive (the client's pre-flight toast tells the
+  // operator which ones). The zip is STREAMED entry-by-entry (audio is
+  // already compressed → store, no deflate), never buffered whole in
+  // memory.
+  //
+  // Client handoff: the browser must ALSO stream — a fetch()-into-Blob save
+  // would buffer the whole (possibly multi-GB) archive in JS memory. So the
+  // panel first POSTs .../download-all/link (bearer-authed) to mint a
+  // SHORT-LIVED, ALBUM-SCOPED signed token, then navigates a plain anchor at
+  // ?dt=<token> — the browser's own download manager streams the response
+  // straight to disk. The token is a stateless HMAC (works across autoscale
+  // instances): albumId + userId + expiry, signed with SESSION_SECRET;
+  // download-only (only this route accepts it), ~2-minute TTL, and the
+  // user's operator/press access is RE-CHECKED at download time.
+  const MASTERS_ZIP_LINK_TTL_MS = 2 * 60 * 1000;
+  const mastersZipHmac = (payload: string) =>
+    createHmac("sha256", process.env.SESSION_SECRET || "gt-dev-secret").update(payload).digest("base64url");
+  function signMastersZipToken(albumId: string, userId: string): string {
+    const exp = Date.now() + MASTERS_ZIP_LINK_TTL_MS;
+    const payload = Buffer.from(JSON.stringify({ a: albumId, u: userId, e: exp })).toString("base64url");
+    return `${payload}.${mastersZipHmac(payload)}`;
+  }
+  function verifyMastersZipToken(token: string, albumId: string): string | null {
+    const dot = token.lastIndexOf(".");
+    if (dot <= 0) return null;
+    const payload = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const expect = mastersZipHmac(payload);
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expect);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+    try {
+      const j = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+      if (j.a !== albumId) return null;
+      if (typeof j.e !== "number" || Date.now() > j.e) return null;
+      return typeof j.u === "string" && j.u ? j.u : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Mint a short-lived streaming download link (same gate as the download).
+  app.post("/api/admin/albums/:id/masters/download-all/link", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const token = signMastersZipToken(req.params.id, req.session.userId!);
+    res.json({ url: `/api/admin/albums/${req.params.id}/masters/download-all?dt=${encodeURIComponent(token)}` });
+  });
+
+  async function streamMastersZip(req: Request, res: Response) {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    try {
+      const album = await storage.getAlbumById(req.params.id, { includeHidden: true });
+      if (!album) return res.status(404).json({ message: "Album not found" });
+      const albumSongs = await storage.getSongsByAlbum(req.params.id);
+      // Resolve every downloadable track BEFORE opening the response so an
+      // album with zero usable masters gets an honest JSON 404 (not a
+      // corrupt empty zip), and storage errors surface before headers ship.
+      const entries: Array<{ file: any; name: string }> = [];
+      const usedNames = new Set<string>();
+      for (const song of [...albumSongs].sort((a: any, b: any) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0))) {
+        const candidates = masterCandidates(song as any).filter((c) => c.cls === "object");
+        let resolved: { file: any; url: string } | null = null;
+        for (const c of candidates) {
+          try {
+            const file = await objectStorage.getObjectEntityFile(c.url);
+            resolved = { file, url: c.url };
+            break;
+          } catch (e) {
+            if (e instanceof ObjectNotFoundError) continue; // try the next candidate
+            throw e;
+          }
+        }
+        if (!resolved) continue; // no_master / external / missing_object — skip
+        const ext = (resolved.url.match(/\.[a-zA-Z0-9]+$/)?.[0] ?? "").toLowerCase();
+        // Zip entry names: same track-number + title shape as the per-track
+        // download; strip path separators/control chars so a weird title
+        // can't nest directories inside the archive.
+        let base = `${String((song as any).trackNumber ?? 0).padStart(2, "0")} ${(song as any).title ?? "Untitled"}`
+          .replace(/[\r\n"\\/]+/g, " ")
+          .trim();
+        let name = `${base}${ext}`;
+        for (let i = 2; usedNames.has(name); i++) name = `${base} (${i})${ext}`;
+        usedNames.add(name);
+        entries.push({ file: resolved.file, name });
+      }
+      if (entries.length === 0) {
+        return res.status(404).json({ code: "no_masters", message: "No downloadable masters on this album — upload masters on the Tracks tab." });
+      }
+      const zipName = `${((album.title ?? "").trim() || "Masters").replace(/[\r\n"\\/]+/g, " ")}.zip`;
+      // Same latin1-safe header handling as the per-song route: ASCII-fold
+      // the plain filename, carry the true UTF-8 name in RFC 5987 filename*.
+      const asciiZipName = zipName.replace(/[^\x20-\x7e]+/g, "-");
+      res.setHeader("Content-Type", "application/zip");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${asciiZipName}"; filename*=UTF-8''${encodeURIComponent(zipName)}`,
+      );
+      const { ZipArchive } = await import("archiver");
+      const archive: any = new ZipArchive({ store: true });
+      archive.on("error", (e: any) => {
+        console.error("[masters-download-all] archive error", e);
+        if (!res.headersSent) res.status(500).end();
+        else res.destroy(e);
+      });
+      archive.on("entry", () => {}); // keep archiver's warning path quiet
+      archive.pipe(res);
+      for (const entry of entries) {
+        const stream = entry.file.createReadStream();
+        stream.on("error", (e: any) => {
+          // A mid-stream storage failure can't be turned into a clean HTTP
+          // error once bytes have shipped — abort so the client sees a
+          // failed (not silently-truncated) download.
+          console.error(`[masters-download-all] stream error for "${entry.name}"`, e);
+          archive.abort();
+          res.destroy(e);
+        });
+        archive.append(stream, { name: entry.name });
+      }
+      await archive.finalize();
+    } catch (e) {
+      console.error("[masters-download-all] failed", e);
+      if (!res.headersSent) res.status(500).json({ message: "Couldn't build the masters zip — try again." });
+      else res.destroy(e as any);
+    }
+  }
+
+  app.get("/api/admin/albums/:id/masters/download-all", (req, res) => {
+    const dt = typeof req.query.dt === "string" ? req.query.dt : null;
+    if (dt) {
+      // Signed-link path (plain anchor navigation → browser streams to
+      // disk). No bearer required; identity comes from the verified token
+      // and the operator/press gate re-runs inside streamMastersZip.
+      const uid = verifyMastersZipToken(dt, req.params.id);
+      if (!uid) return res.status(401).json({ message: "Download link expired — click Download all masters again." });
+      (req as any).session = (req as any).session ?? {};
+      (req as any).session.userId = uid;
+      return void streamMastersZip(req, res);
+    }
+    return requireAdminBearer(req, res, () => void streamMastersZip(req, res));
   });
 
   // Task #3197 — per-album masters pre-flight for the Press panel: classify
