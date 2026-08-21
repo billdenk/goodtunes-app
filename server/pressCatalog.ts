@@ -40,6 +40,7 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
 import { storage } from "./storage";
+import { registerComponentPricingRoutes } from "./pressComponentPricing";
 import {
   pressFormats,
   pressColorTiers,
@@ -460,6 +461,10 @@ export async function lookupCatalogUnitCents(args: {
   colorId: string | null;
   quantity: number | null;
   jacketId?: string | null;
+  /** Task #3227 — when the caller EXPLICITLY selected a jacket, an empty
+   *  tier×jacket ladder must be an honest gap (null), never silently the
+   *  legacy tier ladder. Legacy fallback stays for jacket-less callers. */
+  requireJacketLadder?: boolean;
 }): Promise<{
   unitCents: number;
   snappedQty: number;
@@ -541,6 +546,9 @@ export async function lookupCatalogUnitCents(args: {
         ),
       );
     ladder = (combo?.priceLadder ?? []) as { qty: number; unitCents: number }[];
+  }
+  if (ladder.length === 0 && args.requireJacketLadder && args.jacketId) {
+    return null;
   }
   if (ladder.length === 0) {
     // Legacy fallback for presses not yet rehomed onto the new shape.
@@ -3966,4 +3974,7 @@ export function registerPressCatalogRoutes(
     if (!updated) return res.status(404).json({ message: "Service item not found" });
     res.json(updated);
   });
+
+  // ─── Task #3227 — component→price linkages + package cost breakdown ──
+  registerComponentPricingRoutes(app, requireAdmin, requirePressScope, requirePressEditor);
 }

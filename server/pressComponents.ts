@@ -378,7 +378,12 @@ export async function loadPressComponents(pressId: string): Promise<{
     // appear as empty rows; typed prices are never dropped).
     const merged = mergePricingRows(pricing.rows ?? [], seededPricing.rows);
     if (JSON.stringify(merged) !== JSON.stringify(pricing.rows)) {
-      pricing = { rows: merged };
+      // Task #3227 — the stored pricing config can carry namespaced extra
+      // keys (componentLadders, seeded by scripts/seed-mrp-services-tier3.ts
+      // and read by the component→price linkage editor). Spread the existing
+      // config so a rows re-sync never wipes them.
+      const existingConfig = (byKey.get("pricing")?.config ?? {}) as Record<string, unknown>;
+      pricing = { ...existingConfig, rows: merged } as any;
       await upsertComponentRow(pressId, "pricing", pricing as any, {});
     }
   }
@@ -452,13 +457,24 @@ export function registerPressComponentRoutes(
             issues: parsed.error.issues.slice(0, 5),
           });
         }
-        await upsertComponentRow(pressId, key, parsed.data, {
+        // Task #3227 — 'pricing' configs carry namespaced extra keys
+        // (componentLadders) that the zod schema strips; merge the parsed
+        // save OVER the stored config so a UI save never wipes them.
+        let configToSave: Record<string, unknown> = parsed.data;
+        if (key === "pricing") {
+          const [existing] = await db
+            .select()
+            .from(pressComponents)
+            .where(and(eq(pressComponents.pressId, pressId), eq(pressComponents.componentKey, "pricing")));
+          configToSave = { ...((existing?.config as Record<string, unknown>) ?? {}), ...parsed.data };
+        }
+        await upsertComponentRow(pressId, key, configToSave, {
           userId:
             ((req as any).adminUserId as string | undefined) ??
             req.session?.userId ??
             null,
         });
-        res.json({ ok: true, config: parsed.data });
+        res.json({ ok: true, config: configToSave });
       } catch (e: any) {
         console.error("[press-components] PUT failed:", e?.message ?? e);
         res.status(500).json({ message: "Could not save component" });

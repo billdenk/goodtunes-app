@@ -3125,17 +3125,29 @@ export const pressComponents = pgTable(
 );
 export type PressComponent = typeof pressComponents.$inferSelect;
 
-// Task #2324 — per-press AUDIO spec override. One row per press
-// (unique on pressId). The audio preflight baseline lives as measured
-// constants in shared/vendorSpecs.ts; this table lets an operator (or a
-// press-scoped partner admin) record the plant's CONFIRMED numbers so we
-// never hardcode or fabricate them. A NULL field inherits the plant's
-// baseline; a set value wins (see resolveAudioSpec). This mirrors
-// press_template_specs, which already makes the art/template specs
-// operator-editable. maxSideSeconds is the sparse per-side length table
-// keyed size → rpm (same shape as VendorSpec.audio.maxSideSecondsBySizeRpm)
-// — only the cells the operator filled in override the baseline table.
-// notes is operator reference metadata only (never read by the validator).
+export const pressComponentPriceLinks = pgTable(
+  "press_component_price_links",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    pressId: varchar("press_id").notNull(),
+    componentKey: text("component_key").notNull(), // jacket | inner_sleeve | insert | extras
+    optionId: text("option_id").notNull(),
+    priceMode: text("price_mode").notNull(), // ladder | service | included | custom_quote
+    serviceItemId: varchar("service_item_id"),
+    ladderSource: jsonb("ladder_source").$type<{ groupKey: string; itemLabel: string } | null>(),
+    ladderRungs: jsonb("ladder_rungs").$type<{ qty: number; unitCents: number }[] | null>(),
+    updatedByUserId: varchar("updated_by_user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    pressComponentOptionUniq: unique("press_component_price_links_press_key_option_uniq").on(
+      t.pressId,
+      t.componentKey,
+      t.optionId,
+    ),
+  }),
+);
 export const pressAudioSpecs = pgTable("press_audio_specs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   pressId: varchar("press_id").notNull().unique(),
@@ -6811,3 +6823,5 @@ export const checkoutFailureEvents = pgTable("checkout_failure_events", {
 }));
 export type CheckoutFailureEvent = typeof checkoutFailureEvents.$inferSelect;
 export type InsertPaymentRequest = z.infer<typeof insertPaymentRequestSchema>;
+
+export type PressComponentPriceLink = typeof pressComponentPriceLinks.$inferSelect;

@@ -11541,6 +11541,21 @@
   },
   {
     "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPackageCostBreakdown.tsx",
+    "snippet": "<span className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold w-24 shrink-0\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPackageCostBreakdown.tsx",
+    "snippet": "\"rounded-full px-2.5 py-0.5 text-[11.5px] border transition-colors\","
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPackageCostBreakdown.tsx",
+    "snippet": "<div className=\"text-[11px] uppercase tracking-wider text-slate-400 font-semibold mb-1\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
     "snippet": "className=\"inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200\""
   },
@@ -28373,6 +28388,21 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressPackagePricingCatalog.tsx",
     "snippet": "className=\"text-[12.5px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[13px] font-medium\" style={{ color: INK }}>{label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "<div className=\"text-[11.5px] truncate\" style={{ color: FAINT }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPackagePricingCatalog.tsx",
+    "snippet": "if (isLoading) return <div className=\"text-[12.5px]\" style={{ color: FAINT }}>Loading…</div>;"
   },
   {
     "rule": "naked-icon-button",

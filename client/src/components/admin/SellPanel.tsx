@@ -45,6 +45,7 @@ import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { SkuUpcField } from "@/components/admin/SkuUpcField";
 import { normalizeUpc } from "@shared/upc";
 import { ShareQuoteWithArtist } from "@/components/admin/ShareQuoteWithArtist";
+import { PressPackageCostBreakdown } from "@/components/admin/PressPackageCostBreakdown";
 import { AddonDialog, type CustomAddon } from "@/pages/AdminCustomAddons";
 import { Card } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -1557,6 +1558,27 @@ export function SellPanel({
           )}
           </div>
         </Card>
+
+        {/* Task #3227 — itemized package cost breakdown from the press's
+            own component→price linkages. Operator-only cost data; the
+            server 403s non-operators and we simply don't render it for
+            them. Uses the primary vinyl SKU's press/tier/color/quantity. */}
+        {sellIsSuperAdmin &&
+          (() => {
+            const vinylSku = data?.skus.find(
+              (s) => isVinylFormat(s.format) && s.pressId && (primaryVinylFormat === null || s.format === primaryVinylFormat),
+            );
+            if (!vinylSku?.pressId) return null;
+            return (
+              <PressPackageCostBreakdown
+                pressId={vinylSku.pressId}
+                format={vinylSku.format}
+                tierId={vinylSku.pressTierId ?? null}
+                colorId={vinylSku.pressColorId ?? null}
+                plannedQuantity={vinylSku.plannedQuantity ?? null}
+              />
+            );
+          })()}
 
         {/* Task #2115 — the invited press's uploaded print templates,
             offered as artist downloads for every vinyl format actually

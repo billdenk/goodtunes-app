@@ -12595,10 +12595,100 @@ seed_mrp_services_tier3() {
 seed_mrp_services_tier3 dev  "${DATABASE_URL:-}"
 seed_mrp_services_tier3 prod "${PROD_DATABASE_URL:-}"
 
+# Task #3227 — component→price linkage rows (each press's package component
+# options linked to that press's OWN price sources). Idempotent DDL on BOTH
+# DBs (keeps the schema-drift guard green).
+add_component_price_links_ddl() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping component price-links DDL on $label (no URL set)"
+    return 0
+  fi
+  psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null && echo "post-merge: component price-links DDL ok on $label"
+CREATE TABLE IF NOT EXISTS press_component_price_links (
+  id varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id varchar NOT NULL,
+  component_key text NOT NULL,
+  option_id text NOT NULL,
+  price_mode text NOT NULL,
+  service_item_id varchar,
+  ladder_source jsonb,
+  ladder_rungs jsonb,
+  updated_by_user_id varchar,
+  created_at timestamp NOT NULL DEFAULT now(),
+  updated_at timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT press_component_price_links_press_key_option_uniq UNIQUE (press_id, component_key, option_id)
+);
+SQL
+}
+add_component_price_links_ddl dev  "${DATABASE_URL:-}"
+add_component_price_links_ddl prod "${PROD_DATABASE_URL:-}"
+
+# Task #3227 — repair the Viryl decoy-shell split BEFORE the link seed:
+# earlier Viryl loaders fuzzy-matched the empty VIRYL/viryltech.com shell,
+# so prod's 49 service items + price list landed on the decoy while the
+# real catalog (tiers/jackets/components/SKUs) lives on Viryl Technologies
+# /viryl.ca. Idempotent: after the move the decoy holds nothing, and both
+# UPDATEs no-op unless BOTH rows exist (dev has no decoy = no-op).
+repair_viryl_decoy_split() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then return 0; fi
+  psql "$url" -v ON_ERROR_STOP=1 <<'SQL' || echo "post-merge: WARNING — viryl decoy repair failed on $label (continuing)"
+DO $$
+DECLARE real_id text; decoy_id text;
+BEGIN
+  SELECT id::text INTO real_id  FROM manufacturers WHERE lower(coalesce(domain,'')) = 'viryl.ca' LIMIT 1;
+  SELECT id::text INTO decoy_id FROM manufacturers WHERE lower(coalesce(domain,'')) = 'viryltech.com' LIMIT 1;
+  IF real_id IS NULL OR decoy_id IS NULL OR real_id = decoy_id THEN RETURN; END IF;
+  UPDATE press_service_items SET press_id = real_id WHERE press_id = decoy_id;
+  UPDATE press_price_lists   SET press_id = real_id WHERE press_id = decoy_id;
+  -- Viryl has no gatefold jacket ladder: an earlier seed marked the
+  -- gatefold jacket link 'included' — honest value is custom_quote.
+  UPDATE press_component_price_links
+     SET price_mode = 'custom_quote', service_item_id = NULL,
+         ladder_source = NULL, ladder_rungs = NULL
+   WHERE press_id = real_id AND component_key = 'jacket'
+     AND option_id = 'gatefold' AND price_mode = 'included';
+  -- Viryl's standard white sleeve is a $0 "included in pressing price"
+  -- sheet line: represent as included, never a $0 priced service link.
+  UPDATE press_component_price_links
+     SET price_mode = 'included', service_item_id = NULL,
+         ladder_source = NULL, ladder_rungs = NULL
+   WHERE press_id = real_id AND component_key = 'inner_sleeve'
+     AND option_id = 'white' AND price_mode = 'service';
+END $$;
+SQL
+}
+repair_viryl_decoy_split dev  "${DATABASE_URL:-}"
+repair_viryl_decoy_split prod "${PROD_DATABASE_URL:-}"
+
+# Task #3227 — seed the obvious MRP + Viryl component→price linkages.
+# Marker-guarded inside the script (component_price_links_seed_v1) +
+# per-link guard (operator edits never overwritten).
+PM_COMPONENT_LINKS_FAILED=0
+seed_component_price_links() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping component price-links seed on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/seed-component-price-links.ts 2>&1); then
+    echo "post-merge: component price-links seed ok on $label"
+    echo "$out" | tail -4
+  else
+    echo "post-merge: WARNING — component price-links seed failed on $label (continuing, fingerprint withheld so next merge retries)"
+    echo "$out" | tail -10
+    PM_COMPONENT_LINKS_FAILED=1
+  fi
+}
+seed_component_price_links dev  "${DATABASE_URL:-}"
+seed_component_price_links prod "${PROD_DATABASE_URL:-}"
+
 # ── Stamp the full-run fingerprint (see the skip block at the top) ─────────
 # Reached only on a full pass that survived to here; from now on, merges that
 # don't touch this script skip straight to the mirror sync below.
-if [ "${PM_VIRYL_2026_FAILED:-0}" = "1" ] || [ "${PM_MRP_TIER3_FAILED:-0}" = "1" ]; then
+if [ "${PM_VIRYL_2026_FAILED:-0}" = "1" ] || [ "${PM_MRP_TIER3_FAILED:-0}" = "1" ] || [ "${PM_COMPONENT_LINKS_FAILED:-0}" = "1" ]; then
   # Task #3220/#3226: a pricing loader/seed failed above — withhold the
   # full-run fingerprint so the next merge re-runs the whole migration suite
   # and the marker-guarded loaders get retried instead of silently skipped.

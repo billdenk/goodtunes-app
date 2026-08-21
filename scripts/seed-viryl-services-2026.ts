@@ -21,6 +21,7 @@
 
 import { and, eq, sql } from "drizzle-orm";
 import { db, pool } from "../server/db";
+import { resolveSeedPress } from "./seed-component-price-links";
 import {
   manufacturers,
   pressServiceItems,
@@ -150,15 +151,24 @@ async function main() {
     return;
   }
 
-  const [press] = await db
+  // Decoy-shell trap: prod has an empty VIRYL/viryltech.com shell beside
+  // the real Viryl Technologies/viryl.ca — never take a fuzzy first match.
+  const candidates = await db
     .select()
     .from(manufacturers)
     .where(sql`${manufacturers.domain} ILIKE '%viryl%' OR ${manufacturers.name} ILIKE '%viryl%'`);
-  if (!press) {
-    // FATAL, never stamp the marker on a missing prereq (one-time-backfill rule).
-    throw new Error("Viryl manufacturer not found — run seed-viryl-catalog first.");
-  }
-  console.log(`Viryl press: ${press.id} (${press.name})`);
+  const press = await resolveSeedPress(
+    "Viryl",
+    candidates.map((c) => ({ id: c.id, name: c.name, domain: (c as any).domain ?? null })),
+    "viryl.ca",
+    async (pressId) => {
+      const r = await db.execute(
+        sql`SELECT count(*)::int AS n FROM press_color_tiers WHERE press_id = ${pressId}`,
+      );
+      return Number((r.rows[0] as any)?.n ?? 0);
+    },
+  );
+  console.log(`Viryl press: ${press.id} (${press.name} / ${(press as any).domain ?? "no domain"})`);
 
   // Repair rows an earlier (v2) run seeded with the wrong unit semantics:
   // printed centre labels were stored as per-pair costs though the sheet's

@@ -70,6 +70,14 @@ import {
   SwatchEditorPopover,
   VinylDisc,
 } from "./PressVinylColors";
+import {
+  PACKAGE_COMPONENT_KEYS,
+  PACKAGE_COMPONENT_OPTIONS,
+  PACKAGE_COMPONENT_GROUP_LABEL,
+  PACKAGE_OPTION_LABEL,
+  type PackageComponentKey,
+  type PriceLinkMode,
+} from "@shared/pressComponentPricing";
 import { useAdminDark } from "@/lib/adminAppearance";
 import { PrintedAreasStudy, STUDY_DARK, STUDY_LIGHT, type StudySpec } from "@/components/press/PrintedAreasStudy";
 import { IconButton } from "@/components/ui/IconButton";
@@ -3643,6 +3651,18 @@ export function PressPackagePricingCatalog({
                   <SetupServicesSection pressId={pressId} canEdit={canEdit} />
                 </div>
               </section>
+              {/* Task #3227 — component→price linkages */}
+              <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: "28px 0" }} />
+              <section className="pt-2" data-testid="section-component-pricing-links">
+                <TwoTone lead="Component pricing." rest="Link each option to its price source." />
+                <p className="mt-1 text-[12.5px]" style={{ color: SUBINK }}>
+                  Jackets, inner sleeves, inserts and extras resolve from this press's own price
+                  ladders and service items — unlinked options show honestly as "no price on file."
+                </p>
+                <div className="mt-3">
+                  <ComponentPricingLinksSection pressId={pressId} canEdit={canEdit} />
+                </div>
+              </section>
             </div>
           </div>
         </fieldset>
@@ -5071,6 +5091,227 @@ function SetupServicesSection({ pressId, canEdit }: { pressId: string; canEdit: 
             </button>
           </div>
         </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Task #3227 — Component pricing links ──────────────────────────────
+// Per-option price-source linkage editor: each package component option
+// (jacket style, inner sleeve, insert, download card, sticker, poly-bag,
+// shrink-wrap, insertion) links to THIS press's own price source — a Tier 3
+// component ladder, a Setup & Services item, "included in record price", or
+// "custom quote". No link = honest "no price on file" (never $0).
+type PriceLinkRow = {
+  id: string;
+  componentKey: string;
+  optionId: string;
+  priceMode: PriceLinkMode;
+  serviceItemId: string | null;
+  ladderSource: { groupKey: string; itemLabel: string } | null;
+  ladderRungs: { qty: number; unitCents: number }[] | null;
+};
+type LinksPayload = {
+  links: PriceLinkRow[];
+  ladderGroups: { key: string; label: string; items: { label: string }[] }[];
+  ladderPriceList: string | null;
+  services: { id: string; category: string; label: string; amountCents: number; unitBasis: PressServiceUnitBasis }[];
+};
+
+function ComponentPriceLinkRow({
+  pressId,
+  componentKey,
+  optionId,
+  link,
+  payload,
+  canEdit,
+}: {
+  pressId: string;
+  componentKey: PackageComponentKey;
+  optionId: string;
+  link: PriceLinkRow | null;
+  payload: LinksPayload;
+  canEdit: boolean;
+}) {
+  const { toast } = useToast();
+  const qk = ["/api/admin/manufacturers", pressId, "catalog", "component-price-links"];
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: qk });
+  // "" = no link (no price on file). Ref-needing modes hold locally until a
+  // source is picked, so a half-made choice never saves.
+  const [pendingMode, setPendingMode] = useState<string | null>(null);
+  const mode = pendingMode ?? link?.priceMode ?? "";
+
+  const save = useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      const r = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/catalog/component-price-links`, {
+        componentKey,
+        optionId,
+        ...body,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      setPendingMode(null);
+      invalidate();
+    },
+    onError: (e: any) => toast({ title: e?.message || "Couldn't save the link", variant: "destructive" }),
+  });
+  const unlink = useMutation({
+    mutationFn: async () => {
+      await apiRequest(
+        "DELETE",
+        `/api/admin/manufacturers/${pressId}/catalog/component-price-links/${componentKey}/${optionId}`,
+      );
+    },
+    onSuccess: () => {
+      setPendingMode(null);
+      invalidate();
+    },
+    onError: (e: any) => toast({ title: e?.message || "Couldn't remove the link", variant: "destructive" }),
+  });
+
+  const onModeChange = (next: string) => {
+    if (next === "") {
+      if (link) unlink.mutate();
+      else setPendingMode(null);
+      return;
+    }
+    if (next === "included" || next === "custom_quote") {
+      save.mutate({ priceMode: next });
+      return;
+    }
+    setPendingMode(next); // service / ladder wait for the source pick
+  };
+
+  const selectStyle: React.CSSProperties = {
+    color: INK,
+    backgroundColor: "transparent",
+    border: `1px solid ${HAIRLINE}`,
+    borderRadius: 8,
+    padding: "4px 8px",
+    fontSize: 12,
+    maxWidth: 260,
+  };
+
+  const label = PACKAGE_OPTION_LABEL[componentKey]?.[optionId] ?? optionId;
+  const currentSourceLabel =
+    link?.priceMode === "service"
+      ? payload.services.find((s) => s.id === link.serviceItemId)?.label ?? "Service item missing — no price on file"
+      : link?.priceMode === "ladder"
+        ? link.ladderSource?.itemLabel ?? "Typed ladder"
+        : null;
+
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-2"
+      style={{ padding: "9px 16px" }}
+      data-testid={`price-link-row-${componentKey}-${optionId}`}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium" style={{ color: INK }}>{label}</div>
+        <div className="text-[11.5px] truncate" style={{ color: FAINT }}>
+          {mode === "" && "No price on file"}
+          {mode === "included" && "Included in record price"}
+          {mode === "custom_quote" && "Custom quote"}
+          {(mode === "service" || mode === "ladder") &&
+            (pendingMode ? "Pick a source →" : currentSourceLabel)}
+        </div>
+      </div>
+      {canEdit && (
+        <div className="flex items-center gap-2 shrink-0">
+          <select
+            value={mode}
+            onChange={(e) => onModeChange(e.target.value)}
+            style={selectStyle}
+            aria-label={`Price source for ${label}`}
+            data-testid={`select-price-mode-${componentKey}-${optionId}`}
+          >
+            <option value="">No price on file</option>
+            <option value="included">Included in record price</option>
+            <option value="custom_quote">Custom quote</option>
+            {(payload.services ?? []).length > 0 && <option value="service">Service item…</option>}
+            {(payload.ladderGroups ?? []).length > 0 && <option value="ladder">Price ladder…</option>}
+          </select>
+          {mode === "service" && (
+            <select
+              value={link?.priceMode === "service" && !pendingMode ? link.serviceItemId ?? "" : ""}
+              onChange={(e) => e.target.value && save.mutate({ priceMode: "service", serviceItemId: e.target.value })}
+              style={selectStyle}
+              aria-label={`Service item for ${label}`}
+              data-testid={`select-price-service-${componentKey}-${optionId}`}
+            >
+              <option value="">Choose a service item…</option>
+              {payload.services.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label} — {formatDollars(s.amountCents)} {PRESS_SERVICE_UNIT_LABEL[s.unitBasis]}
+                </option>
+              ))}
+            </select>
+          )}
+          {mode === "ladder" && (
+            <select
+              value={
+                link?.priceMode === "ladder" && !pendingMode && link.ladderSource
+                  ? `${link.ladderSource.groupKey}\u0000${link.ladderSource.itemLabel}`
+                  : ""
+              }
+              onChange={(e) => {
+                if (!e.target.value) return;
+                const [groupKey, itemLabel] = e.target.value.split("\u0000");
+                save.mutate({ priceMode: "ladder", ladderGroupKey: groupKey, ladderItemLabel: itemLabel });
+              }}
+              style={selectStyle}
+              aria-label={`Price ladder for ${label}`}
+              data-testid={`select-price-ladder-${componentKey}-${optionId}`}
+            >
+              <option value="">Choose a ladder…</option>
+              {payload.ladderGroups.map((g) => (
+                <optgroup key={g.key} label={g.label}>
+                  {g.items.map((i) => (
+                    <option key={i.label} value={`${g.key}\u0000${i.label}`}>{i.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ComponentPricingLinksSection({ pressId, canEdit }: { pressId: string; canEdit: boolean }) {
+  const qk = ["/api/admin/manufacturers", pressId, "catalog", "component-price-links"];
+  const { data, isLoading } = useQuery<LinksPayload>({ queryKey: qk });
+  if (isLoading) return <div className="text-[12.5px]" style={{ color: FAINT }}>Loading…</div>;
+  if (!data) return null;
+  const linkFor = (componentKey: string, optionId: string) =>
+    (data.links ?? []).find((l) => l.componentKey === componentKey && l.optionId === optionId) ?? null;
+  return (
+    <div>
+      {PACKAGE_COMPONENT_KEYS.map((componentKey) => (
+        <div key={componentKey} style={{ marginBottom: 18 }} data-testid={`price-links-group-${componentKey}`}>
+          <SectionLabel>{PACKAGE_COMPONENT_GROUP_LABEL[componentKey]}</SectionLabel>
+          <Card className="overflow-hidden" testId={`price-links-card-${componentKey}`}>
+            {PACKAGE_COMPONENT_OPTIONS[componentKey].map((optionId, i) => (
+              <div key={optionId} style={{ borderTop: i === 0 ? undefined : `1px solid ${HAIRLINE}` }}>
+                <ComponentPriceLinkRow
+                  pressId={pressId}
+                  componentKey={componentKey}
+                  optionId={optionId}
+                  link={linkFor(componentKey, optionId)}
+                  payload={data}
+                  canEdit={canEdit}
+                />
+              </div>
+            ))}
+          </Card>
+        </div>
+      ))}
+      {data.ladderPriceList && (
+        <div className="text-[11.5px]" style={{ color: FAINT }}>
+          Ladders from {data.ladderPriceList}. Prices resolve only from this press's own rows.
+        </div>
       )}
     </div>
   );
