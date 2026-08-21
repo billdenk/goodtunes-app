@@ -310,7 +310,10 @@ export function PressPanel({
     // Origin of the resolved plant: "invited" = invitedByPressId explicitly set
     // on the artist/label; "artist_default" / "label_default" = homed via
     // default_press_id; "sku_derived" = derived from this album's vinyl SKUs.
-    effectivePressSource?: "invited" | "artist_default" | "label_default" | "sku_derived" | null;
+    // "platform_default" (Task #3219) = nothing points anywhere; the server
+    // fell back to MRP purely so the Package designer can render the
+    // platform-default catalog. NOT a plant assignment.
+    effectivePressSource?: "invited" | "artist_default" | "label_default" | "sku_derived" | "platform_default" | null;
     // Scope (artist or label) for the "change plant" deep-link.
     scopeKind?: "artist" | "label" | null;
     scopeId?: string | null;
@@ -332,7 +335,15 @@ export function PressPanel({
   // Task #2309 — use resolveVendorIdForPress (never returns null): unknown
   // presses map to "generic" so preflight never silently defaults to MRP.
   const resolvedPressName: string | undefined = useMemo(
-    () => invitedPress?.press?.name ?? invitedPress?.effectivePress?.name ?? undefined,
+    () =>
+      invitedPress?.press?.name ??
+      // Task #3219 — the platform-default MRP fallback is display/catalog
+      // only; preflight vendor resolution must NOT silently default to MRP
+      // (Task #2309), so skip it here.
+      (invitedPress?.effectivePressSource === "platform_default"
+        ? undefined
+        : invitedPress?.effectivePress?.name) ??
+      undefined,
     [invitedPress],
   );
   const defaultVendor: VendorId = useMemo(

@@ -1697,9 +1697,11 @@ export function registerCommerceRoutes(app: Express) {
       // as `mrpDefaults` instead — the client only consumes it from
       // the cost-breakdown branch, never to scope the picker UI.
       let mrpDefaults: Awaited<ReturnType<typeof getPressCatalog>> | null = null;
+      let mrpRow: Awaited<ReturnType<typeof storage.getManufacturerByDomain>> | null = null;
       try {
         const mrp = await storage.getManufacturerByDomain(MRP_DOMAIN);
         if (mrp) {
+          mrpRow = mrp;
           await seedMrpCatalog(); // memoized — instant if already seeded
           mrpDefaults = await getPressCatalog(mrp.id);
         }
@@ -1718,7 +1720,7 @@ export function registerCommerceRoutes(app: Express) {
       // Track where the effective press came from so the album Press panel
       // can surface an accurate origin label rather than the misleading
       // "Set on the artist's page" note.
-      let effectivePressSource: "artist_default" | "label_default" | "sku_derived" | null = null;
+      let effectivePressSource: "artist_default" | "label_default" | "sku_derived" | "platform_default" | null = null;
       let effectiveScopeKind: "artist" | "label" | null = null;
       let effectiveScopeId: string | null = null;
       try {
@@ -1801,11 +1803,50 @@ export function registerCommerceRoutes(app: Express) {
           effectiveScopeId = album.labelId;
         }
       }
+      // Task #3219 — no formal invitation, but a press resolved (artist/label
+      // default press or unambiguous SKU press): serve that press's REAL
+      // artist-facing catalog (non-hidden formats; getPressCatalog already
+      // drops archived tiers/colors) instead of an empty one, so the Package
+      // designer renders the full builder rather than the "hasn't published
+      // a catalog yet" empty state. `press` stays null on purpose — the
+      // partner-permissions hard lock, printer-chip row, and picker-lock
+      // code paths key off the invited stamp, and `effectivePressSource`
+      // keeps the provenance distinguishable from "invited".
+      //
+      // Decision (Task #3219): when NO press resolves at all, fall back to
+      // the MRP platform default — MRP is the platform's default press, so
+      // the artist gets the MRP-branded designer with MRP's live catalog
+      // (`effectivePress` = MRP, source "platform_default") rather than a
+      // dead empty state. Clients that must not treat the platform fallback
+      // as a real plant assignment (e.g. preflight vendor resolution) skip
+      // `effectivePressSource === "platform_default"`.
+      let effectiveCatalog: Awaited<ReturnType<typeof getPressCatalog>> = { formats: [], jackets: [], defaultJacketId: null };
+      try {
+        if (effectivePress) {
+          const dom = effectivePress.domain;
+          if (dom === HELLBENDER_DOMAIN) await seedHellbenderCatalog();
+          else if (dom === MRP_DOMAIN) await seedMrpCatalog();
+          else if (dom === PMP_DOMAIN) await seedPmpCatalog();
+          const c = await getPressCatalog(effectivePress.id);
+          effectiveCatalog = { ...c, formats: c.formats.filter((f) => !f.hidden) };
+        } else if (mrpRow && mrpDefaults) {
+          effectivePress = {
+            id: mrpRow.id,
+            name: mrpRow.name,
+            domain: (mrpRow as any).domain ?? null,
+            logoUrl: (mrpRow as any).logoUrl ?? null,
+            identityIconUrl: (mrpRow as any).identityIconUrl ?? null,
+            vinylPlaceholderUrl: (mrpRow as any).vinylPlaceholderUrl ?? null,
+          };
+          effectivePressSource = "platform_default";
+          effectiveCatalog = { ...mrpDefaults, formats: mrpDefaults.formats.filter((f) => !f.hidden) };
+        }
+      } catch {}
       return res.json({
         press: null,
         hasShippedFirst: false,
         formatCosts: await listFormatCosts(),
-        catalog: { formats: [] },
+        catalog: effectiveCatalog,
         mrpDefaults,
         pressMode,
         demo: demoKind,
