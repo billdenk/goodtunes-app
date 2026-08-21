@@ -458,7 +458,11 @@ export function AdminFrame({
   // says this caller can't send invites (matches the AdminInvites gate +
   // POST /api/admin/invites). Default permissive until role resolves so
   // super-admins never see a flash of a missing item.
-  const canInvite = roleInfo === undefined || roleInfo.canInvite !== false;
+  // NULL-safe (Aug 21 2026 prod crash): a fan session that reaches the admin
+  // shell gets a literal `null` role payload — `roleInfo.canInvite` on null
+  // black-screened the whole shell (componentDidCatch). `== null` covers both
+  // "still loading" (undefined) and "no role" (null).
+  const canInvite = roleInfo == null || roleInfo.canInvite !== false;
   // Artist partners now get a full sectioned nav (not just "My releases").
   // Global search (which spans every entity) is still hidden for artists.
   const isArtist = roleInfo?.role === "artist";

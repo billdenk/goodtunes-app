@@ -477,6 +477,58 @@ type OrderItemWithVinyl = OrderItem & {
   vinylColor: string | null;
   jacketUpgrade: JacketUpgrade | null;
 };
+// Batched variant for queue-style pages (Aug 21 2026 prod outage): the admin
+// Orders list called getOrderItems once per order under Promise.all — with
+// ~2,600 legacy (pre-snapshot) items each call also fired the album_skus
+// fallback, so one page load launched hundreds of concurrent queries and
+// exhausted the pg pool ("timeout exceeded when trying to connect", 500s on
+// /api/admin/orders). This does the same work in exactly two queries.
+async function getOrderItemsForOrders(
+  orderRefs: { id: string; albumId: string }[],
+): Promise<Map<string, OrderItemWithVinyl[]>> {
+  const out = new Map<string, OrderItemWithVinyl[]>();
+  if (orderRefs.length === 0) return out;
+  const rows = await db
+    .select()
+    .from(orderItems)
+    .where(inArray(orderItems.orderId, orderRefs.map((o) => o.id)))
+    .orderBy(asc(orderItems.createdAt));
+  const albumIdByOrder = new Map(orderRefs.map((o) => [o.id, o.albumId]));
+  // Legacy fallback SKUs: one IN-query over just the albums that need it.
+  const fallbackAlbumIds = new Set<string>();
+  for (const r of rows) {
+    if (r.kind === "format" && r.vinylColor == null) {
+      const albumId = albumIdByOrder.get(r.orderId);
+      if (albumId) fallbackAlbumIds.add(albumId);
+    }
+  }
+  const skuRows = fallbackAlbumIds.size > 0
+    ? await db
+        .select({ albumId: albumSkus.albumId, format: albumSkus.format, vinylColor: albumSkus.vinylColor, jacketUpgrade: albumSkus.jacketUpgrade })
+        .from(albumSkus)
+        .where(inArray(albumSkus.albumId, [...fallbackAlbumIds]))
+    : [];
+  const skuByAlbumFormat = new Map(skuRows.map((s) => [`${s.albumId}\u0000${s.format}`, s]));
+  for (const ref of orderRefs) out.set(ref.id, []);
+  for (const r of rows) {
+    const arr = out.get(r.orderId) ?? [];
+    if (r.kind !== "format") {
+      arr.push({ ...r, vinylColor: null, jacketUpgrade: null });
+    } else if (r.vinylColor != null) {
+      arr.push({ ...r, vinylColor: r.vinylColor, jacketUpgrade: (r.jacketUpgrade as JacketUpgrade | null) ?? null });
+    } else {
+      const sku = skuByAlbumFormat.get(`${albumIdByOrder.get(r.orderId)}\u0000${r.sku}`);
+      arr.push({
+        ...r,
+        vinylColor: sku?.vinylColor ?? null,
+        jacketUpgrade: (sku?.jacketUpgrade as JacketUpgrade | null) ?? null,
+      });
+    }
+    out.set(r.orderId, arr);
+  }
+  return out;
+}
+
 async function getOrderItems(orderId: string): Promise<OrderItemWithVinyl[]> {
   const rows = await db.select().from(orderItems).where(eq(orderItems.orderId, orderId)).orderBy(asc(orderItems.createdAt));
   if (rows.length === 0) return [];
@@ -3983,11 +4035,14 @@ export function registerCommerceRoutes(app: Express) {
       giftBoxesByItem.set(b.orderItemId, arr);
     }
     // Flat shape matches client/src/pages/AdminOrders.tsx AdminOrderRow.
-    const out = await Promise.all(
-      rows.map(async (r) => {
+    // Items are batch-loaded (two queries total) — see getOrderItemsForOrders.
+    const itemsByOrder = await getOrderItemsForOrders(
+      rows.map((r) => ({ id: r.order.id, albumId: r.order.albumId })),
+    );
+    const out = rows.map((r) => {
         const ship: any = r.order.shippingAddress ?? null;
         const g = giftByOrder.get(r.order.id);
-        const items = (await getOrderItems(r.order.id)).map((it) =>
+        const items = (itemsByOrder.get(r.order.id) ?? []).map((it) =>
           it.kind === "custom_addon"
             ? {
                 ...it,
@@ -4028,8 +4083,7 @@ export function registerCommerceRoutes(app: Express) {
               }
             : null,
         };
-      }),
-    );
+      });
     res.json(out);
   });
   // ─── Task #236 — operator-initiated refund ──────────────────────────

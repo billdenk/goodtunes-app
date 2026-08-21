@@ -34653,7 +34653,14 @@ export async function registerRoutes(
       const name = `${String(song.trackNumber ?? 0).padStart(2, "0")} ${song.title}${ext}`.replace(/[\r\n"\\/]+/g, " ");
       res.setHeader("Content-Type", (meta?.contentType as string) || AUDIO_MIME_BY_EXT[ext] || "application/octet-stream");
       if (meta?.size) res.setHeader("Content-Length", String(meta.size));
-      res.setHeader("Content-Disposition", `attachment; filename="${name}"`);
+      // Header values must be latin1 (Aug 21 2026 prod 500: an em-dash in a
+      // song title threw ERR_INVALID_CHAR from setHeader). ASCII-fold the
+      // plain filename and carry the true UTF-8 name in RFC 5987 filename*.
+      const asciiName = name.replace(/[^\x20-\x7e]+/g, "-");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+      );
       res.setHeader("X-Master-Source", resolved.source);
       resolved.file.createReadStream().on("error", (e: any) => {
         console.error("[masters-download] stream error", e);
