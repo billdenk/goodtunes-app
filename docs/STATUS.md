@@ -2,6 +2,8 @@
 
 Last updated: 2026-08-21
 
+- **White-label domains LIVE end-to-end** (Aug 21 2026, Task #3279): makesvinyl.com + pressesvinyl.com apexes serve production with valid TLS (200, neutral page, no 301 to goodtunes.music); wildcard CNAME added in GoDaddy so any slug resolves. Replit issues no wildcard certs, so each press subdomain must be individually linked in the Replit Domains panel (one-time, ~1 min, zero GoDaddy edits thanks to the wildcard). Live now: mrp/memphis on both domains. Memphis Record Pressing assigned slug `memphis` — branded landing, skinned login, and estimate `/e/:token` viewer all verified on memphis.makesvinyl.com; unassigned linked subdomains show the neutral page.
+
 This file is the current-state summary for the design studio. It is kept
 current, not appended to: stale lines are overwritten when things change.
 

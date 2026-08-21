@@ -16,3 +16,9 @@ Press white-label hosts serve `<slug>.makesvinyl.com` (pressesvinyl.com aliases;
 - Slug RENAMES park the outgoing slug on `previous_white_label_slug` (one-deep alias) so already-sent estimate/invite links keep their skin; the public branding lookup falls back to the alias (current slugs always win), and a press claiming another press's parked alias clears that stale alias. The White Label tab shows a rename note instead of blocking.
 
 **How to apply:** any new white-label surface reads the shared parser + the public no-auth branding endpoint; any new press-outbound link builder goes through the branded-origin-or-request-host helper. Invite-flow regressions are locked in by a DB test accepting an invite under a whitelabel Host header.
+
+## DNS reality (verified live Aug 21 2026)
+- Replit issues NO wildcard TLS certs: wildcard CNAME (`*` → apex) makes any slug *resolve*, but HTTPS works only for hostnames individually linked in the Replit Domains panel (one cert each, ~2 min to mint after verification; SSL handshake errors until then).
+- With the wildcard CNAME in place, linking a new `<slug>.makesvinyl.com` in Replit verifies in ~1 min with zero GoDaddy edits (wildcard answers the CNAME lookup; TXT falls through to the apex replit-verify record).
+- **How to apply:** assigning a press white_label_slug is NOT enough — someone must also link the subdomain in Replit → Deployments → Domains, once per slug (both domains if pressesvinyl should serve too). Un-linked slugs fail TLS entirely (not even the neutral page).
+- One slug per press; it answers on both apexes; links mint on makesvinyl.com primary. Memphis Record Pressing = `memphis`.
