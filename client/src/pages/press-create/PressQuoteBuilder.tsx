@@ -27,6 +27,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useAdminDark } from '@/lib/adminAppearance';
+import { PRESS_MARK_ON_DARK, PRESS_MARK_ON_LIGHT } from '@/lib/pressMark';
 import type { PressComponentsPayload } from '@shared/pressComponents';
 import { makeQuotePricer, pricedSum, pendingLines, type QuoteLine } from './quotePricing';
 import { PressLogoImg, usePressBrand, usePressCatalogSwatches } from './PressPackageBuilder';
@@ -37,7 +38,7 @@ import niinaLabelArt from './assets/niina-label-1.png';
 
 // ── Per-press label branding ─────────────────────────────────────────
 const PRESS_LABEL_BG = '#0a0a0a';
-const PRESS_LABEL_LOGO_FILTER = 'invert(1) brightness(1.7)';
+
 
 // ─── Brand tokens (Apple calm visual language) ──────────────────────
 const BLUE = '#319ED8';
@@ -276,7 +277,7 @@ function DiscLabelArt({ size }: { size: number }) {
           width: size * 0.9,
           height: size * 0.9,
           objectFit: 'contain',
-          filter: PRESS_LABEL_LOGO_FILTER,
+          filter: PRESS_MARK_ON_DARK,
         }}
       />
       {showArcText && (
@@ -741,7 +742,7 @@ function JacketThumbnail({ jacket, size = THUMB }: { jacket: JacketOption; size?
         </>
       )}
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <PressLogoImg  alt="" aria-hidden style={{ width: size * THUMB_LOGO, height: size * THUMB_LOGO, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.90 }} />
+        <PressLogoImg  alt="" aria-hidden style={{ width: size * THUMB_LOGO, height: size * THUMB_LOGO, objectFit: 'contain', filter: PRESS_MARK_ON_DARK, opacity: 0.90 }} />
       </div>
     </div>
   );
@@ -799,7 +800,7 @@ function JacketTile({
             }}>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.12)' }} />
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <PressLogoImg  alt="" aria-hidden style={{ width: THUMB * THUMB_LOGO, height: THUMB * THUMB_LOGO, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.90 }} />
+                <PressLogoImg  alt="" aria-hidden style={{ width: THUMB * THUMB_LOGO, height: THUMB * THUMB_LOGO, objectFit: 'contain', filter: PRESS_MARK_ON_DARK, opacity: 0.90 }} />
               </div>
             </div>
             <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 1, background: 'rgba(0,0,0,0.45)', zIndex: 4 }} />
@@ -833,7 +834,7 @@ function JacketTile({
             }}>
               <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.12)' }} />
               <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <PressLogoImg  alt="" aria-hidden style={{ width: THUMB * THUMB_LOGO, height: THUMB * THUMB_LOGO, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.90 }} />
+                <PressLogoImg  alt="" aria-hidden style={{ width: THUMB * THUMB_LOGO, height: THUMB * THUMB_LOGO, objectFit: 'contain', filter: PRESS_MARK_ON_DARK, opacity: 0.90 }} />
               </div>
             </div>
             <div style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: 1, background: 'rgba(0,0,0,0.40)', zIndex: 4 }} />
@@ -923,7 +924,7 @@ function JacketStage({ jacketType, widespine = false, tipOn = false }: { jacketT
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(155deg, #1e1e26 0%, #0f0f14 100%)', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '50%', background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, transparent 100%)' }} />
         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <PressLogoImg  alt="" aria-hidden style={{ width: JS * 0.52, height: JS * 0.52, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.92 }} />
+          <PressLogoImg  alt="" aria-hidden style={{ width: JS * 0.52, height: JS * 0.52, objectFit: 'contain', filter: PRESS_MARK_ON_DARK, opacity: 0.92 }} />
         </div>
         {tipOn && (
           <div style={{ position: 'absolute', top: 0, right: 0, width: P, height: P, pointerEvents: 'none' }}>
@@ -994,7 +995,7 @@ function JacketStage({ jacketType, widespine = false, tipOn = false }: { jacketT
                 <PressLogoImg  alt="" aria-hidden style={{
                   width: HOLE_D * 0.56, height: HOLE_D * 0.56,
                   objectFit: 'contain',
-                  filter: 'none',
+                  filter: PRESS_MARK_ON_LIGHT,
                   opacity: 0.78,
                 }} />
                 <div style={{
@@ -1314,7 +1315,7 @@ function RainbowPrintFace({ logoSize }: { logoSize: number }) {
       <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(55% 55% at 30% 26%, rgba(120,150,255,0.55), rgba(120,150,255,0) 60%)', mixBlendMode: 'screen' }} />
       <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(46% 46% at 50% 50%, rgba(0,0,0,0.52), rgba(0,0,0,0) 74%)' }} />
       <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <PressLogoImg  alt="" aria-hidden style={{ width: logoSize, height: logoSize, objectFit: 'contain', filter: PRESS_LABEL_LOGO_FILTER, opacity: 0.92 }} />
+        <PressLogoImg  alt="" aria-hidden style={{ width: logoSize, height: logoSize, objectFit: 'contain', filter: PRESS_MARK_ON_DARK, opacity: 0.92 }} />
       </div>
     </>
   );
@@ -1540,7 +1541,7 @@ function LabelLogo({ size, whiteFilter = true, offsetRight = false }: { size: nu
           width: size * (offsetRight ? 0.18 : 0.9),
           height: size * (offsetRight ? 0.18 : 0.9),
           objectFit: 'contain',
-          filter: whiteFilter ? PRESS_LABEL_LOGO_FILTER : undefined,
+          filter: whiteFilter ? PRESS_MARK_ON_DARK : PRESS_MARK_ON_LIGHT,
         }}
       />
       {showArcText && (
@@ -2253,7 +2254,7 @@ function Sticker({
             
             alt=""
             aria-hidden
-            style={{ width: minDim * 0.52, height: minDim * 0.52, objectFit: 'contain' }}
+            style={{ width: minDim * 0.52, height: minDim * 0.52, objectFit: 'contain', filter: PRESS_MARK_ON_LIGHT }}
           />
           {minDim >= 120 && (
             <div
@@ -3534,12 +3535,12 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                             '#0fa596 165deg, #2e9e3f 210deg, #d99a00 265deg,' +
                             '#e05a1a 305deg, #e91e8c 360deg)',
                         }}>
-                          <PressLogoImg  alt="" aria-hidden style={{ width: '72%', height: '72%', objectFit: 'contain', filter: 'brightness(0) invert(1)', opacity: 0.95 }} />
+                          <PressLogoImg  alt="" aria-hidden style={{ width: '72%', height: '72%', objectFit: 'contain', filter: PRESS_MARK_ON_DARK, opacity: 0.95 }} />
                         </div>
                       ))}
                       {labelStyle.id === 'bw' && (
                         <div className="w-full h-full" style={{ background: '#ffffff' }}>
-                          <PressLogoImg  alt="" aria-hidden className="absolute" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '56%', height: '56%', objectFit: 'contain', opacity: 0.78 }} />
+                          <PressLogoImg  alt="" aria-hidden className="absolute" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '56%', height: '56%', objectFit: 'contain', filter: PRESS_MARK_ON_LIGHT, opacity: 0.78 }} />
                         </div>
                       )}
                       {labelStyle.id === 'blank' && <div className="w-full h-full" style={{ background: '#ffffff' }} />}
@@ -3580,13 +3581,13 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                   {/* jacket — MRP house jacket by default; artist cover on swap.
                       PMP-style house jacket (Bill, Aug 16 2026): dark board, white
                       press mark, nothing else. Memphis will supply the real image;
-                      white via CSS invert — only dark assets exist. */}
+                      white via the polarity-safe pressMark filter (any source polarity). */}
                   <div className="absolute overflow-hidden rounded-sm" style={{ left: 0, top: 0, width: JS_BASE, height: JS_BASE, zIndex: 3, boxShadow: '0 4px 22px rgba(0,0,0,0.35)' }}>
                     {useArtistArt ? (
                       <img src={californialandCover} alt="Artist cover" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center" style={{ background: '#111112' }}>
-                        <PressLogoImg  alt={pressBrandName} style={{ width: '52%', height: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.92 }} />
+                        <PressLogoImg  alt={pressBrandName} style={{ width: '52%', height: 'auto', filter: PRESS_MARK_ON_DARK, opacity: 0.92 }} />
                       </div>
                     )}
                   </div>
