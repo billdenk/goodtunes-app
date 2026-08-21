@@ -12766,6 +12766,7 @@ run_sql_both "alter table if exists manufacturers add column if not exists brand
 run_sql_both "alter table if exists manufacturers add column if not exists brand_contact_line text" || true
 run_sql_both "alter table if exists manufacturers add column if not exists email_branding jsonb" || true
 run_sql_both "alter table if exists songs add column if not exists source_url text" || true
+run_sql_both "alter table if exists manufacturers add column if not exists estimates_white_label_enabled boolean not null default false" || true
 # Task #3275 — Shopify platform-fee defaults ladder: artist-level default fee
 # + release-level override (both nullable; accrual coalesces at mint time).
 run_sql_both "alter table if exists people add column if not exists shopify_unit_fee_cents integer" || true
