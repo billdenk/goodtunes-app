@@ -216,3 +216,136 @@ export function computeQuotePendingIds(
   }
   return pending;
 }
+
+// ── Client-estimate email breakdown (Ruby handoff e86b169) ──────────────
+// The estimate email shows fully-expanded numbers for the ONE quantity the
+// press prepared. This mirrors the builder's line construction + run-size
+// curve exactly (quoteLines / QB_SETUP_LINES / tierFactor in
+// PressQuoteBuilder.tsx) so the email's numbers match what the press saw
+// when they hit Send. Returns null when the stored state can't produce an
+// honest, fully-priced breakdown (the email then omits the totals card
+// rather than showing wrong or partial numbers).
+
+/** The builder's run-size discount curve, anchored so the 1,000-unit tier is
+ * the baseline (same numbers as qtyScale/tierFactor in the builders). */
+export function quoteTierFactor(qty: number): number {
+  const raw = qty <= 100 ? 1.0 : qty <= 300 ? 0.88 : qty <= 500 ? 0.8 : qty <= 1000 ? 0.7 : qty <= 2000 ? 0.62 : 0.55;
+  return raw / 0.7;
+}
+
+export type QuoteEmailLine = { id: string; name: string; note?: string; unitDollars: number };
+export type QuoteEmailSetupLine = { id: string; name: string; note?: string; dollars: number };
+export type QuoteEmailBreakdown = {
+  qty: number;
+  unitLines: QuoteEmailLine[];
+  setupLines: QuoteEmailSetupLine[];
+  /** Per-record total at the prepared quantity (sum of unitLines). */
+  unitCost: number;
+  setupTotal: number;
+  /** unitCost × qty */
+  subtotal: number;
+  total: number;
+};
+
+const SIZE_LABEL: Record<string, string> = { "7": '7"', "10": '10"', "12": '12"' };
+
+/** Prefer the press's own Pricing-row label when it reads like a human name
+ * (seeded test rows carry the raw key as label — never surface those). */
+function rowDisplayName(rows: PricingRow[], key: string, fallback: string): string {
+  const row = rows.find((r) => r.key === key);
+  const label = String(row?.label ?? "").trim();
+  return label && !label.includes(":") ? label : fallback;
+}
+
+const JACKET_NAMES: Record<string, string> = {
+  single: "Single Jacket", gatefold: "Gatefold Jacket", trifold: "Tri-Fold Gatefold Jacket", discobag: "Discobag",
+};
+const LABEL_NAMES: Record<string, string> = { color: "Full Color", bw: "Black & White", blank: "Blank" };
+const titleCase = (s: string) => s.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+const withSuffix = (name: string, suffix: string) =>
+  name.toLowerCase().includes(suffix.toLowerCase()) ? name : `${name} ${suffix}`;
+
+export function computeQuoteEmailBreakdown(
+  bs: QuoteBuilderState | null | undefined,
+  rows: PricingRow[] | undefined | null,
+): QuoteEmailBreakdown | null {
+  if (invalidQuoteBuilderState(bs)) return null;
+  if (computeQuotePendingIds(bs, rows).length > 0) return null;
+  const state = bs as QuoteBuilderState;
+  const list: PricingRow[] = Array.isArray(rows) ? rows.filter((r) => r && typeof r.key === "string") : [];
+  const pricer = makeQuotePricer(list);
+  const qty = Number(state.qty);
+  const discs = typeof state.discs === "number" && state.discs > 0 ? state.discs : 1;
+  const sizeId = String(state.sizeId ?? "12") as QuoteSizeId;
+  const unitFactor = quoteTierFactor(qty);
+
+  const raw: Array<{ id: string; name: string; note?: string; v: number | null }> = [];
+  const vinylBase = pricer.vinyl(String(state.colorName), String(state.colorTierName ?? ""), sizeId, String(state.weightId ?? ""));
+  raw.push({
+    id: "vinyl",
+    name: `${SIZE_LABEL[sizeId] ?? sizeId} · ${state.weightId ?? "140"}g ${state.colorName}`,
+    note: discs > 1 ? `${discs} LP per record` : "Vinyl",
+    v: vinylBase == null ? null : vinylBase * discs,
+  });
+  const labelId = String(state.labelId);
+  const labelV = pricer.flat(`labels:${labelId}`);
+  raw.push({
+    id: "label",
+    name: withSuffix(rowDisplayName(list, `labels:${labelId}`, LABEL_NAMES[labelId] ?? titleCase(labelId)), "label"),
+    note: discs > 1 ? "Both discs" : undefined,
+    v: labelV == null ? null : labelV * discs,
+  });
+  const jacketId = String(state.jacketId);
+  raw.push({
+    id: "jacket",
+    name: withSuffix(rowDisplayName(list, `jackets:${jacketId}`, JACKET_NAMES[jacketId] ?? titleCase(jacketId)), "jacket"),
+    v: pricer.flat(`jackets:${jacketId}`),
+  });
+  const sleeveId = String(state.sleeveId);
+  raw.push({
+    id: "sleeve",
+    name: withSuffix(rowDisplayName(list, `sleeves:${sleeveId}`, titleCase(sleeveId)), "sleeve"),
+    v: pricer.flat(`sleeves:${sleeveId}`),
+  });
+  if (state.insertId && state.insertId !== "none") {
+    raw.push({
+      id: "insert",
+      name: rowDisplayName(list, `inserts:${state.insertId}`, `${titleCase(String(state.insertId))} insert`),
+      v: pricer.flat(`inserts:${state.insertId}`),
+    });
+  }
+  if (state.stickerShapeId && state.stickerShapeId !== "none") {
+    raw.push({
+      id: "sticker",
+      name: withSuffix(rowDisplayName(list, `stickers:${state.stickerShapeId}`, titleCase(String(state.stickerShapeId))), "sticker"),
+      v: pricer.flat(`stickers:${state.stickerShapeId}`),
+    });
+  }
+  raw.push({ id: "assembly", name: "Assembly", note: "Insert placed on top before shrink", v: pricer.flat("service:assembly") });
+  raw.push({ id: "shrink", name: "Shrinkwrap", note: "Retail-ready seal", v: pricer.flat("service:shrink") });
+
+  // Pending gate above guarantees no nulls, but stay fail-closed anyway.
+  if (raw.some((l) => l.v == null)) return null;
+  const unitLines: QuoteEmailLine[] = raw.map((l) => ({
+    id: l.id, name: l.name, ...(l.note ? { note: l.note } : {}), unitDollars: (l.v as number) * unitFactor,
+  }));
+
+  const setupDefs: Array<{ id: string; name: string; note?: string; key: string }> = [
+    { id: "cutting", name: "Lacquer cutting", key: "service:cutting" },
+    { id: "plating", name: "Lacquer plating", key: "service:plating" },
+    { id: "test", name: "Test pressing", note: "Includes 2-day domestic shipping", key: "service:test" },
+    { id: "stampers", name: "Stampers", key: "service:stampers" },
+    { id: "colorfee", name: "Color setup fee", key: "service:colorfee" },
+  ];
+  const setupLines: QuoteEmailSetupLine[] = [];
+  for (const d of setupDefs) {
+    const v = pricer.flat(d.key);
+    if (v == null) return null;
+    setupLines.push({ id: d.id, name: d.name, ...(d.note ? { note: d.note } : {}), dollars: v });
+  }
+
+  const unitCost = unitLines.reduce((a, l) => a + l.unitDollars, 0);
+  const setupTotal = setupLines.reduce((a, l) => a + l.dollars, 0);
+  const subtotal = unitCost * qty;
+  return { qty, unitLines, setupLines, unitCost, setupTotal, subtotal, total: subtotal + setupTotal };
+}

@@ -371,6 +371,7 @@ async function sendViaResend(
   html: string,
   text: string,
   replyToOverride?: string | null,
+  fromDisplayName?: string | null,
 ): Promise<SendResult> {
   if (isSyntheticRecipient(to)) {
     // Don't even call Resend — bounces from synthetic domains permanently
@@ -407,7 +408,16 @@ async function sendViaResend(
   }
   try {
     const replyTo = (replyToOverride && replyToOverride.trim().length > 0) ? replyToOverride.trim() : getReplyTo();
-    const body: Record<string, unknown> = { from: getFromAddress(), to, subject, html, text };
+    // Optional per-send display name (e.g. "Brandon Seavers · via GoodTunes®")
+    // over the SAME sending address — never a different domain (per-press
+    // sending domains need SPF/DKIM and are deliberately later work).
+    let from = getFromAddress();
+    const display = (fromDisplayName ?? "").trim().replace(/["<>\r\n]/g, "");
+    if (display) {
+      const m = from.match(/<([^>]+)>/);
+      from = `${display} <${m ? m[1] : from}>`;
+    }
+    const body: Record<string, unknown> = { from, to, subject, html, text };
     if (replyTo) body.reply_to = replyTo;
     const r = await fetch(RESEND_ENDPOINT, {
       method: "POST",
@@ -686,35 +696,317 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
   return sendViaResend("customer-welcome-back", toEmail, subject, html, text);
 }
 
-// Press estimate send (Ruby handoff, Aug 19 2026) — ONE line of copy and a
-// single blue "View estimate" button pointing at the private tokenized link.
-// No account needed to view; the link-not-login rule flips only at "Start
-// this project" on the estimate page itself.
-export async function sendPressEstimateEmail(
-  toEmail: string,
-  opts: { senderFirst: string; pressName: string; jobTitle: string; linkUrl: string },
-): Promise<SendResult> {
-  const { senderFirst, pressName, jobTitle, linkUrl } = opts;
-  const subject = `${senderFirst} at ${pressName} sent you an estimate for ${jobTitle}`;
-  const text = [
-    `${senderFirst} at ${pressName} sent you an estimate for ${jobTitle}.`,
+// ── Press client estimate email (Ruby handoff e86b169, Task #3271) ──────
+// The fully-designed estimate email the platform pushes when a press sends
+// a client their estimate. 600px single dark column, table-based, inline
+// styles, explicit background colors everywhere so the dark canvas survives
+// light-mode clients. Fully-expanded numbers for the ONE quantity the press
+// prepared; ONE filled accent button to the private tokenized page; the
+// GoodTunes hook is one static quiet line. Copy rules: real ®, commas in
+// dollars, "estimate" never "quote".
+//
+// Flavors: one shared structure with a swappable accent bundle. GoodTunes
+// blue is the default; a press with manufacturers.email_branding set (MRP:
+// gold #D6A63F with dark button ink) gets its white-label twin. The
+// template never string-matches press names.
+//
+// Later work (flagged in the handoff README, deliberately NOT built): true
+// per-press sending domains (`From: brandon@memphisvinyl.com`) need
+// per-press SPF/DKIM DNS — until then From stays a GoodTunes address with
+// the press contact's display name, and Reply-To carries the contact.
+
+export type PressEstimateEmailAccent = {
+  accent: string;
+  /** Top color of the estimate-total gradient band (accent at ~10% alpha). */
+  tintTop: string;
+  /** Button text ink — white on blue, dark #1d1d1f on light accents like gold. */
+  buttonInk: string;
+};
+
+export const PRESS_ESTIMATE_ACCENT_DEFAULT: PressEstimateEmailAccent = {
+  accent: "#319ED8",
+  tintTop: "rgba(49,158,216,0.10)",
+  buttonInk: "#ffffff",
+};
+
+/** Resolve a press's accent bundle from its email_branding field. Null/empty
+ * = GoodTunes blue. buttonInk defaults from accent luminance (light accents
+ * like MRP gold get dark ink) unless explicitly set. */
+export function resolvePressEstimateAccent(
+  branding: { accent?: string; buttonInk?: string } | null | undefined,
+): PressEstimateEmailAccent {
+  const hex = String(branding?.accent ?? "").trim();
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return PRESS_ESTIMATE_ACCENT_DEFAULT;
+  const accent = `#${m[1]}`;
+  const r = parseInt(m[1].slice(0, 2), 16);
+  const g = parseInt(m[1].slice(2, 4), 16);
+  const b = parseInt(m[1].slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const explicitInk = String(branding?.buttonInk ?? "").trim();
+  const buttonInk = /^#?[0-9a-fA-F]{6}$/.test(explicitInk)
+    ? (explicitInk.startsWith("#") ? explicitInk : `#${explicitInk}`)
+    : luminance > 0.55
+      ? "#1d1d1f"
+      : "#ffffff";
+  return { accent, tintTop: `rgba(${r},${g},${b},0.12)`, buttonInk };
+}
+
+export type PressEstimateEmailBreakdown = {
+  qty: number;
+  unitLines: Array<{ name: string; note?: string; unitDollars: number }>;
+  setupLines: Array<{ name: string; note?: string; dollars: number }>;
+  unitCost: number;
+  setupTotal: number;
+  subtotal: number;
+  total: number;
+};
+
+export type PressEstimateEmailOpts = {
+  clientName: string;
+  clientEmail: string;
+  estimateNo: string;
+  /** Sent date (defaults to now); valid-until renders sent + 30 days. */
+  sentAt?: Date | string | null;
+  preparedBy?: string | null;
+  pressName: string;
+  jobTitle: string;
+  /** Build spec summary line, e.g. `12" · 140g · Ruby translucent · 1 LP`. */
+  specLine?: string | null;
+  linkUrl: string;
+  /** Expanded numbers for the one prepared quantity. Null = the totals card
+   * is omitted (never render wrong or partial numbers). */
+  breakdown?: PressEstimateEmailBreakdown | null;
+  accent?: PressEstimateEmailAccent;
+  /** Footer letterhead line, e.g. "3015 Brother Blvd · Memphis, TN". */
+  pressLocationLine?: string | null;
+  /** Absolute https press logo (non-SVG — clients strip SVG). */
+  pressLogoUrl?: string | null;
+};
+
+const fmtLongDate = (d: Date) =>
+  d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", timeZone: "America/Chicago" });
+const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+const usd2 = (n: number) => `$${n.toFixed(2)}`;
+
+// Palette — canon charcoal, matches the estimate page exactly (handoff).
+const PE_CANVAS = "#111112";
+const PE_CARD = "#1c1c1e";
+const PE_RAISED = "#232326";
+const PE_INK = "#f5f5f7";
+const PE_SUBINK = "#a1a1a6";
+const PE_HAIRLINE = "rgba(255,255,255,0.10)";
+const PE_FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif";
+
+export function buildPressClientEstimateEmail(
+  opts: PressEstimateEmailOpts,
+): { subject: string; html: string; text: string } {
+  const accent = opts.accent ?? PRESS_ESTIMATE_ACCENT_DEFAULT;
+  const sent = opts.sentAt ? new Date(opts.sentAt) : new Date();
+  const sentDate = Number.isFinite(sent.getTime()) ? sent : new Date();
+  const validUntil = new Date(sentDate.getTime() + 30 * 24 * 3600 * 1000);
+  const clientFirst = (opts.clientName.trim().split(/\s+/)[0] || opts.clientName).trim();
+  const preparedBy = (opts.preparedBy ?? "").trim() || null;
+  const preparerFirst = preparedBy ? preparedBy.split(/\s+/)[0] : null;
+  const b = opts.breakdown ?? null;
+
+  const subject = `Your ${opts.jobTitle} estimate from ${opts.pressName}`;
+  const specBits = [opts.specLine, b ? `${b.qty.toLocaleString("en-US")} units` : null, b ? usd(b.total) : null]
+    .filter(Boolean)
+    .join(" · ");
+  const preheader = b
+    ? `${specBits} — open to explore run sizes.`
+    : "Your private estimate is ready — no account needed.";
+
+  const e = escapeHtml;
+  const row = (html: string) => `<tr>${html}</tr>`;
+  // Every cell carries an explicit background-color so dark holds in
+  // light-mode clients (no inherited/transparent backgrounds anywhere).
+  const lineRow = (bg: string, left: string, right: string, padding: string) =>
+    row(
+      `<td style="background-color:${bg};padding:${padding};border-top:1px solid ${PE_HAIRLINE};">` +
+        `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>` +
+        `<td align="left" style="font-family:${PE_FONT};">${left}</td>` +
+        `<td align="right" style="font-family:${PE_FONT};white-space:nowrap;">${right}</td>` +
+        `</tr></table></td>`,
+    );
+
+  let totalsCard = "";
+  if (b) {
+    const unitRows = b.unitLines
+      .map((l) =>
+        lineRow(
+          PE_CARD,
+          `<div style="font-size:12px;color:${PE_INK};font-weight:500;">${e(l.name)}</div>` +
+            (l.note ? `<div style="font-size:11px;color:${PE_SUBINK};margin-top:1px;">${e(l.note)}</div>` : ""),
+          `<span style="font-size:12px;color:${PE_INK};">${usd2(l.unitDollars)} <span style="color:${PE_SUBINK};font-size:10px;">/unit</span></span>`,
+          "9px 16px 9px 28px",
+        ),
+      )
+      .join("");
+    const setupRows = b.setupLines
+      .map((l) =>
+        lineRow(
+          PE_CARD,
+          `<div style="font-size:11px;color:${PE_SUBINK};">${e(l.name)}</div>` +
+            (l.note ? `<div style="font-size:10px;color:${PE_SUBINK};margin-top:1px;">${e(l.note)}</div>` : ""),
+          `<span style="font-size:11px;color:${PE_SUBINK};">${l.dollars === 0 ? "Included" : usd(l.dollars)}</span>`,
+          "7px 16px 7px 28px",
+        ),
+      )
+      .join("");
+    totalsCard = `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:30px;border:1px solid ${PE_HAIRLINE};border-radius:14px;border-collapse:separate;overflow:hidden;background-color:${PE_CARD};">
+        ${row(
+          `<td style="background-color:${PE_RAISED};padding:12px 16px;">` +
+            `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>` +
+            `<td align="left" style="font-family:${PE_FONT};"><div style="font-size:13px;font-weight:600;color:${PE_INK};">Per record</div>` +
+            `<div style="font-size:11px;color:${PE_SUBINK};margin-top:1px;">This exact build, at ${b.qty.toLocaleString("en-US")} units</div></td>` +
+            `<td align="right" style="font-family:${PE_FONT};font-size:13px;color:${PE_INK};white-space:nowrap;">${usd2(b.unitCost)}</td>` +
+            `</tr></table></td>`,
+        )}
+        ${unitRows}
+        ${lineRow(
+          PE_RAISED,
+          `<div style="font-size:12px;font-weight:600;color:${PE_INK};">Setup costs</div>` +
+            `<div style="font-size:11px;color:${PE_SUBINK};margin-top:1px;">One-time · same at any run size</div>`,
+          `<span style="font-size:12px;color:${PE_INK};">${usd(b.setupTotal)}</span>`,
+          "10px 16px",
+        )}
+        ${setupRows}
+        ${lineRow(
+          PE_CARD,
+          `<div style="font-size:13px;font-weight:600;color:${PE_INK};">Run</div>` +
+            `<div style="font-size:11px;color:${PE_SUBINK};margin-top:1px;">Pressed and packed</div>`,
+          `<span style="font-size:13px;color:${PE_INK};">${b.qty.toLocaleString("en-US")} units · ${usd(b.subtotal)}</span>`,
+          "11px 16px",
+        )}
+        ${row(
+          `<td style="background-color:${PE_CARD};background-image:linear-gradient(180deg, ${accent.tintTop} 0%, ${PE_CARD} 100%);padding:16px;border-top:1px solid ${PE_HAIRLINE};">` +
+            `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>` +
+            `<td align="left" style="font-family:${PE_FONT};"><div style="font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${accent.accent};">Estimate total</div>` +
+            `<div style="font-size:11px;color:${PE_SUBINK};margin-top:2px;">If ${e(clientFirst)} presses the full run</div></td>` +
+            `<td align="right" style="font-family:${PE_FONT};font-size:28px;font-weight:700;letter-spacing:-0.6px;color:${PE_INK};white-space:nowrap;">${usd(b.total)}</td>` +
+            `</tr></table></td>`,
+        )}
+      </table>`;
+  }
+
+  const preparedForLine = [opts.jobTitle, opts.specLine].filter(Boolean).map(String).join(" — ");
+  const logoImg =
+    opts.pressLogoUrl && /^https:\/\//i.test(opts.pressLogoUrl) && !/\.svg(\?|$)/i.test(opts.pressLogoUrl)
+      ? `<img src="${opts.pressLogoUrl}" alt="${e(opts.pressName)}" width="34" height="34" style="display:inline-block;width:34px;height:34px;border:0;border-radius:8px;" /><br />`
+      : "";
+
+  const html = `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="color-scheme" content="dark" /><meta name="supported-color-schemes" content="dark" /></head>
+<body style="margin:0;padding:0;background-color:#0a0a0b;">
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${e(preheader)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0a0b" style="background-color:#0a0a0b;">
+    <tr><td align="center" style="padding:32px 12px 56px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background-color:${PE_CANVAS};border:1px solid ${PE_HAIRLINE};border-radius:18px;border-collapse:separate;overflow:hidden;">
+        <tr><td style="background-color:${PE_CANVAS};padding:36px 36px 40px;font-family:${PE_FONT};">
+
+          <div style="text-align:right;font-size:11px;color:${PE_SUBINK};line-height:1.7;">
+            <div>Estimate <span style="color:${PE_INK};font-weight:600;">${e(opts.estimateNo)}</span></div>
+            <div>${e(fmtLongDate(sentDate))}</div>
+            <div>Valid until <span style="color:${PE_INK};">${e(fmtLongDate(validUntil))}</span></div>
+          </div>
+
+          <div style="margin-top:26px;">
+            <div style="font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:${PE_SUBINK};">Prepared for</div>
+            <div style="font-size:24px;font-weight:700;letter-spacing:-0.4px;color:${PE_INK};margin-top:4px;">${e(opts.clientName)}</div>
+            <div style="font-size:12px;color:${PE_SUBINK};margin-top:5px;">${e(preparedForLine)}${preparedBy ? ` · Prepared by ${e(preparedBy)}` : ""}</div>
+          </div>
+
+          ${totalsCard}
+
+          <div style="margin-top:12px;font-size:12px;color:${PE_SUBINK};text-align:center;">
+            Thinking bigger or smaller? The estimate page prices every run size from 100 to 3,000 live.
+          </div>
+
+          <div style="margin-top:26px;text-align:center;">
+            ${bulletproofButton(opts.linkUrl, "Open your estimate", { bgColor: accent.accent, textColor: accent.buttonInk, paddingV: 13, paddingH: 34, borderRadius: 999, fontSize: 14 })}
+            <div style="margin-top:10px;font-size:11px;color:${PE_SUBINK};">Private link, just for you — no account needed.</div>
+          </div>
+
+          <div style="margin-top:22px;text-align:center;font-size:13px;">
+            <span style="color:${PE_SUBINK};">Get this for $0 out of pocket. </span><a href="${opts.linkUrl}" style="color:${accent.accent};text-decoration:none;">Learn more →</a>
+          </div>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:30px;border:1px solid ${PE_HAIRLINE};border-radius:14px;border-collapse:separate;background-color:${PE_CARD};">
+            <tr><td style="background-color:${PE_CARD};padding:14px 16px;font-family:${PE_FONT};font-size:12px;color:${PE_SUBINK};line-height:1.55;border-radius:14px;">
+              <span style="color:${PE_INK};font-weight:600;">Questions? Just reply.</span>
+              Replies go straight to ${preparerFirst ? `${e(preparerFirst)} at ${e(opts.pressName)}` : e(opts.pressName)}.
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td align="center" style="background-color:${PE_CARD};padding:24px 36px 30px;border-top:1px solid ${PE_HAIRLINE};font-family:${PE_FONT};text-align:center;">
+          ${logoImg}
+          <div style="font-size:12px;font-weight:600;color:${PE_INK};margin-top:8px;">${e(opts.pressName)}</div>
+          ${opts.pressLocationLine ? `<div style="font-size:11px;color:${PE_SUBINK};margin-top:2px;">${e(opts.pressLocationLine)}</div>` : ""}
+          <div style="font-size:11px;color:${PE_SUBINK};line-height:1.7;margin-top:14px;">
+            <p style="margin:0;">All orders are subject to +/- 10% and billed accordingly.</p>
+            <p style="margin:2px 0 0;">Listed prices may change per final order specifications.</p>
+            <p style="margin:2px 0 0;">This estimate is valid for 30 days.</p>
+          </div>
+          <div aria-hidden style="height:1px;background-color:${PE_HAIRLINE};margin-top:18px;"></div>
+          <div style="font-size:10px;color:${PE_SUBINK};margin-top:14px;">
+            Sent by GoodTunes® on behalf of ${e(opts.pressName)} · This email was sent to ${e(opts.clientEmail)} because ${preparerFirst ? e(preparerFirst) : e(opts.pressName)} prepared an estimate for you.
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+
+  const textLines: string[] = [
+    `Estimate ${opts.estimateNo} · ${fmtLongDate(sentDate)} · Valid until ${fmtLongDate(validUntil)}`,
     ``,
-    `View it here (private link, no account needed):`,
-    linkUrl,
-  ].join("\n");
-  const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; color: #1a1a1a;">
-      ${emailLogoImg("color")}
-      <p style="font-size: 16px; line-height: 1.6; margin: 20px 0 28px;">
-        <strong>${escapeHtml(senderFirst)}</strong> at ${escapeHtml(pressName)} sent you an estimate for <strong>${escapeHtml(jobTitle)}</strong>.
-      </p>
-      ${bulletproofButton(linkUrl, "View estimate", { bgColor: "#319ED8", paddingV: 13, paddingH: 26, borderRadius: 999 })}
-      <p style="font-size: 12.5px; color: #888; line-height: 1.55; margin: 26px 0 0;">
-        This is a private link — no account needed to view.
-      </p>
-    </div>
-  `;
-  return sendViaResend("press-estimate-send", toEmail, subject, html, text);
+    `Prepared for ${opts.clientName}`,
+    preparedForLine + (preparedBy ? ` · Prepared by ${preparedBy}` : ""),
+    ``,
+  ];
+  if (b) {
+    textLines.push(`Per record — this exact build, at ${b.qty.toLocaleString("en-US")} units: ${usd2(b.unitCost)}`);
+    for (const l of b.unitLines) textLines.push(`  ${l.name}: ${usd2(l.unitDollars)} /unit${l.note ? ` (${l.note})` : ""}`);
+    textLines.push(`Setup costs — one-time, same at any run size: ${usd(b.setupTotal)}`);
+    for (const l of b.setupLines) textLines.push(`  ${l.name}: ${l.dollars === 0 ? "Included" : usd(l.dollars)}`);
+    textLines.push(`Run — pressed and packed: ${b.qty.toLocaleString("en-US")} units · ${usd(b.subtotal)}`);
+    textLines.push(`Estimate total: ${usd(b.total)}`);
+    textLines.push(``);
+  }
+  textLines.push(
+    `Thinking bigger or smaller? The estimate page prices every run size from 100 to 3,000 live.`,
+    ``,
+    `Open your estimate (private link, just for you — no account needed):`,
+    opts.linkUrl,
+    ``,
+    `Get this for $0 out of pocket: ${opts.linkUrl}`,
+    ``,
+    `Questions? Just reply. Replies go straight to ${preparerFirst ? `${preparerFirst} at ${opts.pressName}` : opts.pressName}.`,
+    ``,
+    `All orders are subject to +/- 10% and billed accordingly.`,
+    `Listed prices may change per final order specifications.`,
+    `This estimate is valid for 30 days.`,
+    ``,
+    `Sent by GoodTunes® on behalf of ${opts.pressName}`,
+  );
+
+  return { subject, html, text: textLines.join("\n") };
+}
+
+// Send wrapper — From stays a GoodTunes address (per-press sending domains
+// are flagged later work) with the preparing contact's display name
+// ("<contact> · via GoodTunes®"); Reply-To carries the contact so "Just
+// reply" reaches the human who prepared the estimate.
+export async function sendPressClientEstimateEmail(
+  toEmail: string,
+  opts: PressEstimateEmailOpts & { replyToEmail?: string | null; fromDisplayName?: string | null },
+): Promise<SendResult> {
+  const { subject, html, text } = buildPressClientEstimateEmail(opts);
+  return sendViaResend("press-estimate-send", toEmail, subject, html, text, opts.replyToEmail ?? null, opts.fromDisplayName ?? null);
 }
 
 // Task #2921 — neutral one-tap sign-in link for fans who are NOT legacy

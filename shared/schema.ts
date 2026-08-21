@@ -5001,6 +5001,12 @@ export const manufacturers = pgTable("manufacturers", {
   // labelBgColor (or a neutral default when that's null too).
   labelLogoUrl: text("label_logo_url"),
   labelBgColor: text("label_bg_color"),
+  // Task #3271 (handoff/press-client-estimate-email) — per-press accent
+  // bundle for the white-label client estimate email. Null = GoodTunes blue
+  // default; MRP seeded gold {accent:"#D6A63F", buttonInk:"#1d1d1f"}. The
+  // email template never string-matches press names — this field is the
+  // ONLY flavor switch, so future per-press twins are additive data.
+  emailBranding: jsonb("email_branding").$type<{ accent?: string; buttonInk?: string }>(),
   // handoff/cd-cassette-catalog — per-press CD and cassette catalogs. CD and
   // cassette have a FIXED product structure (CD: case → print → booklet →
   // run pricing; cassette: case → shell → imprint → run pricing), so unlike

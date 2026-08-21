@@ -7,3 +7,8 @@ Rule: any client "send" flow saves configuration WITHOUT flipping status, then o
 **How to apply:** any new send/share/invite loop (estimates, invites, notifications) — status transition lives server-side only; zero-delivery is an error state in the UI.
 
 Related documented staging posture: the PUBLIC estimate page (/e/:token) Ask/Send/Start sheets are intentionally front-end-local pending Ruby's persistence decision (logged in docs/STATUS.md) — don't "fix" them without her call.
+
+## Client estimate email (Task era Aug 2026)
+- The designed estimate email (handoff/press-client-estimate-email, e86b169) is built by the pure exported `buildPressClientEstimateEmail` in server/mail.ts; flavor = accent bundle resolved from `manufacturers.email_branding` jsonb via `resolvePressEstimateAccent` (null = GoodTunes blue; MRP seeded gold #D6A63F w/ dark button ink, seeded BY DOMAIN not name). Never string-match press names in the template.
+- Expanded numbers come from `computeQuoteEmailBreakdown` (shared/quotePricing.ts) — stored builderState + press's CURRENT pricing rows; returns null (email omits the totals card) rather than partial numbers.
+- `sendViaResend` now takes an optional 7th `fromDisplayName` arg — display name over the SAME MAIL_FROM address ("<contact> · via GoodTunes®"); Reply-To = preparing contact. True per-press sending domains (SPF/DKIM) are flagged later work.

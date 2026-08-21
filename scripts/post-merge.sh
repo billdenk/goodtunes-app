@@ -12793,3 +12793,11 @@ SQL
 }
 migrate_redemption_email_hold dev  "${DATABASE_URL:-}"
 migrate_redemption_email_hold prod "${PROD_DATABASE_URL:-}"
+
+# Task #3271 (handoff/press-client-estimate-email e86b169) — per-press accent
+# bundle for the white-label client estimate email. Null = GoodTunes blue.
+# MRP seeded gold with dark button ink, keyed by DOMAIN (never ILIKE-first-row
+# by name — decoy-row trap), and only while still NULL so an operator edit
+# is never overwritten.
+run_sql_both "alter table if exists manufacturers add column if not exists email_branding jsonb" || true
+run_sql_both "update manufacturers set email_branding = '{\"accent\":\"#D6A63F\",\"buttonInk\":\"#1d1d1f\"}'::jsonb where email_branding is null and website_url ilike '%memphisrecordpressing.com%'" || true

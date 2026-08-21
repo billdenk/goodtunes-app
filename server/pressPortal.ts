@@ -15,7 +15,7 @@
 
 import type { Express, Request, Response } from "express";
 import crypto from "crypto";
-import { sendPressEstimateEmail } from "./mail";
+import { sendPressClientEstimateEmail, resolvePressEstimateAccent } from "./mail";
 import { and, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { z } from "zod";
 import * as dnsLookup from "dns/promises";
@@ -34,7 +34,7 @@ import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./ea
 import { sqlPersonIdByContactEmail } from "./partnerInvites";
 import { hasArtistShape } from "./lib/personArtistShape";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
-import { computeQuotePendingIds, invalidQuoteBuilderState } from "@shared/quotePricing";
+import { computeQuotePendingIds, invalidQuoteBuilderState, computeQuoteEmailBreakdown } from "@shared/quotePricing";
 import { registerPressTemplateFlowRoutes } from "./pressTemplatesPortal";
 import { registerPressComponentRoutes } from "./pressComponents";
 
@@ -2320,8 +2320,26 @@ export function registerPressPortalRoutes(
   // Every estimates route resolves the press first — requirePressScope lets
   // super-admins through for ANY id, so without this a typo'd/nonexistent
   // press id would read empty lists or mint orphan rows.
-  async function resolvePress(pressId: string): Promise<{ name: string } | null> {
-    const rows = await db.select({ name: manufacturers.name }).from(manufacturers).where(eq(manufacturers.id, pressId)).limit(1);
+  async function resolvePress(pressId: string): Promise<{
+    name: string;
+    contactEmail: string | null;
+    location: string | null;
+    websiteUrl: string | null;
+    logoUrl: string | null;
+    emailBranding: { accent?: string; buttonInk?: string } | null;
+  } | null> {
+    const rows = await db
+      .select({
+        name: manufacturers.name,
+        contactEmail: manufacturers.contactEmail,
+        location: manufacturers.location,
+        websiteUrl: manufacturers.websiteUrl,
+        logoUrl: manufacturers.logoUrl,
+        emailBranding: manufacturers.emailBranding,
+      })
+      .from(manufacturers)
+      .where(eq(manufacturers.id, pressId))
+      .limit(1);
     return rows[0] ?? null;
   }
 
@@ -2540,6 +2558,64 @@ export function registerPressPortalRoutes(
 
     const payload = (row.payload ?? {}) as Record<string, any>;
 
+    // The preparing contact — resolved up-front so BOTH the first send and
+    // a resend can address the email honestly. From stays a GoodTunes
+    // address with "<contact> · via GoodTunes®" as the display name;
+    // Reply-To carries the contact's real email so "Just reply" reaches
+    // them (falls back to the press contact email, then the platform
+    // default). True per-press sending domains are flagged later work.
+    const callerId = ((req as any).adminUserId as string | undefined) ?? req.session?.userId;
+    let senderName = "";
+    let senderEmail: string | null = null;
+    if (callerId) {
+      const u = await db.execute<any>(sql`SELECT display_name AS name, email FROM users WHERE id = ${callerId} LIMIT 1`);
+      const uRow = ((u as any).rows ?? [])[0];
+      senderName = String(uRow?.name ?? uRow?.email ?? "").trim();
+      const em = String(uRow?.email ?? "").trim();
+      senderEmail = em.includes("@") ? em : null;
+    }
+    const replyToEmail = senderEmail ?? (press.contactEmail && press.contactEmail.includes("@") ? press.contactEmail : null);
+    const accent = resolvePressEstimateAccent(press.emailBranding);
+    const pressDomain = String(press.websiteUrl ?? "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim();
+    const pressLocationLine = [press.location, pressDomain].filter(Boolean).join(" · ") || null;
+    const pressLogoUrl = press.logoUrl && /^https:\/\//i.test(press.logoUrl) ? press.logoUrl : null;
+
+    // Fully-expanded numbers for the ONE prepared quantity — recomputed from
+    // the stored builder state + the press's CURRENT pricing rows (same
+    // source the /send gate trusts). Null (legacy/unverifiable state) omits
+    // the totals card rather than rendering wrong or partial numbers.
+    const composeEstimateEmail = async (
+      freshRow: typeof row,
+      freshPayload: Record<string, any>,
+      linkUrl: string,
+      recipient: { name: string; email: string },
+      preparedByName: string | null,
+    ) => {
+      const { loadPressComponents } = await import("./pressComponents");
+      const configs = await loadPressComponents(pressId);
+      const breakdown = computeQuoteEmailBreakdown(freshPayload.builderState ?? null, configs.pricing?.rows ?? []);
+      const jobTitle = String(freshRow.title ?? "your record").trim() || "your record";
+      const clientName = String(freshPayload.clientName ?? recipient.name ?? "").trim() || recipient.email;
+      const preparedBy = preparedByName || (typeof freshPayload.preparedBy === "string" ? freshPayload.preparedBy : null);
+      return {
+        clientName,
+        clientEmail: recipient.email,
+        estimateNo: String(freshRow.displayId ?? "").trim() || jobTitle,
+        sentAt: freshPayload.sentAt ?? null,
+        preparedBy,
+        pressName: press.name,
+        jobTitle,
+        specLine: typeof freshPayload.build === "string" && freshPayload.build.trim() ? freshPayload.build.trim() : null,
+        linkUrl,
+        breakdown,
+        accent,
+        pressLocationLine,
+        pressLogoUrl,
+        replyToEmail,
+        fromDisplayName: `${(preparedBy || press.name).trim()} · via GoodTunes®`,
+      };
+    };
+
     // Send is one-way and a sent estimate is immutable: calling /send again on
     // a Sent/Viewed/… row is a RESEND — it re-emails the already-minted link
     // and never touches status or payload (a re-send must not regress Viewed
@@ -2551,10 +2627,9 @@ export function registerPressPortalRoutes(
       const proto0 = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https";
       const host0 = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
       const linkUrl0 = `${proto0}://${host0}/e/${existingToken}`;
-      const jobTitle0 = String(freshRow.title ?? "your record").trim() || "your record";
       const recipients0 = body.data.recipients.map((r) => ({ name: r.name, email: r.email }));
       const results0 = await Promise.all(
-        recipients0.map((r) => sendPressEstimateEmail(r.email, { senderFirst: press.name, pressName: press.name, jobTitle: jobTitle0, linkUrl: linkUrl0 })),
+        recipients0.map(async (r) => sendPressClientEstimateEmail(r.email, await composeEstimateEmail(freshRow, freshPayload, linkUrl0, r, null))),
       );
       const sentCount0 = results0.filter((r) => r.ok).length;
       return res.json({ row: freshRow, shareToken: existingToken, linkUrl: linkUrl0, sentCount: sentCount0, attempted: recipients0.length, resend: true });
@@ -2599,15 +2674,9 @@ export function registerPressPortalRoutes(
         ? { ...payload.builderState, clientName: body.data.artistName }
         : payload.builderState,
     };
-    // Sender ("Prepared by") is resolved BEFORE the one-way claim so the
-    // claim is the ONLY write that ever touches a Sent payload.
-    const callerId = ((req as any).adminUserId as string | undefined) ?? req.session?.userId;
-    let senderName = "";
-    if (callerId) {
-      const u = await db.execute<any>(sql`SELECT display_name AS name, email FROM users WHERE id = ${callerId} LIMIT 1`);
-      const uRow = ((u as any).rows ?? [])[0];
-      senderName = String(uRow?.name ?? uRow?.email ?? "").trim();
-    }
+    // Sender ("Prepared by") was resolved up-top (with their reply-to email)
+    // BEFORE the one-way claim so the claim is the ONLY write that ever
+    // touches a Sent payload.
     if (senderName) nextPayload.preparedBy = senderName;
     // Atomic one-way claim: only a row still in Draft can be transitioned.
     // If a concurrent /send won the race, we lose the claim, reload the row
@@ -2634,13 +2703,10 @@ export function registerPressPortalRoutes(
     const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
     const linkUrl = `${proto}://${host}/e/${shareToken}`;
 
-    const senderFirst = senderName ? senderName.split(/[\s@]/)[0] : press.name;
-    const jobTitle = String(row.title ?? "your record").trim() || "your record";
-
     // Best-effort mail — a transport failure must not lose the Sent state,
     // but the caller needs to know (mail.ts records failures for ops).
     const results = await Promise.all(
-      sentTo.map((r) => sendPressEstimateEmail(r.email, { senderFirst, pressName: press.name, jobTitle, linkUrl })),
+      sentTo.map(async (r) => sendPressClientEstimateEmail(r.email, await composeEstimateEmail(updated, nextPayload, linkUrl, r, senderName || null))),
     );
     const sentCount = results.filter((r) => r.ok).length;
     res.json({ row: updated, shareToken, linkUrl, sentCount, attempted: sentTo.length });
