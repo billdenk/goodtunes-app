@@ -2895,38 +2895,31 @@ export function registerPressPortalRoutes(
       set.doesFulfillment = nextFulfillment;
     }
     if (Object.keys(set).length === 0) return res.json({ ok: true });
-    await db.update(manufacturers).set(set).where(eq(manufacturers.id, pressId));
-    // When a logo was uploaded via the signed-PUT flow the browser wrote the
-    // file directly to GCS without setting an ACL. The /objects/uploads/:id
-    // serving route requires visibility="public" so we set it here, after
-    // persisting the URL, using best-effort (never fail the save on ACL error).
-    const logoUrlsToPublish = [
+    // Task #3254 — a logo uploaded via the signed-PUT flow lands in GCS with
+    // NO ACL, and /objects/uploads/:id refuses anything not explicitly
+    // public. Publish + VERIFY the ACL BEFORE persisting the URL; if
+    // publication fails, fail the save so a broken URL is never stored.
+    // Pasted absolute external URLs pass through untouched.
+    const { collectUploadObjectUrls, publishUploadObjectsOrThrow, LogoAclPublishError } =
+      await import("./logoAclPublish");
+    const logoUrlsToPublish = collectUploadObjectUrls([
       set.logoUrl, set.navLogoUrl,
       set.lightLogoUrl, set.lightNavLogoUrl,
       set.squareLogoUrl, set.lightSquareLogoUrl,
-    ].filter(
-      (u): u is string => typeof u === "string" && u.startsWith("/objects/uploads/"),
-    );
+    ]);
     if (logoUrlsToPublish.length > 0) {
       try {
-        const { ObjectStorageService, setObjectAclPolicy } = await import(
-          "./replit_integrations/object_storage/objectStorage"
-        );
-        const oss = new ObjectStorageService();
-        await Promise.all(
-          logoUrlsToPublish.map(async (url) => {
-            try {
-              const file = await oss.getObjectEntityFile(url);
-              await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
-            } catch (e) {
-              console.error("[press-logo-acl] failed to set ACL on", url, e);
-            }
-          }),
-        );
+        await publishUploadObjectsOrThrow(logoUrlsToPublish);
       } catch (e) {
-        console.error("[press-logo-acl] import failed", e);
+        console.error("[press-logo-acl] refusing to persist unpublished logo", e);
+        return res.status(e instanceof LogoAclPublishError ? 422 : 502).json({
+          message: e instanceof LogoAclPublishError
+            ? e.message
+            : "Couldn't publish the uploaded logo — try again in a moment.",
+        });
       }
     }
+    await db.update(manufacturers).set(set).where(eq(manufacturers.id, pressId));
     res.json({ ok: true });
   });
 

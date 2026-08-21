@@ -20107,6 +20107,30 @@ export async function registerRoutes(
       if (b.doesGoodDeed !== undefined) u.doesGoodDeed = nextGoodDeed;
       if (b.doesFulfillment !== undefined) u.doesFulfillment = nextFulfillment;
     }
+    // Task #3254 — same publish-on-save ACL handling as the press-portal
+    // profile PATCH: any `/objects/uploads/...` image URL being persisted
+    // must be publicly readable BEFORE we store it, or god-view Details
+    // edits persist private objects that /objects/uploads/:id 404s. Pasted
+    // absolute external URLs are untouched.
+    {
+      const { collectUploadObjectUrls, publishUploadObjectsOrThrow, LogoAclPublishError } =
+        await import("./logoAclPublish");
+      const toPublish = collectUploadObjectUrls([
+        u.logoUrl, u.identityIconUrl, u.coverUrl, u.vinylPlaceholderUrl,
+      ]);
+      if (toPublish.length > 0) {
+        try {
+          await publishUploadObjectsOrThrow(toPublish);
+        } catch (e) {
+          console.error("[press-logo-acl] refusing to persist unpublished image", e);
+          return res.status(e instanceof LogoAclPublishError ? 422 : 502).json({
+            message: e instanceof LogoAclPublishError
+              ? e.message
+              : "Couldn't publish the uploaded image — try again in a moment.",
+          });
+        }
+      }
+    }
     const m = await storage.updateManufacturer(String(req.params.id), u);
     if (!m) return res.status(404).json({ message: "Manufacturer not found" });
     // Task #2237 — if the master logo actually changed, migrate albums still

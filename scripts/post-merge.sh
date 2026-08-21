@@ -12731,3 +12731,29 @@ run_sql_both "create unique index if not exists people_spotify_url_active_uniq o
 
 # Task #3248 — per-format UPC on album SKUs (idempotent, dev + prod).
 run_sql_both "alter table if exists album_skus add column if not exists upc text" || true
+
+# Task #3254 — one-shot: set the public ACL on every object referenced by a
+# manufacturer logo/image column (press profile logos uploaded via signed-PUT
+# landed with no ACL, so /objects/uploads/:id 404s them). Marker-guarded
+# inside the script (press_logo_acl_backfill_v1) per DB; the bucket is shared
+# dev+prod so the ACL sets themselves are idempotent either way. Missing
+# objects logged, never fatal; an ACL-set FAILURE withholds the marker so the
+# next merge retries. Runs OUTSIDE the migration-suite fingerprint block on
+# purpose: cheap after the marker lands, and must not be skippable.
+backfill_press_logo_acls() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press-logo ACL backfill on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/backfill-press-logo-acls.ts 2>&1); then
+    echo "post-merge: press-logo ACL backfill ok on $label"
+    echo "$out" | tail -4
+  else
+    echo "post-merge: WARNING — press-logo ACL backfill failed on $label (continuing; marker withheld so next merge retries)"
+    echo "$out" | tail -10
+  fi
+}
+backfill_press_logo_acls dev  "${DATABASE_URL:-}"
+backfill_press_logo_acls prod "${PROD_DATABASE_URL:-}"
