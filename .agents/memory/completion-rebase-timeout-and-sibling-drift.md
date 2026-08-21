@@ -1,0 +1,9 @@
+---
+name: Completion validation vs sibling merges
+description: markTaskComplete rebase TIMEOUTs self-heal via continueMergeResolution; sibling task merges break validation via un-run dev-DB migrations.
+---
+**Rule:** When markTaskComplete errors with a git-status "Rebase onto the main repl failed (TIMEOUT)", just call `continueMergeResolution({})` — it usually reports "completed cleanly" — then retry markTaskComplete. Don't debug git.
+
+**Why:** The pre-rebase status probe times out on large worktrees; the rebase itself succeeds. Seen repeatedly Aug 2026.
+
+**How to apply:** Also expect each SIBLING task merge during your completion loop to re-fail validation with dev-DB schema drift or NOT-NULL test failures: the merged task's post-merge migrations exist in scripts/post-merge.sh but never ran in YOUR task env. Find the sibling's migration block there and run its SQL against dev (`$DATABASE_URL`) by hand, re-run the one failing test file, retry completion.

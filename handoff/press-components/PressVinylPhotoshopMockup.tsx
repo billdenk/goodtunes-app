@@ -1,3 +1,5 @@
+// HANDOFF COPY — self-contained verbatim-replacement screen for the real GoodTunes app.
+// Compiles alone: only react, lucide-react, @radix-ui/react-popover, and local ./assets/* imports.
 // PressVinylPhotoshopMockup — a PRESS-facing "Add your vinyl" tool where a record
 // pressing plant defines the vinyl COLORS they can press. Copy-then-rework of
 // ArtistProjectPackageConfigurator.tsx (donor, untouched), now mirroring the
@@ -15,7 +17,7 @@
 // the screen is the "Save color" button inside the add-swatch popover. Press
 // persona is light (charcoal is admin-only). Self-contained, inline mock data.
 
-import { useMemo, useState, useEffect, useRef, useCallback, useId, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback, useId, forwardRef, type ReactNode } from 'react';
 import {
   UserPlus,
   Search,
@@ -31,6 +33,7 @@ import {
   ShieldCheck,
   LogOut,
   Check,
+  Pipette,
   UploadCloud,
   Plus,
   MoreHorizontal,
@@ -47,46 +50,81 @@ import {
   Star,
   Copy,
   Image as ImageIcon,
-  Pipette,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Moon, Sun, ClipboardList as NavEstimatesIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from '@/components/ui/popover';
-import { createContext, useContext } from 'react';
-import { useAdminDark } from '@/lib/adminAppearance';
-import { postAdminImage } from '@/lib/adminUpload';
-import { resolvePressMarkLogo, type PressComponentsPayload } from './usePressComponents';
-import { WhiteMarkGlyph } from './PressMarkGlyph';
-import { canApplyPhotoSuggestion } from './photoSuggestionGuard';
-import type { VinylComponentConfig, OfferOption } from '@shared/pressComponents';
+import * as PopoverPrimitive from '@radix-ui/react-popover';
 
-// ── Per-press label branding (data) ──────────────────────────────────
-// Each press supplies a center-label mark (assumed to read white via the
-// WhiteMarkGlyph mask) against a black label. When missing, render nothing —
-// never another press's mark. Threaded via context so the verbatim handoff
-// render tree doesn't need brand props at every DiscLabelArt call site.
-const PRESS_LABEL_BG = '#0a0a0a';
-const LabelBrandCtx = createContext<{ logoUrl: string | null; bgColor: string | null }>({
-  logoUrl: null,
-  bgColor: null,
+// ─── Inline chrome primitives (verbatim replacements) ────────────────
+// Self-contained stand-ins so this handoff compiles alone: a minimal Button
+// and thin Popover wrappers over @radix-ui/react-popover. In the real app,
+// swap these for the shared design-system <Button>/<Popover> — the props and
+// rendered classes match the variants this screen uses.
+function cnLocal(...parts: Array<string | false | null | undefined>): string {
+  return parts.filter(Boolean).join(' ');
+}
+
+type InlineButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'default' | 'ghost';
+  size?: 'default' | 'sm';
+};
+const Button = forwardRef<HTMLButtonElement, InlineButtonProps>(function Button(
+  { className, variant = 'default', size = 'default', ...props },
+  ref,
+) {
+  const base =
+    'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 hover-elevate active-elevate-2';
+  const variantCls =
+    variant === 'ghost'
+      ? 'border border-transparent'
+      : 'bg-primary text-primary-foreground border border-primary-border';
+  const sizeCls = size === 'sm' ? 'min-h-8 rounded-md px-3 text-xs' : 'min-h-9 px-4 py-2';
+  return <button ref={ref} className={cnLocal(base, variantCls, sizeCls, className)} {...props} />;
 });
 
-function useLabelBg(): string {
-  const { bgColor } = useContext(LabelBrandCtx);
-  return bgColor || PRESS_LABEL_BG;
-}
-async function uploadPreviewImageFile(file: File): Promise<string | null> {
-  try {
-    const { url } = await postAdminImage(file, { mask: 'disc', noun: 'swatch' });
-    return url;
-  } catch {
-    return null;
-  }
-}
+const Popover = PopoverPrimitive.Root;
+const PopoverTrigger = PopoverPrimitive.Trigger;
+const PopoverContent = forwardRef<
+  React.ElementRef<typeof PopoverPrimitive.Content>,
+  React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
+>(function PopoverContent({ className, align = 'center', sideOffset = 4, ...props }, ref) {
+  return (
+    <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Content
+        ref={ref}
+        align={align}
+        sideOffset={sideOffset}
+        className={cnLocal(
+          'z-50 w-72 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 origin-[--radix-popover-content-transform-origin]',
+          className,
+        )}
+        {...props}
+      />
+    </PopoverPrimitive.Portal>
+  );
+});
+import goodtunesLogo from './assets/goodtunes-logo.png';
+import mrpLogo from './assets/mrp-logo.png';
+// MRP's real logo mark (black, single-color vector) for the record label.
+import mrpLabelLogo from './assets/mrp-logo.svg';
+
+// ── Per-press label branding ─────────────────────────────────────────
+// Each press supplies a center-label logo (SVG preferred) + a label
+// background color. The mockup hardcodes Memphis Record Pressing's brand:
+// a BLACK label with their WHITE logo, always — regardless of vinyl color
+// (matches their real pressings). Future presses would swap these two inputs.
+const PRESS_LABEL_LOGO = mrpLabelLogo;
+const PRESS_LABEL_BG = '#0a0a0a';
+// The supplied asset is black, so invert it to white for the black label.
+const PRESS_LABEL_LOGO_FILTER = 'invert(1) brightness(1.7)';
+import brandonPhoto from './assets/brandon-seavers.png';
+// Mock-only reference image for the "PREVIEW IMAGE" upload rows — a round
+// artwork disc stands in for a press-supplied swatch photo. No real upload.
+import mockPreviewImg from './assets/gt-preview-artwork-circle.png';
+// Andrew's real MRP test discs (Aug 21 2026) — photo colors for the
+// match-from-photo work in the rebuild sheet.
+import mrpDiscGold from './assets/mrp-disc-hb01-metallic-gold.png';
+import mrpDiscAmerica from './assets/mrp-disc-md25-america.png';
+import mrpDiscSangria from './assets/mrp-disc-mb16-sangria.png';
 
 // ─── Theme tokens — light (default) + dark (charcoal admin canon) ────
 // The whole page (shell chrome, cards, popovers) reads from THEMES[mode].
@@ -211,13 +249,13 @@ function cn(...parts: Array<string | false | null | undefined>): string {
 
 // ─── Vinyl layer kit (from SplatterVinylPreview) ─────────────────────
 const LAYERS = {
-  opaque: '/vinyl-layers/opaque-vinyl.png',
-  translucent: '/vinyl-layers/translucent-vinyl.png',
-  splatter1: '/vinyl-layers/splatter-one.png',
-  splatter2: '/vinyl-layers/splatter-two.png',
-  splatter3: '/vinyl-layers/splatter-three.png',
-  highlights: '/vinyl-layers/vinyl-highlights.png',
-  inner: '/vinyl-layers/inner-circle.png',
+  opaque: '/__mockup/vinyl-layers/opaque-vinyl.png',
+  translucent: '/__mockup/vinyl-layers/translucent-vinyl.png',
+  splatter1: '/__mockup/vinyl-layers/splatter-one.png',
+  splatter2: '/__mockup/vinyl-layers/splatter-two.png',
+  splatter3: '/__mockup/vinyl-layers/splatter-three.png',
+  highlights: '/__mockup/vinyl-layers/vinyl-highlights.png',
+  inner: '/__mockup/vinyl-layers/inner-circle.png',
 };
 
 type CategoryId = string;
@@ -304,28 +342,28 @@ const SPLATTER_PRESETS: Array<{ label: string; vinylType: 'opaque' | 'translucen
 // spin read on every color. The black asset is inverted to white for the
 // black label. Fixed shine layer (elsewhere) never rotates.
 function DiscLabelArt({ size }: { size: number }) {
-  const { logoUrl: brandLogoUrl } = useContext(LabelBrandCtx);
   // `size` is the label diameter. The full logo (SVG) stays crisp at any size
   // and reads as a tiny brand dot on the small thumbnails. The subordinate
   // catalog arc text would be mush when small, so it only shows on large labels.
   const showArcText = size >= 70;
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
-      {brandLogoUrl && (
-        // Black label face — the mark renders WHITE via mask regardless of
-        // the uploaded logo's color (shared WhiteMarkGlyph chain).
-        <WhiteMarkGlyph
-          logoUrl={brandLogoUrl}
-          size={size * 0.9}
-          opacity={1}
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)',
-          }}
-        />
-      )}
+      <img
+        src={PRESS_LABEL_LOGO}
+        alt=""
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          // Logo dominates the label, as in the reference pressing.
+          width: size * 0.9,
+          height: size * 0.9,
+          objectFit: 'contain',
+          filter: PRESS_LABEL_LOGO_FILTER,
+        }}
+      />
       {/* quiet catalog line, arced along the bottom — subordinate to the logo */}
       {showArcText && (
         <svg
@@ -340,7 +378,7 @@ function DiscLabelArt({ size }: { size: number }) {
           </defs>
           <text fill="rgba(245,245,247,0.5)" style={{ fontSize: 4.4, fontWeight: 600, letterSpacing: 1 }}>
             <textPath href="#gt-label-bottom" startOffset="50%" textAnchor="middle">
-              33 ⅓ RPM
+              MRP-001 · 33 ⅓ RPM
             </textPath>
           </text>
         </svg>
@@ -358,7 +396,7 @@ function VinylDisc({
 }: {
   size: number;
   swatch: Swatch;
-  bodyRef?: React.Ref<HTMLDivElement>;
+  bodyRef?: React.RefObject<HTMLDivElement | null>;
   /** Center label diameter as a fraction of the disc (7" uses a smaller 3.3" label). */
   labelRatio?: number;
   /** Spindle hole diameter as a fraction of the disc. */
@@ -366,10 +404,6 @@ function VinylDisc({
 }) {
   const LABEL_RATIO = labelRatio ?? PSD_LABEL_RATIO;
   const INNER_RATIO = 129 / 1104;
-  const labelBg = useLabelBg();
-  // Real configs can carry a style with zero colors (the mock never did) —
-  // render nothing rather than crash the whole tab.
-  if (!swatch) return null;
   // A generator-made color renders through the stencil art everywhere the
   // disc device appears — stage, tiles, search rows — same frame, same label.
   if (swatch.gen) {
@@ -415,27 +449,6 @@ function VinylDisc({
             aria-hidden
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
           />
-          {/* Branded center label composited over the reference photo — the
-              photo replaces the vinyl BODY, but the press's printed label
-              (bg color + white logo mark) still sits on top, exactly like the
-              portal colors page overlays its label on photo swatches. Same
-              size threshold as the rendered discs: logo art only ≥70px so
-              tiny popover/editor thumbnails don't get a noise dot. */}
-          <div
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: size * LABEL_RATIO,
-              height: size * LABEL_RATIO,
-              borderRadius: '50%',
-              backgroundColor: labelBg,
-              overflow: 'hidden',
-            }}
-          >
-            {size >= 70 && <DiscLabelArt size={size * LABEL_RATIO} />}
-          </div>
         </div>
         <div
           style={{
@@ -556,7 +569,7 @@ function VinylDisc({
             width: size * LABEL_RATIO,
             height: size * LABEL_RATIO,
             borderRadius: '50%',
-            backgroundColor: labelBg,
+            backgroundColor: PRESS_LABEL_BG,
             overflow: 'hidden',
           }}
         >
@@ -825,8 +838,6 @@ type Category = {
   /** Set when the type was created through the generator ("Create type").
       Locks every color added to this type to one stencil style. */
   genStyleId?: string;
-  /** Press-supplied photo shown on the style tile (type editor upload). */
-  customImg?: string;
   /** Finish styles only: which finishes this style offers artists.
       Undefined = all of the style's finishes. One shared truth — the main
       page's Finish bar and the sheet edit the same list. (Bill, Aug 20 2026.) */
@@ -874,6 +885,46 @@ const INITIAL_CATEGORIES: Category[] = [
     swatches: [
       mk('UP1', 'Ruby Red', 'opaque', '#B01E2E', {
         sizes: ['7"', '10"', '12"'],
+        customImg: mockPreviewImg,
+      }),
+    ],
+  },
+  // Andrew's real MRP catalog photos (Aug 21 2026) — the match-from-photo
+  // test set. Photo colors with no gen data: "Edit color" opens the rebuild
+  // sheet, where "From their photo" pulls their dominant colors.
+  {
+    id: 'hb01-metallic-gold',
+    name: 'HB01 Metallic Gold',
+    kind: 'opaque',
+    sizes: ['7"', '10"', '12"'],
+    swatches: [
+      mk('HB1', 'HB01 Metallic Gold', 'opaque', '#C29A3E', {
+        sizes: ['7"', '10"', '12"'],
+        customImg: mrpDiscGold,
+      }),
+    ],
+  },
+  {
+    id: 'md25-america',
+    name: 'MD25 America',
+    kind: 'opaque',
+    sizes: ['7"', '10"', '12"'],
+    swatches: [
+      mk('MD2', 'MD25 America', 'opaque', '#A98FA5', {
+        sizes: ['7"', '10"', '12"'],
+        customImg: mrpDiscAmerica,
+      }),
+    ],
+  },
+  {
+    id: 'mb16-sangria',
+    name: 'MB16 Sangria',
+    kind: 'opaque',
+    sizes: ['7"', '10"', '12"'],
+    swatches: [
+      mk('MB1', 'MB16 Sangria', 'opaque', '#F4A98E', {
+        sizes: ['7"', '10"', '12"'],
+        customImg: mrpDiscSangria,
       }),
     ],
   },
@@ -881,16 +932,351 @@ const INITIAL_CATEGORIES: Category[] = [
 
 // Representative preview swatch for each category card's mini disc.
 function categoryPreview(cat: Category): Swatch {
-  // Real configs can hold a style with no colors yet — fall back to a plain
-  // black swatch so preview devices always have something to render.
+  return cat.swatches[0];
+}
+
+// ─── Shell primitives (Press persona, mirrors PressDashboard) ────────
+type PressNavItem = { label: string; icon: typeof LayoutDashboard; active?: boolean };
+
+const PRESS_NAV: PressNavItem[] = [
+  { label: 'Dashboard', icon: LayoutDashboard },
+  { label: 'Clients', icon: Users },
+  { label: 'Create', icon: NavEstimatesIcon },
+  { label: 'Projects', icon: Disc3 },
+  { label: 'Acquisition', icon: UserPlus },
+  { label: 'Catalog', icon: Library, active: true },
+  { label: 'Settings', icon: Cog },
+  { label: 'Referrals', icon: Gift },
+];
+
+
+// ─── Create group (founder, Aug 16 2026): an estimate or a package are two
+// different creations on two pages — one "Create" rail entry, live links. ───
+const CREATE_CHILDREN: Array<{ label: string; icon: typeof LayoutDashboard; route: string }> = [
+  { label: 'Estimates', icon: NavEstimatesIcon, route: 'PressEstimatesIndex' },
+  { label: 'Packages', icon: NavPackage, route: 'PressPackagesIndex' },
+];
+
+function CreateNavGroup({ item, t }: { item: { label: string }; t: Theme }) {
   return (
-    cat.swatches[0] ?? { id: `${cat.id}-empty`, name: cat.name, kind: 'black', base: '#0C0C0C', sizes: cat.sizes }
+    <div>
+      <button
+        type="button"
+        aria-expanded
+        className={`w-full flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors ${t.hoverWash}`}
+        style={{ fontWeight: 500, color: t.subink }}
+      >
+        <NavChevron className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
+        <span className="truncate flex-1 text-left">{item.label}</span>
+      </button>
+      <div className="space-y-0.5">
+        {CREATE_CHILDREN.map(({ label, icon: Icon, route }) => (
+          <a
+            key={label}
+            href={`#/${route}`}
+            className={`flex items-center gap-2.5 pl-7 pr-2.5 h-9 rounded-lg text-[13px] transition-colors ${t.hoverWash}`}
+            style={{ fontWeight: 500, color: t.subink }}
+            data-testid={`nav-${label.toLowerCase()}`}
+          >
+            <Icon className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
+            <span className="truncate flex-1">{label}</span>
+          </a>
+        ))}
+      </div>
+    </div>
   );
 }
 
-// ─── Press identity (data) — the portal payload supplies the real press
-// name; this module default is shadowed inside the page component. ────
+function NavRow({ label, icon: Icon, active, t }: PressNavItem & { t: Theme }) {
+  return (
+    <a
+      href="#"
+      onClick={(e) => e.preventDefault()}
+      className={cn(
+        'flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors',
+        !active && '${t.hoverWashRail}',
+      )}
+      style={{
+        fontWeight: active ? 600 : 500,
+        color: active ? t.ink : t.subink,
+        backgroundColor: active ? t.card : undefined,
+        boxShadow: active ? t.pillShadow : undefined,
+      }}
+    >
+      <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? t.ink : t.faint }} />
+      <span className="truncate flex-1">{label}</span>
+    </a>
+  );
+}
+
+// ─── Catalog + Components pull-downs ──────────────────────────────────
+const COMPONENTS_CHILDREN: { label: string; mock: string }[] = [
+  { label: 'Vinyl', mock: 'PressVinylPhotoshopMockup' },
+  { label: 'Jackets', mock: 'ArtistChooseJacket' },
+  { label: 'Inner Sleeves', mock: 'ArtistChooseInnerSleeve' },
+  { label: 'Center Labels', mock: 'PressCatalogVinylLabels' },
+  { label: 'Inserts', mock: 'ArtistChooseInserts' },
+  { label: 'Stickers', mock: 'PressCatalogStickers' },
+  { label: 'Pricing', mock: 'PressCatalogPricing' },
+];
+const COMPONENTS_ACTIVE = 'Vinyl';
+
+
+type CatalogChild = { label: string; icon: typeof LayoutDashboard; soon?: boolean; active?: boolean };
+const CATALOG_CHILDREN: CatalogChild[] = [
+  { label: 'GoodTunes Packages', icon: NavPackage },
+  { label: 'White Label', icon: NavLayers, soon: true },
+  { label: 'GoodDeed Certificates', icon: NavAward },
+  { label: 'Specs', icon: NavWave, soon: true },
+  { label: 'Templates', icon: NavTemplate, soon: true },
+];
+
+function CatalogRail({ item, t }: { item: PressNavItem; t: Theme }) {
+  const [catalogOpen, setCatalogOpen] = useState(true);
+  const [componentsOpen, setComponentsOpen] = useState(true);
+  const CatalogIcon = item.icon;
+  return (
+    <>
+      <button
+        type="button"
+        aria-expanded={catalogOpen}
+        onClick={() => setCatalogOpen((v) => !v)}
+        className={cn(
+          'w-full flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors',
+          !item.active && '${t.hoverWashRail}',
+        )}
+        style={{
+          fontWeight: item.active ? 600 : 500,
+          color: item.active ? t.ink : t.subink,
+          backgroundColor: item.active ? t.card : undefined,
+          boxShadow: item.active ? t.pillShadow : undefined,
+        }}
+      >
+        <CatalogIcon className="w-4 h-4 flex-shrink-0" style={{ color: item.active ? t.ink : t.faint }} />
+        <span className="truncate flex-1 text-left">{item.label}</span>
+        <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.faint, transform: catalogOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+      </button>
+
+      <div className="space-y-0.5">
+        {CATALOG_CHILDREN.map(({ label, icon: Icon, soon, active }) => (
+          <a
+            key={label}
+            href="#"
+            onClick={(e) => e.preventDefault()}
+            className={`flex items-center gap-2.5 pl-7 pr-2.5 h-9 rounded-lg text-[13px] transition-colors ${active ? '' : '${t.hoverWashRail}'}`}
+            style={{
+              fontWeight: active ? 600 : 500,
+              color: active ? t.ink : t.subink,
+              backgroundColor: active ? t.card : undefined,
+              boxShadow: active ? t.pillShadow : undefined,
+            }}
+          >
+            <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? t.ink : t.faint }} />
+            <span className="truncate flex-1">{label}</span>
+            {soon && (
+              <span className="text-[10px] font-semibold px-2 h-[18px] inline-flex items-center rounded-full flex-shrink-0" style={{ backgroundColor: t.soft, color: t.subink }}>
+                Request
+              </span>
+            )}
+          </a>
+        ))}
+      </div>
+
+
+      <button
+        type="button"
+        aria-expanded={componentsOpen}
+        onClick={() => setComponentsOpen((v) => !v)}
+        className={cn('w-full flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13.5px] transition-colors', t.hoverWashRail)}
+        style={{ fontWeight: 500, color: t.subink }}
+      >
+        <Layers className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
+        <span className="truncate flex-1 text-left">Components</span>
+        <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.faint, transform: componentsOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }} />
+      </button>
+
+      {componentsOpen && (
+        <div className="space-y-0.5" style={{ marginLeft: 18, paddingLeft: 12, borderLeft: `1px solid ${t.hairline}` }}>
+          {COMPONENTS_CHILDREN.map((c) => {
+            const active = c.label === COMPONENTS_ACTIVE;
+            return (
+              <a
+                key={c.label}
+                href={`#/${c.mock}`}
+                className={cn(
+                  'flex items-center gap-2.5 px-2.5 h-9 rounded-lg text-[13px] transition-colors',
+                  !active && '${t.hoverWashRail}',
+                )}
+                style={{
+                  fontWeight: active ? 600 : 500,
+                  color: active ? t.ink : t.subink,
+                  backgroundColor: active ? t.card : undefined,
+                  boxShadow: active ? t.pillShadow : undefined,
+                }}
+              >
+                <span className="truncate flex-1">{c.label}</span>
+              </a>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
 const PARTNER_NAME = 'Memphis Record Pressing';
+const USER_FIRST_NAME = 'Brandon';
+const USER_EMAIL = 'brandon@memphisrecordpressing.com';
+const USER_INITIALS = 'BS';
+
+const USER_MENU: Array<{ label: string; icon: typeof UserPen }> = [
+  { label: 'Edit profile', icon: UserPen },
+  { label: 'Invite teammate', icon: UserPlus },
+  { label: 'Security', icon: ShieldCheck },
+];
+
+function UserMenu({ t }: { t: Theme }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn('w-8 h-8 rounded-full overflow-hidden ring-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 transition-shadow', t.avatarRing)}
+          aria-label="Account menu"
+          data-testid="button-user-menu"
+        >
+          <img src={brandonPhoto} alt={USER_INITIALS} className="w-full h-full object-cover" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="w-64 p-0 rounded-2xl"
+        style={{ border: `1px solid ${t.hairline}`, backgroundColor: t.card, color: t.ink, boxShadow: t.popShadow }}
+        data-testid="menu-user"
+      >
+        <div className="px-3.5 py-3" style={{ borderBottom: `1px solid ${t.hairline}` }}>
+          <div className="text-[13.5px] font-semibold" style={{ color: t.ink }}>{USER_FIRST_NAME}</div>
+          <div className="text-[11.5px] truncate" style={{ color: t.subink }}>{USER_EMAIL}</div>
+        </div>
+        <div className="py-1.5">
+          {USER_MENU.map((m) => {
+            const Icon = m.icon;
+            return (
+              <button
+                key={m.label}
+                type="button"
+                className={cn('w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] transition-colors', t.hoverWashSoft)}
+                style={{ color: t.ink }}
+              >
+                <Icon className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
+                <span>{m.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="py-1.5" style={{ borderTop: `1px solid ${t.hairline}` }}>
+          <button
+            type="button"
+            className={cn('w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] transition-colors', t.hoverWashSoft)}
+            style={{ color: t.ink }}
+          >
+            <LogOut className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
+            <span>Sign out</span>
+          </button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function PressShell({ children, t }: { children: ReactNode; t: Theme }) {
+  return (
+    <div className="h-screen flex flex-col font-sans" style={{ backgroundColor: t.canvas, color: t.ink }}>
+      <header
+        className="h-14 flex-shrink-0 flex items-center justify-between gap-4 pl-3 pr-6 sticky top-0 z-20"
+        style={{
+          backgroundColor: t.headerBg,
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderBottom: `1px solid ${t.hairline}`,
+        }}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <span className={cn('h-9 w-9 rounded-full bg-white ring-1 flex items-center justify-center flex-shrink-0 p-1', t.avatarRing)}>
+            <img src={mrpLogo} alt={PARTNER_NAME} className="w-full h-full object-contain" />
+          </span>
+          <span className="text-[15px] font-semibold whitespace-nowrap" style={{ color: t.ink }}>
+            {PARTNER_NAME}
+          </span>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="rounded-full"
+            style={{ color: t.subink, paddingLeft: 12, paddingRight: 12 }}
+            data-testid="button-feedback"
+          >
+            <MessageSquarePlus className="w-3.5 h-3.5" />
+            Feedback
+          </Button>
+          <button
+            type="button"
+            className={cn('w-8 h-8 rounded-full flex items-center justify-center transition-colors', t.hoverWash)}
+            style={{ color: t.subink }}
+            aria-label="Notifications"
+          >
+            <Bell className="w-4 h-4" />
+          </button>
+          <UserMenu t={t} />
+        </div>
+      </header>
+
+      <div className="flex-1 min-h-0 flex">
+        <aside
+          className="w-60 flex-shrink-0 flex flex-col"
+          style={{ backgroundColor: t.rail, borderRight: `1px solid ${t.hairline}` }}
+        >
+          <div className="px-2.5 py-2.5">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: t.faint }} />
+              <input
+                className={cn('w-full h-9 pl-8 pr-10 rounded-full text-[12.5px] focus:outline-none', t.searchPlaceholder)}
+                style={{ border: `1px solid ${t.hairline}`, color: t.ink, backgroundColor: t.searchBg }}
+                placeholder="Search…"
+                readOnly
+              />
+              <span
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[12px] pointer-events-none"
+                style={{ color: t.faint }}
+              >
+                ⌘K
+              </span>
+            </div>
+          </div>
+          <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
+            {PRESS_NAV.map((item) =>
+              item.label === 'Catalog'
+                ? <CatalogRail key={item.label} item={item} t={t} />
+                : item.label === 'Create'
+                  ? <CreateNavGroup key={item.label} item={item} t={t} />
+                  : <NavRow key={item.label} {...item} t={t} />
+            )}
+          </nav>
+          <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${t.hairline}` }}>
+            <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: t.faint }}>
+              Powered by
+            </span>
+            <img src={goodtunesLogo} alt="GoodTunes" className="h-5 w-auto" style={{ filter: t.logoFilter }} />
+          </div>
+        </aside>
+
+        <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
+      </div>
+    </div>
+  );
+}
 
 // ─── Two-tone headings ───────────────────────────────────────────────
 function PageHeading({ lead, rest, t }: { lead: string; rest: string; t: Theme }) {
@@ -928,7 +1314,7 @@ function TypeEditorPopover({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   trigger: ReactNode;
-  onSave: (name: string, sizes: SizeId[], customImg?: string) => void;
+  onSave: (name: string, sizes: SizeId[]) => void;
   onRemove?: () => void;
   /** Generator-made types: reopen the stencil sheet on the type's color. */
   onEditColor?: () => void;
@@ -940,9 +1326,8 @@ function TypeEditorPopover({
 }) {
   const [name, setName] = useState(category.name);
   const [sizes, setSizes] = useState<SizeId[]>(category.sizes);
-  // Press-supplied preview image for the type card — persisted on the
-  // category (real upload via uploadPreviewImageFile).
-  const [customImg, setCustomImg] = useState<string | undefined>(category.customImg);
+  // Mock-only preview image for the type card (no real upload / not persisted).
+  const [customImg, setCustomImg] = useState<string | undefined>(undefined);
 
   const canSave = name.trim().length > 0 && sizes.length > 0;
 
@@ -952,12 +1337,12 @@ function TypeEditorPopover({
   const seed = () => {
     setName(category.name);
     setSizes(category.sizes);
-    setCustomImg(category.customImg);
+    setCustomImg(undefined);
   };
 
   const submit = () => {
     if (!canSave) return;
-    onSave(name.trim(), sizes, customImg);
+    onSave(name.trim(), sizes);
     onOpenChange(false);
   };
 
@@ -1065,10 +1450,7 @@ function TypeEditorPopover({
             <PreviewImageRow
               disc={<VinylDisc size={44} swatch={{ ...categoryPreview(category), customImg }} />}
               img={customImg}
-              onPick={async (file) => {
-                const url = await uploadPreviewImageFile(file);
-                if (url) setCustomImg(url);
-              }}
+              onChange={() => setCustomImg(mockPreviewImg)}
               onRemove={() => setCustomImg(undefined)}
               testId="type-preview-img"
               t={t}
@@ -1135,7 +1517,7 @@ function TypeEditorPopover({
             {category.hidden
               ? <Eye className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
               : <EyeOff className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />}
-            <span>{category.hidden ? "Offer" : "Don\u2019t offer"}</span>
+            <span>{category.hidden ? `Offer ${category.name}` : `Don\u2019t offer ${category.name}`}</span>
           </button>
         )}
         {/* Archive — Apple convention: destructive-adjacent action gets its own
@@ -1180,7 +1562,7 @@ function CategoryCard({
   /** The size currently picked in the "Pick a size" step. */
   pageSize: SizeId;
   onSelect: () => void;
-  onSaveType: (name: string, sizes: SizeId[], customImg?: string) => void;
+  onSaveType: (name: string, sizes: SizeId[]) => void;
   onRemoveType?: () => void;
   onDuplicateType?: () => void;
   onEditColor?: () => void;
@@ -1475,20 +1857,18 @@ function SizeChip({ size, active, onToggle, t }: { size: SizeId; active: boolean
 function PreviewImageRow({
   disc,
   img,
-  onPick,
+  onChange,
   onRemove,
   testId,
   t,
 }: {
   disc: ReactNode;
   img: string | undefined;
-  onPick: (file: File) => void;
+  onChange: () => void;
   onRemove: () => void;
   testId: string;
   t: Theme;
 }) {
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const [uploading, setUploading] = useState(false);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: t.subink }}>
@@ -1497,35 +1877,16 @@ function PreviewImageRow({
       <div className="flex items-center gap-3">
         <span className="flex-shrink-0">{disc}</span>
         <div className="flex flex-col items-start gap-0.5">
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            className="hidden"
-            data-testid={`${testId}-input`}
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              e.currentTarget.value = '';
-              if (!file) return;
-              setUploading(true);
-              try {
-                await onPick(file);
-              } finally {
-                setUploading(false);
-              }
-            }}
-          />
           <button
             type="button"
-            disabled={uploading}
-            onClick={() => inputRef.current?.click()}
-            className="text-[13px] font-semibold rounded transition-colors focus:outline-none disabled:opacity-50"
+            onClick={onChange}
+            className="text-[13px] font-semibold rounded transition-colors focus:outline-none"
             style={{ color: t.blue }}
             data-testid={`${testId}-change`}
           >
-            {uploading ? 'Uploading…' : 'Change image…'}
+            Change image…
           </button>
-          {img && !uploading && (
+          {img && (
             <button
               type="button"
               onClick={onRemove}
@@ -1688,10 +2049,7 @@ function SwatchEditorPopover({
             <PreviewImageRow
               disc={<VinylDisc size={44} swatch={previewSwatch} />}
               img={customImg}
-              onPick={async (file) => {
-                const url = await uploadPreviewImageFile(file);
-                if (url) setCustomImg(url);
-              }}
+              onChange={() => setCustomImg(mockPreviewImg)}
               onRemove={() => setCustomImg(undefined)}
               testId="color-preview-img"
               t={t}
@@ -2232,7 +2590,7 @@ function SwatchTile({
                     hidden
                       ? <Eye className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />
                       : <EyeOff className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />,
-                    hidden ? "Offer" : "Don't offer",
+                    hidden ? `Offer ${swatch.name}` : `Don't offer ${swatch.name}`,
                     onToggleHidden)}
                 </div>
               )}
@@ -2528,7 +2886,7 @@ function OfferableOptionCards({
 // (either/or base, pick-one sets, splatter counts) are DATA, never
 // hardcoded UI. Otis's renderer swaps in the full-res pipeline 1:1.
 
-const GEN_BASE = '/vinyl-gen/';
+const GEN_BASE = '/__mockup/vinyl-gen/';
 
 type GenLayerSpec = {
   /** Layer PNG inside the style's PSD group folder. */
@@ -2931,7 +3289,7 @@ function GenDisc({
   gen: GenColorSpec;
   labelRatio?: number;
   holeRatio?: number;
-  bodyRef?: React.Ref<HTMLDivElement>;
+  bodyRef?: React.RefObject<HTMLDivElement | null>;
   ghost?: boolean;
 }) {
   const style = genStyleById(gen.styleId);
@@ -2949,7 +3307,6 @@ function GenDisc({
   const baseKind = gen.baseKind ?? 'opaque';
   const LABEL_RATIO = labelRatio ?? PSD_LABEL_RATIO;
   const labelSize = size * LABEL_RATIO;
-  const labelBg = useLabelBg();
   return (
     <div
       style={{
@@ -3001,7 +3358,7 @@ function GenDisc({
           style={{
             position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
             width: labelSize, height: labelSize, borderRadius: '50%',
-            backgroundColor: labelBg, boxShadow: '0 0 0 0.5px rgba(0,0,0,0.4)',
+            backgroundColor: PRESS_LABEL_BG, boxShadow: '0 0 0 0.5px rgba(0,0,0,0.4)',
           }}
         >
           <DiscLabelArt size={labelSize} />
@@ -3110,7 +3467,7 @@ async function extractDiscPalette(src: string): Promise<DiscAnalysis> {
       buckets.set(key, bk);
     }
   }
-  const ranked = Array.from(buckets.values())
+  const ranked = [...buckets.values()]
     .sort((p, q) => q.n - p.n)
     .map((bk) => [bk.r / bk.n, bk.g / bk.n, bk.b / bk.n] as [number, number, number]);
   // Greedy pick: biggest clusters first, each far enough from the ones
@@ -3837,13 +4194,6 @@ function GeneratorSheet({
   const [name, setName] = useState(initial?.name ?? replaceOf?.name ?? (presetStyleId ? initStyle.name : ''));
   // Photo comparison starts tucked away — click to slide it out.
   const [compareOpen, setCompareOpen] = useState(false);
-  // Form rule (handoff README): outside clicks never dismiss the sheet;
-  // Esc/Cancel/Save close it. Esc handled here, window-level.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
   // Dominant colors pulled from their photo — feeds the "From their photo"
   // strip in the compare drawer. (Andrew, Aug 21 2026.)
   const [photoPalette, setPhotoPalette] = useState<string[]>([]);
@@ -3851,10 +4201,6 @@ function GeneratorSheet({
   // guess" caption until the press switches away. (Andrew, Aug 21 2026.)
   const [suggestedStyleId, setSuggestedStyleId] = useState<string | null>(null);
   const suggestionDone = useRef(false);
-  // ANY interaction with the sheet (pointer or key) marks it touched — the
-  // async photo decode must never replace work the press already started,
-  // including a style click or a half-typed hex. (Review, Aug 21 2026.)
-  const sheetTouched = useRef(false);
   useEffect(() => {
     let alive = true;
     if (replaceOf?.customImg) {
@@ -3864,9 +4210,10 @@ function GeneratorSheet({
           setPhotoPalette(a.palette);
           // Auto-apply the guess ONCE, and only into an untouched sheet —
           // never over work the press already started.
+          if (suggestionDone.current || lockedStyleId) return;
+          suggestionDone.current = true;
           setColors((prev) => {
-            if (!canApplyPhotoSuggestion({ touched: sheetTouched.current, alreadyApplied: suggestionDone.current, lockedStyleId, colors: prev })) return prev;
-            suggestionDone.current = true;
+            if (prev.some((c) => HEX_RE.test(c))) return prev; // already touched
             const sug = suggestDiscStyle(a);
             if (!sug) return prev;
             const s = genStyleById(sug.styleId);
@@ -4114,14 +4461,10 @@ function GeneratorSheet({
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center"
       style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', padding: 24 }}
+      onClick={onClose}
       data-testid="gen-sheet-overlay"
     >
-      <div
-        style={{ position: 'relative' }}
-        onClick={(e) => e.stopPropagation()}
-        onPointerDownCapture={() => { sheetTouched.current = true; }}
-        onKeyDownCapture={() => { sheetTouched.current = true; }}
-      >
+      <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
       {/* The photo drawer slides out PAST the sheet's left edge — its own
           panel, never squeezing the sheet's insides. (Bill, Aug 20 2026.) */}
       {replaceOf?.customImg && (
@@ -4939,137 +5282,52 @@ function GeneratorSheet({
   );
 }
 
-export function PressVinylStylesComponent({
-  payload,
-  canEdit,
-  save,
-  saving,
-}: {
-  payload: PressComponentsPayload;
-  canEdit: boolean;
-  save: (config: VinylComponentConfig) => void;
-  saving: boolean;
-}) {
-  // Theme rides the admin appearance toggle (light default, charcoal dark).
-  const mode: 'light' | 'dark' = useAdminDark() ? 'dark' : 'light';
+export function PressVinylPhotoshopMockup() {
+  // Mock-only theme toggle. Default is light (press persona); dark = charcoal
+  // admin canon. Everything except the vinyl disc render reads from `t`.
+  const [mode, setMode] = useState<'light' | 'dark'>('light');
   const t = THEMES[mode];
-  void saving;
-
-  const press = payload.press;
-  const PARTNER_NAME = press.name; // shadows the module mock default
-  const labelBrand = useMemo(
-    () => ({ logoUrl: resolvePressMarkLogo(press), bgColor: press.labelBgColor ?? null }),
-    [press],
-  );
-
-  // ── Config-backed state, seeded from the payload's vinyl slice ─────
-  // Whole blob saved atomically on every mutation (press_components PUT).
-  const cfgRef = useRef<VinylComponentConfig>(payload.vinyl);
-  const [config, setConfig] = useState<VinylComponentConfig>(payload.vinyl);
-  const dirtyRef = useRef(false);
-  const pressIdRef = useRef(press.id);
-  // Re-seed ONLY when the press identity changes AND there are no unsaved
-  // edits (standing rule: local edit vs shared-query re-seed).
-  useEffect(() => {
-    if (pressIdRef.current !== press.id) {
-      pressIdRef.current = press.id;
-      dirtyRef.current = false;
-      cfgRef.current = payload.vinyl;
-      setConfig(payload.vinyl);
-    } else if (!dirtyRef.current) {
-      cfgRef.current = payload.vinyl;
-      setConfig(payload.vinyl);
-    }
-  }, [press.id, payload.vinyl]);
-  const commit = useCallback(
-    (mutate: (prev: VinylComponentConfig) => VinylComponentConfig) => {
-      // Read-only viewers (scoped press staff without edit rights) never
-      // persist — the server's pressUserCanEdit gate is the backstop, this
-      // keeps the UI honest instead of silently failing saves.
-      if (!canEdit) return;
-      const next = mutate(cfgRef.current);
-      cfgRef.current = next;
-      dirtyRef.current = true;
-      setConfig(next);
-      save(next);
-    },
-    [save],
-  );
-
-  // The mock's `categories` state, backed by config. Functional updaters
-  // apply against the latest committed config (cfgRef), never stale state.
-  const categories = config.categories as unknown as Category[];
-  const setCategories: React.Dispatch<React.SetStateAction<Category[]>> = useCallback(
-    (updater) => {
-      commit((prev) => ({
-        ...prev,
-        categories: (typeof updater === 'function'
-          ? (updater as (c: Category[]) => Category[])(prev.categories as unknown as Category[])
-          : updater) as unknown as VinylComponentConfig['categories'],
-      }));
-    },
-    [commit],
-  );
-
+  const [categories, setCategories] = useState<Category[]>(INITIAL_CATEGORIES);
   const [selectedSizeId, setSelectedSizeId] = useState<string>('12');
   // Which sizes this press offers. A size marked "not offered" never
   // disappears — it stays on the card, muted, labeled "Not offered"
   // (icon + word, never color alone), so the ladder stays consistent.
   const [selectedQuantityId, setSelectedQuantityId] = useState<string>('1');
   const [selectedWeightId, setSelectedWeightId] = useState<string>('140');
-  // Offered maps derive from the config's offered subsets (OfferOption[]).
-  const offeredOf = (master: { id: string }[], offered: OfferOption[]) =>
-    Object.fromEntries(master.map((o) => [o.id, offered.some((x) => x.id === o.id)]));
-  const offeredSizes = useMemo(() => offeredOf(VINYL_SIZE_OPTIONS, config.sizeOptions), [config.sizeOptions]);
-  const offeredQuantities = useMemo(() => offeredOf(VINYL_QUANTITIES, config.quantities), [config.quantities]);
-  // Weight ladder = master rungs ∪ press-added customs, sorted by grams.
-  const weights = useMemo(() => {
-    const extra = config.weights.filter((w) => !VINYL_WEIGHTS.some((m) => m.id === w.id));
-    return [...VINYL_WEIGHTS, ...extra].sort((a, b) => Number(a.id) - Number(b.id));
-  }, [config.weights]);
-  const offeredWeights = useMemo(() => offeredOf(weights, config.weights), [weights, config.weights]);
+  const [offeredSizes, setOfferedSizes] = useState<Record<string, boolean>>({ '7': true, '10': true, '12': true });
+  const [offeredQuantities, setOfferedQuantities] = useState<Record<string, boolean>>({ '1': true, '2': true, '3': true, '4': true });
+  const [offeredWeights, setOfferedWeights] = useState<Record<string, boolean>>({ '140': true, '180': true });
   const [offerMenuOpenId, setOfferMenuOpenId] = useState<string | null>(null);
-  // Shared toggle: flip an option's offered state in the config and, if the
-  // current selection just went dark, hop to the first still-offered sibling.
+  // Shared toggle: flip an option's offered state and, if the current
+  // selection just went dark, hop to the first still-offered sibling.
   const makeToggle = (
-    field: 'sizeOptions' | 'quantities' | 'weights',
-    options: OfferOption[],
+    setMap: React.Dispatch<React.SetStateAction<Record<string, boolean>>>,
+    options: { id: string }[],
     selected: string,
     setSelected: (id: string) => void,
   ) => (id: string) => {
-    commit((prev) => {
-      const offeredNow = prev[field].some((o) => o.id === id);
-      let nextArr: OfferOption[];
-      if (offeredNow) {
-        nextArr = prev[field].filter((o) => o.id !== id);
-        if (selected === id) {
-          const fallback = options.find((o) => o.id !== id && nextArr.some((x) => x.id === o.id));
-          if (fallback) setSelected(fallback.id);
-        }
-      } else {
-        const opt = options.find((o) => o.id === id);
-        if (!opt) return prev;
-        nextArr = [...prev[field], { id: opt.id, label: opt.label, note: opt.note ?? '' }];
+    setMap((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      if (!next[id] && selected === id) {
+        const fallback = options.find((o) => o.id !== id && next[o.id]);
+        if (fallback) setSelected(fallback.id);
       }
-      return { ...prev, [field]: nextArr };
+      return next;
     });
     setOfferMenuOpenId(null);
   };
-  const toggleSizeOffered = makeToggle('sizeOptions', VINYL_SIZE_OPTIONS, selectedSizeId, setSelectedSizeId);
-  const toggleQuantityOffered = makeToggle('quantities', VINYL_QUANTITIES, selectedQuantityId, setSelectedQuantityId);
-  const toggleWeightOffered = makeToggle('weights', weights, selectedWeightId, setSelectedWeightId);
+  const toggleSizeOffered = makeToggle(setOfferedSizes, VINYL_SIZE_OPTIONS, selectedSizeId, setSelectedSizeId);
+  const toggleQuantityOffered = makeToggle(setOfferedQuantities, VINYL_QUANTITIES, selectedQuantityId, setSelectedQuantityId);
+  const [weights, setWeights] = useState(VINYL_WEIGHTS);
+  const toggleWeightOffered = makeToggle(setOfferedWeights, weights, selectedWeightId, setSelectedWeightId);
   const addWeight = (grams: string, note: string) => {
     const id = grams;
     if (weights.some((w) => w.id === id)) return; // already in the ladder
-    commit((prev) => ({
-      ...prev,
-      weights: [...prev.weights, { id, label: `${grams}g`, note: note || 'Custom' }].sort(
-        (a, b) => Number(a.id) - Number(b.id),
-      ),
-    }));
+    setWeights((prev) => [...prev, { id, label: `${grams}g`, note: note || 'Custom' }].sort((a, b) => Number(a.id) - Number(b.id)));
+    setOfferedWeights((prev) => ({ ...prev, [id]: true }));
   };
-  const [categoryId, setCategoryId] = useState<CategoryId>(() => categories[0]?.id ?? 'black');
-  const [selectedSwatchId, setSelectedSwatchId] = useState<string>(() => categories[0]?.swatches[0]?.id ?? 'BK1');
+  const [categoryId, setCategoryId] = useState<CategoryId>('black');
+  const [selectedSwatchId, setSelectedSwatchId] = useState<string>('BK1');
 
   const category = useMemo(
     () => categories.find((c) => c.id === categoryId) ?? categories[0],
@@ -5113,8 +5371,8 @@ export function PressVinylStylesComponent({
   };
 
   // Rename a type / set its type-level sizes from the ⋯ menu on its card.
-  const updateCategory = (catId: CategoryId, name: string, sizes: SizeId[], customImg?: string) => {
-    setCategories((prev) => prev.map((c) => (c.id === catId ? { ...c, name, sizes, customImg } : c)));
+  const updateCategory = (catId: CategoryId, name: string, sizes: SizeId[]) => {
+    setCategories((prev) => prev.map((c) => (c.id === catId ? { ...c, name, sizes } : c)));
   };
 
   // Hide/show a type for artists — it stays here for the press either way.
@@ -5301,7 +5559,7 @@ export function PressVinylStylesComponent({
     : undefined;
 
   return (
-    <LabelBrandCtx.Provider value={labelBrand}>
+    <PressShell t={t}>
       <div className="mx-auto w-full" style={{ maxWidth: 1240, paddingLeft: 40, paddingRight: 40, paddingTop: 40, paddingBottom: 96 }}>
         {/* Quiet opening header */}
         <div className="min-w-0">
@@ -5441,7 +5699,7 @@ export function PressVinylStylesComponent({
                     active={c.id === categoryId}
                     pageSize={`${selectedSizeId}"` as SizeId}
                     onSelect={() => chooseCategory(c.id)}
-                    onSaveType={(name, sizes, customImg) => updateCategory(c.id, name, sizes, customImg)}
+                    onSaveType={(name, sizes) => updateCategory(c.id, name, sizes)}
                     onRemoveType={categories.length > 1 ? () => removeCategory(c.id) : undefined}
                     onDuplicateType={c.genStyleId ? () => duplicateCategory(c.id) : undefined}
                     onEditColor={c.swatches[0]?.gen
@@ -5723,6 +5981,34 @@ export function PressVinylStylesComponent({
         />
       )}
 
-    </LabelBrandCtx.Provider>
+      {/* Floating mock-only theme toggle — bottom-right. Not part of the
+          product; lets a reviewer flip light ⇆ dark (charcoal admin canon). */}
+      <button
+        type="button"
+        onClick={() => setMode((m) => (m === 'dark' ? 'light' : 'dark'))}
+        aria-label={mode === 'dark' ? 'View light' : 'View dark'}
+        data-testid="button-toggle-theme"
+        className="fixed z-50 inline-flex items-center gap-2 rounded-full transition-colors"
+        style={{
+          bottom: 24,
+          right: 24,
+          height: 40,
+          padding: '0 16px',
+          fontSize: 13,
+          fontWeight: 600,
+          color: t.ink,
+          backgroundColor: t.frostedBg,
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: `1px solid ${t.hairline}`,
+          boxShadow: t.popShadow,
+        }}
+      >
+        {mode === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+        {mode === 'dark' ? 'View light' : 'View dark'}
+      </button>
+    </PressShell>
   );
 }
+
+export default PressVinylPhotoshopMockup;

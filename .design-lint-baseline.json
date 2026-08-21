@@ -25377,7 +25377,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressVinylStyles.tsx",
+    "snippet": "<span className=\"text-[10.5px] font-bold uppercase tracking-wider\" style={{ color: t.faint, whiteSpace: 'nowrap' }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressVinylStyles.tsx",
+    "snippet": "<span className=\"text-[11px]\" style={{ color: t.faint, marginTop: 8, whiteSpace: 'nowrap' }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressVinylStyles.tsx",
     "snippet": "className=\"rounded-full text-[12px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressVinylStyles.tsx",
+    "snippet": "className=\"text-[11.5px]\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -25548,11 +25563,6 @@
     "rule": "naked-icon-button",
     "file": "client/src/pages/press-components/PressVinylStyles.tsx",
     "snippet": "<button type=\"button\" aria-label={`${s.label} options`} data-testid={`${testPrefix}-menu-${s.id}`} className={`absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center transiti"
-  },
-  {
-    "rule": "naked-icon-button",
-    "file": "client/src/pages/press-components/PressVinylStyles.tsx",
-    "snippet": "<button type=\"button\" onClick={onClose} aria-label=\"Close\" data-testid=\"gen-sheet-close\" className=\"inline-flex items-center justify-center rounded-full flex-shrink-0\" style={{ width: 32, height: 32, "
   },
   {
     "rule": "player-touch-target-too-small",
