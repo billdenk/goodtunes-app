@@ -42,6 +42,8 @@ import {
   type PathToPressNavigateDetail,
 } from "@/lib/pathToPressNav";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
+import { SkuUpcField } from "@/components/admin/SkuUpcField";
+import { normalizeUpc } from "@shared/upc";
 import { ShareQuoteWithArtist } from "@/components/admin/ShareQuoteWithArtist";
 import { AddonDialog, type CustomAddon } from "@/pages/AdminCustomAddons";
 import { Card } from "@/components/ui/card";
@@ -550,6 +552,8 @@ export function SellPanel({
       // (preserves the existing lock state); set true/false from the
       // header's Lock/Unlock icon.
       locked?: boolean;
+      // Task #3248 — per-format UPC/GTIN-12 (artwork-only). null clears.
+      upc?: string | null;
     }) => {
       const r = await apiRequest("PUT", `/api/admin/albums/${albumId}/skus/${body.format}`, body);
       const json = await r.json();
@@ -2525,6 +2529,8 @@ function SkuRow({
     // row's lock; omit on every other Save so existing lock state is
     // preserved.
     locked?: boolean;
+    // Task #3248 — per-format UPC/GTIN-12 (artwork-only). null clears.
+    upc?: string | null;
   }) => void;
   onDelete: () => void;
   // Task #654 — "Change the physical format" dialog (launched from the
@@ -2735,6 +2741,10 @@ function SkuRow({
   const [displayNameStr, setDisplayNameStr] = useState<string>(
     existing?.displayName ?? "",
   );
+  // Task #3248 — per-format UPC. Free-typed here; live-validated in the
+  // SkuUpcField and only sent to the server when empty (clear) or valid
+  // (see submit()) so a half-typed number can't 400 the autosave.
+  const [upcStr, setUpcStr] = useState<string>((existing as any)?.upc ?? "");
   // Task #385 — vinyl rows lose Stock + the unlimited radio. Non-vinyl
   // rows (CD / cassette / merch) keep the legacy fixed/unlimited mode
   // and the Stock input untouched (out of scope for #385).
@@ -3486,6 +3496,17 @@ function SkuRow({
     usingCatalog &&
     (pressTierId !== (initialTier?.id ?? null) || pressColorId !== initialColorId);
   const storedDisplayName = existing?.displayName ?? "";
+  // Task #3248 — UPC dirty-compare against the canonical stored value.
+  // Compare canonicalised (normalizeUpc) so re-opening a saved row whose
+  // 11-digit entry was completed server-side doesn't read dirty; invalid
+  // in-progress text counts as "not sendable" (upcSendable below) and is
+  // excluded from dirty so autosave can't fire a 400.
+  const storedUpc = ((existing as any)?.upc ?? "") as string;
+  const upcTrimmed = upcStr.trim();
+  const upcNormalized = upcTrimmed ? normalizeUpc(upcTrimmed) : null;
+  const upcSendable = !upcTrimmed || upcNormalized?.ok === true;
+  const upcCanonical = upcNormalized?.ok ? upcNormalized.upc12 : upcTrimmed ? null : "";
+  const upcDirty = upcSendable && (upcCanonical ?? "") !== storedUpc;
   // Task #429 / #430 — if the effective track count (live tracklist
   // or operator-entered Anticipated tracks) has drifted from the
   // row's snapshotted value, treat the row as dirty so Save lights
@@ -3530,7 +3551,8 @@ function SkuRow({
     (!isVinyl && usingCatalog && parsedQty !== storedQty) ||
     (isVinyl && !usingCatalog && (vinylColorId !== storedColor || jacketUpgrade !== storedJacket)) ||
     catalogDirty ||
-    trackCountDirty;
+    trackCountDirty ||
+    upcDirty;
 
   const submit = () => {
     const cents = parseDollars(priceStr);
@@ -3578,6 +3600,9 @@ function SkuRow({
       pressTierId: usingCatalog ? pressTierId : null,
       pressColorId: usingCatalog ? pressColorId : null,
       displayName: displayNameStr.trim() ? displayNameStr.trim() : null,
+      // Task #3248 — only send the UPC when it's empty (clear) or valid;
+      // omit while the operator is mid-typing so the save can't 400.
+      ...(upcSendable ? { upc: upcCanonical || null } : {}),
     });
   };
 
@@ -3631,6 +3656,9 @@ function SkuRow({
     pressColorId,
     colorUnresolved,
     displayNameStr,
+    // Task #3248 — UPC edits ride the same debounced autosave; upcDirty
+    // already excludes invalid in-progress values.
+    upcStr,
     // Task #430 — re-arm the debounce when only the effective track
     // count changes (e.g. anticipated tracks edited on a row that's
     // otherwise clean, or already dirty from a price edit). Without
@@ -7130,6 +7158,15 @@ function SkuRow({
         className="empty:hidden mt-3"
         data-testid="container-upsell-body"
       />
+      {/* Task #3248 — per-format UPC + barcode artwork (rich card). */}
+      <div className="mt-4 max-w-md">
+        <SkuUpcField
+          format={format}
+          value={upcStr}
+          onChange={setUpcStr}
+          disabled={isLocked}
+        />
+      </div>
       </div>
       </>
       ) : (
@@ -7157,6 +7194,14 @@ function SkuRow({
               data-testid={`input-price-${format}`}
             />
           </div>
+
+          {/* Task #3248 — per-format UPC + barcode artwork (legacy card). */}
+          <SkuUpcField
+            format={format}
+            value={upcStr}
+            onChange={setUpcStr}
+            disabled={isLocked}
+          />
 
           <div className="flex items-center justify-between gap-3">
             <span className="text-slate-500 text-xs inline-flex items-center gap-1">

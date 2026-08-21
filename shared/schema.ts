@@ -2524,6 +2524,13 @@ export const albumSkus = pgTable(
     // (read-only on the artist Sell panel). Server blocks unlock once a
     // pressing_order_requests row for this album reaches status='approved'.
     lockedAt: timestamp("locked_at"),
+    // Task #3248 — optional per-format UPC/GTIN-12 owned by the artist/
+    // label. Always stored as the canonical 12 digits (server validates
+    // via shared/upc.ts: numeric, length, check-digit verify, 11→12
+    // completion). Artwork-only: we render barcode files from it but
+    // never issue numbers; a NULL vinyl SKU surfaces a warning-level
+    // preflight check, never a block.
+    upc: text("upc"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => ({

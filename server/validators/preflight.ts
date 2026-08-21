@@ -636,4 +636,39 @@ export function validateAudioFromSpecs(
   return checks;
 }
 
+// ────────────────────────────────────────────────────────────────────────
+// Task #3248 — album-level UPC preflight. Warning-only (never blocks):
+// jacket/packaging artwork usually carries a UPC-A barcode, so when a
+// vinyl release's vinyl SKU has no UPC on file the artist/press should
+// find out BEFORE pressing. Pure function over the album's SKU rows so
+// the endpoint and tests share one implementation. Returns null when the
+// album has no vinyl SKU (nothing to warn about) or when every vinyl SKU
+// already carries a UPC.
+export function upcPreflightCheck(
+  skus: { format: string; active: boolean; upc: string | null }[],
+  isVinyl: (format: string) => boolean,
+): CheckResult | null {
+  const vinyl = skus.filter((s) => isVinyl(s.format));
+  if (vinyl.length === 0) return null;
+  // Prefer active rows; fall back to any vinyl row (a not-yet-activated
+  // draft still presses jackets).
+  const considered = vinyl.some((s) => s.active) ? vinyl.filter((s) => s.active) : vinyl;
+  const missing = considered.filter((s) => !(s.upc ?? "").trim());
+  if (missing.length === 0) {
+    return {
+      key: "release.upc",
+      label: "UPC on vinyl SKU",
+      status: "pass",
+      message: "Vinyl SKU carries a UPC — barcode artwork can be generated for the jacket.",
+    };
+  }
+  return {
+    key: "release.upc",
+    label: "UPC on vinyl SKU",
+    status: "warn",
+    message:
+      "No UPC on the vinyl SKU. Retail/distribution jackets usually need a UPC-A barcode printed on the packaging — add one on the Package tab's format row before pressing. (Warning only — pressing is not blocked.)",
+  };
+}
+
 export { rollupStatus };

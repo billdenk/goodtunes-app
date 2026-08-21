@@ -12616,3 +12616,6 @@ sync_github_build_mirror
 
 # Race-safe Spotify-import dedupe: one active Person per Spotify URL.
 run_sql_both "create unique index if not exists people_spotify_url_active_uniq on people (spotify_url) where spotify_url is not null and deleted_at is null" || true
+
+# Task #3248 — per-format UPC on album SKUs (idempotent, dev + prod).
+run_sql_both "alter table if exists album_skus add column if not exists upc text" || true

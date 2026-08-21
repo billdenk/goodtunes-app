@@ -286,6 +286,9 @@ async function upsertSku(input: {
   // Task #433 — per-row Lock. `undefined` = leave existing value alone
   // (no-op on conflict update); `Date` = lock; `null` = unlock.
   lockedAt?: Date | null;
+  // Task #3248 — canonical 12-digit UPC. `undefined` = preserve existing;
+  // `null` = clear; string = validated GTIN-12 from shared/upc.ts.
+  upc?: string | null;
 }): Promise<AlbumSku> {
   const setOnConflict: Record<string, unknown> = {
     priceCents: input.priceCents,
@@ -314,6 +317,12 @@ async function upsertSku(input: {
     delete insertValues.lockedAt;
   } else {
     setOnConflict.lockedAt = input.lockedAt;
+  }
+  // Task #3248 — same preserve-on-undefined semantics as lockedAt.
+  if (input.upc === undefined) {
+    delete insertValues.upc;
+  } else {
+    setOnConflict.upc = input.upc;
   }
   const [row] = await db
     .insert(albumSkus)
@@ -1229,6 +1238,11 @@ export function registerCommerceRoutes(app: Express) {
     // toggle from the row's Lock/Unlock icon. Unlock once a pressing
     // order has been approved is rejected with 409 below.
     locked: z.boolean().optional(),
+    // Task #3248 — optional per-format UPC/GTIN-12. Validated + canonical-
+    // ised (11→12 completion, check-digit verify) below via shared/upc.ts;
+    // empty string / null clears the field. `undefined` = preserve existing
+    // (back-compat with clients that don't send it).
+    upc: z.string().max(20).optional().nullable(),
   });
   app.put("/api/admin/albums/:id/skus/:format", requireAdmin, async (req, res) => {
     if (await gatePricingWrite(req, res, String(req.params.id))) return;
@@ -1372,6 +1386,20 @@ export function registerCommerceRoutes(app: Express) {
       }
       lockedAt = parsed.data.locked ? new Date() : null;
     }
+    // Task #3248 — validate + canonicalise the UPC. `undefined` preserves
+    // the stored value (clients that don't send the field); null / "" clears.
+    let upc: string | null | undefined = undefined;
+    if (parsed.data.upc !== undefined) {
+      const rawUpc = (parsed.data.upc ?? "").trim();
+      if (!rawUpc) {
+        upc = null;
+      } else {
+        const { normalizeUpc } = await import("@shared/upc");
+        const v = normalizeUpc(rawUpc);
+        if (!v.ok) return res.status(400).json({ message: `Invalid UPC: ${v.error}` });
+        upc = v.upc12;
+      }
+    }
     const row = await upsertSku({
       albumId: album.id,
       format: parsed.data.format,
@@ -1402,8 +1430,40 @@ export function registerCommerceRoutes(app: Express) {
       pressTierId: pressTierIdSnap,
       pressColorId: pressColorIdSnap,
       lockedAt,
+      upc,
     });
     res.json(row);
+  });
+
+  // Task #3248 — UPC-A barcode artwork render. Artwork only: the number is
+  // validated (check digit) but we never issue numbers or prove ownership/
+  // GS1 registration. `?upc=` may be 11 digits (check digit auto-completed)
+  // or 12; `?fmt=svg|png`. PNG is print-resolution (~1300px wide) with
+  // human-readable digits + spec quiet zones. Admin/partner bearer only —
+  // read-only render, so no per-album gate needed.
+  app.get("/api/admin/barcode/upc-a", requireAdmin, async (req, res) => {
+    const rawUpc = String(req.query.upc ?? "");
+    const fmt = String(req.query.fmt ?? "svg");
+    const { normalizeUpc } = await import("@shared/upc");
+    const v = normalizeUpc(rawUpc);
+    if (!v.ok) return res.status(400).json({ message: `Invalid UPC: ${v.error}` });
+    try {
+      if (fmt === "png") {
+        const { renderUpcPng } = await import("./barcode");
+        const buf = await renderUpcPng(v.upc12);
+        res.setHeader("Content-Type", "image/png");
+        res.setHeader("Content-Disposition", `inline; filename="UPC-${v.upc12}.png"`);
+        return res.send(buf);
+      }
+      if (fmt !== "svg") return res.status(400).json({ message: "fmt must be svg or png" });
+      const { renderUpcSvg } = await import("./barcode");
+      const svg = renderUpcSvg(v.upc12);
+      res.setHeader("Content-Type", "image/svg+xml");
+      res.setHeader("Content-Disposition", `inline; filename="UPC-${v.upc12}.svg"`);
+      return res.send(svg);
+    } catch (e: any) {
+      return res.status(400).json({ message: e?.message ?? "Barcode render failed" });
+    }
   });
 
   // Task #194 — Platform default per-format cost breakdown, served to

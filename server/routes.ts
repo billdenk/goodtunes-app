@@ -33835,6 +33835,38 @@ export async function registerRoutes(
         });
         validated++;
       }
+      // Task #3248 — album-level UPC check (warning only, never blocks).
+      // Persisted as its own `upload_validations` row so it renders in the
+      // same masters-preflight panel and rides `rollupPreflightForAlbum`
+      // (warn never outranks a fail, and pass rows are invisible noise-wise).
+      try {
+        const { upcPreflightCheck } = await import("./validators/preflight");
+        const { isVinylFormat } = await import("../shared/pressing");
+        const { albumSkus: albumSkusTable } = await import("@shared/schema");
+        const skuRows = await db
+          .select({ format: albumSkusTable.format, active: albumSkusTable.active, upc: albumSkusTable.upc })
+          .from(albumSkusTable)
+          .where(eq(albumSkusTable.albumId, albumId));
+        const upcCheck = upcPreflightCheck(
+          skuRows.map((r) => ({ format: r.format, active: r.active, upc: r.upc ?? null })),
+          (f) => isVinylFormat(f as any),
+        );
+        if (upcCheck) {
+          await storage.insertUploadValidation({
+            albumId,
+            kind: "audio",
+            vendorId,
+            templateId: null,
+            assetUrl: "",
+            fileName: "Release · UPC",
+            status: upcCheck.status === "warn" ? "warn" : "pass",
+            checks: [upcCheck],
+          });
+        }
+      } catch (upcErr) {
+        // Best-effort — the UPC advisory must never fail the whole preflight run.
+        console.warn("[preflight-masters] UPC check skipped:", upcErr);
+      }
       res.json({ tracksValidated: validated, tracksMissing: missing });
     } catch (e: any) {
       console.error("[preflight-masters]", e);
