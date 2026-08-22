@@ -37,7 +37,32 @@ export function onWhitelabelHost(host?: string): boolean {
   const h = (host ?? (typeof window === "undefined" ? "" : window.location.host))
     .toLowerCase()
     .split(":")[0];
-  return isWhitelabelHost(h);
+  if (isWhitelabelHost(h)) return true;
+  // Dev fallback mirroring the server's ?slug= branding override: *.replit.dev
+  // can't carry a white-label subdomain, so `?gtwl=<slug>` lets the branded
+  // surfaces be exercised in development. Never active in production builds.
+  if (import.meta.env.DEV && typeof window !== "undefined") {
+    return !!devWhitelabelSlug();
+  }
+  return false;
+}
+
+// Dev-only white-label slug override (see onWhitelabelHost). Reads `?gtwl=`
+// and remembers it in sessionStorage so client-side navigations keep the
+// override for the session.
+export function devWhitelabelSlug(): string | null {
+  if (!import.meta.env.DEV || typeof window === "undefined") return null;
+  try {
+    const qs = new URLSearchParams(window.location.search).get("gtwl");
+    if (qs !== null) {
+      if (qs === "") { sessionStorage.removeItem("gt-dev-wl-slug"); return null; }
+      sessionStorage.setItem("gt-dev-wl-slug", qs.toLowerCase());
+      return qs.toLowerCase();
+    }
+    return sessionStorage.getItem("gt-dev-wl-slug");
+  } catch {
+    return null;
+  }
 }
 
 // True when the page is served from the fan-facing store launch host. Used to
@@ -86,4 +111,14 @@ export function useAuthKind(): AuthKind {
     if (typeof window === "undefined") return "customer";
     return detectAuthKind(window.location.host, window.location.pathname);
   }, [typeof window === "undefined" ? "" : window.location.host]);
+}
+
+// Dev-only: mirror the ?gtwl override onto API paths as `wl=<slug>` so the
+// server can host-scope white-label portal reads even on *.replit.dev
+// (which can't carry a white-label subdomain). No-op when no dev override
+// is active — in production the real host carries the slug.
+export function withDevWlParam(path: string): string {
+  const slug = devWhitelabelSlug();
+  if (!slug) return path;
+  return path + (path.includes("?") ? "&" : "?") + "wl=" + encodeURIComponent(slug);
 }

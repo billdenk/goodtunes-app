@@ -448,6 +448,16 @@ export function Login() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
+  // Ruby handoff b912fb6 — on an MRP-light white-label host the CUSTOMER
+  // sign-in is the portal's own light login (/next-steps); the dark customer
+  // login chrome never renders there. Admin (press-partner) login keeps its
+  // light admin chrome with the press mark.
+  useEffect(() => {
+    if (!isAdmin && onWhitelabelLoginHost && whitelabelBrand?.skin === "mrp-light") {
+      navigate("/next-steps", { replace: true });
+    }
+  }, [isAdmin, onWhitelabelLoginHost, whitelabelBrand?.skin, navigate]);
+
   // Task #45 — "How does this email sign in?" lookup. When the fan
   // finishes typing their email (blur) we ask the server which provider
   // (if any) actually authenticates that address. If it's google/apple

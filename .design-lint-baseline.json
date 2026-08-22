@@ -29632,6 +29632,21 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/WhitelabelLanding.tsx",
+    "snippet": "<p className=\"text-[15px]\" style={{ color: MRP_SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/WhitelabelLanding.tsx",
+    "snippet": "className=\"mt-8 inline-flex items-center justify-center px-8 h-11 text-[15px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/WhitelabelLanding.tsx",
+    "snippet": "<p className=\"mt-10 text-[12.5px]\" style={{ color: MRP_SUBINK }}>{brand.contactLine}</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/WhitelabelLanding.tsx",
     "snippet": "<p className=\"text-[15px]\" style={{ color: \"#a1a1a6\" }}>"
   },
   {

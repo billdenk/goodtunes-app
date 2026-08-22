@@ -790,6 +790,10 @@ export type PressEstimateEmailOpts = {
   pressLocationLine?: string | null;
   /** Absolute https press logo (non-SVG — clients strip SVG). */
   pressLogoUrl?: string | null;
+  /** Visual skin: "dark" (default, GoodTunes charcoal) or "light" (the MRP
+   * white-label flavor — white canvas, square corners; Ruby handoff b912fb6).
+   * Resolved from manufacturers.email_branding, never a press-name match. */
+  skin?: "dark" | "light";
 };
 
 const fmtLongDate = (d: Date) =>
@@ -797,18 +801,30 @@ const fmtLongDate = (d: Date) =>
 const usd = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 const usd2 = (n: number) => `$${n.toFixed(2)}`;
 
-// Palette — canon charcoal, matches the estimate page exactly (handoff).
-const PE_CANVAS = "#111112";
-const PE_CARD = "#1c1c1e";
-const PE_RAISED = "#232326";
-const PE_INK = "#f5f5f7";
-const PE_SUBINK = "#a1a1a6";
-const PE_HAIRLINE = "rgba(255,255,255,0.10)";
 const PE_FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif";
 
 export function buildPressClientEstimateEmail(
   opts: PressEstimateEmailOpts,
 ): { subject: string; html: string; text: string } {
+  // Two skins, ONE structure. Dark = canon charcoal (GoodTunes flavor).
+  // Light = the MRP white-label flavor from Ruby's handoff b912fb6
+  // (PressClientEstimateEmailMRP): white canvas, warm #eceae3 inbox
+  // backdrop, SQUARE corners everywhere (MRP corner ruling), palette
+  // copied verbatim. Skin is data-driven off manufacturers.email_branding
+  // — never a press-name string match.
+  const light = opts.skin === "light";
+  const PE_CANVAS = light ? "#ffffff" : "#111112";
+  const PE_CARD = light ? "#ffffff" : "#1c1c1e";
+  const PE_RAISED = light ? "#fbfaf7" : "#232326";
+  const PE_INK = light ? "#1d1d1f" : "#f5f5f7";
+  const PE_SUBINK = light ? "#6e6e73" : "#a1a1a6";
+  const PE_HAIRLINE = light ? "rgba(0,0,0,0.10)" : "rgba(255,255,255,0.10)";
+  const PE_BODY_BG = light ? "#eceae3" : "#0a0a0b";
+  const PE_R_OUTER = light ? 0 : 18;
+  const PE_R_CARD = light ? 0 : 14;
+  const PE_R_BTN = light ? 0 : 999;
+  const PE_R_LOGO = light ? 0 : 8;
+  const PE_SCHEME = light ? "light" : "dark";
   const accent = opts.accent ?? PRESS_ESTIMATE_ACCENT_DEFAULT;
   const sent = opts.sentAt ? new Date(opts.sentAt) : new Date();
   const sentDate = Number.isFinite(sent.getTime()) ? sent : new Date();
@@ -864,7 +880,7 @@ export function buildPressClientEstimateEmail(
       )
       .join("");
     totalsCard = `
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:30px;border:1px solid ${PE_HAIRLINE};border-radius:14px;border-collapse:separate;overflow:hidden;background-color:${PE_CARD};">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:30px;border:1px solid ${PE_HAIRLINE};border-radius:${PE_R_CARD}px;border-collapse:separate;overflow:hidden;background-color:${PE_CARD};">
         ${row(
           `<td style="background-color:${PE_RAISED};padding:12px 16px;">` +
             `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>` +
@@ -903,16 +919,16 @@ export function buildPressClientEstimateEmail(
   const preparedForLine = [opts.jobTitle, opts.specLine].filter(Boolean).map(String).join(" — ");
   const logoImg =
     opts.pressLogoUrl && /^https:\/\//i.test(opts.pressLogoUrl) && !/\.svg(\?|$)/i.test(opts.pressLogoUrl)
-      ? `<img src="${opts.pressLogoUrl}" alt="${e(opts.pressName)}" width="34" height="34" style="display:inline-block;width:34px;height:34px;border:0;border-radius:8px;" /><br />`
+      ? `<img src="${opts.pressLogoUrl}" alt="${e(opts.pressName)}" width="34" height="34" style="display:inline-block;width:34px;height:34px;border:0;border-radius:${PE_R_LOGO}px;" /><br />`
       : "";
 
   const html = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="color-scheme" content="dark" /><meta name="supported-color-schemes" content="dark" /></head>
-<body style="margin:0;padding:0;background-color:#0a0a0b;">
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><meta name="color-scheme" content="${PE_SCHEME}" /><meta name="supported-color-schemes" content="${PE_SCHEME}" /></head>
+<body style="margin:0;padding:0;background-color:${PE_BODY_BG};">
   <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${e(preheader)}</div>
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0a0b" style="background-color:#0a0a0b;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${PE_BODY_BG}" style="background-color:${PE_BODY_BG};">
     <tr><td align="center" style="padding:32px 12px 56px;">
-      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background-color:${PE_CANVAS};border:1px solid ${PE_HAIRLINE};border-radius:18px;border-collapse:separate;overflow:hidden;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:100%;background-color:${PE_CANVAS};border:1px solid ${PE_HAIRLINE};border-radius:${PE_R_OUTER}px;border-collapse:separate;overflow:hidden;">
         <tr><td style="background-color:${PE_CANVAS};padding:36px 36px 40px;font-family:${PE_FONT};">
 
           <div style="text-align:right;font-size:11px;color:${PE_SUBINK};line-height:1.7;">
@@ -934,7 +950,7 @@ export function buildPressClientEstimateEmail(
           </div>
 
           <div style="margin-top:26px;text-align:center;">
-            ${bulletproofButton(opts.linkUrl, "Open your estimate", { bgColor: accent.accent, textColor: accent.buttonInk, paddingV: 13, paddingH: 34, borderRadius: 999, fontSize: 14 })}
+            ${bulletproofButton(opts.linkUrl, "Open your estimate", { bgColor: accent.accent, textColor: accent.buttonInk, paddingV: 13, paddingH: 34, borderRadius: PE_R_BTN, fontSize: 14 })}
             <div style="margin-top:10px;font-size:11px;color:${PE_SUBINK};">Private link, just for you — no account needed.</div>
           </div>
 
@@ -942,8 +958,8 @@ export function buildPressClientEstimateEmail(
             <span style="color:${PE_SUBINK};">Get this for $0 out of pocket. </span><a href="${opts.linkUrl}" style="color:${accent.accent};text-decoration:none;">Learn more →</a>
           </div>
 
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:30px;border:1px solid ${PE_HAIRLINE};border-radius:14px;border-collapse:separate;background-color:${PE_CARD};">
-            <tr><td style="background-color:${PE_CARD};padding:14px 16px;font-family:${PE_FONT};font-size:12px;color:${PE_SUBINK};line-height:1.55;border-radius:14px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:30px;border:1px solid ${PE_HAIRLINE};border-radius:${PE_R_CARD}px;border-collapse:separate;background-color:${PE_CARD};">
+            <tr><td style="background-color:${PE_CARD};padding:14px 16px;font-family:${PE_FONT};font-size:12px;color:${PE_SUBINK};line-height:1.55;border-radius:${PE_R_CARD}px;">
               <span style="color:${PE_INK};font-weight:600;">Questions? Just reply.</span>
               Replies go straight to ${preparerFirst ? `${e(preparerFirst)} at ${e(opts.pressName)}` : e(opts.pressName)}.
             </td></tr>
@@ -1005,16 +1021,78 @@ export function buildPressClientEstimateEmail(
   return { subject, html, text: textLines.join("\n") };
 }
 
+// Task #3295 (Ruby handoff b912fb6) — the "Ask a question" sheet on the
+// client estimate page sends a REAL message to the press: a plain email to
+// the preparing contact (falls back to the press contact email) with
+// Reply-To carrying the client so a reply lands back in their inbox.
+export async function sendPressClientQuestionEmail(
+  toEmail: string,
+  opts: {
+    pressName: string;
+    estimateNo: string;
+    jobTitle: string;
+    clientName: string;
+    clientEmail: string;
+    message: string;
+    linkUrl: string;
+  },
+): Promise<SendResult> {
+  const e = escapeHtml;
+  const subject = `Question about estimate ${opts.estimateNo} (${opts.jobTitle}) from ${opts.clientName}`;
+  const text = [
+    `${opts.clientName} <${opts.clientEmail}> asked a question about estimate ${opts.estimateNo} (${opts.jobTitle}):`,
+    ``,
+    opts.message,
+    ``,
+    `Reply to this email to answer them directly.`,
+    ``,
+    `Estimate: ${opts.linkUrl}`,
+    ``,
+    `Sent by GoodTunes® on behalf of your client.`,
+  ].join("\n");
+  const html = `<!DOCTYPE html><html lang="en"><body style="margin:0;padding:24px;background:#f6f6f4;font-family:${PE_FONT};color:#1d1d1f;">
+    <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid rgba(0,0,0,0.10);padding:28px 32px;">
+      <div style="font-size:14px;font-weight:600;">${e(opts.clientName)} <span style="font-weight:400;color:#6e6e73;">&lt;${e(opts.clientEmail)}&gt;</span> asked about estimate ${e(opts.estimateNo)} — ${e(opts.jobTitle)}</div>
+      <div style="margin-top:16px;padding:14px 16px;background:#fbfaf7;border:1px solid rgba(0,0,0,0.10);font-size:14px;line-height:1.6;white-space:pre-wrap;">${e(opts.message)}</div>
+      <div style="margin-top:16px;font-size:12.5px;color:#6e6e73;">Reply to this email to answer them directly. <a href="${opts.linkUrl}" style="color:#1d1d1f;">Open the estimate</a></div>
+      <div style="margin-top:20px;font-size:10.5px;color:#6e6e73;">Sent by GoodTunes® on behalf of your client.</div>
+    </div>
+  </body></html>`;
+  return sendViaResend("press-client-question", toEmail, subject, html, text, opts.clientEmail, `${opts.clientName} · via GoodTunes®`);
+}
+
 // Send wrapper — From stays a GoodTunes address (per-press sending domains
 // are flagged later work) with the preparing contact's display name
 // ("<contact> · via GoodTunes®"); Reply-To carries the contact so "Just
 // reply" reaches the human who prepared the estimate.
+// TEMP review override (Bill, Aug 21 2026): while the MRP client-portal
+// rollout is under review, every press-client estimate email delivers to
+// Bill instead of the real recipient so he can see exactly what clients
+// get. The estimate's payload keeps the REAL sentTo list — only delivery
+// is redirected. Remove the constant to restore normal delivery.
+const PRESS_ESTIMATE_REVIEW_RECIPIENT: string | null =
+  (process.env.PRESS_ESTIMATE_REVIEW_RECIPIENT ?? "").trim() || null;
+
+// Exported for tests — pure recipient/subject selection so the review
+// override is verifiable without sending mail. Default (env unset) delivers
+// to the real recipient with the original subject.
+export function resolvePressEstimateDelivery(
+  toEmail: string,
+  subject: string,
+  reviewRecipient: string | null = PRESS_ESTIMATE_REVIEW_RECIPIENT,
+): { deliverTo: string; subject: string } {
+  return reviewRecipient
+    ? { deliverTo: reviewRecipient, subject: `[to ${toEmail}] ${subject}` }
+    : { deliverTo: toEmail, subject };
+}
+
 export async function sendPressClientEstimateEmail(
   toEmail: string,
   opts: PressEstimateEmailOpts & { replyToEmail?: string | null; fromDisplayName?: string | null },
 ): Promise<SendResult> {
   const { subject, html, text } = buildPressClientEstimateEmail(opts);
-  return sendViaResend("press-estimate-send", toEmail, subject, html, text, opts.replyToEmail ?? null, opts.fromDisplayName ?? null);
+  const delivery = resolvePressEstimateDelivery(toEmail, subject);
+  return sendViaResend("press-estimate-send", delivery.deliverTo, delivery.subject, html, text, opts.replyToEmail ?? null, opts.fromDisplayName ?? null);
 }
 
 // Task #2921 — neutral one-tap sign-in link for fans who are NOT legacy

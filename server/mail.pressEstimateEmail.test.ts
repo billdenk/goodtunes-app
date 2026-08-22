@@ -8,6 +8,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   buildPressClientEstimateEmail,
+  resolvePressEstimateDelivery,
   resolvePressEstimateAccent,
   PRESS_ESTIMATE_ACCENT_DEFAULT,
   type PressEstimateEmailBreakdown,
@@ -107,6 +108,26 @@ test("MRP gold flavor from branding field — same structure, gold accent, dark 
   assert.match(html, /Estimate total/);
 });
 
+test("light skin (Ruby handoff b912fb6): white canvas, square corners, warm backdrop — same structure", () => {
+  const accent = resolvePressEstimateAccent({ accent: "#D6A63F", buttonInk: "#1d1d1f" });
+  const { html, subject } = buildPressClientEstimateEmail({ ...baseOpts, accent, skin: "light" });
+  assert.equal(subject, "Your Californialand estimate from Memphis Record Pressing");
+  // Light palette replaces the charcoal ladder entirely.
+  assert.match(html, /background-color:#ffffff/);
+  assert.match(html, /background-color:#eceae3/); // warm inbox backdrop
+  assert.ok(!html.includes("#111112"));
+  assert.ok(!html.includes("#1c1c1e") || html.includes("color:#1d1d1f"), "charcoal card bg must not survive");
+  assert.ok(!html.includes("background-color:#232326"));
+  // Square corners — MRP corner ruling: no pill button radius.
+  assert.ok(!/border-radius:\s*999px/.test(html));
+  // Same structure + numbers as dark.
+  assert.match(html, /1,000 units/);
+  assert.match(html, /\$5,185\.00/);
+  assert.match(html, /Open your estimate/);
+  assert.match(html, /\/e\/abc123token/);
+  assert.ok(!/quote/i.test(html));
+});
+
 test("accent resolution: null → blue; light accent w/o explicit ink → dark ink", () => {
   assert.deepEqual(resolvePressEstimateAccent(null), PRESS_ESTIMATE_ACCENT_DEFAULT);
   assert.deepEqual(resolvePressEstimateAccent({}), PRESS_ESTIMATE_ACCENT_DEFAULT);
@@ -168,4 +189,17 @@ test("computeQuoteEmailBreakdown mirrors the builder's curve and lines", () => {
   assert.equal(computeQuoteEmailBreakdown(bs as any, rows.slice(0, 3)), null);
   assert.equal(computeQuoteEmailBreakdown({ ...bs, done: [] } as any, rows), null);
   assert.equal(computeQuoteEmailBreakdown(null, rows), null);
+});
+
+// ── #3295 review gate — delivery recipient selection ─────────────────────
+test("estimate email delivers to the real recipient when no review override is set", () => {
+  const d = resolvePressEstimateDelivery("client@example.test", "Your estimate", null);
+  assert.equal(d.deliverTo, "client@example.test");
+  assert.equal(d.subject, "Your estimate");
+});
+
+test("review override (env-configured) redirects delivery and prefixes the subject", () => {
+  const d = resolvePressEstimateDelivery("client@example.test", "Your estimate", "bill@gogoods.com");
+  assert.equal(d.deliverTo, "bill@gogoods.com");
+  assert.equal(d.subject, "[to client@example.test] Your estimate");
 });

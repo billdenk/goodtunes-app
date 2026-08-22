@@ -70,6 +70,9 @@ import {
   CheckCircle2,
   ArrowLeftRight,
   CircleDashed,
+  AlertTriangle,
+  Square,
+  Ruler,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
@@ -1775,6 +1778,23 @@ const MOCK_RAW = {
   uploadedAt: 'Aug 18 at 3:19 PM',
 };
 
+// Full-template dimension-mismatch guard facts. A client picked "Full template"
+// in the replace chooser but uploaded panel-sized SQUARE cover art. The measured
+// file matches a single FRONT panel (311.15 × 311.15 mm — consistent with
+// MOCK_PANELS.front + the 12in gusseted jacket spec) instead of the full
+// back+spine+front spread (779.41 × 539.33 mm — MOCK_RAW.dims). A wrong-size full
+// template is never seatable, so there is NO "use it anyway" escape.
+const MOCK_MISMATCH = {
+  uploadedFile: 'GOLDENROD-cover-front.png',
+  // Measured dims of the uploaded file — the square front-panel size.
+  measured: '311.15 × 311.15 mm',
+  measuredMatch: 'front panel',
+  // What "Full template" actually expects — the whole spread.
+  expected: MOCK_RAW.dims, // 779.41 × 539.33 mm
+  expectedLabel: 'Full template',
+  body: 'The full template covers back, spine, and front in one file. This file is the size of the front panel.',
+};
+
 // The full press-side MRP template facts — mirrors the Memphis Record Pressing
 // template page (12-JKTSG3D-100). Rendered around the real mrp-jacket-template.png
 // (Andrew's PDF render). Self-contained MOCK, no press-file edits.
@@ -2432,6 +2452,134 @@ function HistoryPanel({ t, onClose }: { t: Theme; onClose: () => void }) {
   );
 }
 
+// Full-template dimension-mismatch guard. Appears after the user picks "Full
+// template" in the replace chooser and (in the mock) picks a file whose measured
+// dimensions match a single PANEL, not the full spread. Same frosted dark scrim
+// as UploadDialog. Status is word + icon (Bill is colorblind), no emojis, no color
+// alone, sentence-case heading, real measurement numbers with units. There is NO
+// "use it anyway" — a wrong-size full template is never seatable.
+function MismatchSheet({ t, onSwapPanel, onChooseAnother, onCancel }: {
+  t: Theme;
+  onSwapPanel: () => void;   // route to the single-panel path, file carried along
+  onChooseAnother: () => void; // reopen the full-template file picker
+  onCancel: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', padding: 20 }}
+      data-testid="mismatch-scrim"
+      onClick={onCancel}
+    >
+      <div
+        className="rounded-2xl overflow-hidden w-full"
+        style={{ maxWidth: 460, background: t.card, border: `1px solid ${t.hairline}`, boxShadow: '0 24px 80px rgba(0,0,0,0.45)' }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="That file measures like a single panel."
+        data-testid="mismatch-sheet"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header — status chip (word + icon), heading, X close top-right gray circle. */}
+        <div className="flex items-start justify-between gap-4" style={{ padding: '20px 22px 0' }}>
+          <div className="min-w-0">
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full text-[11.5px] font-semibold"
+              style={{ padding: '3px 10px', background: t.warnBg, border: `1px solid ${t.warnBorder}`, color: t.warnInk }}
+              data-testid="mismatch-status"
+            >
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" aria-hidden /> Size mismatch
+            </span>
+            <h2 className="text-[17px] font-semibold" style={{ marginTop: 10, color: t.ink, letterSpacing: '-0.01em' }}>
+              That file measures like a single panel.
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className={cn('w-8 h-8 -mr-1 rounded-full flex items-center justify-center flex-shrink-0 transition-colors', t.hoverCard)}
+            style={{ background: t.soft, color: t.subink }}
+            aria-label="Cancel"
+            data-testid="mismatch-close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* The measured numbers, plainly. Uploaded file vs expected full template. */}
+        <div style={{ padding: '16px 22px 0' }}>
+          <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${t.hairline}` }} data-testid="mismatch-numbers">
+            {/* Uploaded file — measured as the front panel. */}
+            <div className="flex items-start gap-3" style={{ padding: '12px 14px' }}>
+              <Square className="w-4 h-4 flex-shrink-0" style={{ marginTop: 1, color: t.subink }} aria-hidden />
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] font-semibold" style={{ color: t.subink }}>You uploaded</div>
+                <div className="text-[13.5px] font-semibold truncate" style={{ marginTop: 1, color: t.ink }} title={MOCK_MISMATCH.uploadedFile}>
+                  {MOCK_MISMATCH.uploadedFile}
+                </div>
+                <div className="inline-flex items-center gap-1.5 text-[12.5px]" style={{ marginTop: 3, color: t.ink }}>
+                  <Ruler className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.faint }} aria-hidden />
+                  <span className="tabular-nums font-medium">{MOCK_MISMATCH.measured}</span>
+                  <span style={{ color: t.faint }}>&middot; matches a {MOCK_MISMATCH.measuredMatch}</span>
+                </div>
+              </div>
+            </div>
+            {/* Expected — the full template spread. */}
+            <div className="flex items-start gap-3" style={{ padding: '12px 14px', borderTop: `1px solid ${t.hairline}`, background: t.soft }}>
+              <LayoutTemplate className="w-4 h-4 flex-shrink-0" style={{ marginTop: 1, color: t.subink }} aria-hidden />
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] font-semibold" style={{ color: t.subink }}>{MOCK_MISMATCH.expectedLabel} expects</div>
+                <div className="inline-flex items-center gap-1.5 text-[12.5px]" style={{ marginTop: 3, color: t.ink }}>
+                  <Ruler className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.faint }} aria-hidden />
+                  <span className="tabular-nums font-medium">{MOCK_MISMATCH.expected}</span>
+                  <span style={{ color: t.faint }}>&middot; back, spine and front</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p className="text-[12.5px]" style={{ marginTop: 12, color: t.subink, lineHeight: 1.55 }} data-testid="mismatch-body">
+            {MOCK_MISMATCH.body}
+          </p>
+        </div>
+
+        {/* Actions — vertical stack. Primary (the ONE filled blue action) on top per
+            canon for stacked alerts: route to the single-panel path with the file
+            carried along. Then a quiet secondary, then plain-text cancel. NO "use it
+            anyway" — a wrong-size full template is never seatable. */}
+        <div className="flex flex-col gap-2" style={{ padding: '18px 22px 20px' }}>
+          <button
+            type="button"
+            onClick={onSwapPanel}
+            className="inline-flex items-center justify-center gap-1.5 rounded-full text-[13px] font-semibold transition-colors w-full"
+            style={{ padding: '9px 16px', color: '#fff', background: BLUE, border: `1px solid ${BLUE}` }}
+            data-testid="mismatch-swap-panel"
+          >
+            <ImagePlus className="w-4 h-4 flex-shrink-0" aria-hidden /> Swap the front panel instead
+          </button>
+          <button
+            type="button"
+            onClick={onChooseAnother}
+            className={cn('inline-flex items-center justify-center gap-1.5 rounded-full text-[13px] font-medium transition-colors w-full', t.hoverCard)}
+            style={{ padding: '9px 16px', color: t.ink, border: `1px solid ${t.hairline}` }}
+            data-testid="mismatch-choose-another"
+          >
+            <Upload className="w-4 h-4 flex-shrink-0" aria-hidden /> Choose a different file
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            className={cn('rounded-full text-[13px] font-medium transition-colors w-full', t.hoverCard)}
+            style={{ padding: '8px 16px', color: t.subink }}
+            data-testid="mismatch-cancel"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // The view toolbar — reused VERBATIM from the press-side Test/Certify view row:
 // a segmented view pill on the LEFT (Full Template · Back · Front · Spine, in that
 // order) and a right cluster of ghost circle buttons. The ONE difference for the
@@ -2459,11 +2607,21 @@ function ViewToolbar({ t, area, onArea, fullLocked, panelsLocked, hasArt, lastMe
   const [showReplace, setShowReplace] = useState(false);
   const [replaceMethod, setReplaceMethod] = useState<'template' | 'images'>(lastMethod);
   const [replacePanel, setReplacePanel] = useState<PanelId>('front');
+  // Full-template mismatch guard. In the live app the client picked "Full template"
+  // then uploaded panel-sized square cover art; the app silently seated it. Here the
+  // "Continue" on Full template runs a mock file-pick whose measured dims match a
+  // PANEL, landing on the guard sheet instead of the silent seat.
+  const [showMismatch, setShowMismatch] = useState(false);
   const openReplace = () => { setReplaceMethod(lastMethod); setReplacePanel('front'); setShowReplace(true); };
   const confirmReplace = () => {
     setShowReplace(false);
-    if (replaceMethod === 'template') onReplaceTemplate();
-    else onReplacePanel(replacePanel);
+    if (replaceMethod === 'template') {
+      // Mock file-pick: the chosen file measures as a single panel, not the full
+      // spread → catch it with the guard sheet rather than seating it silently.
+      setShowMismatch(true);
+    } else {
+      onReplacePanel(replacePanel);
+    }
   };
   return (
     <div className="flex items-center justify-between gap-4 flex-wrap" data-testid="view-toolbar">
@@ -2647,6 +2805,14 @@ function ViewToolbar({ t, area, onArea, fullLocked, panelsLocked, hasArt, lastMe
                 </div>
               </div>
             </>
+          )}
+          {showMismatch && (
+            <MismatchSheet
+              t={t}
+              onSwapPanel={() => { setShowMismatch(false); onReplacePanel('front'); }}
+              onChooseAnother={() => { setShowMismatch(false); onReplaceTemplate(); }}
+              onCancel={() => setShowMismatch(false)}
+            />
           )}
         </div>
 

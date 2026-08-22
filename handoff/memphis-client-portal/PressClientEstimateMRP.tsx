@@ -1,59 +1,51 @@
-// PressClientEstimate — the estimate a press client actually receives, at
-// its private tokenized link (/e/:token — VIEW-only, no account needed).
-// Visuals are Ruby's Aug-19 handoff verbatim (handoff/press-client-estimate);
-// only the MOCK_ consts swapped for real data from GET /api/estimate-link/:token.
+// CORNER RULING (Bill, Aug 21 2026): Memphis's corner token = SQUARE across
+// the whole MRP skin — buttons, inputs, cards, pills. Only true circles
+// (avatars, status icons, the frosted x) stay round.
+// PressClientEstimateMRP — the WHITE-LABEL (Memphis Record Pressing) flavor
+// of the client estimate page. Bill's ask (Aug 21 2026): same dark page,
+// MRP's look and feel — gold accent #D9C153 (eyedropped from
+// memphisrecordpressing.com — Andrew, Aug 21 2026) replaces GoodTunes blue; filled gold actions carry dark ink
+// like MRP's own "GET A QUOTE" button. Layout, copy, numbers, and wiring are
+// otherwise identical to PressClientEstimate — keep the two in lockstep.
+// UNLOCKED by Bill (Aug 18 2026) — the Aug-16 lock stands for layout, but
+// Bill ok'd wiring the actions: Share is a quiet dialog (private link, no
+// account), Ask a question is Brandon's card, Start this project is a
+// confirm sheet, and the GoodTunes hook became ONE quiet line under the
+// total. Everything else stays pixel-identical.
+// PressClientEstimate — the estimate a press client actually receives.
+// Bill's brief (Aug 16 2026): based on the real MRP quote PDF
+// (071526-02, Niina Soleil single LP). One page, client-facing, dark.
 // - Click any quantity tier and every price updates live.
 // - "Setup costs" is one line; the chevron reveals the fixed-cost breakdown.
-// - Real total anchors the curve: the sent estimate's totalCents at its
-//   chosen run size scales the handoff's per-unit line curve so the number
-//   the artist was quoted is exactly the number shown at that tier.
-// - Share is a quiet dialog (private link, no account), Ask a question is
-//   the preparer's card, Start this project is a confirm sheet — account
-//   creation begins only there (link-not-login rule).
-// Dark-only (canon: this is what the client gets).
+// - "Prepared for" name comes from the client record (Spotify import etc. —
+//   mocked here as Alma Rivera).
+// - Action at the bottom is a placeholder "Start this project" (exact
+//   action TBD with Bill).
+// Self-contained per handoff rules. Numbers from the MRP PDF at 1,000 units;
+// other tiers scale with the standard qty curve.
 
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { useParams } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
-import PressClientEstimateMRP from '@/pages/mrp/PressClientEstimateMRP';
-import californialandCover from './press-create/assets/californialand-cover.jpg';
-import rubyVinylPhoto from './press-create/assets/mrp-ruby-translucent.png';
-import innerSleeveArt from './press-create/assets/californialand-inner-sleeve.png';
-import niinaLabelArt from './press-create/assets/niina-label-1.png';
-import mrpLogoAsset from './press-create/assets/mrp-logo.svg';
+import californialandCover from './assets/californialand-cover.jpg';
+import rubyVinylPhoto from './assets/mrp-ruby-translucent.png';
+import innerSleeveArt from './assets/californialand-inner-sleeve.png';
+import niinaLabelArt from './assets/niina-label-1.png';
+import mrpLogoAsset from './assets/mrp-logo.svg';
+import brandonPhoto from './assets/brandon-seavers.png';
 
-// ─── Estimate payload from the private link ─────────────────────────
-type LinkEstimate = {
-  title: string;
-  displayId: string | null;
-  status: string;
-  createdAt: string | null;
-  sentAt: string | null;
-  pressName: string;
-  clientName: string | null;
-  preparedBy: string | null;
-  build: string | null; // spec summary string from the builder
-  size: string | null;
-  totalCents: number | null;
-  builderState: Record<string, any> | null;
-  // Task #3257 — press white-label brand (sanitized, display-only). All-null
-  // = the page renders its neutral/GoodTunes defaults exactly as before.
-  brand?: {
-    logoUrl: string | null; // dark-background logo (this page is dark-only)
-    lightLogoUrl: string | null;
-    accentColor: string | null;
-    cornerStyle: string | null; // 'rounded' | 'square'
-    contactLine: string | null;
-    // Ruby handoff b912fb6 — presses with email branding get the light MRP
-    // skin (rendered by PressClientEstimateMRP); everyone else stays dark.
-    skin?: string | null;
-  } | null;
-};
+// ─── Mock data (from the MRP estimate PDF) ───────────────────────────
+const MOCK_CLIENT_FIRST = 'Niina';
+const MOCK_CLIENT_FULL = 'Niina Soleil';
+const MOCK_CLIENT_EMAIL = 'niina@soleilmusic.com';
+const MOCK_ESTIMATE_NO = '071526-02';
+const MOCK_DATE = 'August 24, 2026';
+const MOCK_VALID_UNTIL = 'September 23, 2026';
+const MOCK_PREPARED_BY = 'Brandon Seavers';
+const MOCK_JOB = 'Californialand';
+const MOCK_SPEC = '12" · 140g · Ruby translucent · 1 LP';
 
-// Per-unit line items at the 1,000-unit tier (handoff curve — scaled so the
-// sum at the SENT run size matches the real quoted total).
+// Per-unit line items at the 1,000-unit tier (PDF "DESCRIPTION" block).
 const UNIT_LINES = [
-  { id: 'vinyl',    name: '12" LP · 140g color vinyl',            note: 'Color vinyl, single LP',                      at1000: 2.30 },
+  { id: 'vinyl',    name: '12" LP · 140g color vinyl',            note: 'Translucent ruby, single LP',                 at1000: 2.30 },
   { id: 'labels',   name: 'Center labels · full color',           note: 'Printed before pressing',                     at1000: 0.25 },
   { id: 'sleeve',   name: 'Inner sleeve · full color',            note: '100# gloss text',                             at1000: 0.81 },
   { id: 'jacket',   name: 'Single jacket · full color',           note: '20pt board, semi-gloss',                      at1000: 0.81 },
@@ -62,7 +54,7 @@ const UNIT_LINES = [
   { id: 'shrink',   name: 'Shrinkwrap',                           note: 'Retail-ready seal',                           at1000: 0.17 },
 ];
 
-// Fixed setup costs — quantity-independent.
+// Fixed setup costs (PDF "FIXED SETUP COSTS" block) — quantity-independent.
 const SETUP_LINES = [
   { id: 'cutting',  name: 'Lacquer cutting',   amount: 650 },
   { id: 'plating',  name: 'Lacquer plating',   amount: 375 },
@@ -74,37 +66,25 @@ const SETUP_TOTAL = SETUP_LINES.reduce((a, l) => a + l.amount, 0);
 
 const QUANTITIES = [100, 300, 500, 1000, 2000, 3000];
 
-// Same discount curve as the quote builder, anchored so 1,000 = curve base.
+// Same discount curve as the quote builder, anchored so 1,000 = PDF prices.
 function tierScale(qty: number): number {
   const raw = qty <= 100 ? 1.0 : qty <= 300 ? 0.88 : qty <= 500 ? 0.8 : qty <= 1000 ? 0.7 : qty <= 2000 ? 0.62 : 0.55;
-  return raw / 0.7; // anchor: 1,000-unit tier is the curve's baseline
+  return raw / 0.7; // anchor: 1,000-unit tier matches the PDF exactly
 }
+const unitLineAt = (at1000: number, qty: number) => at1000 * tierScale(qty);
+const unitCostAt = (qty: number) => UNIT_LINES.reduce((a, l) => a + unitLineAt(l.at1000, qty), 0);
 
 const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 const money2 = (n: number) => `$${n.toFixed(2)}`;
 
-const fmtDate = (iso: string | null | undefined) => {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-};
-const plusDays = (iso: string | null | undefined, days: number) => {
-  if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  d.setDate(d.getDate() + days);
-  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-};
-
 // ─── Palette (canon charcoal, dark-only — this is what the client gets) ──
-const CANVAS = '#111112';
-const CARD = '#1c1c1e';
-const CARD_RAISED = '#232326';
-const INK = '#f5f5f7';
-const SUBINK = '#a1a1a6';
-const HAIRLINE = 'rgba(255,255,255,0.10)';
-const BLUE = '#319ED8';
+const CANVAS = '#ffffff'; // MRP pages are pure white (Andrew, Aug 21 2026)
+const CARD = '#ffffff';
+const CARD_RAISED = '#fbfaf7';
+const INK = '#1d1d1f';
+const SUBINK = '#6e6e73';
+const HAIRLINE = 'rgba(0,0,0,0.10)';
+const BLUE = '#D9C153'; // MRP white-label accent — gold replaces GoodTunes blue everywhere
 
 // Hover spin + rewind (self-contained lite copy of the builder's hook).
 const SPIN_DPS = 360 / 8000;
@@ -148,7 +128,7 @@ function useSpin() {
   return { bodyRef, onEnter, onLeave, showRewind, rewind };
 }
 
-const BLUE_TINT_TOP = 'rgba(49,158,216,0.10)';
+const BLUE_TINT_TOP = 'rgba(217,193,83,0.12)';
 // Inset hairline — lines stop short of the card edges (Bill, Aug 16 2026).
 function InsetRule() {
   return <div aria-hidden style={{ height: 1, background: HAIRLINE, margin: '0 18px' }} />;
@@ -175,7 +155,7 @@ function CloseX({ onClose, testid }: { onClose: () => void; testid: string }) {
         position: 'absolute', top: 14, right: 14, width: 30, height: 30, borderRadius: '50%',
         display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
         background: 'rgba(30,30,32,0.55)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-        border: '1px solid rgba(255,255,255,0.18)', color: '#f5f5f7',
+        border: '1px solid rgba(0,0,0,0.18)', color: '#1d1d1f',
       }}
     >
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
@@ -186,6 +166,8 @@ function CloseX({ onClose, testid }: { onClose: () => void; testid: string }) {
 }
 
 // ─── Quiet Apple sheet — shared by the wired actions (Bill, Aug 18) ──
+// Dismissal is the canon circled × top-right (Bill, Aug 19) — no text
+// Cancel/Close buttons anywhere.
 function Sheet({ children, onClose, testid, width = 400 }: { children: React.ReactNode; onClose: () => void; testid: string; width?: number }) {
   return (
     <div
@@ -197,7 +179,7 @@ function Sheet({ children, onClose, testid, width = 400 }: { children: React.Rea
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
-        style={{ position: 'relative', width, maxWidth: '100%', borderRadius: 18, background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, boxShadow: '0 32px 80px rgba(0,0,0,0.7)', padding: 26 }}
+        style={{ position: 'relative', width, maxWidth: '100%', borderRadius: 0, background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, boxShadow: '0 32px 80px rgba(0,0,0,0.18)', padding: 26 }}
       >
         <CloseX onClose={onClose} testid={`${testid}-close`} />
         {children}
@@ -208,74 +190,20 @@ function Sheet({ children, onClose, testid, width = 400 }: { children: React.Rea
 
 // Field + button treatments (dark, canon quiet).
 const fieldStyle: React.CSSProperties = {
-  width: '100%', height: 38, borderRadius: 10, padding: '0 12px', fontSize: 13.5,
+  width: '100%', height: 38, borderRadius: 0, padding: '0 12px', fontSize: 13.5,
   background: CANVAS, border: `1px solid ${HAIRLINE}`, color: INK, outline: 'none',
 };
-// Confirm earns its accent only once the user has done something actionable.
-// Task #3257 — accent + corner radius follow the press's white-label brand.
-const confirmBtn = (earned: boolean, accent: string = BLUE, radius: number = 999): React.CSSProperties => ({
-  padding: '10px 22px', borderRadius: radius, fontSize: 13.5, fontWeight: 600,
+// Confirm earns its blue only once the user has done something actionable.
+const confirmBtn = (earned: boolean): React.CSSProperties => ({
+  padding: '10px 22px', borderRadius: 0, fontSize: 13.5, fontWeight: 600,
   cursor: earned ? 'pointer' : 'not-allowed',
-  background: earned ? accent : 'transparent',
+  background: earned ? BLUE : 'transparent',
   border: earned ? '1px solid transparent' : `1px solid ${HAIRLINE}`,
-  color: earned ? '#fff' : SUBINK,
+  color: earned ? '#1d1d1f' : SUBINK,
 });
 
-// #RRGGBB → rgba() tint for the totals-card gradient.
-function hexTint(hex: string, alpha: number): string {
-  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
-  if (!m) return BLUE_TINT_TOP;
-  const n = parseInt(m[1], 16);
-  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
-}
-
-export default function PressClientEstimate() {
-  const { token } = useParams<{ token: string }>();
-  const { data, isLoading, isError } = useQuery<LinkEstimate>({
-    queryKey: [`/api/estimate-link/${token}`],
-    enabled: !!token,
-    retry: false,
-    staleTime: Infinity,
-  });
-
-  // Real fields with quiet fallbacks (the page renders nothing until loaded).
-  const clientFull = data?.clientName || data?.title || 'Your estimate';
-  const clientFirst = clientFull.split(' ')[0];
-  const estimateNo = data?.displayId ?? '—';
-  const sentIso = data?.sentAt ?? data?.createdAt ?? null;
-  const dateLabel = fmtDate(sentIso) ?? '';
-  const validUntil = plusDays(sentIso, 30);
-  const preparedBy = data?.preparedBy || data?.pressName || '';
-  const firstName = preparedBy.split(' ')[0] || 'the press';
-  const pressName = data?.pressName ?? '';
-  const jobTitle = data?.title ?? '';
-  const spec = data?.build ?? '';
-
-  // Task #3257 — white-label brand. Invalid/missing accent falls back to
-  // GoodTunes blue; missing corner style stays the rounded (pill) default.
-  // The "Always GoodTunes" surfaces (shimmer hook + explainer button) keep
-  // GoodTunes blue deliberately.
-  const brand = data?.brand ?? null;
-  const ACCENT = brand?.accentColor && /^#[0-9a-fA-F]{6}$/.test(brand.accentColor) ? brand.accentColor : BLUE;
-  const PILL = brand?.cornerStyle === 'square' ? 10 : 999;
-  const ACCENT_TINT_TOP = ACCENT === BLUE ? BLUE_TINT_TOP : hexTint(ACCENT, 0.10);
-  const brandLogoUrl = brand?.logoUrl || null;
-
-  // Anchor the curve to the real quoted number: the sent estimate's
-  // totalCents at its chosen run size is exact; other tiers follow the
-  // standard qty curve around it.
-  const estQty: number = typeof data?.builderState?.qty === 'number' ? data!.builderState!.qty : 1000;
-  const scaleFix = useMemo(() => {
-    const curveUnitAtEst = UNIT_LINES.reduce((a, l) => a + l.at1000 * tierScale(estQty), 0);
-    const totalDollars = (data?.totalCents ?? 0) / 100;
-    const realUnitAtEst = totalDollars > SETUP_TOTAL && estQty > 0 ? (totalDollars - SETUP_TOTAL) / estQty : null;
-    return realUnitAtEst && curveUnitAtEst > 0 ? realUnitAtEst / curveUnitAtEst : 1;
-  }, [data?.totalCents, estQty]);
-  const unitLineAt = useCallback((at1000: number, q: number) => at1000 * tierScale(q) * scaleFix, [scaleFix]);
-  const unitCostAt = useCallback((q: number) => UNIT_LINES.reduce((a, l) => a + unitLineAt(l.at1000, q), 0), [unitLineAt]);
-
-  const [qty, setQty] = useState<number | null>(null);
-  const activeQty = qty ?? estQty;
+export default function PressClientEstimateMRP() {
+  const [qty, setQty] = useState(1000);
   const [setupOpen, setSetupOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   // Wired actions (Bill, Aug 18 2026)
@@ -290,8 +218,8 @@ export default function PressClientEstimate() {
   // The link-not-login rule flips HERE (Bill, Aug 19 2026): viewing was
   // login-free; starting the project is where the account begins.
   const [startStep, setStartStep] = useState<'confirm' | 'account' | 'done'>('confirm');
-  const [acctName, setAcctName] = useState('');
-  const [acctEmail, setAcctEmail] = useState('');
+  const [acctName, setAcctName] = useState(MOCK_CLIENT_FULL);
+  const [acctEmail, setAcctEmail] = useState(MOCK_CLIENT_EMAIL);
   const [acctPassword, setAcctPassword] = useState('');
   const [hookOpen, setHookOpen] = useState(false);
   const spin = useSpin();
@@ -301,46 +229,26 @@ export default function PressClientEstimate() {
   const closeAsk = () => { setAskOpen(false); setAskSent(false); setAskMsg(''); };
   const closeStart = () => {
     setStartOpen(false); setStartStep('confirm');
-    setAcctName(clientFull); setAcctEmail(''); setAcctPassword('');
+    setAcctName(MOCK_CLIENT_FULL); setAcctEmail(MOCK_CLIENT_EMAIL); setAcctPassword('');
   };
+  const firstName = MOCK_PREPARED_BY.split(' ')[0];
 
-  const unitCost = useMemo(() => unitCostAt(activeQty), [unitCostAt, activeQty]);
-  const subtotal = unitCost * activeQty;
+  const unitCost = useMemo(() => unitCostAt(qty), [qty]);
+  const subtotal = unitCost * qty;
   const total = subtotal + SETUP_TOTAL;
-
-  if (isLoading) {
-    return (
-      <div style={{ minHeight: '100vh', background: CANVAS, color: SUBINK, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif" }}>
-        <div style={{ fontSize: 14 }}>Loading your estimate…</div>
-      </div>
-    );
-  }
-  // Ruby handoff b912fb6 — Memphis (email-branding presses) gets its own
-  // light skin, delete-first: this dark page never renders for them.
-  if (data?.brand?.skin === 'mrp-light') {
-    return <PressClientEstimateMRP />;
-  }
-  if (isError || !data) {
-    return (
-      <div style={{ minHeight: '100vh', background: CANVAS, color: INK, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif" }}>
-        <div style={{ textAlign: 'center' }} data-testid="estimate-link-notfound">
-          <div style={{ fontSize: 18, fontWeight: 700 }}>This estimate link isn't available.</div>
-          <div style={{ fontSize: 13.5, color: SUBINK, marginTop: 8 }}>Check the link, or ask the press to send it again.</div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div style={{ minHeight: '100vh', background: CANVAS, color: INK, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif" }}>
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px 80px' }}>
 
-        {/* ── Header: estimate meta only — press identity lives in the footer ── */}
+        {/* ── Header: estimate meta only — the press identity moved to the
+            footer (Bill, Aug 19 2026) so the top doesn't compete with the
+            artist's cover/identity. ── */}
         <header style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 24 }}>
           <div style={{ textAlign: 'right', fontSize: 12, color: SUBINK, lineHeight: 1.7 }}>
-            <div>Estimate <span style={{ color: INK, fontWeight: 600 }}>{estimateNo}</span></div>
-            {dateLabel && <div>{dateLabel}</div>}
-            {validUntil && <div>Valid until <span style={{ color: INK }}>{validUntil}</span></div>}
+            <div>Estimate <span style={{ color: INK, fontWeight: 600 }}>{MOCK_ESTIMATE_NO}</span></div>
+            <div>{MOCK_DATE}</div>
+            <div>Valid until <span style={{ color: INK }}>{MOCK_VALID_UNTIL}</span></div>
           </div>
         </header>
 
@@ -351,9 +259,9 @@ export default function PressClientEstimate() {
           </span>
           <div>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: SUBINK }}>Prepared for</div>
-          <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.4, margin: '6px 0 0' }}>{clientFull}</h1>
+          <h1 style={{ fontSize: 30, fontWeight: 700, letterSpacing: -0.4, margin: '6px 0 0' }}>{MOCK_CLIENT_FULL}</h1>
           <p style={{ fontSize: 13.5, color: SUBINK, margin: '8px 0 0' }}>
-            {spec ? <>{spec}{preparedBy ? <> · Prepared by {preparedBy}</> : null}</> : (preparedBy ? <>Prepared by {preparedBy}</> : null)}
+            {MOCK_JOB} — {MOCK_SPEC} · Prepared by {MOCK_PREPARED_BY}
           </p>
           </div>
         </section>
@@ -371,7 +279,7 @@ export default function PressClientEstimate() {
               <div style={{ position: 'relative', width: 280, height: 280, borderRadius: '50%', overflow: 'hidden' }}>
                 <div ref={spin.bodyRef} style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', willChange: 'transform' }}>
                   <img src={rubyVinylPhoto} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.13)' }} />
-                  {/* label — covers the photo's baked-in label, spins with the record */}
+                  {/* her label — covers the photo's baked-in MRP label, spins with the record */}
                   <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '40%', height: '40%', borderRadius: '50%', overflow: 'hidden' }}>
                     <img src={niinaLabelArt} alt="" aria-hidden style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 8, height: 8, borderRadius: '50%', background: '#161617' }} />
@@ -381,21 +289,21 @@ export default function PressClientEstimate() {
                 <div style={{
                   position: 'absolute', inset: 0, pointerEvents: 'none',
                   backgroundColor: '#ffffff', opacity: 0.6,
-                  maskImage: 'url(/vinyl-layers/vinyl-highlights.png)',
-                  WebkitMaskImage: 'url(/vinyl-layers/vinyl-highlights.png)',
+                  maskImage: 'url(/__mockup/vinyl-layers/vinyl-highlights.png)',
+                  WebkitMaskImage: 'url(/__mockup/vinyl-layers/vinyl-highlights.png)',
                   maskSize: '100% 100%', WebkitMaskSize: '100% 100%',
                   maskRepeat: 'no-repeat', WebkitMaskRepeat: 'no-repeat',
                 }} />
               </div>
             </div>
             {/* inner sleeve — peeking between jacket and record */}
-            <div className="absolute transition-transform duration-500 ease-out group-hover:translate-x-5" style={{ left: 26, top: 5, width: 284, height: 284, borderRadius: 3, overflow: 'hidden', border: '1px solid #222', boxShadow: '0 1px 8px rgba(0,0,0,0.4)' }} aria-hidden>
+            <div className="absolute transition-transform duration-500 ease-out group-hover:translate-x-5" style={{ left: 26, top: 5, width: 284, height: 284, borderRadius: 0, overflow: 'hidden', border: '1px solid #222', boxShadow: '0 1px 8px rgba(0,0,0,0.4)' }} aria-hidden>
               <img src={innerSleeveArt} alt="" aria-hidden style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
             <img
               src={californialandCover}
-              alt={`${jobTitle} cover`}
-              style={{ position: 'absolute', left: 0, top: 0, width: 288, height: 288, borderRadius: 4, objectFit: 'cover', boxShadow: '0 8px 32px rgba(0,0,0,0.5)', zIndex: 2 }}
+              alt="Californialand cover"
+              style={{ position: 'absolute', left: 0, top: 0, width: 288, height: 288, borderRadius: 0, objectFit: 'cover', boxShadow: '0 8px 32px rgba(0,0,0,0.25)', zIndex: 2 }}
             />
             {/* rewind */}
             <button
@@ -425,7 +333,7 @@ export default function PressClientEstimate() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
             {QUANTITIES.map((q) => {
-              const active = q === activeQty;
+              const active = q === qty;
               return (
                 <button
                   key={q}
@@ -435,17 +343,17 @@ export default function PressClientEstimate() {
                   data-testid={`estimate-qty-${q}`}
                   style={{
                     padding: '14px 10px',
-                    borderRadius: 12,
+                    borderRadius: 0,
                     background: active ? CARD_RAISED : CARD,
-                    border: active ? `1.5px solid ${ACCENT}` : `1px solid ${HAIRLINE}`,
+                    border: active ? `1.5px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
                     cursor: 'pointer',
                     textAlign: 'center',
                     color: INK,
                   }}
                 >
-                  <div style={{ fontSize: 16, fontWeight: 700, color: active ? ACCENT : INK }}>{q.toLocaleString()}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: active ? BLUE : INK }}>{q.toLocaleString()}</div>
                   <div style={{ fontSize: 10.5, color: SUBINK, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 1 }}>units</div>
-                  <div style={{ fontSize: 12.5, marginTop: 6, color: active ? ACCENT : SUBINK, fontVariantNumeric: 'tabular-nums' }}>
+                  <div style={{ fontSize: 12.5, marginTop: 6, color: active ? BLUE : SUBINK, fontVariantNumeric: 'tabular-nums' }}>
                     {money2(unitCostAt(q))} /unit
                   </div>
                 </button>
@@ -455,7 +363,8 @@ export default function PressClientEstimate() {
         </section>
 
         {/* ── Totals ── */}
-        <section style={{ marginTop: 16, borderRadius: 16, border: `1px solid ${HAIRLINE}`, overflow: 'hidden' }}>
+        <section style={{ marginTop: 16, borderRadius: 0, border: `1px solid ${HAIRLINE}`, overflow: 'hidden' }}>
+          {/* Per record — chevron expands the full cost breakdown (Bill, Aug 16) */}
           <button
             type="button"
             onClick={() => setDetailsOpen((v) => !v)}
@@ -484,7 +393,7 @@ export default function PressClientEstimate() {
                     <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 1 }}>{l.note}</div>
                   </div>
                   <div style={{ fontSize: 12.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                    {money2(unitLineAt(l.at1000, activeQty))} <span style={{ color: SUBINK, fontSize: 11 }}>/unit</span>
+                    {money2(unitLineAt(l.at1000, qty))} <span style={{ color: SUBINK, fontSize: 11 }}>/unit</span>
                   </div>
                 </div>
               ))}
@@ -528,7 +437,7 @@ export default function PressClientEstimate() {
               <div style={{ fontSize: 13.5, fontWeight: 600 }}>Run</div>
               <div style={{ fontSize: 12, color: SUBINK, marginTop: 1 }}>Pressed and packed</div>
             </div>
-            <div style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{activeQty.toLocaleString()} units · {money(subtotal)}</div>
+            <div style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{qty.toLocaleString()} units · {money(subtotal)}</div>
           </div>
           <div style={{ background: CARD }}><InsetRule /></div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '13px 18px', background: CARD }}>
@@ -538,21 +447,23 @@ export default function PressClientEstimate() {
             </div>
             <div style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{money(SETUP_TOTAL)}</div>
           </div>
-          <div style={{ padding: '18px', borderTop: `1px solid ${HAIRLINE}`, background: `linear-gradient(180deg, ${ACCENT_TINT_TOP} 0%, ${CARD} 100%)` }}>
+          <div style={{ padding: '18px', borderTop: `1px solid ${HAIRLINE}`, background: `linear-gradient(180deg, ${BLUE_TINT_TOP} 0%, ${CARD} 100%)` }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: ACCENT }}>Estimate total</div>
-                <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 2 }}>If {clientFirst} presses the full run</div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: BLUE }}>Estimate total</div>
+                <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 2 }}>If {MOCK_CLIENT_FIRST} presses the full run</div>
               </div>
               <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: -0.6, fontVariantNumeric: 'tabular-nums' }}>{money(total)}</div>
             </div>
             {/* The GoodTunes hook — ONE quiet line at the moment of maximum
-                price awareness. Apple Intelligence-style gradient sweep INSIDE
-                the type — never opacity pulsing. Honors reduced motion. */}
+                price awareness (Bill, Aug 18 2026). No banner, no ad.
+                Apple Intelligence-style gradient sweep INSIDE the type (Bill,
+                Aug 19 2026) — a slow shimmer draws the eye once, calmly;
+                never opacity pulsing (blinking begs). Honors reduced motion. */}
             <style>{`
               @keyframes gt-hook-sweep { 0% { background-position: 130% 0; } 100% { background-position: -30% 0; } }
               .gt-hook-shimmer {
-                background: linear-gradient(100deg, #86868b 0%, #86868b 38%, #6fc3ea 48%, #319ED8 50%, #6fc3ea 52%, #86868b 62%, #86868b 100%);
+                background: linear-gradient(100deg, #86868b 0%, #86868b 38%, #ecdb8a 48%, #D9C153 50%, #ecdb8a 52%, #86868b 62%, #86868b 100%);
                 background-size: 280% 100%;
                 -webkit-background-clip: text; background-clip: text;
                 -webkit-text-fill-color: transparent; color: transparent;
@@ -576,8 +487,10 @@ export default function PressClientEstimate() {
         </section>
 
         {/* ── Action ── */}
+        {/* Apple rule (Bill, Aug 16 2026): primary action sits on the right. */}
         <section style={{ marginTop: 28 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 22 }}>
+            {/* quiet links grouped together, left of the button, centered on it */}
             <button
               type="button"
               onClick={() => setShareOpen(true)}
@@ -598,7 +511,7 @@ export default function PressClientEstimate() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
-              Ask {firstName} a question
+              Ask {MOCK_PREPARED_BY.split(' ')[0]} a question
             </button>
             <div style={{ position: 'relative' }}>
               <button
@@ -606,13 +519,13 @@ export default function PressClientEstimate() {
                 onClick={() => setStartOpen(true)}
                 data-testid="estimate-start-project"
                 style={{
-                  padding: '12px 26px', borderRadius: PILL, border: 'none', cursor: 'pointer',
-                  background: ACCENT, color: '#fff', fontSize: 14.5, fontWeight: 600,
+                  padding: '12px 26px', borderRadius: 0, border: 'none', cursor: 'pointer',
+                  background: BLUE, color: '#1d1d1f', fontSize: 14.5, fontWeight: 700,
                 }}
               >
                 Start this project
               </button>
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 10, textAlign: 'center', fontSize: 11.5, fontWeight: 400, color: 'rgba(255,255,255,0.38)', whiteSpace: 'nowrap' }}>
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 10, textAlign: 'center', fontSize: 11.5, fontWeight: 400, color: 'rgba(0,0,0,0.38)', whiteSpace: 'nowrap' }}>
                 Saved to your account
               </div>
             </div>
@@ -622,26 +535,16 @@ export default function PressClientEstimate() {
 
         {/* ── Terms ── */}
         <footer style={{ marginTop: 40, fontSize: 11.5, color: SUBINK, lineHeight: 1.7, textAlign: 'center' }}>
-          {/* Press identity — letterhead-style close. Quiet: modest logo,
-              subink name. (Address only when we know it.) */}
+          {/* Press identity — letterhead-style close (moved from the header,
+              Bill, Aug 19 2026). Quiet: modest logo, subink address. */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, paddingBottom: 22, marginBottom: 22, borderBottom: `1px solid ${HAIRLINE}` }}>
-            {/* Task #3257 — the press's own logo kit + contact line drive the
-                letterhead; the old hardcoded MRP demo assets remain ONLY as
-                the fallback for Memphis when no logo is configured. */}
-            {brandLogoUrl ? (
-              <img src={brandLogoUrl} alt={pressName} style={{ maxHeight: 40, maxWidth: 180, objectFit: 'contain', opacity: 0.95 }} data-testid="estimate-brand-logo" />
-            ) : /^memphis/i.test(pressName) ? (
-              <img src={mrpLogoAsset} alt={pressName} style={{ width: 40, height: 40, filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
-            ) : null}
+            <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 40, height: 40, opacity: 0.9 }} />
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: INK }}>{pressName}</div>
-              {brand?.contactLine ? (
-                <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 2 }} data-testid="estimate-brand-contact">{brand.contactLine}</div>
-              ) : /^memphis record pressing$/i.test(pressName.trim()) ? (
-                <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 2 }}>3015 Brother Blvd · Memphis, TN · memphisvinyl.com</div>
-              ) : null}
+              <div style={{ fontSize: 13, fontWeight: 600, color: INK }}>Memphis Record Pressing</div>
+              <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 2 }}>3015 Brother Blvd · Memphis, TN · memphisvinyl.com</div>
             </div>
           </div>
+          {/* Each sentence on its own line (Bill, Aug 19 2026). */}
           <p style={{ margin: 0 }}>All orders are subject to +/- 10% and billed accordingly.</p>
           <p style={{ margin: '2px 0 0' }}>Listed prices may change per final order specifications.</p>
           <p style={{ margin: '2px 0 0' }}>This estimate is valid for 30 days.</p>
@@ -670,7 +573,7 @@ export default function PressClientEstimate() {
                 <button
                   type="button"
                   disabled={!shareEarned}
-                  style={confirmBtn(shareEarned, ACCENT, PILL)}
+                  style={confirmBtn(shareEarned)}
                   onClick={() => { if (!shareEarned) return; setShareSent(true); window.setTimeout(closeShare, 1400); }}
                   data-testid="button-share-send"
                 >
@@ -682,7 +585,7 @@ export default function PressClientEstimate() {
         </Sheet>
       )}
 
-      {/* ── Ask a question — the preparer's card ── */}
+      {/* ── Ask a question — Brandon's card ── */}
       {askOpen && (
         <Sheet onClose={closeAsk} testid="sheet-ask">
           {askSent ? (
@@ -692,12 +595,12 @@ export default function PressClientEstimate() {
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <span style={{ width: 52, height: 52, borderRadius: 14, overflow: 'hidden', flexShrink: 0, border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: CARD, color: SUBINK, fontSize: 20, fontWeight: 600 }}>
-                  {(preparedBy || pressName || '?')[0]}
+                <span style={{ width: 52, height: 52, borderRadius: 0, overflow: 'hidden', flexShrink: 0, border: `1px solid ${HAIRLINE}` }}>
+                  <img src={brandonPhoto} alt={MOCK_PREPARED_BY} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </span>
                 <div>
                   <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: -0.2 }}>How can I help?</div>
-                  <div style={{ fontSize: 12, color: SUBINK, marginTop: 2 }}>{preparedBy}{preparedBy && pressName ? ' · ' : ''}{pressName}</div>
+                  <div style={{ fontSize: 12, color: SUBINK, marginTop: 2 }}>{MOCK_PREPARED_BY} · Memphis Record Pressing</div>
                 </div>
               </div>
               <textarea
@@ -711,7 +614,7 @@ export default function PressClientEstimate() {
                 <button
                   type="button"
                   disabled={askMsg.trim() === ''}
-                  style={confirmBtn(askMsg.trim() !== '', ACCENT, PILL)}
+                  style={confirmBtn(askMsg.trim() !== '')}
                   onClick={() => { if (askMsg.trim() !== '') setAskSent(true); }}
                   data-testid="button-ask-send"
                 >
@@ -723,13 +626,28 @@ export default function PressClientEstimate() {
         </Sheet>
       )}
 
-      {/* ── Start this project — confirm → create account → done ── */}
+      {/* ── Start this project — confirm → create account → done ──
+          Bill (Aug 19 2026): starting the project is where account creation
+          begins; the estimate itself stayed link-not-login. */}
       {startOpen && (
         <Sheet onClose={closeStart} testid="sheet-start" width={430}>
           {startStep === 'done' ? (
             <div style={{ textAlign: 'center', padding: '6px 0' }}>
               <div style={{ fontSize: 15.5, fontWeight: 600 }}>Project created — {firstName} will be in touch.</div>
               <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 6 }}>Welcome, {acctName.trim().split(' ')[0]} — your account is ready.</div>
+              {/* The flow continues — done state hands off to the MRP-branded
+                  next-steps page (Bill, Aug 21 2026). */}
+              <button
+                type="button"
+                data-testid="button-see-next-steps"
+                onClick={() => { window.location.hash = '#/PressClientNextStepsMRP'; }}
+                style={{
+                  marginTop: 18, padding: '11px 24px', borderRadius: 0, border: 'none', cursor: 'pointer',
+                  background: BLUE, color: '#1d1d1f', fontSize: 13.5, fontWeight: 700,
+                }}
+              >
+                See what happens next
+              </button>
             </div>
           ) : startStep === 'account' ? (
             <>
@@ -745,10 +663,11 @@ export default function PressClientEstimate() {
                 <input style={fieldStyle} placeholder="Password" type="password" value={acctPassword} onChange={(e) => setAcctPassword(e.target.value)} data-testid="input-account-password" />
               </div>
               <div style={{ marginTop: 20 }}>
+                {/* Earns its blue once a password is typed (canon). */}
                 <button
                   type="button"
                   disabled={acctPassword.trim() === ''}
-                  style={{ ...confirmBtn(acctPassword.trim() !== '', ACCENT, PILL), width: '100%' }}
+                  style={{ ...confirmBtn(acctPassword.trim() !== ''), width: '100%' }}
                   onClick={() => { if (acctPassword.trim() !== '') setStartStep('done'); }}
                   data-testid="button-create-account"
                 >
@@ -761,15 +680,19 @@ export default function PressClientEstimate() {
             </>
           ) : (
             <>
+              {/* Apple heading: large bold headline, calmer subline below
+                  (Bill, Aug 19 2026) — never heading and copy at one weight. */}
               <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.4, lineHeight: 1.25, paddingRight: 30 }}>
-                Start {jobTitle || 'this project'} with {pressName}
+                Start {MOCK_JOB} with Memphis Record Pressing
               </div>
               <p style={{ fontSize: 13.5, color: SUBINK, margin: '10px 0 0', lineHeight: 1.65 }}>
                 This locks the estimate as your working numbers, creates the project draft,
                 and lets {firstName} know you&rsquo;re ready. Nothing is billed yet.
               </p>
               <div style={{ marginTop: 22, display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" style={confirmBtn(true, ACCENT, PILL)} onClick={() => setStartStep('account')} data-testid="button-start-confirm">
+                {/* Earned blue — the user opened the confirm deliberately.
+                    Advances to account creation, not straight to done. */}
+                <button type="button" style={confirmBtn(true)} onClick={() => setStartStep('account')} data-testid="button-start-confirm">
                   Start project
                 </button>
               </div>
@@ -778,7 +701,10 @@ export default function PressClientEstimate() {
         </Sheet>
       )}
 
-      {/* ── GoodTunes® explainer — App Store-style story card ── */}
+      {/* ── GoodTunes® explainer — App Store-style story card (Bill, Aug 19) ──
+          Large rounded square: full-bleed ruby-vinyl graphic on top, type
+          below, frosted circled × over the graphic, ONE filled-blue forward
+          action at the bottom. */}
       {hookOpen && (
         <div
           style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)', padding: 24 }}
@@ -789,9 +715,10 @@ export default function PressClientEstimate() {
             role="dialog"
             aria-modal="true"
             onClick={(e) => e.stopPropagation()}
-            className="rounded-3xl"
-            style={{ position: 'relative', width: 520, maxWidth: '90vw', overflow: 'hidden', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, boxShadow: '0 32px 80px rgba(0,0,0,0.7)' }}
+            className="rounded-none"
+            style={{ position: 'relative', width: 520, maxWidth: '90vw', overflow: 'hidden', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, boxShadow: '0 32px 80px rgba(0,0,0,0.18)' }}
           >
+            {/* Top half — full-bleed graphic, gradient into the card body */}
             <div style={{ position: 'relative', height: 280, overflow: 'hidden' }} aria-hidden>
               <img
                 src={rubyVinylPhoto}
@@ -800,7 +727,9 @@ export default function PressClientEstimate() {
               />
               <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, rgba(0,0,0,0) 45%, ${CARD_RAISED} 100%)` }} />
             </div>
+            {/* Canon circled × — frosted, over the graphic (Apple sheets) */}
             <CloseX onClose={() => setHookOpen(false)} testid="button-goodtunes-close" />
+            {/* Bottom half — headline + the three lines + one forward action */}
             <div style={{ padding: '4px 30px 28px' }}>
               <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>GoodTunes® fan-funded pressing</div>
               <div style={{ fontSize: 13.5, color: SUBINK, marginTop: 12, lineHeight: 1.7 }}>
@@ -808,12 +737,13 @@ export default function PressClientEstimate() {
                 <p style={{ margin: '6px 0 0' }}>The run funds itself — same build, same press, $0 up front.</p>
                 <p style={{ margin: '6px 0 0' }}>You keep the estimate you&rsquo;re looking at; only the payer changes.</p>
               </div>
+              {/* ONE primary — the single forward action of an informational card */}
               <button
                 type="button"
                 data-testid="button-goodtunes-learn"
                 style={{
-                  marginTop: 22, width: '100%', padding: '12px 0', borderRadius: 999, border: 'none',
-                  cursor: 'pointer', background: BLUE, color: '#fff', fontSize: 14.5, fontWeight: 600,
+                  marginTop: 22, width: '100%', padding: '12px 0', borderRadius: 0, border: 'none',
+                  cursor: 'pointer', background: BLUE, color: '#1d1d1f', fontSize: 14.5, fontWeight: 700,
                 }}
               >
                 Learn more

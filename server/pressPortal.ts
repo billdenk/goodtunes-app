@@ -927,6 +927,7 @@ export function registerPressPortalRoutes(
       SELECT id, name, logo_url, light_logo_url, nav_logo_url, light_nav_logo_url,
              square_logo_url, light_square_logo_url,
              brand_accent_color, brand_corner_style, brand_contact_line,
+             email_branding,
              (lower(white_label_slug) = ${slug}) AS current_match
       FROM manufacturers
       WHERE lower(white_label_slug) = ${slug}
@@ -947,6 +948,13 @@ export function registerPressPortalRoutes(
       accentColor: m.brand_accent_color ?? null,
       cornerStyle: m.brand_corner_style ?? null,
       contactLine: m.brand_contact_line ?? null,
+      // Tab identity (favicon) — square mark preferred, any logo as fallback.
+      squareLogoUrl: m.square_logo_url ?? m.light_square_logo_url ?? m.logo_url ?? m.light_logo_url ?? null,
+      // Ruby handoff b912fb6 — presses with email branding configured get
+      // the light MRP skin on their customer-facing surfaces (landing,
+      // sign-in, estimate page, client portal). Data-driven, never a
+      // press-name string match. Null = current dark/neutral surfaces.
+      skin: m.email_branding ? "mrp-light" : null,
     });
   });
 
@@ -2781,7 +2789,10 @@ export function registerPressPortalRoutes(
              m.light_logo_url AS press_light_logo_url,
              m.brand_accent_color AS brand_accent_color,
              m.brand_corner_style AS brand_corner_style,
-             m.brand_contact_line AS brand_contact_line
+             m.brand_contact_line AS brand_contact_line,
+             m.email_branding AS email_branding,
+             m.location AS press_location,
+             m.website_url AS press_website_url
       FROM press_estimates e
       JOIN manufacturers m ON m.id = e.press_id
       WHERE e.kind = 'estimate' AND e.payload->>'shareToken' = ${token}
@@ -2809,6 +2820,9 @@ export function registerPressPortalRoutes(
       size: payload.size ?? null,
       totalCents: payload.totalCents ?? null,
       builderState: payload.builderState ?? null,
+      acceptedAt: payload.acceptedAt ?? null,
+      clientEmail:
+        (Array.isArray(payload.sentTo) ? payload.sentTo.find((r: any) => String(r?.email ?? "").includes("@"))?.email : null) ?? null,
       // Task #3257 — white-label brand for the public viewer. Display-only
       // fields; all-null = the page renders its GoodTunes/neutral defaults.
       brand: {
@@ -2817,9 +2831,484 @@ export function registerPressPortalRoutes(
         accentColor: row.brand_accent_color ?? null,
         cornerStyle: row.brand_corner_style ?? null,
         contactLine: row.brand_contact_line ?? null,
+        // Ruby handoff b912fb6 — light MRP skin for presses with email
+        // branding set. Data-driven, never a press-name match.
+        skin: row.email_branding ? "mrp-light" : null,
+        locationLine: [row.press_location, String(row.press_website_url ?? "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim()].filter(Boolean).join(" · ") || null,
       },
     });
   });
+
+  // ── Task #3295 (Ruby handoff b912fb6) — client actions off the private
+  // estimate token. The token is the credential: it was minted at send time
+  // and mailed only to the estimate's recipients. All three endpoints load
+  // the estimate the same way the GET does and refuse unknown tokens.
+  const loadEstimateByToken = async (tokenRaw: unknown) => {
+    const token = String(tokenRaw ?? "").trim();
+    if (token.length < 24 || token.length > 128) return null;
+    const found = await db.execute<any>(sql`
+      SELECT e.*, m.id AS press_id, m.name AS press_name, m.contact_email AS press_contact_email,
+             m.email_branding AS email_branding, m.logo_url AS press_logo_url,
+             m.location AS press_location, m.website_url AS press_website_url,
+             m.white_label_slug AS white_label_slug
+      FROM press_estimates e
+      JOIN manufacturers m ON m.id = e.press_id
+      WHERE e.kind = 'estimate' AND e.payload->>'shareToken' = ${token}
+      LIMIT 1
+    `);
+    return ((found as any).rows ?? [])[0] ?? null;
+  };
+  const estimateLinkUrl = (req: Request, row: any, token: string) => {
+    const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https";
+    const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
+    const branded = whitelabelOriginForPress({ whiteLabelSlug: row.white_label_slug } as any);
+    return `${branded ?? `${proto}://${host}`}/e/${token}`;
+  };
+
+  // "Ask a question" — sends a REAL message to the press: email to the
+  // preparing contact (fallback: press contact email), Reply-To = client.
+  app.post("/api/estimate-link/:token/ask", async (req, res) => {
+    const row = await loadEstimateByToken(req.params.token);
+    if (!row) return res.status(404).json({ message: "Estimate not found" });
+    const body = z
+      .object({
+        name: z.string().trim().max(120).optional().default(""),
+        email: z.string().trim().email().max(200).optional(),
+        message: z.string().trim().min(1).max(4000),
+      })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: "A question is required" });
+    const payload = (row.payload ?? {}) as Record<string, any>;
+    const sentTo: Array<{ name?: string; email?: string }> = Array.isArray(payload.sentTo) ? payload.sentTo : [];
+    // Resolve the press-side recipient: the preparer's email if we can find
+    // it, else the press contact email. No recipient = honest 503, never a
+    // silent drop.
+    let toEmail: string | null = null;
+    const preparedBy = typeof payload.preparedBy === "string" ? payload.preparedBy.trim() : "";
+    if (preparedBy) {
+      const u = await db.execute<any>(sql`SELECT email FROM users WHERE display_name = ${preparedBy} AND email LIKE '%@%' LIMIT 1`);
+      toEmail = ((u as any).rows ?? [])[0]?.email ?? null;
+    }
+    if (!toEmail && typeof row.press_contact_email === "string" && row.press_contact_email.includes("@")) toEmail = row.press_contact_email;
+    if (!toEmail) return res.status(503).json({ message: "This press has no contact email on file yet — reply to the estimate email instead." });
+    const clientEmail = body.data.email ?? (sentTo.find((r) => r?.email?.includes("@"))?.email ?? "");
+    const clientName = body.data.name || String(payload.clientName ?? "").trim() || clientEmail || "Your client";
+    const { sendPressClientQuestionEmail } = await import("./mail");
+    const token = String(req.params.token).trim();
+    const result = await sendPressClientQuestionEmail(toEmail, {
+      pressName: row.press_name,
+      estimateNo: String(row.display_id ?? row.title ?? ""),
+      jobTitle: String(row.title ?? "your record"),
+      clientName,
+      clientEmail: clientEmail || "no-reply@goodtunes.music",
+      message: body.data.message,
+      linkUrl: estimateLinkUrl(req, row, token),
+    });
+    if (!result.ok) return res.status(502).json({ message: "We couldn't deliver your question — please try again or reply to the estimate email." });
+    res.json({ ok: true });
+  });
+
+  // "Share" — sends the real estimate email (press-skinned) to a recipient
+  // the client chooses. Reuses the exact same composition as /send.
+  app.post("/api/estimate-link/:token/share", async (req, res) => {
+    const row = await loadEstimateByToken(req.params.token);
+    if (!row) return res.status(404).json({ message: "Estimate not found" });
+    const body = z
+      .object({ name: z.string().trim().max(120).optional().default(""), email: z.string().trim().email().max(200) })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: "A valid email address is required" });
+    const payload = (row.payload ?? {}) as Record<string, any>;
+    const { loadPressComponents } = await import("./pressComponents");
+    const configs = await loadPressComponents(String(row.press_id));
+    const breakdown = computeQuoteEmailBreakdown(payload.builderState ?? null, configs.pricing?.rows ?? []);
+    const accent = resolvePressEstimateAccent(row.email_branding ?? null);
+    const pressDomain = String(row.press_website_url ?? "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim();
+    const token = String(req.params.token).trim();
+    const result = await sendPressClientEstimateEmail(body.data.email, {
+      clientName: body.data.name || body.data.email,
+      clientEmail: body.data.email,
+      estimateNo: String(row.display_id ?? "").trim() || String(row.title ?? ""),
+      sentAt: payload.sentAt ?? null,
+      preparedBy: typeof payload.preparedBy === "string" ? payload.preparedBy : null,
+      pressName: row.press_name,
+      jobTitle: String(row.title ?? "your record").trim() || "your record",
+      specLine: typeof payload.build === "string" && payload.build.trim() ? payload.build.trim() : null,
+      linkUrl: estimateLinkUrl(req, row, token),
+      breakdown,
+      accent,
+      skin: row.email_branding ? ("light" as const) : ("dark" as const),
+      pressLocationLine: [row.press_location, pressDomain].filter(Boolean).join(" · ") || null,
+      pressLogoUrl: row.press_logo_url && /^https:\/\//i.test(row.press_logo_url) ? row.press_logo_url : null,
+      replyToEmail: typeof row.press_contact_email === "string" && row.press_contact_email.includes("@") ? row.press_contact_email : null,
+    } as any);
+    if (!result.ok) return res.status(502).json({ message: "We couldn't send that share email — please try again." });
+    res.json({ ok: true });
+  });
+
+  // "Start this project" — flips the estimate to Converted (one-way; the
+  // estimate becomes the project's working numbers) and, when the client
+  // isn't signed in yet, creates their real customer account off the
+  // create-account form and signs them in (host-scoped session + bearer).
+  // Estimate math itself never changes here.
+  app.post("/api/estimate-link/:token/start", async (req, res) => {
+    const row = await loadEstimateByToken(req.params.token);
+    if (!row) return res.status(404).json({ message: "Estimate not found" });
+    const body = z
+      .object({
+        name: z.string().trim().max(200).optional().default(""),
+        email: z.string().trim().email().max(200).optional(),
+        password: z.string().min(8).max(200).optional(),
+      })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: "Check the account details — password must be at least 8 characters" });
+    const payload = (row.payload ?? {}) as Record<string, any>;
+
+    // Resolve or create the customer account.
+    let customerId: string | null = null;
+    let token: string | null = null;
+    const auth = req.session?.userId && req.session?.kind === "customer" ? { userId: req.session.userId } : null;
+    if (auth) {
+      customerId = auth.userId;
+    } else if (body.data.email && body.data.password) {
+      const emailNorm = body.data.email.toLowerCase();
+      const existing = await storage.getCustomerByEmail(emailNorm);
+      if (existing) {
+        return res.status(409).json({ message: "An account with that email already exists — sign in instead.", code: "ACCOUNT_EXISTS" });
+      }
+      const { scrypt, randomBytes } = await import("crypto");
+      const { promisify } = await import("util");
+      const scryptAsync = promisify(scrypt);
+      const salt = randomBytes(16).toString("hex");
+      const buf = (await scryptAsync(body.data.password, salt, 64)) as Buffer;
+      const hashed = `${buf.toString("hex")}.${salt}`;
+      // Username from the email local part, uniquified — mirrors the
+      // restricted-insert customer create paths.
+      const base = emailNorm.split("@")[0].replace(/[^a-z0-9_]/g, "").slice(0, 24) || "client";
+      let username = base;
+      for (let i = 0; i < 5; i++) {
+        if (!(await storage.getCustomerByUsername(username))) break;
+        username = `${base}${crypto.randomBytes(2).toString("hex")}`;
+      }
+      const displayName = body.data.name || String(payload.clientName ?? "").trim() || emailNorm;
+      const c = await storage.createCustomer({ username, email: emailNorm, displayName, realName: body.data.name || null, password: hashed });
+      // Account was created from a real estimate email link — mark signup
+      // complete (name + deliverable email collected up-front).
+      await storage.updateCustomer(c.id, { handle: username, signupCompletedAt: new Date() } as any).catch(() => {});
+      customerId = c.id;
+      req.session.userId = c.id;
+      req.session.kind = "customer";
+      token = crypto.randomBytes(32).toString("hex");
+      await storage.createAuthToken(token, c.id, "customer");
+    }
+
+    // One-way claim: only a live (Sent/Viewed) estimate can convert; a
+    // Converted row returns ok (idempotent confirm), Draft/Abandoned refuse.
+    if (row.status === "Converted") return res.json({ ok: true, alreadyStarted: true, token });
+    if (row.status !== "Sent" && row.status !== "Viewed") {
+      return res.status(409).json({ message: "This estimate isn't live anymore — ask the press to re-send it." });
+    }
+    const nextPayload: Record<string, any> = {
+      ...payload,
+      acceptedAt: new Date().toISOString(),
+      ...(customerId ? { acceptedByCustomerId: customerId } : {}),
+    };
+    const [updated] = await db
+      .update(pressEstimates)
+      .set({ status: "Converted", payload: nextPayload, updatedAt: new Date() })
+      .where(and(eq(pressEstimates.id, row.id), sql`${pressEstimates.status} IN ('Sent','Viewed')`))
+      .returning({ id: pressEstimates.id });
+    if (!updated) return res.status(409).json({ message: "This estimate just changed — reload the page." });
+    res.json({ ok: true, token });
+  });
+
+  // Signed-in client's portal data (dashboard / next-steps / project home).
+  // Matches estimates to the customer by acceptedByCustomerId OR by a sentTo
+  // recipient email equal to the account email — real data only, honest
+  // zeros for a fresh client.
+  // #3295 review gate — the client portal is a WHITE-LABEL surface, so its
+  // reads must be scoped to the ONE press the request's host belongs to.
+  // A client with estimates at two presses only ever sees the host press's
+  // projects on that press's portal. In development (*.replit.dev can't
+  // carry a white-label subdomain) an explicit ?wl=<slug> query mirrors the
+  // client's ?gtwl override; never honored in production.
+  async function resolvePortalPressForRequest(req: Request): Promise<{ id: string } | null> {
+    const { parseWhitelabelHost } = await import("@shared/whitelabelHost");
+    const rawHost = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "");
+    let slug = parseWhitelabelHost(rawHost)?.slug ?? null;
+    if (!slug && process.env.NODE_ENV !== "production") {
+      const q = String(req.query.wl ?? "").trim().toLowerCase();
+      if (q) slug = q;
+    }
+    if (!slug) return null;
+    const r = await db.execute<any>(sql`
+      SELECT id FROM manufacturers
+      WHERE lower(white_label_slug) = ${slug} OR lower(previous_white_label_slug) = ${slug}
+      ORDER BY (lower(white_label_slug) = ${slug}) DESC
+      LIMIT 1
+    `);
+    const row = ((r as any).rows ?? [])[0];
+    return row ? { id: String(row.id) } : null;
+  }
+
+  app.get("/api/press-client/portal", async (req, res) => {
+    const userId = req.session?.userId;
+    const kind = req.session?.kind;
+    let customer = kind === "customer" && userId ? await storage.getCustomer(userId) : null;
+    if (!customer) {
+      // Bearer fallback (host-scoped sessions can lag right after signup).
+      const authHeader = String(req.headers.authorization ?? "");
+      const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+      if (bearer) {
+        const t = await storage.getAuthBy(bearer);
+        if (t && t.kind === "customer") customer = await storage.getCustomer(t.userId);
+      }
+    }
+    if (!customer) return res.status(401).json({ message: "Unauthorized" });
+    const hostPress = await resolvePortalPressForRequest(req);
+    if (!hostPress) return res.status(404).json({ message: "Not found" });
+    const email = String(customer.email ?? "").toLowerCase();
+    const rows = await db.execute<any>(sql`
+      SELECT e.id, e.display_id, e.title, e.status, e.created_at, e.updated_at, e.payload,
+             m.name AS press_name, m.email_branding AS email_branding
+      FROM press_estimates e
+      JOIN manufacturers m ON m.id = e.press_id
+      WHERE e.kind = 'estimate'
+        AND e.press_id = ${hostPress.id}
+        AND (e.payload->>'acceptedByCustomerId' = ${customer.id}
+             OR EXISTS (
+               SELECT 1 FROM jsonb_array_elements(COALESCE(e.payload->'sentTo','[]'::jsonb)) r
+               WHERE lower(r->>'email') = ${email}
+             ))
+      ORDER BY e.updated_at DESC
+      LIMIT 50
+    `);
+    const list = ((rows as any).rows ?? []).map((r: any) => {
+      const p = (r.payload ?? {}) as Record<string, any>;
+      return {
+        id: r.id,
+        estimateNo: r.display_id ?? null,
+        title: r.title ?? null,
+        status: r.status,
+        pressName: r.press_name ?? null,
+        build: p.build ?? null,
+        totalCents: p.totalCents ?? null,
+        quantity: p.builderState?.quantity ?? null,
+        sentAt: p.sentAt ?? null,
+        acceptedAt: p.acceptedAt ?? null,
+        shareToken: typeof p.shareToken === "string" ? p.shareToken : null,
+        preparedBy: p.preparedBy ?? null,
+      };
+    });
+    res.json({
+      client: { id: customer.id, displayName: customer.displayName, email: customer.email },
+      estimates: list,
+    });
+  });
+
+  // Signed-in client's dashboard data — real data only, honest zeros for a
+  // fresh press client (no fabricated sales/plays). The range switcher
+  // re-queries this endpoint; series length follows the range. Activity is
+  // the estimate lifecycle (created / sent / accepted / files uploaded).
+  app.get("/api/press-client/dashboard", async (req, res) => {
+    const userId = req.session?.userId;
+    const kind = req.session?.kind;
+    let customer = kind === "customer" && userId ? await storage.getCustomer(userId) : null;
+    if (!customer) {
+      const authHeader = String(req.headers.authorization ?? "");
+      const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+      if (bearer) {
+        const t = await storage.getAuthBy(bearer);
+        if (t && t.kind === "customer") customer = await storage.getCustomer(t.userId);
+      }
+    }
+    if (!customer) return res.status(401).json({ message: "Unauthorized" });
+    const hostPress = await resolvePortalPressForRequest(req);
+    if (!hostPress) return res.status(404).json({ message: "Not found" });
+    const email = String(customer.email ?? "").toLowerCase();
+    const range = String(req.query.range ?? "30d");
+    const days = range === "today" ? 1 : range === "7d" ? 7 : range === "90d" ? 90 : range === "all" ? 365 : 30;
+    const rows = await db.execute<any>(sql`
+      SELECT e.id, e.display_id, e.title, e.status, e.created_at, e.payload,
+             m.name AS press_name
+      FROM press_estimates e
+      JOIN manufacturers m ON m.id = e.press_id
+      WHERE e.kind = 'estimate'
+        AND e.press_id = ${hostPress.id}
+        AND (e.payload->>'acceptedByCustomerId' = ${customer.id}
+             OR EXISTS (
+               SELECT 1 FROM jsonb_array_elements(COALESCE(e.payload->'sentTo','[]'::jsonb)) r
+               WHERE lower(r->>'email') = ${email}
+             ))
+      ORDER BY e.updated_at DESC
+      LIMIT 50
+    `);
+    const ests = ((rows as any).rows ?? []) as any[];
+    // Series — honest zeros; press clients have no linked fan-sales data yet.
+    const series: { date: string; salesCents: number; plays: number; listeners: number }[] = [];
+    const now = Date.now();
+    for (let i = days - 1; i >= 0; i--) {
+      series.push({ date: new Date(now - i * 86400_000).toISOString().slice(0, 10), salesCents: 0, plays: 0, listeners: 0 });
+    }
+    const activity: { id: string; kind: string; ts: string; title: string; detail: string }[] = [];
+    const topProjects: { id: string; title: string; format: string; units: number; salesCents: number }[] = [];
+    for (const r of ests) {
+      const p = (r.payload ?? {}) as Record<string, any>;
+      const no = r.display_id ?? "";
+      const title = r.title ?? "Untitled project";
+      if (r.created_at) activity.push({ id: `${r.id}-created`, kind: "stage", ts: new Date(r.created_at).toISOString(), title: `Estimate ${no} prepared`, detail: `${title} · ${r.press_name ?? ""}` });
+      if (p.sentAt) activity.push({ id: `${r.id}-sent`, kind: "stage", ts: p.sentAt, title: `Estimate ${no} sent to you`, detail: title });
+      if (p.acceptedAt) activity.push({ id: `${r.id}-accepted`, kind: "milestone", ts: p.acceptedAt, title: `${title} project created`, detail: `Estimate ${no} locked as working numbers` });
+      for (const f of Array.isArray(p.clientFiles) ? p.clientFiles : []) {
+        if (f?.uploadedAt) activity.push({ id: `${r.id}-file-${f.uploadedAt}`, kind: "certificate", ts: f.uploadedAt, title: `File received — ${f.name ?? "upload"}`, detail: `${title} · Estimate ${no}` });
+      }
+      topProjects.push({
+        id: r.id,
+        title,
+        format: `${p.build ?? "Vinyl"}${r.status === "Converted" ? ` · in production at ${r.press_name ?? "the press"}` : ""}`,
+        units: 0,
+        salesCents: 0,
+      });
+    }
+    activity.sort((a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime());
+    const zero = { salesRangeCents: 0, salesLifetimeCents: 0, playsRange: 0, listenerCount: 0, buyerCount: 0 };
+    res.json({
+      range,
+      kpis: { ...zero, prior: { ...zero } },
+      series,
+      activity: activity.slice(0, 12),
+      topProjects: topProjects.slice(0, 5),
+      channels: [],
+      giving: null,
+    });
+  });
+
+  // Real client file upload (Ruby handoff "Must work": Upload files opens a
+  // real upload). Customer-authed; the file streams to Object Storage under
+  // the shared uploads convention and its URL is appended to the estimate's
+  // payload.clientFiles so the press sees what the client sent.
+  {
+    const multerP = import("multer").then((m) => m.default);
+    const uploadMiddleware = async (req: Request, res: Response, next: Function) => {
+      const multer = await multerP;
+      const clientUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } });
+      clientUpload.single("file")(req as any, res as any, next as any);
+    };
+    app.post("/api/press-client/estimates/:id/files", uploadMiddleware, async (req, res) => {
+      const { randomUUID } = await import("node:crypto");
+      const { ObjectStorageService, objectStorageClient } = await import("./replit_integrations/object_storage/objectStorage");
+      const { setObjectAclPolicy } = await import("./replit_integrations/object_storage/objectAcl");
+      const objectStorage = new ObjectStorageService();
+      const userId = req.session?.userId;
+      const kind = req.session?.kind;
+      let customer = kind === "customer" && userId ? await storage.getCustomer(userId) : null;
+      if (!customer) {
+        const authHeader = String(req.headers.authorization ?? "");
+        const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+        if (bearer) {
+          const t = await storage.getAuthBy(bearer);
+          if (t && t.kind === "customer") customer = await storage.getCustomer(t.userId);
+        }
+      }
+      if (!customer) return res.status(401).json({ message: "Unauthorized" });
+      const f = (req as any).file as { originalname: string; mimetype: string; buffer: Buffer } | undefined;
+      if (!f) return res.status(400).json({ message: "No file uploaded" });
+      const estimateId = String(req.params.id);
+      const rows = await db.select().from(pressEstimates).where(eq(pressEstimates.id, estimateId)).limit(1);
+      const row = rows[0];
+      if (!row || row.kind !== "estimate") return res.status(404).json({ message: "Estimate not found" });
+      const payload = (row.payload ?? {}) as Record<string, any>;
+      const email = String(customer.email ?? "").toLowerCase();
+      const sentTo: Array<{ email?: string }> = Array.isArray(payload.sentTo) ? payload.sentTo : [];
+      const mine = payload.acceptedByCustomerId === customer.id || sentTo.some((r) => String(r?.email ?? "").toLowerCase() === email);
+      if (!mine) return res.status(404).json({ message: "Estimate not found" });
+      const ext = (f.originalname.match(/\.[A-Za-z0-9]{1,8}$/)?.[0] ?? "").toLowerCase();
+      const id = `${randomUUID()}${ext}`;
+      const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
+      const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
+      const firstSlash = trimmed.indexOf("/");
+      const bucketName = firstSlash === -1 ? trimmed : trimmed.slice(0, firstSlash);
+      const prefix = firstSlash === -1 ? "" : trimmed.slice(firstSlash + 1);
+      const objectName = `${prefix ? `${prefix}/` : ""}uploads/${id}`;
+      const file = objectStorageClient.bucket(bucketName).file(objectName);
+      await file.save(f.buffer, { contentType: f.mimetype || "application/octet-stream", resumable: false });
+      // PRIVATE by construction — client masters/artwork must never be
+      // readable via the generic public /objects route (review gate,
+      // #3295). Reads go through the authed download route below.
+      await setObjectAclPolicy(file, { owner: customer.id, visibility: "private" });
+      const url = `/api/press-client/estimates/${estimateId}/files/${id}`;
+      const entry = { name: f.originalname, url, objectId: id, uploadedAt: new Date().toISOString(), byCustomerId: customer.id };
+      const clientFiles = Array.isArray(payload.clientFiles) ? [...payload.clientFiles, entry] : [entry];
+      await db
+        .update(pressEstimates)
+        .set({ payload: { ...payload, clientFiles }, updatedAt: new Date() })
+        .where(eq(pressEstimates.id, estimateId));
+      res.json({ ok: true, file: entry });
+    });
+
+    // Authed download of a client-uploaded file. Readable ONLY by (a) the
+    // client the estimate belongs to (accepted-by or sentTo email match) or
+    // (b) an operator/press user scoped to the estimate's press. Never
+    // served via the public /objects route (files are stored private).
+    app.get("/api/press-client/estimates/:id/files/:objectId", async (req, res) => {
+      const userId = req.session?.userId;
+      const kind = req.session?.kind;
+      let auth: { userId: string; kind: "admin" | "customer" } | null =
+        userId && kind ? { userId, kind: kind as any } : null;
+      if (!auth) {
+        const authHeader = String(req.headers.authorization ?? "");
+        const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+        if (bearer) auth = (await storage.getAuthBy(bearer)) ?? null;
+      }
+      if (!auth) return res.status(401).json({ message: "Unauthorized" });
+      const estimateId = String(req.params.id);
+      const objectId = String(req.params.objectId);
+      const rows = await db.select().from(pressEstimates).where(eq(pressEstimates.id, estimateId)).limit(1);
+      const row = rows[0];
+      if (!row || row.kind !== "estimate") return res.status(404).json({ message: "Not found" });
+      const payload = (row.payload ?? {}) as Record<string, any>;
+      const clientFiles: Array<{ objectId?: string; name?: string }> = Array.isArray(payload.clientFiles) ? payload.clientFiles : [];
+      const entry = clientFiles.find((e) => e?.objectId === objectId);
+      if (!entry) return res.status(404).json({ message: "Not found" });
+      let allowed = false;
+      if (auth.kind === "customer") {
+        const customer = await storage.getCustomer(auth.userId);
+        const email = String(customer?.email ?? "").toLowerCase();
+        const sentTo: Array<{ email?: string }> = Array.isArray(payload.sentTo) ? payload.sentTo : [];
+        allowed = !!customer && (payload.acceptedByCustomerId === customer.id
+          || sentTo.some((r) => String(r?.email ?? "").toLowerCase() === email));
+      } else {
+        // Operator or press user — super_admin/admin see everything;
+        // partner accounts must hold a membership on THIS press.
+        const { getUserRole, findMembershipForScope } = await import("./auth/roles");
+        const role = await getUserRole(auth.userId);
+        allowed = role?.role === "super_admin" || role?.role === "admin"
+          || !!(await findMembershipForScope(auth.userId, "manufacturer", row.pressId));
+      }
+      if (!allowed) return res.status(404).json({ message: "Not found" });
+      const { ObjectStorageService, objectStorageClient } = await import("./replit_integrations/object_storage/objectStorage");
+      const objectStorage = new ObjectStorageService();
+      const privateDir = objectStorage.getPrivateObjectDir().replace(/\/$/, "");
+      const trimmed = privateDir.startsWith("/") ? privateDir.slice(1) : privateDir;
+      const firstSlash = trimmed.indexOf("/");
+      const bucketName = firstSlash === -1 ? trimmed : trimmed.slice(0, firstSlash);
+      const prefix = firstSlash === -1 ? "" : trimmed.slice(firstSlash + 1);
+      const file = objectStorageClient.bucket(bucketName).file(`${prefix ? `${prefix}/` : ""}uploads/${objectId}`);
+      const [exists] = await file.exists();
+      if (!exists) return res.status(404).json({ message: "Not found" });
+      const [meta] = await file.getMetadata();
+      res.setHeader("Content-Type", String(meta.contentType ?? "application/octet-stream"));
+      // RFC 5987: ASCII fallback in `filename`, UTF-8 original in
+      // `filename*` — a raw non-ASCII name makes Node reject the header
+      // (ERR_INVALID_CHAR → 500).
+      const rawName = String(entry.name ?? objectId);
+      const asciiName = rawName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "") || objectId;
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(rawName)}`,
+      );
+      file.createReadStream().on("error", () => { if (!res.headersSent) res.status(500).end(); else res.end(); }).pipe(res);
+    });
+  }
 
   // Send an estimate to the artist (Ruby handoff, Aug 19 2026). Requires an
   // artist association (name at minimum) and at least one valid recipient
@@ -2906,6 +3395,9 @@ export function registerPressPortalRoutes(
         linkUrl,
         breakdown,
         accent,
+        // MRP light skin (Ruby handoff b912fb6) for presses with email
+        // branding configured — data-driven, never a press-name match.
+        skin: press.emailBranding ? ("light" as const) : ("dark" as const),
         pressLocationLine,
         pressLogoUrl,
         replyToEmail,

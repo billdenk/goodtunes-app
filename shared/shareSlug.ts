@@ -26,6 +26,10 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "favicon",
   "share",
   "e", // public estimate links (/e/:token)
+  // Task #3295 — MRP white-label client-portal routes (whitelabel hosts).
+  "next-steps",
+  "dashboard",
+  "projects",
   ".well-known",
   // auth + account routes
   "login",

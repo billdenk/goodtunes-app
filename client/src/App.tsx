@@ -110,6 +110,13 @@ import { AdminReview } from "@/pages/AdminReview";
 import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
 import AcceptInvite from "@/pages/AcceptInvite";
 import PressClientEstimate from "@/pages/PressClientEstimate";
+import PressClientEstimateAcceptedMRP from "@/pages/mrp/PressClientEstimateAcceptedMRP";
+import { useWhitelabelBrand } from "@/hooks/useWhitelabelBrand";
+import PressClientNextStepsMRP from "@/pages/mrp/PressClientNextStepsMRP";
+import ArtistDashboardMRP from "@/pages/mrp/ArtistDashboardMRP";
+import ArtistDashboardNextStepsMRP from "@/pages/mrp/ArtistDashboardNextStepsMRP";
+import ArtistProjectHomeMRP from "@/pages/mrp/ArtistProjectHomeMRP";
+import MrpSkinGate from "@/pages/mrp/MrpSkinGate";
 import JoinReferralLink from "@/pages/JoinReferralLink";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
@@ -392,6 +399,27 @@ function Testing() {
   // stagingCheckout — the /testing dry-run must keep the real GoodTunes
   // Buy sheet + Stripe path even when an external Sale URL is set.
   return <AlbumDetail albumId={data.id} stagingCheckout />;
+}
+
+// White-label tab identity — on a press-branded host the browser tab shows
+// the PRESS (title + favicon), never GoodTunes (Bill, Aug 21 2026). Renders
+// nothing; runs alongside the Switch so it covers every route on the host.
+// (WhitelabelDocumentHead is mounted from Router below, outside the Switch.)
+function WhitelabelDocumentHead() {
+  const { brand } = useWhitelabelBrand();
+  useEffect(() => {
+    if (!brand?.known || !brand.pressName) return;
+    document.title = brand.pressName;
+    const iconUrl = brand.squareLogoUrl ?? brand.logoUrl ?? null;
+    if (iconUrl) {
+      document.querySelectorAll("link[rel*='icon']").forEach((el) => el.remove());
+      const link = document.createElement("link");
+      link.rel = "icon";
+      link.href = iconUrl;
+      document.head.appendChild(link);
+    }
+  }, [brand?.known, brand?.pressName, brand?.squareLogoUrl, brand?.logoUrl]);
+  return null;
 }
 
 function Router() {
@@ -747,6 +775,7 @@ function Router() {
 
   return (
     <>
+      {onWhitelabelHost() && <WhitelabelDocumentHead />}
       <Switch location={editOverlayActive ? editBackground : location}>
         {/* Task #284 — Friendly error landing for OAuth callback failures
             and any future surface that wants to bounce to a full-page
@@ -834,8 +863,35 @@ function Router() {
             sign-in/up before letting them call POST claim. */}
         <Route path="/gift/:token" component={GiftClaim} />
         {/* Press client estimate — public tokenized link (VIEW-only, no
-            account needed; the link is the secret). Dark-only page. */}
+            account needed; the link is the secret). Dark page by default;
+            Memphis (email-branding presses) renders the light MRP skin
+            (Ruby handoff b912fb6) via the skin branch inside the page. */}
+        <Route path="/e/:token/accepted" component={PressClientEstimateAcceptedMRP} />
         <Route path="/e/:token" component={PressClientEstimate} />
+        {/* Ruby handoff b912fb6 — Memphis client portal. Registered only on
+            the white-label host family so goodtunes.music hosts keep their
+            current routing (these paths fall through to the slug resolver
+            elsewhere). Light-only screens by design. */}
+        {onWhitelabelHost() && (
+          <Route path="/next-steps">
+            <MrpSkinGate><PressClientNextStepsMRP /></MrpSkinGate>
+          </Route>
+        )}
+        {onWhitelabelHost() && (
+          <Route path="/dashboard/next-steps">
+            <MrpSkinGate><ArtistDashboardNextStepsMRP /></MrpSkinGate>
+          </Route>
+        )}
+        {onWhitelabelHost() && (
+          <Route path="/dashboard">
+            <MrpSkinGate><ArtistDashboardMRP /></MrpSkinGate>
+          </Route>
+        )}
+        {onWhitelabelHost() && (
+          <Route path="/projects">
+            <MrpSkinGate><ArtistProjectHomeMRP /></MrpSkinGate>
+          </Route>
+        )}
         {/* Task #49 — Shopify redemption landing. Public; the page itself
             routes the fan through sign-in/up before calling claim. */}
         <Route path="/redeem/:code" component={Redeem} />
@@ -1264,7 +1320,9 @@ function Router() {
           Self-gates: only renders for customer sessions with no library,
           no legacy import, and newFanWelcomeSeenAt IS NULL. Never shows on
           admin/auth/checkout paths. iOS-safe: zero Buy/price copy. */}
-      <NewFanWelcomeSheet />
+      {/* …and never on the press white-label family — MRP client-portal
+          screens (Task #3295) are press-branded, not GoodTunes fan pages. */}
+      {!onWhitelabelHost() && <NewFanWelcomeSheet />}
       {user?.kind === "admin" && isAnalyticsDebugOverlayEnabled() && <AnalyticsDebugOverlay />}
     </>
   );

@@ -105,14 +105,14 @@ test("estimate-link returns exactly the sanitized allowlist incl. brand — no t
   assert.equal(r.status, 200);
   assert.deepEqual(
     Object.keys(r.json).sort(),
-    ["brand", "build", "builderState", "clientName", "createdAt", "displayId",
+    ["acceptedAt", "brand", "build", "builderState", "clientEmail", "clientName", "createdAt", "displayId",
      "preparedBy", "pressName", "sentAt", "size", "status", "title", "totalCents"].sort(),
     "public payload must be the exact allowlist — nothing extra",
   );
   assert.equal(r.json.pressName, "t3257 Press");
   assert.deepEqual(
     Object.keys(r.json.brand).sort(),
-    ["accentColor", "contactLine", "cornerStyle", "lightLogoUrl", "logoUrl"].sort(),
+    ["accentColor", "contactLine", "cornerStyle", "lightLogoUrl", "logoUrl", "locationLine", "skin"].sort(),
   );
   assert.equal(r.json.brand.accentColor, "#B3282D");
   assert.equal(r.json.brand.cornerStyle, "square");
@@ -162,4 +162,67 @@ test("invite lookup carries sanitized pressBrand for press-referred invites only
   const plain = await get(`/api/invites/${plainInviteToken}`);
   assert.equal(plain.status, 200);
   assert.equal(plain.json.pressBrand, null, "no press referrer → pressBrand null");
+});
+
+// ── #3295 review gates — client file upload/download access control ──────
+test("client file upload + download routes reject anonymous callers", async () => {
+  const estId = [...created.pressEstimates][0];
+  const up = await fetch(`${baseUrl}/api/press-client/estimates/${estId}/files`, { method: "POST" });
+  assert.equal(up.status, 401, "anonymous upload must 401");
+  const dl = await fetch(`${baseUrl}/api/press-client/estimates/${estId}/files/deadbeef.wav`);
+  assert.equal(dl.status, 401, "anonymous file download must 401");
+});
+
+test("portal + dashboard reads reject anonymous callers", async () => {
+  for (const path of ["/api/press-client/portal", "/api/press-client/dashboard?range=30d"]) {
+    const r = await fetch(`${baseUrl}${path}`);
+    assert.equal(r.status, 401, `${path} must 401 for anon`);
+  }
+});
+
+// ── #3295 review gate — portal reads are HOST-PRESS scoped ───────────────
+// A client with estimates at TWO presses must only see the host press's
+// projects on that press's white-label portal (dev ?wl= mirrors the host
+// slug; 127.0.0.1 is not a white-label host).
+test("client portal only returns the host press's estimates (two-press customer)", async () => {
+  const { randomUUID: uuid } = await import("node:crypto");
+  const custId = uuid();
+  const email = `t3295-${custId.slice(0, 8)}@example.test`;
+  const token = "t3295tok" + uuid().replace(/-/g, "");
+  const pressB = uuid();
+  const slugA = "t3295a" + custId.slice(0, 6);
+  const slugB = "t3295b" + custId.slice(0, 6);
+  await exec(sql`UPDATE manufacturers SET white_label_slug = ${slugA} WHERE id = ${pressId}`);
+  await exec(sql`INSERT INTO manufacturers (id, name, white_label_slug) VALUES (${pressB}, ${"t3295 Other Press"}, ${slugB})`);
+  created.manufacturers.add(pressB);
+  await exec(sql`INSERT INTO customer_users (id, username, email, display_name) VALUES (${custId}, ${"t3295-" + custId.slice(0, 8)}, ${email}, ${"t3295 client"})`);
+  await exec(sql`INSERT INTO auth_tokens (token, customer_user_id, kind) VALUES (${token}, ${custId}, ${"customer"})`);
+  const estA = uuid(); const estB = uuid();
+  for (const [id, pid, no] of [[estA, pressId, "T3295-A"], [estB, pressB, "T3295-B"]] as const) {
+    await exec(sql`
+      INSERT INTO press_estimates (id, press_id, kind, display_id, title, status, payload)
+      VALUES (${id}, ${pid}, ${"estimate"}, ${no}, ${"proj " + no}, ${"Sent"},
+              ${JSON.stringify({ sentTo: [{ email }], sentAt: new Date().toISOString() })}::jsonb)
+    `);
+    created.pressEstimates.add(id);
+  }
+  try {
+    const auth = { headers: { authorization: `Bearer ${token}` } };
+    // No white-label host and no dev slug → portal refuses.
+    const bare = await fetch(`${baseUrl}/api/press-client/portal`, auth);
+    assert.equal(bare.status, 404, "portal without a resolvable host press must 404");
+    // Host press A → ONLY press A's estimate.
+    const ra = await (await fetch(`${baseUrl}/api/press-client/portal?wl=${slugA}`, auth)).json();
+    assert.deepEqual(ra.estimates.map((e: any) => e.estimateNo), ["T3295-A"]);
+    // Host press B → ONLY press B's estimate.
+    const rb = await (await fetch(`${baseUrl}/api/press-client/portal?wl=${slugB}`, auth)).json();
+    assert.deepEqual(rb.estimates.map((e: any) => e.estimateNo), ["T3295-B"]);
+    // Dashboard is scoped the same way.
+    const da = await (await fetch(`${baseUrl}/api/press-client/dashboard?range=30d&wl=${slugA}`, auth)).json();
+    assert.deepEqual(da.topProjects.map((p: any) => p.title), ["proj T3295-A"]);
+  } finally {
+    await exec(sql`DELETE FROM auth_tokens WHERE token = ${token}`);
+    await exec(sql`DELETE FROM customer_users WHERE id = ${custId}`);
+    await exec(sql`UPDATE manufacturers SET white_label_slug = NULL WHERE id = ${pressId}`);
+  }
 });
