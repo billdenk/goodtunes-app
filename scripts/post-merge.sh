@@ -12918,3 +12918,100 @@ SQL
 }
 migrate_press_whitelabel_prev_slug_task_3280 dev  "${DATABASE_URL:-}"
 migrate_press_whitelabel_prev_slug_task_3280 prod "${PROD_DATABASE_URL:-}"
+
+# Task #3304 — one-time DATA fix: drop the accidental "VIRYL TEST.pdf"
+# upload event from the CALIFORNIALAND jacket slot's file history. The
+# trail is normally append-only, but this was an operator mis-upload and
+# the row is NEITHER the Current row (a newer 'uploaded' event exists for
+# the same album+component, and the checks JSONB serves that later file)
+# NOR lock-relevant (locks derive only from 'downloaded'/'unlocked'
+# events) — so deleting it cannot disturb Current/lock/replacement
+# derivation. Scoped tight: the CANONICAL CALIFORNIALAND album is resolved
+# by identity (live row WITH songs — the known decoy-shell trap), required
+# to be exactly one; the delete is pinned to that album + the 'jacket'
+# component + the EXACT filename + a strictly-newer differently-named
+# uploaded sibling. Marker-guarded; the marker is stamped ONLY after the
+# canonical album was positively identified — a DB without the album
+# (all dev clones) exits without stamping so a later run can still fire.
+remove_viryl_test_file_event_task_3304() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping VIRYL TEST history fix on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(psql "$url" -v ON_ERROR_STOP=1 -t -A <<'SQL' 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+DECLARE
+  v_album   varchar;
+  v_count   integer := 0;
+  v_deleted integer := 0;
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM post_merge_data_backfills WHERE name = 'task_3304_remove_viryl_test_file_event'
+  ) THEN
+    RAISE NOTICE 'VIRYL TEST history fix already applied — skipping';
+    RETURN;
+  END IF;
+
+  -- Canonical CALIFORNIALAND = the live row that actually has songs
+  -- (identity, never a UUID; the trashed empty shells don't qualify).
+  SELECT count(*) INTO v_count
+  FROM albums a
+  WHERE a.title = 'CALIFORNIALAND' AND a.deleted_at IS NULL
+    AND EXISTS (SELECT 1 FROM songs s WHERE s.album_id = a.id);
+  IF v_count = 0 THEN
+    -- Album not in this DB (dev clones) — self-gate WITHOUT stamping the
+    -- marker so a DB that later gains the data still gets the fix.
+    RAISE NOTICE 'VIRYL TEST history fix: no canonical CALIFORNIALAND here — no-op, marker NOT stamped';
+    RETURN;
+  ELSIF v_count > 1 THEN
+    RAISE WARNING 'VIRYL TEST history fix: % candidate CALIFORNIALAND rows — ambiguous, aborting without marker', v_count;
+    RETURN;
+  END IF;
+  SELECT a.id INTO v_album
+  FROM albums a
+  WHERE a.title = 'CALIFORNIALAND' AND a.deleted_at IS NULL
+    AND EXISTS (SELECT 1 FROM songs s WHERE s.album_id = a.id);
+
+  DELETE FROM completed_template_file_events e
+  WHERE e.album_id = v_album
+    AND e.component_id = 'jacket'
+    AND e.event = 'uploaded'
+    AND e.file_name = 'VIRYL TEST.pdf'
+    -- Safety: only when a strictly newer, differently named 'uploaded'
+    -- event exists on the same slot, so the derived "Current" row (newest
+    -- uploaded) can never change.
+    AND EXISTS (
+      SELECT 1 FROM completed_template_file_events n
+      WHERE n.album_id = e.album_id
+        AND n.component_id = e.component_id
+        AND n.event = 'uploaded'
+        AND (n.created_at > e.created_at
+             OR (n.created_at = e.created_at AND n.id > e.id))
+        AND n.file_name IS DISTINCT FROM e.file_name);
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  -- Target positively identified (unique canonical album) — stamp. A
+  -- 0-row delete here means the event is already gone: work done.
+  INSERT INTO post_merge_data_backfills (name) VALUES ('task_3304_remove_viryl_test_file_event');
+  RAISE NOTICE 'VIRYL TEST history fix applied on album %: % event row(s) deleted', v_album, v_deleted;
+END
+$$;
+COMMIT;
+SQL
+  ); then
+    echo "post-merge: VIRYL TEST history fix ok on $label"
+    echo "$out" | grep -i 'VIRYL TEST history fix' || true
+  else
+    echo "post-merge: WARNING — VIRYL TEST history fix failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+remove_viryl_test_file_event_task_3304 dev  "${DATABASE_URL:-}"
+remove_viryl_test_file_event_task_3304 prod "${PROD_DATABASE_URL:-}"
