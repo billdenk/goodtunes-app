@@ -385,3 +385,10 @@ type = "text"
 title = "Apple canon style guide (design direction Ruby works from)"
 description = "The visual canon governing all GoodTunes admin/partner surfaces — theming, typography, components, breakpoints."
 logical_id = "410b8170-ee50-46b9-a632-ae71c6e501fc"
+
+[[outputs]]
+id = "_sksGt1uX-Pf_eMojCx3l"
+uri = "file://docs/mrp-sow-status-monday.md"
+type = "text"
+title = "MRP SOW status — Monday edition"
+description = "Ask-by-ask status sheet updated Aug 22 for the Monday session — copy/paste or download for the MRP presentation."
