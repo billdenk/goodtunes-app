@@ -233,6 +233,12 @@ function carryScope(carry: URLSearchParams): URLSearchParams {
   return carry;
 }
 function pressAlbumHref(albumId: string): string {
+  // Super-admin god-view mounts this same tab body on /admin/manufacturers/:id.
+  // From there, /vendor/albums/:id would hit the vendor route guard and bounce
+  // the operator back to /admin — open the operator album page instead.
+  if (window.location.pathname.startsWith("/admin/")) {
+    return `/admin/albums/${albumId}?tab=press`;
+  }
   const carry = carryScope(new URLSearchParams({ tab: "press" }));
   return `/vendor/albums/${albumId}?${carry.toString()}`;
 }
