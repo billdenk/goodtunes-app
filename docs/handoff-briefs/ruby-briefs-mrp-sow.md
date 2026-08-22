@@ -57,3 +57,44 @@ wires it; all data exists.
 ## Already with you
 Client estimate **download page** (#30–31): `docs/handoff-briefs/estimate-download-spec.md`
 (MRP's example sheet to beat is `docs/handoff-briefs/mrp-example-estimate.pdf`).
+
+## 8. Pricing model + pricing source, set in White Label (Bill, Aug 22)
+**The need (two settings per press, chosen by the operator in the super-admin
+White Label panel):**
+
+**a) Pricing model — how this press thinks about pricing.** We already have
+two real-world shapes and expect only a few more:
+- **MRP-style:** all-in record+jacket ladders per *style* (Black, Opaque,
+  Smoke Blends…) with style-level surcharges (Splatter +$0.75/300, +$0.55/500+),
+  plus service items (metalwork, setup, test pressings).
+- **Viryl-style:** component-itemized — each piece (record, jacket, sleeve,
+  insert) priced on its own ladder and summed.
+The chosen model should drive how BOTH the Components → Pricing operator page
+AND the press-facing "My price list" page (brief 6) lay out — MRP shows by X,
+Viryl by Y. If a third press doesn't fit either, we add a model then. Design
+the picker in White Label and how each model presents.
+
+**b) Pricing source — where the numbers come from.** Choices: **GoodTunes
+native** (our sheets/CSV import — the default; MRP, Viryl, and PMP all start
+here, all three come off Excel), **CODA.io**, or **Odoo**. Connecting an
+external source should feel like our Shopify connect: pick it, authorize,
+map columns once, done. Rules that must hold regardless of source: hand-edited
+(locked) rungs survive re-sync; gaps show "no price on file", never $0; the
+source badge is visible so an operator always knows which numbers are live.
+Data can flow both ways (names/prices we change feed back, theirs feed in) —
+design how sync status and conflicts are shown, not the plumbing.
+
+**Interim (no design needed, noting for context):** until CODA lands, MRP,
+Viryl, and PMP simply click Pricing and see their loaded numbers via the
+native source — brief 6's page is that surface.
+
+## 9. Component ↔ pricing lifecycle (Bill, Aug 22)
+**What's already true (no design needed):** pricing links to a component
+*option by stable id*, not by name — renaming a component today keeps its
+pricing attached automatically, and the new name flows through to estimates.
+**The need:** duplicating a component/option should carry its pricing along
+(today a duplicate starts with "no price on file"), and when a press is on an
+external source (CODA/Odoo), a rename or duplicate here must reconcile with
+the source rather than silently fork. Design the moments: what the operator
+sees when duplicating (e.g. "pricing copied from Opaque"), and what a
+rename/duplicate looks like when an external source is connected.
