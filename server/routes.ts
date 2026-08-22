@@ -34967,7 +34967,34 @@ export async function registerRoutes(
     if (!spec) return res.status(404).json({ message: "That component isn't required for this configuration." });
     if (!spec.templateFileUrl) return res.status(404).json({ message: "No template file on this slot." });
     const url = spec.templateFileUrl;
-    if (url.startsWith("/")) return res.redirect(url);
+    // Task #3307 — `?clean=1` serves the artist "design template": a copy of
+    // the SAME file whose GT guide layers (bleed/cut/spine/dieline overlays)
+    // are toggled off in the PDF's default optional-content config. Layers
+    // are hidden, never deleted — re-enableable in Illustrator/Acrobat.
+    // Fail-open everywhere: any rewrite problem serves the raw file instead.
+    const wantClean = req.query.clean === "1";
+    if (url.startsWith("/")) {
+      if (wantClean && url.startsWith("/objects/")) {
+        try {
+          const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+          const file = await new ObjectStorageService().getObjectEntityFile(url);
+          const { MAX_CLEAN_REWRITE_BYTES, hideGtLayersInPdf } = await import("./pdf/hideGtLayers");
+          const [meta] = await file.getMetadata();
+          const size = Number(meta.size ?? 0);
+          if (size > 0 && size <= MAX_CLEAN_REWRITE_BYTES) {
+            const [raw] = await file.download();
+            const clean = await hideGtLayersInPdf(raw);
+            if (clean) {
+              res.setHeader("Content-Type", "application/pdf");
+              return res.end(clean);
+            }
+          }
+        } catch {
+          // fall through to the raw redirect below
+        }
+      }
+      return res.redirect(url);
+    }
     if (!/^https:\/\//i.test(url)) return res.status(409).json({ message: "This template's link can't be fetched." });
     const os = await import("node:os");
     const path = await import("node:path");
@@ -34987,6 +35014,24 @@ export async function registerRoutes(
       }
       if (fetched.spooled !== true) {
         return res.status(502).json({ message: "Couldn't spool the template file." });
+      }
+      if (wantClean) {
+        // Rewrite the spooled copy with GT layers hidden; any failure falls
+        // through to streaming the raw spooled file exactly as before.
+        try {
+          const { MAX_CLEAN_REWRITE_BYTES, hideGtLayersInPdf } = await import("./pdf/hideGtLayers");
+          const size = fs.statSync(tmp).size;
+          if (size > 0 && size <= MAX_CLEAN_REWRITE_BYTES) {
+            const clean = await hideGtLayersInPdf(fs.readFileSync(tmp));
+            if (clean) {
+              fs.unlink(tmp, () => {});
+              res.setHeader("Content-Type", "application/pdf");
+              return res.end(clean);
+            }
+          }
+        } catch {
+          // fall through — raw stream below
+        }
       }
       res.setHeader("Content-Type", "application/pdf");
       const stream = fs.createReadStream(tmp);

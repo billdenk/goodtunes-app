@@ -21247,6 +21247,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<p className=\"text-[11.5px]\" style={{ padding: '8px 14px 10px', color: t.faint, borderTop: `1px solid ${t.hairline}`, lineHeight: 1.45, maxWidth: 236 }} data-testid=\"file-menu-clean-note\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 620, lineHeight: 1.5 }}>"
   },
   {

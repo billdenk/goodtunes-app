@@ -304,15 +304,43 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   }, [albumId, componentId, hasTemplateFile]);
 
   // Download the template the artist is designing into (task: "view AND
-  // download"). Served from the already-fetched blob so auth headers never
-  // matter for the anchor.
-  const downloadTemplate = () => {
-    if (!tpl) return;
+  // download"). Two flavors (Task #3307):
+  //   'design' — the CLEAN copy: same file, GT guide layers toggled off in
+  //     the PDF's layer-visibility config (re-enableable in Illustrator /
+  //     Acrobat; some quick-look previews ignore layer visibility and will
+  //     still show guides). Fetched from the server's ?clean=1 variant; any
+  //     failure falls back to the raw already-fetched blob — the artist
+  //     always gets a working file.
+  //   'guides' — the exact raw file served today, from the already-fetched
+  //     blob so auth headers never matter for the anchor.
+  const downloadBlob = (blob: Blob, name: string) => {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(tpl.blob);
-    a.download = `${(spec?.label ?? 'press-template').replace(/[^\w\- ]+/g, '')}.pdf`;
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 30_000);
+  };
+  const tplBaseName = (spec?.label ?? 'press-template').replace(/[^\w\- ]+/g, '');
+  const [cleanBusy, setCleanBusy] = useState(false);
+  const downloadTemplate = (variant: 'design' | 'guides' = 'design') => {
+    if (!tpl) return;
+    if (variant === 'guides') {
+      downloadBlob(tpl.blob, `${tplBaseName} - template with guides.pdf`);
+      return;
+    }
+    if (cleanBusy) return;
+    setCleanBusy(true);
+    void (async () => {
+      try {
+        const r = await apiRequest('GET', `/api/admin/albums/${albumId}/completed-template/template-file/${encodeURIComponent(componentId)}?clean=1`);
+        downloadBlob(await r.blob(), `${tplBaseName} - design template.pdf`);
+      } catch {
+        // Fail open — the raw file still works for designing.
+        downloadBlob(tpl.blob, `${tplBaseName} - design template.pdf`);
+      } finally {
+        setCleanBusy(false);
+      }
+    })();
   };
 
   // ── The artist's checked art, at real measured size where possible: own
@@ -526,14 +554,28 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
               <button
                 type="button"
                 role="menuitem"
-                onClick={() => { setFileMenuOpen(false); if (tpl) downloadTemplate(); }}
+                onClick={() => { setFileMenuOpen(false); if (tpl) downloadTemplate('design'); }}
                 aria-disabled={!tpl}
                 className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', !!tpl && t.hoverCard)}
                 style={{ padding: '10px 14px', color: tpl ? t.ink : t.faint, borderTop: `1px solid ${t.hairline}`, cursor: tpl ? 'pointer' : 'not-allowed' }}
                 data-testid="file-menu-download"
               >
-                <Download className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Download raw template
+                <Download className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Design template
               </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { setFileMenuOpen(false); if (tpl) downloadTemplate('guides'); }}
+                aria-disabled={!tpl}
+                className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', !!tpl && t.hoverCard)}
+                style={{ padding: '10px 14px', color: tpl ? t.ink : t.faint, cursor: tpl ? 'pointer' : 'not-allowed' }}
+                data-testid="file-menu-download-guides"
+              >
+                <LayoutTemplate className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Template with guides
+              </button>
+              <p className="text-[11.5px]" style={{ padding: '8px 14px 10px', color: t.faint, borderTop: `1px solid ${t.hairline}`, lineHeight: 1.45, maxWidth: 236 }} data-testid="file-menu-clean-note">
+                The design template opens with the GT guide layers hidden &mdash; turn them back on in Illustrator or Acrobat. Some quick-look previews ignore layer visibility.
+              </p>
             </div>
           </>
         )}
@@ -636,15 +678,28 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
           <div className="flex items-center gap-2.5 flex-wrap">
             <h2 className="text-[16px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{TEMPLATE.name}</h2>
             {tpl && (
-              <button
-                type="button"
-                onClick={downloadTemplate}
-                className={cn('inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium transition-colors', t.hoverCard)}
-                style={{ padding: '4px 12px', border: `1px solid ${t.hairline}`, color: t.subink }}
-                data-testid="button-download-template"
-              >
-                <Download className="w-3.5 h-3.5 flex-shrink-0" /> Download template
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => downloadTemplate('design')}
+                  title="GT guide layers hidden — re-enable them in Illustrator or Acrobat. Some quick-look previews ignore layer visibility."
+                  className={cn('inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium transition-colors', t.hoverCard)}
+                  style={{ padding: '4px 12px', border: `1px solid ${t.hairline}`, color: t.subink }}
+                  data-testid="button-download-template"
+                >
+                  <Download className="w-3.5 h-3.5 flex-shrink-0" /> Design template
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadTemplate('guides')}
+                  title="The exact raw press file, guides visible."
+                  className={cn('inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium transition-colors', t.hoverCard)}
+                  style={{ padding: '4px 12px', border: `1px solid ${t.hairline}`, color: t.subink }}
+                  data-testid="button-download-template-guides"
+                >
+                  <LayoutTemplate className="w-3.5 h-3.5 flex-shrink-0" /> Template with guides
+                </button>
+              </>
             )}
             {allPass && (
               <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: t.ready }} data-testid="badge-certified">
@@ -1315,7 +1370,7 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
   tplState: 'loading' | 'ready' | 'error' | 'idle'; tplError: string | null; hasTemplateFile: boolean;
   busy: boolean; uploadPct: number | null; measuring: boolean;
   onUploadFile: (file: File | undefined) => void; onCheckUrl: (url: string) => void;
-  onDownloadTemplate: () => void; canDownload: boolean;
+  onDownloadTemplate: (variant: 'design' | 'guides') => void; canDownload: boolean;
   historyRows: FileEventRow[];
 }) {
   // Mode: per-panel images vs one full-template file. Handoff default 'images'.
@@ -1375,16 +1430,30 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
           ]}
           testPrefix="raw-entry-chips"
         />
-        <button
-          type="button"
-          onClick={() => { if (canDownload) onDownloadTemplate(); }}
-          aria-disabled={!canDownload}
-          className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', canDownload && t.hoverCard)}
-          style={{ padding: '7px 14px', color: canDownload ? t.subink : t.faint, border: `1px solid ${t.hairline}`, opacity: canDownload ? 1 : 0.55, cursor: canDownload ? 'pointer' : 'not-allowed' }}
-          data-testid="button-download-raw"
-        >
-          <LayoutTemplate className="w-4 h-4 flex-shrink-0" /> Download raw template
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => { if (canDownload) onDownloadTemplate('design'); }}
+            aria-disabled={!canDownload}
+            title="GT guide layers hidden — re-enable them in Illustrator or Acrobat. Some quick-look previews ignore layer visibility."
+            className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', canDownload && t.hoverCard)}
+            style={{ padding: '7px 14px', color: canDownload ? t.subink : t.faint, border: `1px solid ${t.hairline}`, opacity: canDownload ? 1 : 0.55, cursor: canDownload ? 'pointer' : 'not-allowed' }}
+            data-testid="button-download-raw"
+          >
+            <Download className="w-4 h-4 flex-shrink-0" /> Design template
+          </button>
+          <button
+            type="button"
+            onClick={() => { if (canDownload) onDownloadTemplate('guides'); }}
+            aria-disabled={!canDownload}
+            title="The exact raw press file, guides visible."
+            className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', canDownload && t.hoverCard)}
+            style={{ padding: '7px 14px', color: canDownload ? t.subink : t.faint, border: `1px solid ${t.hairline}`, opacity: canDownload ? 1 : 0.55, cursor: canDownload ? 'pointer' : 'not-allowed' }}
+            data-testid="button-download-raw-guides"
+          >
+            <LayoutTemplate className="w-4 h-4 flex-shrink-0" /> Template with guides
+          </button>
+        </div>
       </div>
 
       {/* Status card. The per-panel path can't be measured against the press
@@ -1546,14 +1615,28 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
                   <button
                     type="button"
                     role="menuitem"
-                    onClick={() => { setMenuOpen(false); if (canDownload) onDownloadTemplate(); }}
+                    onClick={() => { setMenuOpen(false); if (canDownload) onDownloadTemplate('design'); }}
                     aria-disabled={!canDownload}
                     className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', canDownload && t.hoverCard)}
                     style={{ padding: '10px 14px', color: canDownload ? t.ink : t.faint, borderTop: `1px solid ${t.hairline}`, cursor: canDownload ? 'pointer' : 'not-allowed' }}
                     data-testid="file-menu-download"
                   >
-                    <Download className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Download raw template
+                    <Download className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Design template
                   </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setMenuOpen(false); if (canDownload) onDownloadTemplate('guides'); }}
+                    aria-disabled={!canDownload}
+                    className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', canDownload && t.hoverCard)}
+                    style={{ padding: '10px 14px', color: canDownload ? t.ink : t.faint, cursor: canDownload ? 'pointer' : 'not-allowed' }}
+                    data-testid="file-menu-download-guides"
+                  >
+                    <LayoutTemplate className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Template with guides
+                  </button>
+                  <p className="text-[11.5px]" style={{ padding: '8px 14px 10px', color: t.faint, borderTop: `1px solid ${t.hairline}`, lineHeight: 1.45, maxWidth: 236 }} data-testid="file-menu-clean-note">
+                    The design template opens with the GT guide layers hidden &mdash; turn them back on in Illustrator or Acrobat. Some quick-look previews ignore layer visibility.
+                  </p>
                 </div>
               </>
             )}
@@ -1706,7 +1789,6 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
     </div>
   );
 }
-
 
 
 export default ArtistTemplateTest;
