@@ -68,6 +68,7 @@ import {
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { LyricsGapDots } from "@/components/LyricsGapDots";
+import { SongSourceUrlChip } from "@/components/SongSourceUrlChip";
 import { ProgressStrip } from "@/components/ui/ProgressStrip";
 import {
   Popover,
@@ -298,6 +299,9 @@ interface SongLite {
   // master (e.g. 24-bit WAV → FLAC for browser playback). Null when
   // the upload was already playable in browsers. See server schema.
   audioSourceUrl?: string | null;
+  // Task #3260 — operator-only provenance: the external link this master
+  // was imported from (server strips it from fan reads).
+  sourceUrl?: string | null;
   syncedLyrics?: { timeMs: number; endMs?: number; text: string }[] | null;
   instrumental?: boolean | null;
   isExplicit?: boolean | null;
@@ -15525,6 +15529,13 @@ function AudioEditor({
                 readout sits with the file it describes. Renders empty
                 for a legacy row with no probed specs yet. */}
             <MasterSpecLine song={song} />
+
+            {/* Task #3260 — operator-only provenance: the external link
+                this master was imported from (pasted URL or Dropbox
+                batch). Mirrors the bonus-video "Imported from" chip.
+                Never shown fan-side (server strips songs.sourceUrl from
+                all fan reads). */}
+            <SongSourceUrlChip songId={song.id} sourceUrl={song.sourceUrl} />
 
             {/* Task #2131 — amber leading-silence warning. Shows when
                 the probed value is >0.5 s. "Trim" fires a server-side

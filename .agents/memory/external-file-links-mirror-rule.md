@@ -3,13 +3,16 @@ name: External file links must be mirrored, never referenced
 description: Standing rule — any pasted external link (Dropbox etc.) that becomes a persisted file source must be downloaded into our object storage first.
 ---
 
-Standing rule (gogoods, Aug 15 2026): "just like audio, we should always download those files so we have them." Any external https link a user pastes that would be persisted as a file source of truth (press template PDFs, certification test files — and any future surface) must be downloaded into our own object storage at save time; the DB stores the `/objects/uploads/...` path, never the external URL.
+Standing rule from the creator: "just like audio, we should always download those files so we have them." Any external https link a user pastes that would be persisted as a file source of truth (audio masters, videos, images, template PDFs — any surface) must be downloaded into our own object storage at save time; the DB stores only our storage path, never the external URL.
 
-**Why:** Memphis template slots stored raw Dropbox links; preview/measurement then permanently depended on those links (a zip link poisoned slots with a durable "not a PDF" failure, and even valid links can die). Self-heal/retry paths are worthless if the source bytes live on someone else's host.
+**Why:** template slots once stored raw Dropbox links; preview/measurement then permanently depended on those links (a zip link poisoned slots with a durable "not a PDF" failure, and even valid links can die). Self-heal/retry paths are worthless if the source bytes live on someone else's host.
 
 **How to apply:**
-- Helper: `mirrorExternalTemplatePdf` in `server/templateSpecs.ts` (SSRF-guarded scan+spool → streamed signed PUT → admin/public ACL; deletes its own object on late failure). `deleteMirroredTemplateObject` for caller-side compensation when the DB write that would reference the object fails.
-- Enforce at EVERY write boundary that accepts a URL (portal + admin routes both had one — the reviewer caught the admin one), and reject `http://`/other schemes up front.
-- Old rows saved before the rule still hold external links; they heal when re-attached.
+- Enforce at EVERY write boundary that accepts a URL — portal AND admin routes, plus any legacy fetch-and-store endpoints (sweep for older fetch helpers when tightening the pattern; a forgotten one keeps the weak posture alive). Reject non-https schemes up front.
+- A failed external fetch fails the whole save (422) — never fall back to persisting the raw URL — and a failed save must delete any objects it already uploaded (arm compensation before mirroring; multi-stage mirrors can orphan partial uploads).
+- Authorization runs BEFORE any external fetch, including approval-divert paths: a caller lacking the relevant upload permission must not be able to trigger remote downloads or storage writes.
+- Old rows saved before the rule still hold external links; they heal when re-attached, and a one-time sweep mirrors the fetchable ones. Unmirrorable share pages (ShareFile, Dropbox .zip) end as "needs re-upload" flags answered with 422, never 5xx.
 
-**Legacy dead-link handling (Aug 2026):** rows persisted before the rule can still hold external URLs; a one-time sweep mirrors the fetchable ones. After that, ANY remaining external `template_file_url` means the file is unfetchable → download route answers 422 `{code:"template_link_dead"}` (never 5xx — 5xx pages ops on every open) and the Templates UI presents the slot as "Needs re-upload". ShareFile share pages and Dropbox .zip links are inherently unmirrorable (not direct PDFs) — those always end as re-upload flags, not sweep bugs.
+**Provenance:** tracks keep the original link as OPERATOR-only provenance — strip it for fans AND for partner roles (every partner account passes a bare is-admin check, so gate disclosure on an explicit operator-role check).
+
+**SSRF posture:** validate the DNS answer at CONNECTION time (guarded lookup on the socket), never pre-check-then-fetch — a rebinding host defeats any two-resolution flow; DNS failures map to the same honest 422. The non-public classifier must cover ALL special-purpose IPv4/IPv6 space (CGNAT, TEST-NET, fe80::/10, v4-embedded forms), and URL hostnames keep brackets on IPv6 literals ("[::1]") — strip them before IP-literal detection or bracketed private literals bypass the guard entirely.

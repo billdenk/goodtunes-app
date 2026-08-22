@@ -13015,3 +13015,29 @@ SQL
 }
 remove_viryl_test_file_event_task_3304 dev  "${DATABASE_URL:-}"
 remove_viryl_test_file_event_task_3304 prod "${PROD_DATABASE_URL:-}"
+
+# Task #3260 — operator-only track import provenance (idempotent, dev + prod).
+[ -n "${DATABASE_URL:-}" ] && psql "$DATABASE_URL" -c "alter table if exists songs add column if not exists source_url text" >/dev/null 2>&1 || true
+[ -n "${PROD_DATABASE_URL:-}" ] && psql "$PROD_DATABASE_URL" -c "alter table if exists songs add column if not exists source_url text" >/dev/null 2>&1 || true
+
+# Task #3260 — one-shot repair: mirror any external-URL song masters into
+# object storage ('49 track 7 is the known row). Marker-guarded inside the
+# script (task_3260_mirror_external_song_audio); dead links are logged as
+# NEEDS RE-UPLOAD and left for masters health to flag.
+mirror_external_song_audio() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping external song-audio mirror on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/mirror-external-song-audio.ts 2>&1); then
+    echo "post-merge: external song-audio mirror ok on $label"
+    echo "$out" | tail -5
+  else
+    echo "post-merge: WARNING — external song-audio mirror failed on $label (no marker stamped; next merge retries)"
+    echo "$out" | tail -8
+  fi
+}
+mirror_external_song_audio dev  "${DATABASE_URL:-}"
+mirror_external_song_audio prod "${PROD_DATABASE_URL:-}"

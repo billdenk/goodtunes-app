@@ -939,6 +939,14 @@ export const songs = pgTable("songs", {
   // re-mastering for streaming services, and a "Download original"
   // affordance on the admin master row.
   audioSourceUrl: text("audio_source_url"),
+  // Task #3260 — operator-only provenance: the ORIGINAL external link this
+  // track's master was imported from (a pasted Dropbox/https link or the
+  // Dropbox bulk importer's share link). The bytes themselves always live
+  // in our object storage (mirror-at-save platform rule) — this only
+  // answers "where did we pull this from / can we re-pull it?". NEVER
+  // fan-visible: every fan-facing song read strips it (grep
+  // stripSongProvenance in routes.ts). Null for direct uploads.
+  sourceUrl: text("source_url"),
   // Per-line WebVTT-derived timing. Uploaded by admin as a .vtt file,
   // parsed client-side into { timeMs, text } cues. When present, the
   // Player's lyrics overlay uses these timestamps verbatim instead of

@@ -18,6 +18,7 @@ import {
 import { scorePressMatches, type PressCandidateInput } from "@shared/pressMatch";
 import { MRP_COLOR_LIBRARY_URL, type MrpParsedTile, maskToVinylDisc, parseMrpColorPage, matchFamilyToTier } from "./vendorColorScrape";
 import { ImageTooLargeError, makeDisplayDerivative } from "./imageProcessing";
+import { ExternalFetchError, isExternalFileUrl, fetchExternalFileToTmp, armMirrorOrphanCleanup } from "./externalFileMirror";
 import { closeSaleWindow as closeCertSaleWindow } from "./saleWindow";
 import { generateBatchPdf as generateCertBatchPdf, CERT_BATCH_STEPS } from "./certBatch";
 import { sqlConnectedAlbums, sqlNpoArtistAlbums } from "./adminAlbumQueries";
@@ -4716,139 +4717,22 @@ export async function registerRoutes(
   // DNS-resolve here (matches the rest of the codebase's posture) — the
   // hostname check catches bare-IP URLs.
   app.post("/api/admin/fetch-image-from-url", requireAdminBearer, async (req, res) => {
+    const raw = String(req.body?.url || "").trim();
+    if (!raw) return res.status(400).json({ message: "Paste a URL." });
+    if (!/^https?:\/\//i.test(raw)) {
+      return res.status(400).json({ message: "Image URLs must use http:// or https://." });
+    }
+    // Shared mirror pipeline: connection-time DNS SSRF guard, per-hop
+    // redirect re-validation, size cap, content sniffing. Orphan
+    // compensation deletes the uploaded object if the response errors.
+    const mirrorSink = armMirrorOrphanCleanup(res);
     try {
-      const raw = String(req.body?.url || "").trim();
-      if (!raw) return res.status(400).json({ message: "Paste a URL." });
-
-      let url: URL;
-      try { url = new URL(raw); }
-      catch { return res.status(400).json({ message: "That doesn't look like a valid URL." }); }
-
-      // Dropbox share links default to dl=0 (HTML preview page). Flip to
-      // dl=1 so we get the actual image bytes back instead of a web page.
-      const isDropbox =
-        url.hostname === "www.dropbox.com" ||
-        url.hostname === "dropbox.com" ||
-        url.hostname === "dl.dropboxusercontent.com" ||
-        /\.dl\.dropboxusercontent\.com$/i.test(url.hostname);
-      if (isDropbox) url.searchParams.set("dl", "1");
-
-      const MAX_BYTES = 8 * 1024 * 1024; // matches dropzone cap
-      const timeoutMs = 30_000;
-      const startMs = Date.now();
-      // One shared AbortController enforces the deadline across BOTH
-      // the redirect chain AND the body stream below — so a slow
-      // first hop or a slow body read can't push us past 30s total.
-      const ac = new AbortController();
-      const deadlineTimer = setTimeout(() => ac.abort(), timeoutMs);
-      const remaining = () => Math.max(0, timeoutMs - (Date.now() - startMs));
-      let response: Awaited<ReturnType<typeof fetch>> | null = null;
-
-      try {
-        for (let hop = 0; hop <= 5; hop++) {
-          if (remaining() === 0) {
-            return res.status(504).json({ message: "Fetching that image took too long." });
-          }
-          if (url.protocol !== "https:" && url.protocol !== "http:") {
-            return res.status(400).json({ message: "Image URLs must use http:// or https://." });
-          }
-          if (isPrivateIp(url.hostname)) {
-            return res.status(400).json({ message: "Refusing to fetch from a private/internal address." });
-          }
-          const r = await fetch(url.toString(), {
-            redirect: "manual",
-            signal: ac.signal,
-            headers: { "User-Agent": "GoodTunesBot/1.0" },
-          });
-          if (r.status >= 300 && r.status < 400) {
-            const loc = r.headers.get("location");
-            if (!loc) return res.status(502).json({ message: "Redirect with no target." });
-            try { url = new URL(loc, url); }
-            catch { return res.status(502).json({ message: "Invalid redirect URL." }); }
-            try { await r.arrayBuffer(); } catch { /* drain */ }
-            continue;
-          }
-          response = r;
-          break;
-        }
-      } finally {
-        // We hand the controller to the body stream below, so the timer
-        // keeps running; only the body's finally clears it.
-      }
-      if (!response) return res.status(502).json({ message: "Too many redirects." });
-      if (!response.ok) {
-        return res.status(502).json({ message: `Couldn't fetch (HTTP ${response.status}). Make sure the link is public.` });
-      }
-
-      const ctHeader = (response.headers.get("content-type") || "").toLowerCase().split(";")[0].trim();
-      // We don't trust the content-type header alone — Dropbox, S3, and
-      // many shared-link hosts hand back generic labels like
-      // "application/binary" or "application/octet-stream" even when the
-      // bytes are a real JPEG. Reject obvious HTML up front, otherwise
-      // we'll sniff the magic bytes below.
-      if (ctHeader.includes("text/html")) {
-        return res.status(415).json({
-          message: "That link returned a web page, not an image. For Dropbox, use the file's direct image URL.",
-        });
-      }
-
-      // Stream the body, abort the moment we exceed the cap OR the
-      // shared deadline fires (the AbortController above will reject
-      // reader.read() with an AbortError).
-      const reader = response.body?.getReader();
-      if (!reader) {
-        clearTimeout(deadlineTimer);
-        return res.status(502).json({ message: "Empty response." });
-      }
-      const chunks: Buffer[] = [];
-      let total = 0;
-      let buf: Buffer;
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          if (value) {
-            total += value.byteLength;
-            if (total > MAX_BYTES) {
-              try { await reader.cancel(); } catch { /* ignore */ }
-              clearTimeout(deadlineTimer);
-              return res.status(413).json({ message: "Image is larger than 8 MB." });
-            }
-            chunks.push(Buffer.from(value));
-          }
-        }
-        buf = Buffer.concat(chunks);
-      } catch (e: any) {
-        if (ac.signal.aborted) {
-          return res.status(504).json({ message: "Fetching that image took too long." });
-        }
-        throw e;
-      } finally {
-        clearTimeout(deadlineTimer);
-      }
-
-      // Magic-byte sniff (overrides whatever the server claimed).
-      // JPEG: FF D8 FF · PNG: 89 50 4E 47 · GIF: 47 49 46 38
-      // WebP: "RIFF...WEBP" · AVIF: "...ftypavif"
-      let sniffed: string | null = null;
-      if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) sniffed = "image/jpeg";
-      else if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) sniffed = "image/png";
-      else if (buf.length >= 6 && buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x38) sniffed = "image/gif";
-      else if (buf.length >= 12 && buf.slice(0, 4).toString("ascii") === "RIFF" && buf.slice(8, 12).toString("ascii") === "WEBP") sniffed = "image/webp";
-      else if (buf.length >= 12 && buf.slice(4, 8).toString("ascii") === "ftyp" && buf.slice(8, 12).toString("ascii") === "avif") sniffed = "image/avif";
-
-      // Prefer the sniffed type. Fall back to the header only if we
-      // couldn't sniff and the header is in our allowlist.
-      const finalCt = sniffed ?? (ctHeader in IMAGE_MIME_TO_EXT ? ctHeader : null);
-      if (!finalCt) {
-        return res.status(415).json({
-          message: `That URL didn't return a supported image (got "${ctHeader || "unknown"}"). Use JPG, PNG, WebP, GIF, or AVIF.`,
-        });
-      }
-
-      const storedUrl = await uploadBufferToObjectStorage(buf, finalCt);
-      return res.json({ url: storedUrl });
+      const url = await mirrorExternalImageFile(raw, mirrorSink);
+      return res.json({ url });
     } catch (err: any) {
+      if (err instanceof ExternalFetchError) {
+        return res.status(422).json({ message: err.message });
+      }
       console.error("fetch-image-from-url failed", err);
       return res.status(500).json({ message: err?.message || "Couldn't fetch that image." });
     }
@@ -5246,180 +5130,38 @@ export async function registerRoutes(
     "/api/admin/upload-video/from-url",
     requireAdminBearer,
     async (req, res) => {
-      const MAX_BYTES = 500 * 1024 * 1024;
-      // Pulled out here so we can keep the tempfile path around for a
-      // post-upload ffmpeg single-frame extraction (poster).
-      const fsp = await import("node:fs/promises");
-      const fs = await import("node:fs");
-      const os = await import("node:os");
-      const path = await import("node:path");
+      const raw = String(req.body?.url || "").trim();
+      if (!raw) return res.status(400).json({ message: "URL is required" });
+      if (!/^https?:\/\//i.test(raw)) {
+        return res.status(400).json({ message: "Only http(s) URLs are allowed" });
+      }
+      // Shared mirror pipeline: connection-time DNS SSRF guard, per-hop
+      // redirect re-validation, size cap, MOV→MP4 transcode, poster
+      // extraction. Orphan compensation deletes uploaded objects if the
+      // response ends in an error.
+      const mirrorSink = armMirrorOrphanCleanup(res);
       try {
-        const raw = String(req.body?.url || "").trim();
-        if (!raw) return res.status(400).json({ message: "URL is required" });
-        let parsed: URL;
+        const mirrored = await mirrorExternalVideoFile(raw, mirrorSink);
+        // Recover a sensible default title from the URL path
+        // ("Video Name.mp4" → "Video Name"); the client can override.
+        let suggestedTitle = "Imported video";
         try {
-          parsed = new URL(raw);
-        } catch {
-          return res.status(400).json({ message: "That doesn't look like a valid URL" });
-        }
-        if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-          return res.status(400).json({ message: "Only http(s) URLs are allowed" });
-        }
-
-        // Normalize Dropbox share links. `dl=0` shows the preview page;
-        // `dl=1` (or the `dl.dropboxusercontent.com` host) serves the raw
-        // file. Works for both legacy /s/ links and the newer /scl/ links.
-        if (
-          parsed.hostname === "www.dropbox.com" ||
-          parsed.hostname === "dropbox.com"
-        ) {
-          parsed.searchParams.set("dl", "1");
-        }
-        const fetchUrl = parsed.toString();
-
-        const upstream = await fetch(fetchUrl, { redirect: "follow" });
-        if (!upstream.ok || !upstream.body) {
-          return res
-            .status(400)
-            .json({ message: `Couldn't fetch that URL (${upstream.status})` });
-        }
-        const lenHeader = upstream.headers.get("content-length");
-        if (lenHeader && Number(lenHeader) > MAX_BYTES) {
-          return res
-            .status(400)
-            .json({ message: "Video is larger than the 500MB import limit" });
-        }
-        // Pick an extension from the validated MIME, else from the URL path.
-        const upstreamMime = (upstream.headers.get("content-type") || "")
-          .split(";")[0]
-          .trim()
-          .toLowerCase();
-        let ext: string | undefined = VIDEO_MIME_TO_EXT[upstreamMime];
-        let storedMime = upstreamMime;
-        if (!ext) {
-          const pathExt = parsed.pathname.toLowerCase().match(/\.(mp4|mov|webm)(?:$|[?#])/);
-          if (pathExt) {
-            const map: Record<string, [string, string]> = {
-              mp4: [".mp4", "video/mp4"],
-              mov: [".mov", "video/quicktime"],
-              webm: [".webm", "video/webm"],
-            };
-            [ext, storedMime] = map[pathExt[1]];
-          }
-        }
-        if (!ext) {
-          return res.status(400).json({
-            message: "That URL didn't return an MP4, MOV, or WebM video",
-          });
-        }
-
-        // Always land on a tempfile first. The .mov path already needed
-        // this for the transcode step; the .mp4/.webm path keeps the
-        // tempfile around so we can run a single-frame poster extract
-        // after the upload finishes. Memory budget is unchanged — bytes
-        // flow upstream → tempfile in ~64 KB chunks regardless.
-        const needsTranscode = storedMime === "video/quicktime";
-        const { Readable } = await import("stream");
-        const { pipeline } = await import("node:stream/promises");
-
-        const tmpIn = path.join(os.tmpdir(), `${randomUUID()}${ext}`);
-        const out = fs.createWriteStream(tmpIn);
-        let received = 0;
-        const nodeReadable = Readable.fromWeb(upstream.body as any);
-        let aborted = false;
-        nodeReadable.on("data", (chunk: Buffer) => {
-          received += chunk.length;
-          if (received > MAX_BYTES && !aborted) {
-            aborted = true;
-            nodeReadable.destroy(new Error("Video exceeded 500MB import cap"));
-          }
+          const parsed = new URL(raw);
+          const lastSeg = decodeURIComponent(
+            parsed.pathname.split("/").filter(Boolean).pop() || "",
+          );
+          suggestedTitle = lastSeg.replace(/\.[^.]+$/, "") || suggestedTitle;
+        } catch { /* keep default */ }
+        return res.json({
+          url: mirrored.url,
+          suggestedTitle,
+          posterUrl: mirrored.posterUrl,
+          sourceUrl: raw,
         });
-
-        let finalId = `${randomUUID()}${ext}`;
-        let finalMime = storedMime;
-        let finalExt = ext;
-        // The file we'll use to extract the poster frame from (always
-        // the playback-ready file — transcoded mp4 for .mov, original
-        // otherwise). Cleaned up in `finally`.
-        let posterSourcePath: string | null = null;
-        let convOut: string | null = null;
-        try {
-          await pipeline(nodeReadable, out);
-
-          if (needsTranscode) {
-            const conv = await transcodeVideoToWebFriendlyMp4(tmpIn, ".mov");
-            convOut = conv.outputPath;
-            finalMime = conv.mime;
-            finalExt = conv.ext;
-            finalId = `${randomUUID()}${finalExt}`;
-            posterSourcePath = conv.outputPath;
-            const { bucketName, objectName } = uploadDestination(finalId);
-            const f2 = objectStorageClient.bucket(bucketName).file(objectName);
-            const w = f2.createWriteStream({
-              contentType: finalMime,
-              metadata: { cacheControl: "public, max-age=31536000, immutable" },
-              resumable: false,
-            });
-            await pipeline(fs.createReadStream(conv.outputPath), w);
-            await setObjectAclPolicy(f2, { owner: "admin", visibility: "public" });
-          } else {
-            posterSourcePath = tmpIn;
-            const { bucketName, objectName } = uploadDestination(finalId);
-            const file = objectStorageClient.bucket(bucketName).file(objectName);
-            const w = file.createWriteStream({
-              contentType: finalMime,
-              metadata: { cacheControl: "public, max-age=31536000, immutable" },
-              resumable: false,
-            });
-            await pipeline(fs.createReadStream(tmpIn), w);
-            await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
-          }
-
-          // Best-effort poster extraction. Fall back to no poster on
-          // any failure — never block the upload result on it.
-          let posterUrl: string | null = null;
-          if (posterSourcePath) {
-            try {
-              posterUrl = await extractPosterToObjectStorage(posterSourcePath);
-            } catch (e) {
-              console.warn("[upload-video/from-url] poster extract failed", e);
-            }
-          }
-
-          // Try to recover a sensible default title from the URL path —
-          // ("Video Name.mp4" → "Video Name"). Falls back to the upstream
-          // Content-Disposition `filename=` when the URL itself has no
-          // meaningful last segment (e.g. signed-link CDNs that hide the
-          // filename in a header). The client can still override before
-          // save. Pretty-casing happens client-side in `prettyTitleFromName`.
-          function fromContentDisposition(): string | null {
-            const cd = upstream.headers.get("content-disposition") || "";
-            // RFC 5987 `filename*=UTF-8''…` wins over plain `filename=…`.
-            const star = cd.match(/filename\*\s*=\s*[^']*''([^;]+)/i);
-            const plain = cd.match(/filename\s*=\s*"?([^";]+)"?/i);
-            const raw = (star?.[1] || plain?.[1] || "").trim();
-            if (!raw) return null;
-            try { return decodeURIComponent(raw).replace(/\.[^.]+$/, ""); }
-            catch { return raw.replace(/\.[^.]+$/, ""); }
-          }
-          const lastSeg = decodeURIComponent(parsed.pathname.split("/").filter(Boolean).pop() || "");
-          const suggestedTitle =
-            lastSeg.replace(/\.[^.]+$/, "") ||
-            fromContentDisposition() ||
-            "Imported video";
-
-          return res.json({
-            url: `/objects/uploads/${finalId}`,
-            suggestedTitle,
-            posterUrl,
-            sourceUrl: raw,
-            bytes: received,
-          });
-        } finally {
-          try { await fsp.unlink(tmpIn); } catch {}
-          if (convOut) { try { await fsp.unlink(convOut); } catch {} }
-        }
       } catch (err: any) {
+        if (err instanceof ExternalFetchError) {
+          return res.status(422).json({ message: err.message });
+        }
         console.error("Video from-URL ingest failed", err);
         return res.status(500).json({
           message: err?.message || "Could not import video from that URL",
@@ -5556,6 +5298,128 @@ export async function registerRoutes(
       }
     },
   );
+
+  // ── Task #3260 — mirror-at-save for pasted external file links ─────────
+  //
+  // Platform rule: an external http(s) file URL pasted into ANY admin
+  // URL-accepting field is downloaded into our object storage at save; the
+  // row only ever points at `/objects/...`. The SSRF-safe download half
+  // lives in server/externalFileMirror.ts; these closures bolt on the
+  // normal upload/transcode pipelines. Every caller converts
+  // ExternalFetchError into a 422 that FAILS the save — never persist the
+  // raw external URL.
+
+  /** Mirror an external AUDIO master: download → transcode when the browser
+   *  can't play it (24-bit WAV → FLAC, same pipeline as uploads) → upload
+   *  served copy (+ archival original when transcoded). */
+  async function mirrorExternalAudioMaster(
+    externalUrl: string,
+    sink: string[],
+  ): Promise<{ url: string; sourceUrl: string | null }> {
+    const fsp = await import("node:fs/promises");
+    const fetched = await fetchExternalFileToTmp(externalUrl, "audio");
+    let transcodedTmp: string | null = null;
+    try {
+      const conv = await transcodeAudioToWebFriendly(fetched.tmpPath, fetched.ext);
+      if (conv.action === "transcode" && conv.outputPath !== fetched.tmpPath) {
+        transcodedTmp = conv.outputPath;
+      }
+      const url = await uploadFileToObjectStorage(conv.outputPath, conv.mime);
+      sink.push(url);
+      const sourceUrl = conv.action === "transcode"
+        ? await uploadFileToObjectStorage(fetched.tmpPath, fetched.mime)
+        : null;
+      if (sourceUrl) sink.push(sourceUrl);
+      return { url, sourceUrl };
+    } catch (e: any) {
+      if (e instanceof ExternalFetchError) throw e;
+      throw new ExternalFetchError(
+        `Couldn't process that audio file (${e?.message ?? "unknown error"}).`,
+      );
+    } finally {
+      try { await fsp.unlink(fetched.tmpPath); } catch { /* ignore */ }
+      if (transcodedTmp) { try { await fsp.unlink(transcodedTmp); } catch { /* ignore */ } }
+    }
+  }
+
+  /** Mirror an external raw file (no transcode) — used for pasted archival
+   *  originals (audioSourceUrl) where the bytes are stored verbatim. */
+  async function mirrorExternalRawFile(
+    externalUrl: string,
+    kind: "audio" | "video",
+    sink: string[],
+  ): Promise<string> {
+    const fsp = await import("node:fs/promises");
+    const fetched = await fetchExternalFileToTmp(externalUrl, kind);
+    try {
+      const url = await uploadFileToObjectStorage(fetched.tmpPath, fetched.mime);
+      sink.push(url);
+      return url;
+    } finally {
+      try { await fsp.unlink(fetched.tmpPath); } catch { /* ignore */ }
+    }
+  }
+
+  /** Mirror an external VIDEO: download → MOV gets the same web-friendly
+   *  MP4 transcode the from-URL importer runs → upload → best-effort poster
+   *  frame extraction. */
+  async function mirrorExternalVideoFile(
+    externalUrl: string,
+    sink: string[],
+  ): Promise<{ url: string; posterUrl: string | null }> {
+    const fsp = await import("node:fs/promises");
+    const fetched = await fetchExternalFileToTmp(externalUrl, "video");
+    let convOut: string | null = null;
+    try {
+      let servePath = fetched.tmpPath;
+      let serveMime = fetched.mime;
+      if (fetched.mime === "video/quicktime") {
+        const conv = await transcodeVideoToWebFriendlyMp4(fetched.tmpPath, ".mov");
+        convOut = conv.outputPath;
+        servePath = conv.outputPath;
+        serveMime = conv.mime;
+      }
+      const url = await uploadFileToObjectStorage(servePath, serveMime);
+      sink.push(url);
+      let posterUrl: string | null = null;
+      try {
+        posterUrl = await extractPosterToObjectStorage(servePath);
+      } catch (e) {
+        console.warn("[external-mirror] poster extract failed", e);
+      }
+      if (posterUrl) sink.push(posterUrl);
+      return { url, posterUrl };
+    } catch (e: any) {
+      if (e instanceof ExternalFetchError) throw e;
+      throw new ExternalFetchError(
+        `Couldn't process that video file (${e?.message ?? "unknown error"}).`,
+      );
+    } finally {
+      try { await fsp.unlink(fetched.tmpPath); } catch { /* ignore */ }
+      if (convOut) { try { await fsp.unlink(convOut); } catch { /* ignore */ } }
+    }
+  }
+
+  /** Mirror an external IMAGE into object storage (8MB cap, magic-byte
+   *  types enforced by content-type/extension; oversized rasters go
+   *  through the same display-derivative pipeline as uploads). */
+  async function mirrorExternalImageFile(externalUrl: string, sink: string[]): Promise<string> {
+    const fsp = await import("node:fs/promises");
+    const fetched = await fetchExternalFileToTmp(externalUrl, "image");
+    try {
+      const buf = await fsp.readFile(fetched.tmpPath);
+      const url = await uploadBufferToObjectStorage(buf, fetched.mime);
+      sink.push(url);
+      return url;
+    } catch (e: any) {
+      if (e instanceof ExternalFetchError) throw e;
+      throw new ExternalFetchError(
+        `Couldn't store that image (${e?.message ?? "unknown error"}).`,
+      );
+    } finally {
+      try { await fsp.unlink(fetched.tmpPath); } catch { /* ignore */ }
+    }
+  }
 
   // --- Direct-to-Object-Storage audio upload ----------------------------
   //
@@ -10196,14 +10060,21 @@ export async function registerRoutes(
     if (!albumId || !title || trackNumber == null) {
       return res.status(400).json({ message: "albumId, title, trackNumber are required" });
     }
+    let effAudioUrl: string | null = audioUrl ? normalizeAudioUrl(String(audioUrl)) : null;
+    let effAudioSourceUrl: string | null = audioSourceUrl ? normalizeAudioUrl(String(audioSourceUrl)) : null;
+    let songProvenanceUrl: string | null = null;
     // Task #79 — creating a song is a track-listing change
     // (edit_metadata) and, when it embeds a master, also upload_masters.
     // Both respect the post-sale lock. Approval-mode diverts the
     // metadata side to the queue; if the create includes audio, it
     // additionally requires upload_masters (no divert for that — masters
     // are not in the approval-queue scope).
+    // Task #3260 — ALL authorization runs before the external mirror
+    // fetch below: an unauthorized caller must not be able to trigger a
+    // remote download or an object-storage write.
+    let divertScope: { kind: string; id: string } | null = null;
     {
-      const { partnerEditGate, gateAlbumRoute, resolveAlbumScope, createPendingChange } = await import("./auth/partnerPermissions");
+      const { partnerEditGate, gateAlbumRoute, resolveAlbumScope } = await import("./auth/partnerPermissions");
       const albumScope = await resolveAlbumScope(String(albumId));
       if (!albumScope) return res.status(404).json({ message: "Album not found" });
       if (albumScope.scope) {
@@ -10212,20 +10083,55 @@ export async function registerRoutes(
         if (outcome === "divert") {
           // Task #2896 — stamp the scope that actually authorized the
           // request (partnerEditGate's dual-scope match), not the
-          // label-first resolution.
+          // label-first resolution. The pending change itself is created
+          // AFTER the mirror block so a diverted patch also carries only
+          // /objects/ URLs.
           const matchedScope = req.partnerGate?.targetScope ?? albumScope.scope;
-          const row = await createPendingChange({
-            targetTable: "songs", targetId: String(albumId), albumId: String(albumId),
-            scopeKind: matchedScope.kind, scopeId: matchedScope.id,
-            patch: { __op: "create", title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl },
-            submittedByUserId: req.session.userId!,
-          });
-          return res.status(202).json({ pendingChange: row, message: "Your edit was sent to GoodTunes for review." });
+          divertScope = { kind: matchedScope.kind, id: matchedScope.id };
         }
       }
-      if (audioUrl) {
+      // Masters are NEVER approval-queue work: any create that carries
+      // audio requires upload_masters even when the metadata side
+      // diverts — otherwise a metadata-only partner could trigger
+      // remote downloads/object writes via a diverted create.
+      if (effAudioUrl || effAudioSourceUrl) {
         if (await gateAlbumRoute(req, res, "upload_masters", String(albumId))) return;
       }
+    }
+    // Task #3260 — mirror-at-save: a pasted EXTERNAL audio link is
+    // downloaded into object storage before anything is persisted (even
+    // the approval-divert patch must carry /objects/ URLs). The
+    // original external link is kept as operator-only provenance in
+    // songs.sourceUrl. A failed fetch FAILS the save (422) — the raw
+    // external URL is never stored.
+    const mirrorSink = armMirrorOrphanCleanup(res);
+    try {
+      if (effAudioUrl && isExternalFileUrl(effAudioUrl)) {
+        const external = effAudioUrl;
+        const mirrored = await mirrorExternalAudioMaster(external, mirrorSink);
+        effAudioUrl = mirrored.url;
+        // The mirror pipeline decides the archival original (set only when
+        // it transcoded) — it supersedes whatever the client posted.
+        effAudioSourceUrl = mirrored.sourceUrl;
+        songProvenanceUrl = external;
+      } else if (effAudioSourceUrl && isExternalFileUrl(effAudioSourceUrl)) {
+        effAudioSourceUrl = await mirrorExternalRawFile(effAudioSourceUrl, "audio", mirrorSink);
+      }
+    } catch (e) {
+      if (e instanceof ExternalFetchError) {
+        return res.status(422).json({ message: `${e.message} The track was not saved.` });
+      }
+      throw e;
+    }
+    if (divertScope) {
+      const { createPendingChange } = await import("./auth/partnerPermissions");
+      const row = await createPendingChange({
+        targetTable: "songs", targetId: String(albumId), albumId: String(albumId),
+        scopeKind: divertScope.kind as any, scopeId: divertScope.id,
+        patch: { __op: "create", title, trackNumber, duration, lyrics, audioUrl: effAudioUrl, audioSourceUrl: effAudioSourceUrl, sourceUrl: songProvenanceUrl },
+        submittedByUserId: req.session.userId!,
+      });
+      return res.status(202).json({ pendingChange: stripPendingChangeProvenance(row), message: "Your edit was sent to GoodTunes for review." });
     }
     // Task #331 — re-probe the file server-side rather than trusting
     // whatever the upload widget posted. Client-provided servedSpecs/
@@ -10234,8 +10140,8 @@ export async function registerRoutes(
     // poison the press-panel preflight). Probe failures resolve to
     // all-null specs and get logged below so the operator can chase
     // unreadable headers.
-    const normAudioUrl = audioUrl ? normalizeAudioUrl(String(audioUrl)) : null;
-    const normAudioSourceUrl = audioSourceUrl ? normalizeAudioUrl(String(audioSourceUrl)) : null;
+    const normAudioUrl = effAudioUrl;
+    const normAudioSourceUrl = effAudioSourceUrl;
     const probedServed = normAudioUrl ? await probeUrlToSpecs(normAudioUrl) : null;
     const probedSource = normAudioSourceUrl ? await probeUrlToSpecs(normAudioSourceUrl) : null;
     if (normAudioUrl && probedServed && probedServed.format == null && probedServed.sampleRate == null && probedServed.bytes == null) {
@@ -10255,6 +10161,9 @@ export async function registerRoutes(
       // transcoded a 24-bit / 32-bit / 32-float PCM master down to
       // FLAC for browser playback. Null when no transcode was needed.
       audioSourceUrl: normAudioSourceUrl,
+      // Task #3260 — operator-only provenance: the external link this
+      // master was imported from (stripped from all fan-facing reads).
+      sourceUrl: songProvenanceUrl,
       // Task #331 — authoritative server-side probe (replaces the
       // earlier "trust client servedSpecs" path). Write ALL spec
       // columns including nulls so a probe failure can't leave stale
@@ -10277,7 +10186,9 @@ export async function registerRoutes(
     // fire-and-forget; the admin UI polls muxStatus. Stream-only tracks
     // have no master so this is a no-op (maybeIngestToMux guards on URL).
     void maybeIngestToMux(song.id, (song as any).audioUrl, { freshUpload: true });
-    return res.status(201).json(song);
+    // Task #3260 — mutation responses must apply the SAME operator-only
+    // provenance projection as reads (partners can create/edit songs).
+    return res.status(201).json((await isOperatorUser(req)) ? song : stripSongProvenance(song));
   });
 
   app.put("/api/admin/songs/:id", requireAdmin, async (req, res, next) => {
@@ -10289,6 +10200,62 @@ export async function registerRoutes(
   }, async (req, res) => {
     const id = String(req.params.id);
     const gate = req.partnerGate!;
+    // Task #79 — body-shape gating: the outer middleware enforces
+    // edit_metadata + lock for ANY song PUT, but writes that touch the
+    // master file additionally require upload_masters. This keeps a
+    // partner with edit_metadata=true / upload_masters=false from
+    // swapping the audio under the guise of a metadata edit. Task #3260 —
+    // this check runs BEFORE the external mirror block below so an
+    // unauthorized caller can't trigger a remote download or an
+    // object-storage write (diverted edits go to the review queue with
+    // the mirrored URLs instead).
+    // Masters are NEVER approval-queue work, so this gate applies to
+    // diverted (approval-mode) edits too — a metadata-only partner must
+    // not be able to trigger a remote download or object-storage write
+    // by smuggling a master swap into a diverted edit.
+    if (req.body?.audioUrl !== undefined || req.body?.audioSourceUrl !== undefined) {
+      const { gateAlbumRoute } = await import("./auth/partnerPermissions");
+      // gate.albumId is already set by requirePartnerPermission.
+      if (gate.albumId && await gateAlbumRoute(req, res, "upload_masters", gate.albumId)) return;
+    }
+    // Task #3260 — mirror-at-save: rewrite any pasted EXTERNAL audio link
+    // in the body into object storage BEFORE the approval-divert snapshot
+    // below, so a diverted patch also carries /objects/ URLs only. The
+    // external link rides along as operator-only provenance
+    // (body.sourceUrl → songs.source_url). A failed fetch fails the save
+    // (422) — the raw external URL is never persisted anywhere.
+    const mirrorSink = armMirrorOrphanCleanup(res);
+    // Provenance is SERVER-DERIVED only (set by the mirror block below when
+    // an external link is mirrored, cleared when the master is replaced).
+    // Never accept a caller-supplied sourceUrl — a stored javascript: URL
+    // would render as a clickable operator-side link (stored XSS).
+    if (req.body && "sourceUrl" in req.body) delete req.body.sourceUrl;
+    try {
+      const bodyAudio = req.body?.audioUrl !== undefined && req.body.audioUrl
+        ? normalizeAudioUrl(String(req.body.audioUrl))
+        : null;
+      if (bodyAudio && isExternalFileUrl(bodyAudio)) {
+        const mirrored = await mirrorExternalAudioMaster(bodyAudio, mirrorSink);
+        req.body.audioUrl = mirrored.url;
+        req.body.audioSourceUrl = mirrored.sourceUrl;
+        req.body.sourceUrl = bodyAudio;
+      } else if (req.body?.audioUrl !== undefined) {
+        // Master replaced by an upload (or cleared) — provenance from any
+        // previous link import no longer describes the bytes.
+        req.body.sourceUrl = null;
+      }
+      const bodySrc = req.body?.audioSourceUrl !== undefined && req.body.audioSourceUrl
+        ? normalizeAudioUrl(String(req.body.audioSourceUrl))
+        : null;
+      if (bodySrc && isExternalFileUrl(bodySrc)) {
+        req.body.audioSourceUrl = await mirrorExternalRawFile(bodySrc, "audio", mirrorSink);
+      }
+    } catch (e) {
+      if (e instanceof ExternalFetchError) {
+        return res.status(422).json({ message: `${e.message} The track was not saved.` });
+      }
+      throw e;
+    }
     if (gate.divert) {
       const { createPendingChange } = await import("./auth/partnerPermissions");
       const row = await createPendingChange({
@@ -10304,27 +10271,22 @@ export async function registerRoutes(
       // post-sale lock returns a hard 403 from requirePartnerPermission
       // before we ever reach this handler.
       return res.status(202).json({
-        pendingChange: row,
+        pendingChange: stripPendingChangeProvenance(row),
         message: "Your edit was sent to GoodTunes for review.",
       });
     }
     const { title, trackNumber, duration, lyrics, audioUrl, audioSourceUrl, syncedLyrics, instrumental, isExplicit, previewStartMs, previewEndMs, servedSpecs, sourceSpecs, streamOnly, spotifyTrackUrl, appleMusicTrackUrl, leadingSilenceSecs } = req.body ?? {};
-    // Task #79 — body-shape gating: the outer middleware enforces
-    // edit_metadata + lock for ANY song PUT, but writes that touch the
-    // master file additionally require upload_masters. This keeps a
-    // partner with edit_metadata=true / upload_masters=false from
-    // swapping the audio under the guise of a metadata edit.
-    if (audioUrl !== undefined || audioSourceUrl !== undefined) {
-      const { gateAlbumRoute } = await import("./auth/partnerPermissions");
-      // gate.albumId is already set by requirePartnerPermission.
-      if (gate.albumId && await gateAlbumRoute(req, res, "upload_masters", gate.albumId)) return;
-    }
     const updates: any = {};
     if (title !== undefined) updates.title = String(title);
     if (trackNumber !== undefined) updates.trackNumber = Number(trackNumber);
     if (duration !== undefined) updates.duration = Number(duration);
     if (lyrics !== undefined) updates.lyrics = lyrics ? String(lyrics) : null;
     if (audioUrl !== undefined) updates.audioUrl = audioUrl ? normalizeAudioUrl(String(audioUrl)) : null;
+    // Task #3260 — operator-only provenance stamped by the mirror block
+    // above (external paste ⇒ the link; upload/clear ⇒ null).
+    if (req.body?.sourceUrl !== undefined) {
+      updates.sourceUrl = req.body.sourceUrl ? String(req.body.sourceUrl) : null;
+    }
     // Archival original — cleared when the operator clears the master
     // (no playback URL ⇒ no archival original to keep). Otherwise set
     // explicitly when the upload pipeline transcoded the master.
@@ -10560,7 +10522,10 @@ export async function registerRoutes(
         );
       }
     }
-    return res.json(updated);
+    // Task #3260 — mutation responses apply the same operator-only
+    // provenance projection as reads (a metadata-only PUT by a partner
+    // must not echo back a stored external source link).
+    return res.json((await isOperatorUser(req)) ? updated : stripSongProvenance(updated as any));
   });
 
   // Bulk-delete N songs in a single transaction (avoids the deadlock that
@@ -10635,7 +10600,11 @@ export async function registerRoutes(
         const updated = await storage.updateSong(id, {
           waveform: peaks,
         } as any);
-        return res.json({ id, bars: peaks.length, song: updated });
+        return res.json({
+          id,
+          bars: peaks.length,
+          song: (await isOperatorUser(req)) ? updated : stripSongProvenance(updated as any),
+        });
       } catch (err: any) {
         console.error("Waveform extraction failed", id, err?.message);
         return res
@@ -13260,6 +13229,10 @@ export async function registerRoutes(
                   duration,
                   audioUrl,
                   audioSourceUrl,
+                  // Task #3260 — operator-only provenance: the Dropbox
+                  // share link this batch was imported from (stripped
+                  // from all fan-facing reads).
+                  sourceUrl: folderUrl,
                   lyrics: "",
                   instrumental: false,
                   syncedLyrics: null as any,
@@ -15897,120 +15870,41 @@ export async function registerRoutes(
       if (!/^https?:\/\//i.test(src)) {
         return res.status(400).json({ message: "audioUrl is not an http(s) URL" });
       }
-      // Hard wall-clock budget across redirect chain + body stream. Big
-      // FLAC masters can run a minute or two on a slow link, so we give
-      // mirroring a generous 5-minute deadline; SSRF/protocol checks run
-      // on every hop inside `safeStreamFetch` so a redirect to internal
-      // infra still gets rejected.
-      const AUDIO_MIRROR_DEADLINE_MS = 5 * 60_000;
-      let upstreamHandle: { response: globalThis.Response; ac: AbortController; done: () => void } | null = null;
+      // Task #3260 — masters require upload_masters; the gate runs BEFORE
+      // any external fetch so an unauthorized partner can't trigger remote
+      // downloads or object-storage writes via this legacy endpoint.
+      {
+        const { gateAlbumRoute } = await import("./auth/partnerPermissions");
+        if (await gateAlbumRoute(req, res, "upload_masters", song.albumId)) return;
+      }
+      // Task #3260 — shared mirror pipeline: connection-time DNS SSRF
+      // guard, redirect-hop re-validation, size caps, and the normal
+      // probe/transcode flow. Orphan compensation deletes any uploaded
+      // objects if the response ends in an error.
+      const mirrorSink = armMirrorOrphanCleanup(res);
       try {
-        // Dropbox share-link normalization: ?dl=0 → ?dl=1 to get raw bytes.
-        const normalized = src.replace(/([?&])dl=0(\b)/, "$1dl=1$2");
-        upstreamHandle = await safeStreamFetch(normalized, {
-          totalTimeoutMs: AUDIO_MIRROR_DEADLINE_MS,
-        });
-        const upstream = upstreamHandle.response;
-        if (!upstream.ok || !upstream.body) {
-          upstreamHandle.done();
-          return res.status(502).json({
-            message: `Upstream fetch failed: ${upstream.status}`,
-          });
-        }
-        const upstreamMime = (upstream.headers.get("content-type") || "")
-          .split(";")[0]
-          .trim()
-          .toLowerCase();
-        let ext: string | undefined = AUDIO_MIME_TO_EXT[upstreamMime];
-        let storedMime = upstreamMime;
-        if (!ext) {
-          const parsed = new URL(normalized);
-          const m = parsed.pathname.toLowerCase().match(/\.(mp3|m4a|aac|wav|flac|ogg)(?:$|[?#])/);
-          if (m) {
-            const map: Record<string, [string, string]> = {
-              mp3: [".mp3", "audio/mpeg"],
-              m4a: [".m4a", "audio/mp4"],
-              aac: [".aac", "audio/aac"],
-              wav: [".wav", "audio/wav"],
-              flac: [".flac", "audio/flac"],
-              ogg: [".ogg", "audio/ogg"],
-            };
-            [ext, storedMime] = map[m[1]];
-          }
-        }
-        if (!ext) {
-          return res.status(400).json({
-            message: "Upstream did not return a recognized audio type",
-          });
-        }
-        const newId = `${randomUUID()}${ext}`;
-        const { bucketName, objectName } = uploadDestination(newId);
-        const file = objectStorageClient.bucket(bucketName).file(objectName);
-        let received = 0;
-        const writeStream = file.createWriteStream({
-          contentType: storedMime,
-          metadata: { cacheControl: "public, max-age=31536000, immutable" },
-          resumable: false,
-        });
-        const { Readable } = await import("stream");
-        const nodeReadable = Readable.fromWeb(upstream.body as any);
-        let aborted = false;
-        // If the shared deadline fires (or any per-hop SSRF check tripped
-        // after a redirect), tear the body stream down so the GCS write
-        // can't keep draining bytes off a dead connection.
-        const onAbort = () => {
-          if (aborted) return;
-          aborted = true;
-          try { nodeReadable.destroy(new Error("Upstream took too long")); } catch { /* ignore */ }
-          try { writeStream.destroy(new Error("Upstream took too long")); } catch { /* ignore */ }
-        };
-        upstreamHandle.ac.signal.addEventListener("abort", onAbort);
-        try {
-          await new Promise<void>((resolve, reject) => {
-            nodeReadable.on("data", (chunk: Buffer) => {
-              received += chunk.length;
-              if (received > FA_MAX_SOURCE_BYTES && !aborted) {
-                aborted = true;
-                nodeReadable.destroy(new Error("Audio exceeded size cap"));
-                writeStream.destroy(new Error("Audio exceeded size cap"));
-              }
-            });
-            nodeReadable.on("error", reject);
-            writeStream.on("error", reject);
-            writeStream.on("finish", resolve);
-            nodeReadable.pipe(writeStream);
-          });
-        } finally {
-          upstreamHandle.ac.signal.removeEventListener("abort", onAbort);
-        }
-        await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
-        const newUrl = `/objects/uploads/${newId}`;
-        // Task #331 — probe the mirrored file so the admin Masters
-        // table / press-panel preflight has rate/depth/size in
-        // lock-step with the audio_url write. Probe failures degrade
-        // to NULLs (logged) rather than silently leaving stale specs
-        // from the previous (Dropbox) URL.
-        const probedMirror = await probeUrlToSpecs(newUrl);
+        const mirrored = await mirrorExternalAudioMaster(src, mirrorSink);
+        const probedMirror = await probeUrlToSpecs(mirrored.url);
         if (probedMirror.format == null && probedMirror.sampleRate == null && probedMirror.bytes == null) {
-          console.warn(`[audio-specs] mirror — song ${id} probe returned no usable fields (${newUrl}).`);
+          console.warn(`[audio-specs] mirror — song ${id} probe returned no usable fields (${mirrored.url}).`);
         }
         const updated = await storage.updateSong(id, {
-          audioUrl: newUrl,
+          audioUrl: mirrored.url,
+          audioSourceUrl: mirrored.sourceUrl,
+          // Operator-only provenance: remember where the master came from.
+          sourceUrl: src,
           ...audioSpecsToColumnsForceWrite(probedMirror, "served"),
         } as any);
         return res.json({
-          url: newUrl,
-          bytes: received,
-          contentType: storedMime,
-          song: updated,
+          url: mirrored.url,
+          song: (await isOperatorUser(req)) ? updated : stripSongProvenance(updated as any),
         });
       } catch (err: any) {
+        if (err instanceof ExternalFetchError) {
+          return res.status(422).json({ message: `${err.message} The track was not updated.` });
+        }
         console.error("Audio mirror failed for", id, err);
-        return res.status(500).json({
-          message: err?.message || "Could not mirror audio",
-        });
-      } finally {
-        upstreamHandle?.done();
+        return res.status(500).json({ message: err?.message || "Could not mirror audio" });
       }
     },
   );
@@ -16713,14 +16607,39 @@ export async function registerRoutes(
         .status(400)
         .json({ message: "A video file or source URL is required." });
     }
+    // Task #3260 — mirror-at-save: an external video/poster link is
+    // downloaded into object storage before the row is created; the raw
+    // external URL survives only as `sourceUrl` provenance. A failed fetch
+    // fails the save (422).
+    let videoUrl = rawVideoUrl;
+    let posterUrl: string | null = typeof req.body?.posterUrl === "string" && req.body.posterUrl ? String(req.body.posterUrl) : null;
+    let sourceUrl: string | null = typeof req.body?.sourceUrl === "string" && req.body.sourceUrl ? String(req.body.sourceUrl) : null;
+    const mirrorSink = armMirrorOrphanCleanup(res);
+    try {
+      if (isExternalFileUrl(videoUrl)) {
+        const external = videoUrl;
+        const mirrored = await mirrorExternalVideoFile(external, mirrorSink);
+        videoUrl = mirrored.url;
+        if (!posterUrl && mirrored.posterUrl) posterUrl = mirrored.posterUrl;
+        if (!sourceUrl) sourceUrl = external;
+      }
+      if (posterUrl && isExternalFileUrl(posterUrl)) {
+        posterUrl = await mirrorExternalImageFile(posterUrl, mirrorSink);
+      }
+    } catch (e) {
+      if (e instanceof ExternalFetchError) {
+        return res.status(422).json({ message: `${e.message} The video was not saved.` });
+      }
+      throw e;
+    }
     const existing = await storage.listAlbumVideos(albumId);
     const parsed = insertAlbumVideoSchema.safeParse({
       albumId,
       title: req.body?.title ?? "Untitled video",
       description: req.body?.description ?? null,
-      videoUrl: rawVideoUrl,
-      posterUrl: req.body?.posterUrl ?? null,
-      sourceUrl: req.body?.sourceUrl ?? null,
+      videoUrl,
+      posterUrl,
+      sourceUrl,
       position: typeof req.body?.position === "number" ? req.body.position : existing.length,
     });
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
@@ -16736,6 +16655,25 @@ export async function registerRoutes(
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     // `albumId` is immutable from this endpoint — strip it if a client sends it.
     const { albumId: _i, ...patch } = parsed.data as any;
+    // Task #3260 — mirror-at-save for pasted external video/poster links.
+    const mirrorSink = armMirrorOrphanCleanup(res);
+    try {
+      if (typeof patch.videoUrl === "string" && isExternalFileUrl(patch.videoUrl)) {
+        const external = patch.videoUrl;
+        const mirrored = await mirrorExternalVideoFile(external, mirrorSink);
+        patch.videoUrl = mirrored.url;
+        if (patch.posterUrl === undefined && mirrored.posterUrl) patch.posterUrl = mirrored.posterUrl;
+        if (patch.sourceUrl === undefined) patch.sourceUrl = external;
+      }
+      if (typeof patch.posterUrl === "string" && isExternalFileUrl(patch.posterUrl)) {
+        patch.posterUrl = await mirrorExternalImageFile(patch.posterUrl, mirrorSink);
+      }
+    } catch (e) {
+      if (e instanceof ExternalFetchError) {
+        return res.status(422).json({ message: `${e.message} The video was not saved.` });
+      }
+      throw e;
+    }
     const prev = await storage.getAlbumVideoById(String(req.params.id));
     const videoUrlChanged =
       typeof patch.videoUrl === "string" && !!prev && patch.videoUrl !== prev.videoUrl;
@@ -16821,10 +16759,23 @@ export async function registerRoutes(
   app.post("/api/admin/albums/:id/photos", requireAdminBearer, async (req, res) => {
     const albumId = String(req.params.id);
     if (!(await ensureAlbumExists(albumId, res))) return;
+    // Task #3260 — mirror-at-save for pasted external photo links.
+    let photoUrl = req.body?.photoUrl;
+    const mirrorSink = armMirrorOrphanCleanup(res);
+    try {
+      if (typeof photoUrl === "string" && isExternalFileUrl(photoUrl)) {
+        photoUrl = await mirrorExternalImageFile(photoUrl, mirrorSink);
+      }
+    } catch (e) {
+      if (e instanceof ExternalFetchError) {
+        return res.status(422).json({ message: `${e.message} The photo was not saved.` });
+      }
+      throw e;
+    }
     const existing = await storage.listAlbumPhotos(albumId);
     const parsed = insertAlbumPhotoSchema.safeParse({
       albumId,
-      photoUrl: req.body?.photoUrl,
+      photoUrl,
       caption: req.body?.caption ?? null,
       position: typeof req.body?.position === "number" ? req.body.position : existing.length,
     });
@@ -16836,6 +16787,18 @@ export async function registerRoutes(
     const parsed = updateAlbumPhotoSchema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const { albumId: _i, ...patch } = parsed.data as any;
+    // Task #3260 — mirror-at-save for pasted external photo links.
+    const mirrorSink = armMirrorOrphanCleanup(res);
+    try {
+      if (typeof patch.photoUrl === "string" && isExternalFileUrl(patch.photoUrl)) {
+        patch.photoUrl = await mirrorExternalImageFile(patch.photoUrl, mirrorSink);
+      }
+    } catch (e) {
+      if (e instanceof ExternalFetchError) {
+        return res.status(422).json({ message: `${e.message} The photo was not saved.` });
+      }
+      throw e;
+    }
     const p = await storage.updateAlbumPhoto(String(req.params.id), patch);
     if (!p) return res.status(404).json({ message: "Photo not found" });
     return res.json(p);
@@ -16859,10 +16822,23 @@ export async function registerRoutes(
   app.post("/api/admin/albums/:id/gallery", requireAdminBearer, async (req, res) => {
     const albumId = String(req.params.id);
     if (!(await ensureAlbumExists(albumId, res))) return;
+    // Task #3260 — mirror-at-save for pasted external gallery image links.
+    let imageUrl = req.body?.imageUrl;
+    const mirrorSink = armMirrorOrphanCleanup(res);
+    try {
+      if (typeof imageUrl === "string" && isExternalFileUrl(imageUrl)) {
+        imageUrl = await mirrorExternalImageFile(imageUrl, mirrorSink);
+      }
+    } catch (e) {
+      if (e instanceof ExternalFetchError) {
+        return res.status(422).json({ message: `${e.message} The image was not saved.` });
+      }
+      throw e;
+    }
     const existing = await storage.listCampaignGalleryItems(albumId);
     const parsed = insertCampaignGalleryItemSchema.safeParse({
       albumId,
-      imageUrl: req.body?.imageUrl,
+      imageUrl,
       caption: typeof req.body?.caption === "string" ? req.body.caption : "",
       position: typeof req.body?.position === "number" ? req.body.position : existing.length,
     });
@@ -16874,6 +16850,18 @@ export async function registerRoutes(
     const parsed = updateCampaignGalleryItemSchema.safeParse(req.body ?? {});
     if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
     const { albumId: _i, ...patch } = parsed.data as any;
+    // Task #3260 — mirror-at-save for pasted external gallery image links.
+    const mirrorSink = armMirrorOrphanCleanup(res);
+    try {
+      if (typeof patch.imageUrl === "string" && isExternalFileUrl(patch.imageUrl)) {
+        patch.imageUrl = await mirrorExternalImageFile(patch.imageUrl, mirrorSink);
+      }
+    } catch (e) {
+      if (e instanceof ExternalFetchError) {
+        return res.status(422).json({ message: `${e.message} The image was not saved.` });
+      }
+      throw e;
+    }
     const g = await storage.updateCampaignGalleryItem(String(req.params.id), patch);
     if (!g) return res.status(404).json({ message: "Gallery item not found" });
     return res.json(g);
@@ -22888,7 +22876,9 @@ export async function registerRoutes(
     if (previewPass?.jti && previewPass.albumId === album.id) {
       touchPreviewGrant(previewPass.jti);
     }
-    const songs = await storage.getSongsByAlbum(album.id);
+    // Task #3260 — public share surface: always strip operator-only
+    // import provenance from song rows.
+    const songs = (await storage.getSongsByAlbum(album.id)).map(stripSongProvenance);
     const derivedExplicit =
       album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
     const artistPhoto = await resolveArtistPhotoUrl((album as any).primaryArtistId);
@@ -22961,7 +22951,9 @@ export async function registerRoutes(
     if (previewPass?.jti && previewPass.albumId === album.id) {
       touchPreviewGrant(previewPass.jti);
     }
-    const songs = await storage.getSongsByAlbum(album.id);
+    // Task #3260 — public share surface: always strip operator-only
+    // import provenance from song rows.
+    const songs = (await storage.getSongsByAlbum(album.id)).map(stripSongProvenance);
     const derivedExplicit =
       album.isExplicit || songs.some((s) => (s as any).isExplicit === true);
     const artistPhoto = await resolveArtistPhotoUrl((album as any).primaryArtistId);
@@ -23319,6 +23311,39 @@ export async function registerRoutes(
   // still hydrates the session for owners (owner-bypass) and admins
   // (includeHidden). Mirrors the already-public /api/public/album-by-slug
   // payload, so this exposes nothing new.
+  // Task #3260 — songs.sourceUrl is operator-only import provenance ("this
+  // master was pulled from <link>"). It must never reach a fan surface;
+  // every non-admin song read maps rows through this before res.json.
+  function stripSongProvenance<T extends Record<string, any>>(s: T): Omit<T, "sourceUrl"> {
+    const { sourceUrl: _provenance, ...rest } = s;
+    return rest;
+  }
+
+  // Task #3260 — same rule for approval-divert responses and partner-facing
+  // pending-change lists: the stored patch keeps sourceUrl so the operator
+  // review/apply path stays intact, but the copy returned to the SUBMITTING
+  // PARTNER must not carry the imported external URL (possibly a signed or
+  // private share link).
+  function stripPendingChangeProvenance<T extends Record<string, any>>(row: T): T {
+    const patch = row?.patch;
+    if (!patch || typeof patch !== "object" || !("sourceUrl" in (patch as any))) return row;
+    const { sourceUrl: _provenance, ...restPatch } = patch as Record<string, any>;
+    return { ...row, patch: restPatch };
+  }
+
+  // Task #3260 — songs.sourceUrl provenance is OPERATOR-only. isAdminUser()
+  // is true for every partner role (label, artist, manager, vendor, …), so
+  // gating on it would leak original external import links (possibly signed/
+  // private URLs) to non-operator partners. Operators = super_admin/admin.
+  async function isOperatorUser(req: Request): Promise<boolean> {
+    const a = await getAuthFromRequest(req);
+    if (!a || a.kind !== "admin") return false;
+    const user = await storage.getUser(a.userId);
+    if (!user?.isAdmin) return false;
+    const info = await getUserRole(a.userId);
+    return info?.role === "super_admin" || info?.role === "admin";
+  }
+
   app.get("/api/albums/:id", optionalAuth, async (req, res) => {
     const id = String(req.params.id);
     const includeHidden = await albumReadIncludeHidden(req, id);
@@ -23343,7 +23368,10 @@ export async function registerRoutes(
       (album as any).primaryArtistId,
       (album as any).labelId,
     );
-    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, pressPlaceholderLogoUrl, songs });
+    // Task #3260 — songs.sourceUrl is operator-only import provenance;
+    // strip it for everyone else (fans AND partner roles).
+    const outSongs = (await isOperatorUser(req)) ? songs : songs.map(stripSongProvenance);
+    return res.json({ ...album, isExplicit: derivedExplicit, artistPhoto, pressPlaceholderLogoUrl, songs: outSongs });
   });
 
   // Catalog-wide song list. PlayerContext fetches this once and builds an
@@ -23362,9 +23390,12 @@ export async function registerRoutes(
     // "A problem repeatedly occurred" once AlbumDetail mounted on top.
     // PlayerContext rehydrates lyrics/syncedLyrics per-currentSong via
     // GET /api/songs/:id below.
+    // Task #3260 — operator-only import provenance never ships to fans OR
+    // partner roles (isAdminUser above is true for every partner).
+    const provenanceOk = await isOperatorUser(req);
     const slim = all.map((s: any) => {
       const { lyrics: _l, syncedLyrics: _s, waveform: _w, ...rest } = s;
-      return rest;
+      return provenanceOk ? rest : stripSongProvenance(rest);
     });
     return res.json(slim);
   });
@@ -23381,7 +23412,10 @@ export async function registerRoutes(
     // Player can render "Written By: …" under the lyrics. Fans must
     // never see the splits ledger.
     const writers = await storage.getWriterNamesForSong(song.id);
-    return res.json({ ...song, writers });
+    // Task #3260 — operator-only import provenance never ships to fans or
+    // partner roles.
+    const base = (await isOperatorUser(req)) ? song : stripSongProvenance(song);
+    return res.json({ ...base, writers });
   });
 
   app.get("/api/my-albums", requireAuth, async (req, res) => {
@@ -23425,7 +23459,9 @@ export async function registerRoutes(
     if (!playlist) return res.status(404).json({ message: "Not found" });
     if (playlist.userId !== req.session.userId) return res.status(403).json({ message: "Forbidden" });
     const songs = await storage.getPlaylistSongs(id);
-    return res.json(songs);
+    // Task #3260 — playlists are a fan surface; strip operator-only
+    // import provenance from the nested song rows unconditionally.
+    return res.json(songs.map((r: any) => (r?.song ? { ...r, song: stripSongProvenance(r.song) } : r)));
   });
 
   app.post("/api/playlists/:id/songs", requireAuth, async (req, res) => {
@@ -33223,7 +33259,10 @@ export async function registerRoutes(
         req.session.userId!,
         String(req.params.id),
       );
-      res.json(rows);
+      // Task #3260 — patches on song diverts carry operator-only sourceUrl
+      // provenance; strip it from the partner-facing copy (operators never
+      // divert, so their list here is empty anyway).
+      res.json(rows.map((r: any) => stripPendingChangeProvenance(r)));
     },
   );
 
