@@ -1964,8 +1964,8 @@ export default function PressTemplateLiveTest({
                     {/* Anchored popover, no dimming — click anywhere else to dismiss (Bill, Aug 14 2026) */}
                     <div className="fixed inset-0 z-[70]" onClick={() => setShowLayers(false)} data-testid="modal-layers-backdrop" />
                     <div
-                      className="absolute z-[71] rounded-2xl overflow-hidden shadow-2xl w-full"
-                      style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, maxWidth: 420, top: 'calc(100% + 8px)', right: 0 }}
+                      className="absolute z-[71] rounded-2xl overflow-hidden shadow-2xl"
+                      style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}`, width: 'min(420px, calc(100vw - 24px))', top: 'calc(100% + 8px)', right: 0 }}
                       role="dialog"
                       aria-label="Layers read from the file"
                       data-testid="modal-layers"

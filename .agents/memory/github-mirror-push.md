@@ -335,4 +335,6 @@ Diverged is the only genuinely-actionable-and-never-false state, so it's the onl
 
 **Key extraction (Aug 2026):** `GITHUB_MIRROR_DEPLOY_KEY` now comes through with its newlines flattened to spaces (one 431-char line). Rebuild before use: sed the BEGIN/END header spaces back to newlines, then `awk 'NR==2{gsub(/ /,"\n")}1'` on the body; verify with `ssh-keygen -y -f /tmp/mirror_key`. A bad key fails as "correct access rights" — check the key first, not the repo.
 
+**DIVERGED via empty "Published your App" commit (Aug 2026):** a Replit publish can drop an empty commit straight onto the mirror's main → freshness reads DIVERGED. Zero file diff vs merge-base, so the task-agent heal is safe: fetch, confirm `git diff --name-only <merge-base> ghmirror/main` is empty, force-push project main tip (main-repl/main) over it.
+
 **Mirror can be AHEAD:** the design studio pushes Ruby handoff commits (handoff/ files only) straight to the mirror's main. A non-fast-forward push rejection = fetch the remote tip, verify it only touches handoff/, then `git rebase FETCH_HEAD` (local-only commits replay cleanly) and push — never merge/pull. Also: the deploy-key secret is a SINGLE line (spaces where newlines were); rebuild by extracting the base64 between BEGIN/END markers, stripping whitespace, folding at 70 chars — validate with `ssh-keygen -y` before pushing.
