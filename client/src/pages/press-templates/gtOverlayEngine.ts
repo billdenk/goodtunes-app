@@ -72,6 +72,15 @@ const mulM = (a: Matrix, b: number[]): Matrix => [
 const applyM = (m: Matrix, x: number, y: number): [number, number] => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
 export const PT_TO_MM = 25.4 / 72;
 
+// Layer eligibility (shared, Task #3306): only GT template layers become
+// toggle chips — GT-prefixed names or LINE/AREA overlay layers. The press
+// live-test page has always filtered with exactly this predicate; the artist
+// test page reuses it so a raw "Layer 1" from art content never shows up.
+export function isGtEligibleLayer(name: string): boolean {
+  const n = name.toUpperCase();
+  return n.includes('LINE') || n.includes('AREA') || n.startsWith('GT');
+}
+
 export function zoneFromName(raw: string): { zone: string; kind: 'line' | 'area' | 'other' } {
   const n = raw.trim().replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').toUpperCase();
   const kind: 'line' | 'area' | 'other' = n.endsWith(' LINE') ? 'line' : n.endsWith(' AREA') ? 'area' : 'other';

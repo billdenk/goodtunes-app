@@ -65,7 +65,7 @@ import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, 
 // live in the SHARED gtOverlayEngine.ts (Task #3184) so the artist art-test
 // page renders art in the template with the exact same machinery. Behavior
 // here is byte-identical to the previous inline copies.
-import { loadPdfjs, renderPage, extractGtLayers, shrinkDataUrl, zoneColor, type GtLayer } from './gtOverlayEngine';
+import { loadPdfjs, renderPage, extractGtLayers, isGtEligibleLayer, shrinkDataUrl, zoneColor, type GtLayer } from './gtOverlayEngine';
 export type { GtLayer } from './gtOverlayEngine';
 import { createFullSharpController } from './fullSharpRender';
 // Bounded-retry hi-DPI crop render (Task #3213) — never strands the viewer on
@@ -370,7 +370,7 @@ export default function PressTemplateLiveTest({
       setTemplateGen((g) => g + 1);
       setCropImg(null);
       const [{ img, wMm, hMm }, { layers, layerNames }] = [await renderPage(doc, 1), await extractGtLayers(doc, 1)];
-      const gt = layers.filter((l) => l.name.toUpperCase().includes('LINE') || l.name.toUpperCase().includes('AREA') || l.name.toUpperCase().startsWith('GT'));
+      const gt = layers.filter((l) => isGtEligibleLayer(l.name));
       if (!gt.length) {
         setError('No GT layers found in this PDF. Add layers named like "GT CUT LINE" / "GT CUT AREA" in Illustrator and re-save.');
       }

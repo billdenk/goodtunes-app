@@ -59,7 +59,7 @@ import {
 } from 'lucide-react';
 import { queryClient, apiRequest } from '@/lib/queryClient';
 import { uploadAdminDocWithProgress } from '@/lib/adminUpload';
-import { loadPdfjs, renderPage, extractGtLayers } from '@/pages/press-templates/gtOverlayEngine';
+import { loadPdfjs, renderPage, extractGtLayers, isGtEligibleLayer } from '@/pages/press-templates/gtOverlayEngine';
 import { TemplateArtViewer, type ViewerTemplate, type ViewerArt } from '@/pages/press-templates/TemplateArtViewer';
 import { useToast } from '@/hooks/use-toast';
 import { useAdminDark } from '@/lib/adminAppearance';
@@ -284,7 +284,11 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
         const doc = await (await loadPdfjs()).getDocument({ data: await blob.arrayBuffer() }).promise;
         const [{ img, wMm, hMm }, { layers }] = [await renderPage(doc, 1), await extractGtLayers(doc, 1)];
         if (cancelled) return;
-        setTpl({ template: { img, wMm, hMm, layers }, doc, blob });
+        // Task #3306 — same eligibility filter as the press live-test page:
+        // only GT template layers become toggle chips, never a raw "Layer 1"
+        // left in the template file from non-GT content.
+        const gtLayers = layers.filter((l) => isGtEligibleLayer(l.name));
+        setTpl({ template: { img, wMm, hMm, layers: gtLayers }, doc, blob });
         setTplState('ready');
       } catch (e: any) {
         if (cancelled) return;
