@@ -49,6 +49,7 @@ import {
   pressTierJacketLadders,
   pressPriceLists,
   pressServiceItems,
+  pressCodaConnections,
   PRESS_SERVICE_CATEGORIES,
   PRESS_SERVICE_UNIT_BASES,
   manufacturers,
@@ -3796,6 +3797,179 @@ export function registerPressCatalogRoutes(
       const { listPricingSyncs } = await import("./hellbenderPricingSync");
       const rows = await listPricingSyncs(pressId);
       return res.json(rows);
+    },
+  );
+
+  // ─── Task #3310 — Coda (Superhuman Docs) press pricing sync ───────
+  // Operator (god-view) ONLY: the connection carries a press-supplied API
+  // token, so partner accounts (even in-scope press members) never touch
+  // these routes. requireAdmin admits all partner bearers — the explicit
+  // super_admin/admin check here is the real boundary.
+  const requireOperator = async (req: Request, res: Response, next: () => void) => {
+    const userId = (req as any).adminUserId as string | undefined;
+    if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const { getUserRole } = await import("./auth/roles");
+    const info = await getUserRole(userId);
+    if (info?.role === "super_admin" || info?.role === "admin") return next();
+    return res.status(403).json({ message: "Operators only" });
+  };
+
+  const codaMappingSchema = z.object({
+    tierColumnId: z.string().min(1),
+    qtyColumnId: z.string().min(1),
+    priceColumnId: z.string().min(1),
+    priceKind: z.enum(["unit", "total"]),
+    formatColumnId: z.string().min(1).nullable(),
+    defaultFormat: z.enum(ALBUM_FORMATS).nullable(),
+  });
+
+  app.get(
+    "/api/admin/manufacturers/:id/coda-connection",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const { getCodaConnection, toPublicCodaConnection } = await import("./codaPricingSync");
+      const conn = await getCodaConnection(String(req.params.id));
+      return res.json(toPublicCodaConnection(conn));
+    },
+  );
+
+  app.put(
+    "/api/admin/manufacturers/:id/coda-connection",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      const parsed = z
+        .object({
+          apiToken: z.string().min(10).optional(),
+          docId: z.string().min(1).optional(),
+          tableId: z.string().min(1).nullable().optional(),
+          tableName: z.string().nullable().optional(),
+          columnMapping: codaMappingSchema.nullable().optional(),
+        })
+        .safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ message: parsed.error.issues[0]?.message ?? "Invalid connection payload" });
+      }
+      try {
+        const { saveCodaConnection, toPublicCodaConnection } = await import("./codaPricingSync");
+        const row = await saveCodaConnection({
+          pressId,
+          apiToken: parsed.data.apiToken ?? null,
+          docId: parsed.data.docId,
+          tableId: parsed.data.tableId,
+          tableName: parsed.data.tableName,
+          columnMapping: parsed.data.columnMapping,
+          userId: (req as any).adminUserId ?? null,
+        });
+        return res.json(toPublicCodaConnection(row));
+      } catch (err: any) {
+        return res.status(400).json({ message: err?.message || "Couldn't save the connection" });
+      }
+    },
+  );
+
+  app.delete(
+    "/api/admin/manufacturers/:id/coda-connection",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const { deleteCodaConnection } = await import("./codaPricingSync");
+      await deleteCodaConnection(String(req.params.id));
+      return res.json({ ok: true });
+    },
+  );
+
+  // Test the stored token/doc: returns the doc name + its tables, and —
+  // when a table is picked (body.tableId or the stored one) — that
+  // table's columns so the operator can map them. Token problems come
+  // back as clear, classified errors, never a silent empty response.
+  app.post(
+    "/api/admin/manufacturers/:id/coda-connection/test",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const coda = await import("./codaPricingSync");
+      const conn = await coda.getCodaConnection(pressId);
+      if (!conn) return res.status(400).json({ message: "Save a token and doc ID first." });
+      const tableId =
+        typeof req.body?.tableId === "string" && req.body.tableId ? req.body.tableId : conn.tableId;
+      try {
+        const { decryptSecret } = await import("./auth/crypto");
+        const token = decryptSecret(conn.apiTokenEncrypted);
+        const doc = await coda.getCodaDoc(token, conn.docId);
+        const tables = await coda.listCodaTables(token, conn.docId);
+        const columns = tableId ? await coda.listCodaColumns(token, conn.docId, tableId) : null;
+        await db
+          .update(pressCodaConnections)
+          .set({ docName: doc.name, lastTestedAt: new Date(), lastError: null, updatedAt: new Date() })
+          .where(eq(pressCodaConnections.id, conn.id));
+        return res.json({ ok: true, docName: doc.name, tables, columns });
+      } catch (err: any) {
+        const message = err?.message || "Connection test failed";
+        await db
+          .update(pressCodaConnections)
+          .set({ lastTestedAt: new Date(), lastError: message, updatedAt: new Date() })
+          .where(eq(pressCodaConnections.id, conn.id));
+        const status = err?.kind === "rate_limit" ? 429 : err?.kind ? 400 : 502;
+        return res.status(status).json({ message, kind: err?.kind ?? "api" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/manufacturers/:id/pricing-sync/coda/preview",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      try {
+        const { buildCodaPricingProposal } = await import("./codaPricingSync");
+        const proposal = await buildCodaPricingProposal(pressId);
+        return res.json({ proposal });
+      } catch (err: any) {
+        console.error("[coda-pricing-sync] preview failed:", err);
+        const status = err?.kind === "rate_limit" ? 429 : err?.kind ? 400 : 502;
+        return res.status(status).json({ message: err?.message || "Preview failed", kind: err?.kind ?? null });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/manufacturers/:id/pricing-sync/coda/commit",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      try {
+        const { buildCodaPricingProposal, applyCodaPricingProposal } = await import(
+          "./codaPricingSync"
+        );
+        // Re-fetch on commit so we never write a stale preview the
+        // operator may have left sitting open (mirrors Hellbender).
+        const proposal = await buildCodaPricingProposal(pressId);
+        const userId = (req as any).adminUserId ?? null;
+        const result = await applyCodaPricingProposal(pressId, userId, proposal);
+        console.log(
+          `[coda-pricing-sync] commit by user=${userId} press=${pressId} ` +
+            `written=${result.rungsWritten} skipped=${result.rungsSkipped} missing=${result.tiersMissing.join(",")}`,
+        );
+        return res.json({ ...result, proposal });
+      } catch (err: any) {
+        console.error("[coda-pricing-sync] commit failed:", err);
+        const status = err?.kind === "rate_limit" ? 429 : err?.kind ? 400 : 500;
+        return res.status(status).json({ message: err?.message || "Commit failed", kind: err?.kind ?? null });
+      }
     },
   );
 

@@ -56,6 +56,7 @@ import { Switch } from "@/components/ui/switch";
 import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
+import { CodaPricingSyncCard } from "@/components/admin/CodaPricingSyncCard";
 import { SaveLink, CardHeader, EditPencil } from "@/components/admin/EditCardChrome";
 import { IconButton } from "@/components/ui/IconButton";
 import { PressTabBody, usePressPortalNav, type PressMe } from "@/pages/PressPortal";
@@ -761,6 +762,11 @@ export function AdminManufacturer() {
             <div className="max-w-3xl">
               <GoodDeedPrintingEditor pressId={id} />
             </div>
+
+            {/* Task #3310 — operator-only Coda (Superhuman Docs) pricing
+                connection + preview/commit sync. Server routes are hard-gated
+                to super_admin/admin; the card only renders for operators. */}
+            {isOperator && <CodaPricingSyncCard pressId={id} />}
           </>
         )}
         {tab === "contacts" && (

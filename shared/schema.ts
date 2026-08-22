@@ -3206,6 +3206,44 @@ export const pressPricingSyncs = pgTable("press_pricing_syncs", {
 });
 export type PressPricingSync = typeof pressPricingSyncs.$inferSelect;
 
+// Task #3310 — per-press Coda.io (Superhuman Docs) pricing connection.
+// A press (MRP first) can hand us a Coda API token + doc ID; the operator
+// picks the pricing table and maps its columns onto our ladder concepts.
+// The token is envelope-encrypted (AES-256-GCM via server/auth/crypto —
+// same TOTP_ENC_KEY envelope as admin 2FA secrets) and is NEVER returned
+// to the browser after save (one-time entry; GET exposes only a
+// "configured" flag). One connection per press (unique press_id).
+export type CodaColumnMapping = {
+  // Column whose value identifies the tier/color book ("Opaque", "Black").
+  tierColumnId: string;
+  // Column carrying the run quantity (300 / 500 / 1000 …).
+  qtyColumnId: string;
+  // Column carrying the price. `priceKind` says whether it's per-unit or
+  // a run total (total ÷ qty → unit).
+  priceColumnId: string;
+  priceKind: "unit" | "total";
+  // Optional column identifying the format (12" LP / 2LP / 7"). When null,
+  // every row lands on `defaultFormat`.
+  formatColumnId: string | null;
+  defaultFormat: string | null;
+};
+export const pressCodaConnections = pgTable("press_coda_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pressId: varchar("press_id").notNull().unique(),
+  apiTokenEncrypted: text("api_token_encrypted").notNull(),
+  docId: text("doc_id").notNull(),
+  docName: text("doc_name"),
+  tableId: text("table_id"),
+  tableName: text("table_name"),
+  columnMapping: jsonb("column_mapping").$type<CodaColumnMapping | null>(),
+  lastTestedAt: timestamp("last_tested_at"),
+  lastError: text("last_error"),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+export type PressCodaConnection = typeof pressCodaConnections.$inferSelect;
+
 // Generic per-album add-on. First user: the **signed_cert** add-on (printed
 // & signed GoodDeed certificate). Future shapes (professional framing,
 // full-album-sized framed GoodDeed with QR provenance) drop in here as new

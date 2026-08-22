@@ -5042,6 +5042,39 @@ SQL
 migrate_task_670_pricing_syncs dev  "${DATABASE_URL:-}"
 migrate_task_670_pricing_syncs prod "${PROD_DATABASE_URL:-}"
 
+# ── Task #3310 — Coda (Superhuman Docs) press pricing connections ────
+# Per-press Coda API connection (encrypted token + doc/table + column
+# mapping) backing the operator-only Coda pricing sync. Idempotent
+# CREATE on both DBs so the publish dev→prod diff never drops it.
+migrate_task_3310_coda_connections() {
+  local label="$1"; local url="$2"
+  [ -z "$url" ] && return 0
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL'
+CREATE TABLE IF NOT EXISTS press_coda_connections (
+  id                   varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id             varchar NOT NULL UNIQUE,
+  api_token_encrypted  text    NOT NULL,
+  doc_id               text    NOT NULL,
+  doc_name             text,
+  table_id             text,
+  table_name           text,
+  column_mapping       jsonb,
+  last_tested_at       timestamp,
+  last_error           text,
+  created_by_user_id   varchar,
+  created_at           timestamp NOT NULL DEFAULT now(),
+  updated_at           timestamp NOT NULL DEFAULT now()
+);
+SQL
+  then
+    echo "post-merge: task-3310 coda connections ok on $label"
+  else
+    echo "post-merge: WARNING — task-3310 coda connections failed on $label (continuing)"
+  fi
+}
+migrate_task_3310_coda_connections dev  "${DATABASE_URL:-}"
+migrate_task_3310_coda_connections prod "${PROD_DATABASE_URL:-}"
+
 # ── Task #727 — Reset every configured GoodDeed to $25 / 20% ─────────
 # Bill wants the Printed & Signed GoodDeed® cert upsell to start at $25
 # retail and 20% of the vinyl run. New-cert defaults are handled in the
