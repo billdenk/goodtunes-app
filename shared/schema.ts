@@ -5144,6 +5144,16 @@ export const manufacturers = pgTable("manufacturers", {
   doesVinyl: boolean("does_vinyl").notNull().default(true),
   doesGoodDeed: boolean("does_good_deed").notNull().default(false),
   doesFulfillment: boolean("does_fulfillment").notNull().default(false),
+  // Task #3291 — per-press unveil switch for the PAID Estimates + White
+  // Label features. Defaults OFF for every press (existing and new): press
+  // logins see neither the Create/Estimates rail section nor the Settings
+  // White Label sub-tab, and the estimate/branding routes 403 them (fail
+  // closed) until an operator flips this on from the admin manufacturer
+  // page. Super admins (and "View as press" sessions, which only a live
+  // super admin can mint) always pass. Public estimate share links and the
+  // public white-label host branding route are NOT gated by this — those
+  // serve fans/recipients, not press users.
+  estimatesWhiteLabelEnabled: boolean("estimates_white_label_enabled").notNull().default(false),
   // Typical lead-time the plant quotes for a standard 12" LP press run,
   // in calendar days. Admin-entered; surfaces on the RFQ comparison
   // table so the operator can sort by turnaround. Nullable while the

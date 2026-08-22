@@ -747,6 +747,8 @@ export function AdminManufacturer() {
               scopeName={m.name}
             />
 
+            {isSuperAdmin && <PressUnveilCard m={m} onSave={(patch) => save.mutate(patch)} saving={save.isPending} />}
+
             {isSuperAdmin && <PressAutoTriggerConsentPanel m={m} />}
 
             <NotificationsCard partnerKind="manufacturer" partnerId={m.id} partnerName={m.name} />
@@ -886,6 +888,43 @@ function PressCapabilitiesCard({
       guardNoun="capability"
       onToggle={(key, next) => onSave({ [key]: next } as Partial<Manufacturer>)}
     />
+  );
+}
+
+// Task #3291 — operator-only unveil switch for the paid Estimates + White
+// Label features. Defaults OFF for every press; flipping it on restores the
+// Create/Estimates rail section, the Settings White Label sub-tab, and the
+// matching API routes for that press's own logins. Server-side the PUT
+// rejects non-staff callers, so a press can never self-toggle its paywall.
+function PressUnveilCard({
+  m,
+  onSave,
+  saving,
+}: {
+  m: Manufacturer;
+  onSave: (patch: Partial<Manufacturer>) => void;
+  saving: boolean;
+}) {
+  const unveiled = (m as any).estimatesWhiteLabelEnabled === true;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-semibold text-slate-900">Estimates &amp; White Label unveiled</div>
+          <p className="mt-1 text-sm text-slate-500 max-w-xl">
+            Paid features. Off = this press's logins see no Create/Estimates section and no
+            Settings → White Label tab, and the matching API routes are locked. Super admins
+            always keep access in god view.
+          </p>
+        </div>
+        <Switch
+          checked={unveiled}
+          disabled={saving}
+          onCheckedChange={(next) => onSave({ estimatesWhiteLabelEnabled: next } as Partial<Manufacturer>)}
+          data-testid="switch-estimates-whitelabel-unveiled"
+        />
+      </div>
+    </div>
   );
 }
 

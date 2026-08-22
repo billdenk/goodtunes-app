@@ -5712,6 +5712,69 @@ SQL
 migrate_manufacturer_capabilities dev  "${DATABASE_URL:-}"
 migrate_manufacturer_capabilities prod "${PROD_DATABASE_URL:-}"
 
+# ─── Task #3291 — per-press Estimates & White Label unveil flag ─────────────
+# Additive schema: paid-feature unveil switch, default FALSE for every press
+# (existing and new). Idempotent, safe on dev + prod, safe to re-run.
+migrate_estimates_whitelabel_unveil() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-3291 estimates-whitelabel-unveil migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS estimates_white_label_enabled boolean NOT NULL DEFAULT false;
+SQL
+  then
+    echo "post-merge: task-3291 estimates-whitelabel-unveil migration ok on $label"
+  else
+    echo "post-merge: WARNING — task-3291 estimates-whitelabel-unveil migration failed on $label (continuing)"
+  fi
+}
+migrate_estimates_whitelabel_unveil dev  "${DATABASE_URL:-}"
+migrate_estimates_whitelabel_unveil prod "${PROD_DATABASE_URL:-}"
+
+# ─── Task #3291 — one-time backfill: leave existing presses UNVEILED ────────
+# Bill's call (Aug 21 2026): nothing should change for presses yet — flip the
+# unveil switch ON for every press that exists today, and operators turn one
+# OFF when pricing starts. TRUE ONE-TIME (marker-guarded) so a later operator
+# flip is never clobbered by re-runs. New presses still default OFF.
+backfill_task_3291_unveil_existing_presses() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping task-3291 unveil backfill on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+CREATE TABLE IF NOT EXISTS post_merge_data_backfills (
+  name        text PRIMARY KEY,
+  applied_at  timestamp NOT NULL DEFAULT now()
+);
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM post_merge_data_backfills
+    WHERE name = 'task_3291_unveil_existing_presses'
+  ) THEN
+    RETURN;
+  END IF;
+  UPDATE manufacturers SET estimates_white_label_enabled = true;
+  INSERT INTO post_merge_data_backfills (name)
+  VALUES ('task_3291_unveil_existing_presses');
+END
+$$;
+COMMIT;
+SQL
+  then
+    echo "post-merge: task-3291 unveil backfill ok on $label"
+  else
+    echo "post-merge: WARNING — task-3291 unveil backfill failed on $label (continuing)"
+  fi
+}
+backfill_task_3291_unveil_existing_presses dev  "${DATABASE_URL:-}"
+backfill_task_3291_unveil_existing_presses prod "${PROD_DATABASE_URL:-}"
+
 # ─── Task #916 — real-data capability flips (domain-keyed, ID-drift safe) ───
 # Hoover Printing is GoodDeeds-only (prints certs, presses no vinyl); MRP
 # (Memphis Record Pressing) does all three. Keyed by DOMAIN, not id, because

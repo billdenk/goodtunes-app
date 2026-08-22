@@ -20095,6 +20095,27 @@ export async function registerRoutes(
       if (b.doesGoodDeed !== undefined) u.doesGoodDeed = nextGoodDeed;
       if (b.doesFulfillment !== undefined) u.doesFulfillment = nextFulfillment;
     }
+    // Task #3291 — per-press unveil of the paid Estimates + White Label
+    // features. Writable ONLY by platform staff: requireAdmin admits every
+    // partner bearer, and a press must never be able to self-toggle its own
+    // paywall through this PUT. Raw users.role read on purpose — same
+    // reasoning as the press-portal unveil gate (a view-as hat must not
+    // grant OR mask the real caller's role for this write).
+    if (b.estimatesWhiteLabelEnabled !== undefined) {
+      // routes.ts requireAdmin stamps req.session.userId (not adminUserId —
+      // that's the commerce.ts variant), so read both.
+      const callerId =
+        (req.session?.userId as string | undefined) ??
+        ((req as any).adminUserId as string | undefined);
+      const roleRow = callerId
+        ? await db.execute<any>(sql`SELECT role FROM users WHERE id = ${callerId} LIMIT 1`)
+        : null;
+      const callerRole = roleRow ? ((roleRow as any).rows ?? [])[0]?.role : null;
+      if (callerRole !== "super_admin" && callerRole !== "admin") {
+        return res.status(403).json({ message: "Only GoodTunes staff can change feature unveiling." });
+      }
+      u.estimatesWhiteLabelEnabled = Boolean(b.estimatesWhiteLabelEnabled);
+    }
     // Task #3254 — same publish-on-save ACL handling as the press-portal
     // profile PATCH: any `/objects/uploads/...` image URL being persisted
     // must be publicly readable BEFORE we store it, or god-view Details

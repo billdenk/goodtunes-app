@@ -731,6 +731,47 @@ export function registerPressPortalRoutes(
     next();
   };
 
+  // ── Task #3291 — paid-feature unveil gate (Estimates + White Label) ────
+  // Both features are hidden until an operator flips the per-press
+  // manufacturers.estimates_white_label_enabled switch. Fail closed for
+  // press-scoped callers; platform staff always pass — INCLUDING under
+  // "View as press", which is why this reads the RAW users.role of the
+  // authenticated caller (req.adminUserId / session) instead of
+  // getUserRole(): the view-as hat rides an ALS override that would make
+  // a super admin look like a press member, but a view-as token can only
+  // be minted by a live super admin, so the real caller is trusted.
+  // The public estimate-link and /api/whitelabel/branding routes are
+  // deliberately NOT gated (they serve fans/recipients, not press users).
+  const callerIsPlatformStaff = async (req: Request): Promise<boolean> => {
+    const callerId =
+      ((req as any).adminUserId as string | undefined) ?? req.session?.userId;
+    if (!callerId) return false;
+    const r = await db.execute<any>(
+      sql`SELECT role FROM users WHERE id = ${callerId} LIMIT 1`,
+    );
+    const role = ((r as any).rows ?? [])[0]?.role;
+    return role === "super_admin" || role === "admin";
+  };
+  const pressIsUnveiled = async (pressId: string): Promise<boolean> => {
+    const r = await db.execute<any>(sql`
+      SELECT estimates_white_label_enabled AS unveiled
+      FROM manufacturers WHERE id = ${pressId} LIMIT 1
+    `);
+    return ((r as any).rows ?? [])[0]?.unveiled === true;
+  };
+  const passesUnveil = async (req: Request): Promise<boolean> =>
+    (await callerIsPlatformStaff(req)) ||
+    (await pressIsUnveiled(String(req.params.id)));
+  const UNVEIL_403 = "Estimates and White Label aren't enabled for this press yet.";
+  // Middleware form for the estimate-only / branding routes. The shared
+  // estimates CRUD routes (which also carry kind=package saved builds)
+  // instead call passesUnveil() inline once the kind is known — Packages
+  // must keep working for every press.
+  const requireUnveiled = async (req: Request, res: Response, next: any) => {
+    if (await passesUnveil(req)) return next();
+    return res.status(403).json({ message: UNVEIL_403 });
+  };
+
   // Press-templates flow (Ruby handoff) — templates index / upload /
   // ingestion / certification API, in its own module.
   registerPressTemplateFlowRoutes(app, requireAdmin, requirePressScope, requirePressEditor);
@@ -790,6 +831,11 @@ export function registerPressPortalRoutes(
       // Null logo = plain generic label (labelBgColor still honored).
       labelLogoUrl: (press as any).labelLogoUrl ?? null,
       labelBgColor: (press as any).labelBgColor ?? null,
+      // Task #3291 — paid Estimates + White Label unveil flag. The portal
+      // hides the Create/Estimates rail section and the Settings White
+      // Label sub-tab when false (unless the viewer is a super admin or a
+      // view-as session); the server routes fail closed regardless.
+      estimatesWhiteLabelEnabled: (press as any).estimatesWhiteLabelEnabled === true,
     });
   });
 
@@ -798,7 +844,7 @@ export function registerPressPortalRoutes(
   // plus canEdit so the White Label tab renders read-only for Staff. PUT is
   // editor-gated; every field nullable (null = fall back to GoodTunes
   // defaults on the customer-facing surfaces).
-  app.get("/api/press/:id/branding", requireAdmin, requirePressScope, async (req, res) => {
+  app.get("/api/press/:id/branding", requireAdmin, requirePressScope, requireUnveiled, async (req, res) => {
     const pressId = String(req.params.id);
     const press = await storage.getManufacturerById(pressId);
     if (!press) return res.status(404).json({ message: "Press not found" });
@@ -828,7 +874,7 @@ export function registerPressPortalRoutes(
     // with an explicit case-insensitive check (friendly 409 beats 23505).
     whiteLabelSlug: z.string().trim().toLowerCase().max(40).nullable().optional(),
   });
-  app.put("/api/press/:id/branding", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+  app.put("/api/press/:id/branding", requireAdmin, requirePressScope, requireUnveiled, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const body = brandingBodySchema.safeParse(req.body ?? {});
     if (!body.success) return res.status(400).json({ message: body.error.issues[0]?.message ?? "Invalid branding" });
@@ -963,7 +1009,7 @@ export function registerPressPortalRoutes(
   // a logo candidate + a suggested accent palette (theme-color + frequent
   // saturated hexes). SUGGESTION ONLY — nothing here persists; the operator
   // confirms in the tab and saves via PUT /branding.
-  app.post("/api/press/:id/brand-suggest", requireAdmin, requirePressScope, async (req, res) => {
+  app.post("/api/press/:id/brand-suggest", requireAdmin, requirePressScope, requireUnveiled, async (req, res) => {
     const url = String(req.body?.url ?? "").trim();
     if (!url || !/^https?:\/\//i.test(url)) {
       return res.status(400).json({ message: "A full https:// URL is required" });
@@ -2639,6 +2685,11 @@ export function registerPressPortalRoutes(
     if (!(await resolvePress(pressId))) return res.status(404).json({ message: "Press not found" });
     const kindParse = estimateKindSchema.safeParse(req.query.kind ?? "estimate");
     if (!kindParse.success) return res.status(400).json({ message: "kind must be estimate|package" });
+    // Task #3291 — kind=package (saved builds) stays open to every press;
+    // only the paid Estimates side is unveil-gated.
+    if (kindParse.data === "estimate" && !(await passesUnveil(req))) {
+      return res.status(403).json({ message: UNVEIL_403 });
+    }
     const rows = await db
       .select()
       .from(pressEstimates)
@@ -2659,6 +2710,11 @@ export function registerPressPortalRoutes(
       .safeParse(req.body);
     if (!body.success) return res.status(400).json({ message: "Invalid estimate body" });
     const { kind, title, status, payload } = body.data;
+    // Task #3291 — creating an ESTIMATE requires the unveil flag; packages
+    // (saved builds) are not part of the paid feature.
+    if (kind === "estimate" && !(await passesUnveil(req))) {
+      return res.status(403).json({ message: UNVEIL_403 });
+    }
     const press = await resolvePress(pressId);
     if (!press) return res.status(404).json({ message: "Press not found" });
     const allowed = kind === "estimate" ? ESTIMATE_STATUSES : PACKAGE_STATUSES;
@@ -2721,6 +2777,10 @@ export function registerPressPortalRoutes(
       .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
       .limit(1);
     if (!existing[0]) return res.status(404).json({ message: "Estimate not found" });
+    // Task #3291 — mutating an ESTIMATE row requires the unveil flag.
+    if (existing[0].kind === "estimate" && !(await passesUnveil(req))) {
+      return res.status(403).json({ message: UNVEIL_403 });
+    }
     const allowed = existing[0].kind === "estimate" ? ESTIMATE_STATUSES : PACKAGE_STATUSES;
     if (body.data.status && !(allowed as readonly string[]).includes(body.data.status)) {
       return res.status(400).json({ message: "Invalid status" });
@@ -2768,6 +2828,17 @@ export function registerPressPortalRoutes(
     const pressId = String(req.params.id);
     const estimateId = String(req.params.estimateId);
     if (!(await resolvePress(pressId))) return res.status(404).json({ message: "Press not found" });
+    // Task #3291 — deleting an ESTIMATE row requires the unveil flag
+    // (kind resolved first; package deletes stay open).
+    const kindRows = await db
+      .select({ kind: pressEstimates.kind })
+      .from(pressEstimates)
+      .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
+      .limit(1);
+    if (!kindRows[0]) return res.status(404).json({ message: "Estimate not found" });
+    if (kindRows[0].kind === "estimate" && !(await passesUnveil(req))) {
+      return res.status(403).json({ message: UNVEIL_403 });
+    }
     const [row] = await db
       .delete(pressEstimates)
       .where(and(eq(pressEstimates.id, estimateId), eq(pressEstimates.pressId, pressId)))
@@ -3320,7 +3391,7 @@ export function registerPressPortalRoutes(
     name: z.string().trim().max(120).optional().default(""),
     email: z.string().trim().email().max(200),
   });
-  app.post("/api/press/:id/estimates/:estimateId/send", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
+  app.post("/api/press/:id/estimates/:estimateId/send", requireAdmin, requirePressScope, requireUnveiled, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const estimateId = String(req.params.estimateId);
     const body = z

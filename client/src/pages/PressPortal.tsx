@@ -28,7 +28,7 @@ import { Loader2, Factory, Users, GitBranch, Settings as Cog, Upload, ExternalLi
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 import { albumStage, type AlbumStage } from "@shared/albumStage";
 import { useAuth } from "@/hooks/useAuth";
-import { apiRequest, getAuthToken, queryClient } from "@/lib/queryClient";
+import { apiRequest, getAuthToken, getViewAsToken, queryClient } from "@/lib/queryClient";
 import { PayoutAccountPanel } from "@/components/admin/PayoutAccountPanel";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -142,6 +142,10 @@ export interface PressMe {
   // handoff/press-settings-templates-policy (Bill, Aug 15 2026) — whether a
   // template must pass a live test before it measures client files.
   requireCertifiedTemplates?: boolean;
+  // Task #3291 — paid Estimates + White Label unveil flag. False hides the
+  // Create/Estimates rail section and the Settings White Label sub-tab for
+  // press logins (super admins and view-as sessions still see both).
+  estimatesWhiteLabelEnabled?: boolean;
   // Jacket placeholder image for the catalog's VinylPreview.
   vinylPlaceholderUrl?: string | null;
   // Center-label branding for the vinyl color setup disc preview.
@@ -460,9 +464,20 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
   // leaf names the press's OWN packages — swap in this press's short name.
   // Spread-preserve the row so icon/section survive (rebuilding rows strips
   // them from the rail).
-  const tabs = modulesForRole("press").map((m) =>
-    m.id === "packages" ? { ...m, label: pressPackagesLabel(me?.name) } : m,
-  ) as ReadonlyArray<{ id: TabId; label: string; soon?: boolean }>;
+  // Task #3291 — the paid Create/Estimates section is hidden until the
+  // press is unveiled. Super admins (god view) and "View as press" sessions
+  // (mintable only by a live super admin) always see it; the server routes
+  // fail closed regardless of what the client shows.
+  const showEstimates =
+    isSuperAdminView || !!getViewAsToken() || me?.estimatesWhiteLabelEnabled === true;
+  const tabs = modulesForRole("press")
+    .filter((m) => (m.id === "estimates" ? showEstimates : true))
+    .map((m) =>
+      m.id === "packages" ? { ...m, label: pressPackagesLabel(me?.name) } : m,
+    ) as ReadonlyArray<{ id: TabId; label: string; soon?: boolean }>;
+  // Deep links (?tab=estimates) degrade to the dashboard when locked.
+  const effectiveTab = tab === "estimates" && !showEstimates ? "dashboard" : tab;
+  const effectiveNav = effectiveTab === tab ? nav : { ...nav, tab: effectiveTab };
 
   return (
     <PressBrandContext.Provider
@@ -497,15 +512,15 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       // while the embedded album view is open (it brings its own chrome).
       pageTitle={
         albumViewId ||
-        ["dashboard", "estimates", "packages", "catalog", "specs", "pricing", "referrals", "reports", "people", "albums", "acquisition", "templates", "comp-vinyl", "comp-cd", "comp-cassette", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing"].includes(tab)
+        ["dashboard", "estimates", "packages", "catalog", "specs", "pricing", "referrals", "reports", "people", "albums", "acquisition", "templates", "comp-vinyl", "comp-cd", "comp-cassette", "comp-jackets", "comp-sleeves", "comp-inserts", "comp-labels", "comp-stickers", "comp-pricing"].includes(effectiveTab)
           ? undefined
-          : tab === "pipeline"
+          : effectiveTab === "pipeline"
             ? "Pipeline"
-            : tabs.find((t) => t.id === tab)?.label
+            : tabs.find((t) => t.id === effectiveTab)?.label
       }
       fallbackIcon={Factory}
       tabs={tabs}
-      activeTab={albumViewId ? "albums" : tab}
+      activeTab={albumViewId ? "albums" : effectiveTab}
       onTabChange={albumViewId ? (newTab) => navigate(pressPortalHref(newTab)) : handleTabChange}
     >
       {albumViewId ? (
@@ -515,7 +530,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
           backHref={pressPortalHref("albums")}
         />
       ) : (
-        <PressTabBody pressId={pressId} isSuperAdminView={isSuperAdminView} me={me} nav={nav} />
+        <PressTabBody pressId={pressId} isSuperAdminView={isSuperAdminView} me={me} nav={effectiveNav} />
       )}
     </OperatorShell>
     </PressBrandContext.Provider>
@@ -3350,13 +3365,21 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
   // read-only panel. Same signal the panel itself derives from /api/me/role.
   const { data: role } = useQuery<{ role?: string }>({ queryKey: ["/api/me/role"] });
   const isSuperAdmin = role?.role === "super_admin";
+  // Task #3291 — White Label is a paid feature, hidden until the press is
+  // unveiled. Super admins and view-as sessions always see it; the server
+  // branding routes fail closed regardless.
+  const { data: me } = useQuery<PressMe>({ queryKey: [`/api/press/${pressId}/me`] });
+  const showWhiteLabel =
+    isSuperAdmin || !!getViewAsToken() || me?.estimatesWhiteLabelEnabled === true;
   const subTabs = [
     { id: "general" as const, label: "General" },
     { id: "team" as const, label: "Team" },
     { id: "payouts" as const, label: "Payouts" },
     { id: "notifications" as const, label: "Notifications" },
-    { id: "whitelabel" as const, label: "White Label" },
+    ...(showWhiteLabel ? [{ id: "whitelabel" as const, label: "White Label" }] : []),
   ];
+  // Deep links (?settings=whitelabel) degrade to General when locked.
+  const effectiveSub = sub === "whitelabel" && !showWhiteLabel ? "general" : sub;
   return (
     <div className="space-y-4">
       <div className="flex gap-1 overflow-x-auto border-b border-[color:var(--apple-hairline)]">
@@ -3365,13 +3388,13 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
             key={t.id}
             type="button"
             onClick={() => setSub(t.id)}
-            className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${sub === t.id ? "border-[color:var(--brand-blue)] text-[color:var(--apple-ink)]" : "border-transparent text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)]"}`}
+            className={`h-10 px-3 text-sm font-semibold whitespace-nowrap border-b-2 ${effectiveSub === t.id ? "border-[color:var(--brand-blue)] text-[color:var(--apple-ink)]" : "border-transparent text-[color:var(--apple-subink)] hover:text-[color:var(--apple-ink)]"}`}
             data-testid={`tab-settings-${t.id}`}
           >{t.label}</button>
         ))}
       </div>
-      {sub === "general" && <ProfileSubTab pressId={pressId} />}
-      {sub === "team" && (
+      {effectiveSub === "general" && <ProfileSubTab pressId={pressId} />}
+      {effectiveSub === "team" && (
         <div className="space-y-4">
           {/* Task #665 — same Contacts panel admins see on
               /admin/manufacturers/:id. Server gates POSTs by
@@ -3386,9 +3409,9 @@ function SettingsTab({ pressId, pressName }: { pressId: string; pressName: strin
           )}
         </div>
       )}
-      {sub === "payouts" && <PayoutsSubTab pressId={pressId} pressName={pressName} />}
-      {sub === "notifications" && <NotificationsSubTab pressId={pressId} />}
-      {sub === "whitelabel" && <PressWhiteLabelSubTab pressId={pressId} />}
+      {effectiveSub === "payouts" && <PayoutsSubTab pressId={pressId} pressName={pressName} />}
+      {effectiveSub === "notifications" && <NotificationsSubTab pressId={pressId} />}
+      {effectiveSub === "whitelabel" && showWhiteLabel && <PressWhiteLabelSubTab pressId={pressId} />}
     </div>
   );
 }
