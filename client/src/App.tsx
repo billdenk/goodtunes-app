@@ -111,6 +111,7 @@ import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
 import AcceptInvite from "@/pages/AcceptInvite";
 import PressClientEstimate from "@/pages/PressClientEstimate";
 import PressClientEstimateAcceptedMRP from "@/pages/mrp/PressClientEstimateAcceptedMRP";
+import PressPQSheet from "@/pages/PressPQSheet";
 import { useWhitelabelBrand } from "@/hooks/useWhitelabelBrand";
 import PressClientNextStepsMRP from "@/pages/mrp/PressClientNextStepsMRP";
 import ArtistDashboardMRP from "@/pages/mrp/ArtistDashboardMRP";
@@ -868,6 +869,9 @@ function Router() {
             (Ruby handoff b912fb6) via the skin branch inside the page. */}
         <Route path="/e/:token/accepted" component={PressClientEstimateAcceptedMRP} />
         <Route path="/e/:token" component={PressClientEstimate} />
+        {/* PQ / cutting-master sheet — signed-out token link. The link is
+            the credential; the page is deliberately chrome-free. */}
+        <Route path="/pq/:token" component={PressPQSheet} />
         {/* Ruby handoff b912fb6 — Memphis client portal. Registered only on
             the white-label host family so goodtunes.music hosts keep their
             current routing (these paths fall through to the slug resolver

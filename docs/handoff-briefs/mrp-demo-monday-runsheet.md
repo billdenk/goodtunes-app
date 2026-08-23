@@ -17,18 +17,18 @@ builder -> price list.
 Live already per STATUS: estimate builder from Components->Pricing rows,
 estimate email, /e/:token page, Start-this-project + account creation,
 next-steps file upload.
-- GAP: **Stripe payment moment.** Artist pays their press bill from the
+- **TEST MODE (Aug 22)** — Stripe payment moment: "You owe / Pay $X" is live on the accepted estimate page (/e/:token/accepted) for Converted estimates; card checkout in Stripe test mode, amount server-derived, Paid state + press-side Paid chip. GAP text follows for reference: **Stripe payment moment.** Artist pays their press bill from the
   portal (Billing model: "You owe." / "Pay $X" — Card or bank transfer,
   securely handled by Stripe). If real charges can't be live by Monday, a
   Stripe TEST-mode checkout is fine for the demo — but the tap must work.
-- GAP: **MRP-side download.** The press sees the converted project and
+- **READY TO TEST (Aug 22)** — MRP-side download: press-only Downloads sub-tab in the project view (finished print files per component + all-print-files, per-track master originals + all-masters ZIP, honest empty/health states). GAP text follows: **MRP-side download.** The press sees the converted project and
   downloads the finished template + music files from their end.
-- GAP: **PQ sheet** (handoff/pq-sheet/, pushed Aug 22): online cutting-
+- **LIVE ON DEV (Aug 22)** — PQ sheet: online tokenized sheet at /pq/{token} (tap-to-play for Mux-ready tracks, honest side-length verdicts, artist confirmations never pre-ticked) + two-page PDF twin; "PQ sheet" entry under Physical → Audio in the press portal. GAP text follows: **PQ sheet** (handoff/pq-sheet/, pushed Aug 22): online cutting-
   master sheet with tap-to-play + Download PDF twin. This is the flow-2
   closer for their mastering folks. If playback can't land by Monday,
   ship the sheet + PDF without play and say so.
-- Also in that handoff's sweep: REMOVE the live "Wave mastering" label
-  before Monday — MRP will notice a service that doesn't exist.
+- Wave mastering label: **LIVE (removed)** — callout deleted from the artist
+  release page (Aug 22). Needs the prod publish to show on the live domain.
 
 ## Flow 3 — MRP invites an artist to self-service
 MRP adds an artist by Spotify link + email (and/or manager/team members);

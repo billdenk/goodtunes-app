@@ -33,6 +33,8 @@ import {
   pressEstimates,
 } from "@shared/schema";
 import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./earlyCut";
+import { signPqToken, verifyPqToken, buildPqPayload } from "./pqSheet";
+import { renderPqPdf } from "./pqSheetPdf";
 import { sqlPersonIdByContactEmail } from "./partnerInvites";
 import { hasArtistShape } from "./lib/personArtistShape";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
@@ -699,11 +701,189 @@ async function pressInviteAcceptBase(req: Request, pressId?: string): Promise<st
   return `${proto}://${host}`;
 }
 
+// ── Task: Monday-demo Stripe payment tap. The artist pays their press bill
+// off the accepted estimate. Two seams below are hermetic-testable: they take
+// an injected minimal Stripe surface ({ checkout, sessions }) exactly like
+// materializeOrderFromSession, so route tests never touch a live account.
+//
+// Money is ALWAYS derived server-side from payload.totalCents — the client
+// never names the amount. The share token is the credential (same model as
+// the public estimate GET); we never echo the raw token into Stripe metadata,
+// only a SHA-256 hash of it, so a leaked Stripe dashboard can't replay the link.
+export type PayEstimateStripe = {
+  checkout: {
+    sessions: {
+      create: (params: any) => Promise<{ id: string; url: string | null }>;
+      retrieve: (id: string) => Promise<{ id: string; payment_status?: string | null; amount_total?: number | null }>;
+    };
+  };
+};
+
+function hashShareToken(token: string): string {
+  return crypto.createHash("sha256").update(String(token)).digest("hex");
+}
+
+export type PayEstimateRow = {
+  id: string;
+  title: string | null;
+  display_id: string | null;
+  status: string | null;
+  press_name: string | null;
+  payload: Record<string, any> | null;
+};
+
+// Atomic jsonb merge write — mirrors the other payload writes in this file
+// (start/ask). Merges the given keys into press_estimates.payload without
+// clobbering concurrent writers to sibling keys.
+async function mergeEstimatePayload(estimateId: string, patch: Record<string, any>) {
+  await db.execute(sql`
+    UPDATE press_estimates
+    SET payload = COALESCE(payload, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb,
+        updated_at = now()
+    WHERE id = ${estimateId}
+  `);
+}
+
+// Creates (or refuses to create) a Checkout session to pay an accepted
+// estimate. Returns a discriminated result the route maps to HTTP. Amount is
+// server-side from payload.totalCents; already-paid estimates 409.
+export async function createEstimatePaySession(opts: {
+  row: PayEstimateRow;
+  token: string;
+  origin: string;
+  stripe: PayEstimateStripe;
+}): Promise<
+  | { ok: true; url: string | null; sessionId: string }
+  | { ok: false; status: number; message: string }
+> {
+  const { row, token, origin, stripe } = opts;
+  const payload = (row.payload ?? {}) as Record<string, any>;
+
+  // Pay only after the estimate is accepted (Converted). Not before.
+  if (row.status !== "Converted") {
+    return { ok: false, status: 409, message: "This estimate hasn't been accepted yet." };
+  }
+  // Idempotent-ish: once paid, never re-charge.
+  if (payload.paidAt) {
+    return { ok: false, status: 409, message: "This estimate is already paid." };
+  }
+
+  const amountCents = Number(payload.totalCents);
+  if (!Number.isFinite(amountCents) || amountCents <= 0) {
+    return { ok: false, status: 422, message: "This estimate has no amount to pay yet — ask the press to update it." };
+  }
+  const amountInt = Math.round(amountCents);
+
+  const displayId = String(row.display_id ?? "").trim();
+  const jobTitle = String(row.title ?? "your record").trim() || "your record";
+  const lineName = `Estimate ${displayId || "—"} — ${jobTitle}`;
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    payment_method_types: ["card"],
+    line_items: [
+      {
+        price_data: {
+          currency: "usd",
+          unit_amount: amountInt,
+          product_data: {
+            name: lineName,
+            description: `Pressing payment for ${row.press_name ?? "your press"}`,
+          },
+        },
+        quantity: 1,
+      },
+    ],
+    metadata: {
+      gt_kind: "press_estimate_pay",
+      pressEstimateId: row.id,
+      shareTokenHash: hashShareToken(token),
+    },
+    payment_intent_data: {
+      metadata: {
+        gt_kind: "press_estimate_pay",
+        pressEstimateId: row.id,
+        shareTokenHash: hashShareToken(token),
+      },
+    },
+    success_url: `${origin}/e/${token}/accepted?paid=1&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${origin}/e/${token}/accepted`,
+    expires_at: Math.floor(Date.now() / 1000) + 1800,
+  });
+
+  // Persist the session id (atomic merge) so pay-status can bind the returned
+  // session to THIS estimate — fail-closed on any mismatch later.
+  await mergeEstimatePayload(row.id, { paySessionId: session.id });
+
+  return { ok: true, url: session.url, sessionId: session.id };
+}
+
+// Confirms payment on return from Checkout. Fail-closed: stamps paidAt ONLY
+// when Stripe says the session is paid AND the session id matches the one we
+// persisted for this estimate. Never trusts the client for the amount.
+export async function confirmEstimatePayStatus(opts: {
+  row: PayEstimateRow;
+  sessionId: string;
+  stripe: PayEstimateStripe;
+}): Promise<
+  | { ok: true; paid: boolean; amountCents: number | null }
+  | { ok: false; status: number; message: string }
+> {
+  const { row, sessionId, stripe } = opts;
+  const payload = (row.payload ?? {}) as Record<string, any>;
+  const serverAmountCents =
+    Number.isFinite(Number(payload.totalCents)) && Number(payload.totalCents) > 0
+      ? Math.round(Number(payload.totalCents))
+      : null;
+
+  // Already stamped — report it without re-hitting Stripe.
+  if (payload.paidAt) {
+    return { ok: true, paid: true, amountCents: payload.paidAmountCents ?? serverAmountCents };
+  }
+
+  const sid = String(sessionId ?? "").trim();
+  if (!sid) return { ok: false, status: 400, message: "Missing session id." };
+
+  // Bind the returned session id to the one we minted for this estimate. A
+  // mismatch means the id doesn't belong here — refuse, don't stamp.
+  if (!payload.paySessionId || payload.paySessionId !== sid) {
+    return { ok: true, paid: false, amountCents: serverAmountCents };
+  }
+
+  const session = await stripe.checkout.sessions.retrieve(sid);
+  const trulyPaid = session?.payment_status === "paid" && session?.id === payload.paySessionId;
+  if (!trulyPaid) {
+    return { ok: true, paid: false, amountCents: serverAmountCents };
+  }
+
+  const amountCents =
+    typeof session.amount_total === "number" && session.amount_total > 0
+      ? session.amount_total
+      : serverAmountCents;
+
+  await mergeEstimatePayload(row.id, {
+    paidAt: new Date().toISOString(),
+    paidAmountCents: amountCents,
+    paidVia: "stripe",
+  });
+
+  return { ok: true, paid: true, amountCents };
+}
+
 export function registerPressPortalRoutes(
   app: Express,
   requireAdmin: any,
   requirePressScope: any,
+  deps: { getStripe?: () => Promise<PayEstimateStripe> } = {},
 ) {
+  // Fresh client per request in production. Tests may inject a hermetic stub;
+  // the default never caches connector credentials or the Stripe client.
+  const getPayStripe =
+    deps.getStripe ??
+    (async () => {
+      const { getStripe } = await import("./stripe");
+      return (await getStripe()) as unknown as PayEstimateStripe;
+    });
   // Task #699 — gate every press-portal EDITING endpoint behind the
   // Owner/Admin tier. requirePressScope already proved the caller is a
   // super_admin or the matching manufacturer admin; this adds the
@@ -2892,6 +3072,9 @@ export function registerPressPortalRoutes(
       totalCents: payload.totalCents ?? null,
       builderState: payload.builderState ?? null,
       acceptedAt: payload.acceptedAt ?? null,
+      // Payment tap (Monday demo) — display-only: has this bill been paid?
+      // Never exposes the Stripe session id or amount internals.
+      paidAt: payload.paidAt ?? null,
       clientEmail:
         (Array.isArray(payload.sentTo) ? payload.sentTo.find((r: any) => String(r?.email ?? "").includes("@"))?.email : null) ?? null,
       // Task #3257 — white-label brand for the public viewer. Display-only
@@ -2908,6 +3091,137 @@ export function registerPressPortalRoutes(
         locationLine: [row.press_location, String(row.press_website_url ?? "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim()].filter(Boolean).join(" · ") || null,
       },
     });
+  });
+
+  // ── PQ / cutting-master sheet (Ruby handoff handoff/pq-sheet) ──────────
+  // Signed-out, token-keyed read of ONE album's cutting-master data. The
+  // token is a stateless HMAC (server/pqSheet.ts) — no DB column, the link
+  // IS the credential, exactly like the estimate /e/:token model. Three
+  // public reads (payload, per-track playback URL, PDF twin) + one press-
+  // authed helper that mints the link for the album view.
+  const pqOrigin = (req: Request): string => {
+    const proto =
+      (req.headers["x-forwarded-proto"] as string)?.split(",")[0] ||
+      req.protocol ||
+      "https";
+    const host =
+      (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
+    return `${proto}://${host}`;
+  };
+  // Resolve the assigned press name for an album, if any, off the SKU stamp
+  // (album_skus.press_id) or the pressing order snapshot. Display-only.
+  const pqPressNameForAlbum = async (albumId: string): Promise<string | null> => {
+    const r = await db.execute<any>(sql`
+      SELECT m.name AS name
+      FROM album_skus sku
+      JOIN manufacturers m ON m.id = sku.press_id
+      WHERE sku.album_id = ${albumId} AND sku.press_id IS NOT NULL
+      LIMIT 1
+    `);
+    return ((r as any).rows ?? [])[0]?.name ?? null;
+  };
+
+  app.get("/api/pq/:token", async (req, res) => {
+    const albumId = verifyPqToken(req.params.token);
+    if (!albumId) return res.status(404).json({ message: "PQ sheet not found" });
+    const token = String(req.params.token);
+    const payload = await buildPqPayload(albumId, pqOrigin(req), token);
+    if (!payload) return res.status(404).json({ message: "PQ sheet not found" });
+    payload.press = await pqPressNameForAlbum(albumId);
+    res.json(payload);
+  });
+
+  // Tap-to-play — mint a short-lived signed Mux playback URL for ONE track
+  // on the sheet. Reuses the existing signed-Mux machinery; 404s honestly
+  // when the track has no ready Mux asset (no fallback to the raw master).
+  app.get("/api/pq/:token/play/:songId", async (req, res) => {
+    const albumId = verifyPqToken(req.params.token);
+    if (!albumId) return res.status(404).json({ message: "PQ sheet not found" });
+    const songId = String(req.params.songId);
+    const r = await db.execute<any>(sql`
+      SELECT id, mux_playback_id, mux_status FROM songs
+      WHERE id = ${songId} AND album_id = ${albumId} LIMIT 1
+    `);
+    const song = ((r as any).rows ?? [])[0];
+    if (!song) return res.status(404).json({ message: "Track not found" });
+    const { signPlaybackUrl, isMuxConfigured } = await import("./mux");
+    if (
+      !isMuxConfigured() ||
+      !song.mux_playback_id ||
+      song.mux_status !== "ready"
+    ) {
+      return res
+        .status(404)
+        .json({ message: "This track isn't ready to play online yet" });
+    }
+    try {
+      const url = await signPlaybackUrl(song.mux_playback_id);
+      res.json({ url, expiresInSec: 3600 });
+    } catch (err: any) {
+      console.error("[pq-play] sign failed", err?.message);
+      res.status(500).json({ message: "Failed to sign playback URL" });
+    }
+  });
+
+  // The print twin — streamed pdfkit doc (no play buttons; footer links
+  // back to the online sheet to listen).
+  app.get("/api/pq/:token/pdf", async (req, res) => {
+    const albumId = verifyPqToken(req.params.token);
+    if (!albumId) return res.status(404).json({ message: "PQ sheet not found" });
+    const token = String(req.params.token);
+    const payload = await buildPqPayload(albumId, pqOrigin(req), token);
+    if (!payload) return res.status(404).json({ message: "PQ sheet not found" });
+    payload.press = await pqPressNameForAlbum(albumId);
+    try {
+      const pdf = await renderPqPdf(payload);
+      const safe = (payload.album || "album").replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="pq-${safe}.pdf"`,
+      );
+      res.send(pdf);
+    } catch (err: any) {
+      console.error("[pq-pdf] render failed", err?.message, err?.stack);
+      res.status(500).json({ message: "Failed to render PQ PDF" });
+    }
+  });
+
+  // Press-authed helper — returns the token URL for the album view. Gate:
+  // platform operator OR the assigned press (album_skus.press_id) via a
+  // manufacturer membership. NOT public (unlike the reads above).
+  app.get("/api/admin/albums/:id/pq-link", requireAdmin, async (req, res) => {
+    const albumId = String(req.params.id);
+    const callerId =
+      ((req as any).adminUserId as string | undefined) ?? req.session?.userId;
+    if (!callerId) return res.status(401).json({ message: "Unauthorized" });
+    const { getUserRole, findMembershipForScope } = await import("./auth/roles");
+    const info = await getUserRole(callerId);
+    let allowed = info?.role === "super_admin" || info?.role === "admin";
+    if (!allowed) {
+      // Assigned press: any manufacturer this caller is a member of that is
+      // stamped on one of the album's SKUs.
+      const r = await db.execute<any>(sql`
+        SELECT DISTINCT sku.press_id AS press_id
+        FROM album_skus sku
+        WHERE sku.album_id = ${albumId} AND sku.press_id IS NOT NULL
+      `);
+      for (const row of (r as any).rows ?? []) {
+        if (await findMembershipForScope(callerId, "manufacturer", String(row.press_id))) {
+          allowed = true;
+          break;
+        }
+      }
+    }
+    if (!allowed) return res.status(403).json({ message: "Forbidden" });
+    const [album] = await db
+      .select({ id: albums.id })
+      .from(albums)
+      .where(eq(albums.id, albumId))
+      .limit(1);
+    if (!album) return res.status(404).json({ message: "Album not found" });
+    const token = signPqToken(albumId);
+    res.json({ token, url: `${pqOrigin(req)}/pq/${token}` });
   });
 
   // ── Task #3295 (Ruby handoff b912fb6) — client actions off the private
@@ -3090,6 +3404,95 @@ export function registerPressPortalRoutes(
       .returning({ id: pressEstimates.id });
     if (!updated) return res.status(409).json({ message: "This estimate just changed — reload the page." });
     res.json({ ok: true, token });
+  });
+
+  // "Pay" — mints a Stripe Checkout session for an accepted (Converted)
+  // estimate. Amount is server-side from payload.totalCents; the client never
+  // names the price. Same credential model as the public GET (the token is
+  // the secret). Success returns to the accepted page with ?paid=1.
+  app.post("/api/estimate-link/:token/pay-session", async (req, res) => {
+    const row = await loadEstimateByToken(req.params.token);
+    if (!row) return res.status(404).json({ message: "Estimate not found" });
+    const token = String(req.params.token).trim();
+    const payload = (row.payload ?? {}) as Record<string, any>;
+    // Reject deterministic business-rule failures before asking the connector
+    // for a client. This keeps 409/422 honest even during a Stripe outage.
+    if (row.status !== "Converted") {
+      return res.status(409).json({ message: "This estimate hasn't been accepted yet." });
+    }
+    if (payload.paidAt) {
+      return res.status(409).json({ message: "This estimate is already paid." });
+    }
+    const amountCents = Number(payload.totalCents);
+    if (!Number.isFinite(amountCents) || amountCents <= 0) {
+      return res.status(422).json({ message: "This estimate has no amount to pay yet — ask the press to update it." });
+    }
+    try {
+      const stripe = await getPayStripe();
+      // Same-origin return URLs — the accepted page ships in the SPA on every
+      // host, so we return the artist to the exact host they paid from.
+      const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || (req as any).protocol || "https";
+      const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
+      const origin = `${proto}://${host}`;
+      const result = await createEstimatePaySession({
+        row: {
+          id: row.id,
+          title: row.title,
+          display_id: row.display_id,
+          status: row.status,
+          press_name: row.press_name,
+          payload: row.payload ?? {},
+        },
+        token,
+        origin,
+        stripe,
+      });
+      if (!result.ok) return res.status(result.status).json({ message: result.message });
+      return res.json({ url: result.url, sessionId: result.sessionId });
+    } catch (e: any) {
+      return res.status(502).json({ message: "We couldn't start the payment — please try again." });
+    }
+  });
+
+  // "Pay status" — confirms a Checkout return. Fail-closed: only stamps paidAt
+  // when Stripe reports the session paid AND its id matches the one we minted.
+  app.get("/api/estimate-link/:token/pay-status", async (req, res) => {
+    const row = await loadEstimateByToken(req.params.token);
+    if (!row) return res.status(404).json({ message: "Estimate not found" });
+    const sessionId = String(req.query.session_id ?? "").trim();
+    const payload = (row.payload ?? {}) as Record<string, any>;
+    const amountCents =
+      Number.isFinite(Number(payload.totalCents)) && Number(payload.totalCents) > 0
+        ? Math.round(Number(payload.totalCents))
+        : null;
+    if (payload.paidAt) {
+      return res.json({ paid: true, amountCents: payload.paidAmountCents ?? amountCents });
+    }
+    if (!sessionId) return res.status(400).json({ message: "Missing session id." });
+    // Fail closed before Stripe: a session not minted for this row can never
+    // stamp payment, even if it belongs to another paid Checkout.
+    if (!payload.paySessionId || payload.paySessionId !== sessionId) {
+      return res.json({ paid: false, amountCents });
+    }
+    try {
+      const stripe = await getPayStripe();
+      const result = await confirmEstimatePayStatus({
+        row: {
+          id: row.id,
+          title: row.title,
+          display_id: row.display_id,
+          status: row.status,
+          press_name: row.press_name,
+          payload: row.payload ?? {},
+        },
+        sessionId,
+        stripe,
+      });
+      if (!result.ok) return res.status(result.status).json({ message: result.message });
+      return res.json({ paid: result.paid, amountCents: result.amountCents });
+    } catch (e: any) {
+      return res.status(502).json({ message: "We couldn't confirm the payment — please try again." });
+    }
   });
 
   // Signed-in client's portal data (dashboard / next-steps / project home).

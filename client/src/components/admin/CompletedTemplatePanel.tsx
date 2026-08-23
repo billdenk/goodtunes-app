@@ -40,30 +40,56 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, fetchBlob } from "@/lib/queryClient";
+
+// Authed template download (repo landmine, Aug 2026): press print templates
+// are MIRRORED into private /objects/ storage, so a bare <a href> at the raw
+// URL drops the caller's auth and 404s. Route the download through the authed
+// template-file endpoint (operator OR the album's assigned press pass its
+// gate) via fetchBlob → object URL, mirroring the masters download pattern.
+export async function templateFileDownload(
+  albumId: string,
+  componentId: string,
+  fileName: string,
+) {
+  const blob = await fetchBlob(
+    `/api/admin/albums/${albumId}/completed-template/template-file/${encodeURIComponent(componentId)}`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
 
 // Tracked download (Ruby handoff Aug 2026): the POST carries the caller's
 // auth (bearer + cookie — a bare <a href> can't), logs a press download to
 // the file history (which LOCKS the slot against artist replacement; the
-// insert is fail-closed server-side), then hands back the session-served
-// assetUrl for a normal anchor download. Operator downloads never lock.
-async function trackedCompletedDownload(albumId: string, componentId: string) {
+// insert is fail-closed server-side), then the returned private assetUrl is
+// fetched with auth into a blob. Operator downloads never lock.
+export async function trackedCompletedDownload(albumId: string, componentId: string): Promise<boolean> {
   try {
     const r = await apiRequest(
       "POST",
       `/api/admin/albums/${albumId}/completed-template/download/${encodeURIComponent(componentId)}`,
     );
     const { url, fileName } = (await r.json()) as { url: string; fileName: string | null };
+    const blob = await fetchBlob(url);
+    const objectUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = objectUrl;
     a.download = fileName ?? "";
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
     document.body.appendChild(a);
     a.click();
     a.remove();
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+    return true;
   } catch (e) {
     console.error("[completed-art] tracked download failed", e);
+    return false;
   }
 }
 import { useToast } from "@/hooks/use-toast";
@@ -81,7 +107,7 @@ import type {
   CheckStatus,
 } from "@shared/uploadValidation";
 
-type CompletedTemplateResponse = {
+export type CompletedTemplateResponse = {
   configured: boolean;
   /** Why the panel is unconfigured ("no_vinyl_sku") — null when configured. */
   reason?: string | null;
@@ -692,16 +718,24 @@ function ArtCard({
             </span>
           )
         ) : spec?.templateFileUrl ? (
-          <a
-            href={spec.templateFileUrl}
-            download
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await templateFileDownload(albumId, componentId, `${noun} template.pdf`);
+              } catch (e: any) {
+                toast({
+                  title: "Couldn't download that template",
+                  description: e?.message ?? "Try again.",
+                  variant: "destructive",
+                });
+              }
+            }}
             className="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand-blue)] hover:underline shrink-0"
             data-testid={`link-completed-template-${componentId}`}
           >
             Template <Download className="w-3.5 h-3.5" />
-          </a>
+          </button>
         ) : (
           <span />
         )}

@@ -93,6 +93,7 @@ type Estimate = {
   source: string;          // MRP referral code / site
   status: EstStatus;
   lastActivity: string;
+  paid?: boolean;          // converted rows show a Paid chip when payload.paidAt
   cover?: string;          // artwork; falls back to Memphis house art
   thumb?: string;          // circular artist photo; falls back to initials
 };
@@ -117,6 +118,21 @@ function StatusWord({ status }: { status: EstStatus }) {
     <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold" style={{ color: INK }} data-testid={`status-${status.toLowerCase()}`}>
       <Icon className="w-3.5 h-3.5 flex-shrink-0" style={{ color }} aria-hidden />
       {status}
+    </span>
+  );
+}
+
+// Paid chip — converted estimates that have been paid. Word + icon, never
+// color alone (founder is colorblind); reads by the check + "Paid" text.
+function PaidChip() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 h-5"
+      style={{ backgroundColor: 'var(--q-track)', color: INK }}
+      data-testid="chip-paid"
+    >
+      <Check className="w-3 h-3 flex-shrink-0" style={{ color: '#34a853' }} aria-hidden />
+      Paid
     </span>
   );
 }
@@ -260,6 +276,7 @@ function toEstimate(row: Row): { display: Estimate; realId: string } {
     source: p.source ?? '—',
     status: row.status as EstStatus,
     lastActivity: fmtActivity(row.updatedAt),
+    paid: Boolean(p.paidAt),
     cover: p.coverUrl ?? undefined,
     thumb: p.thumbUrl ?? undefined,
   };
@@ -461,7 +478,10 @@ export function PressEstimatesIndex({ pressId, canEdit, onBuildEstimate }: { pre
                   </div>
                   <div className="text-[12px] truncate" style={{ marginTop: 3, color: SUBINK }}>{e.build}</div>
                   <div className="flex items-center justify-between gap-2" style={{ marginTop: 10 }}>
-                    <StatusWord status={e.status} />
+                    <span className="inline-flex items-center gap-1.5 min-w-0">
+                      <StatusWord status={e.status} />
+                      {e.status === 'Converted' && e.paid && <PaidChip />}
+                    </span>
                     <DirectionWord direction={e.direction} />
                   </div>
                 </div>
@@ -507,7 +527,12 @@ export function PressEstimatesIndex({ pressId, canEdit, onBuildEstimate }: { pre
                     <td className="px-3 py-3 text-[13px] font-semibold whitespace-nowrap" style={{ color: INK }}>{e.total}</td>
                     <td className="px-3 py-3 whitespace-nowrap"><DirectionWord direction={e.direction} /></td>
                     <td className="px-3 py-3 text-[12.5px] truncate" style={{ color: SUBINK, maxWidth: 200 }}>{e.source}</td>
-                    <td className="px-3 py-3 whitespace-nowrap"><StatusWord status={e.status} /></td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5">
+                        <StatusWord status={e.status} />
+                        {e.status === 'Converted' && e.paid && <PaidChip />}
+                      </span>
+                    </td>
                     <td className="pl-3 pr-5 py-3 text-[12.5px] whitespace-nowrap" style={{ color: SUBINK }}>{e.lastActivity}</td>
                   </tr>
                 ))}

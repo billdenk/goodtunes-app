@@ -19,8 +19,10 @@
 // from other mockups. Numbers match PressClientEstimateMRP at the
 // 1,000-unit tier and PressClientNextStepsMRP's deposit math.
 
+import { useEffect, useState } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import californialandCover from './assets/californialand-cover.jpg';
 import mrpLogoAsset from './assets/mrp-logo.svg';
 import brandonPhoto from './assets/brandon-seavers.png';
@@ -41,6 +43,7 @@ type LinkEstimate = {
   builderState: Record<string, any> | null;
   acceptedAt?: string | null;
   clientEmail?: string | null;
+  paidAt?: string | null;
   brand?: { locationLine?: string | null; contactLine?: string | null; skin?: string | null } | null;
 };
 const SETUP_TOTAL_DOLLARS = 1295;
@@ -61,6 +64,7 @@ const SUBINK = '#6e6e73';
 const HAIRLINE = 'rgba(0,0,0,0.10)';
 const GOLD = '#D9C153'; // MRP's site gold (Andrew, Aug 21 2026)
 const GOLD_TINT_TOP = 'rgba(217,193,83,0.12)';
+const BLUE = '#319ED8'; // the single filled BLUE action per screen (house rule)
 
 // ─── Status grammar — word + icon, never color alone ─────────────────
 function CheckIcon() {
@@ -190,11 +194,61 @@ export default function PressClientEstimateAcceptedMRP() {
   const params = useParams<{ token: string }>();
   const token = params.token;
   const [, navigate] = useLocation();
-  const { data: est, isLoading } = useQuery<LinkEstimate>({
+  const { data: est, isLoading, refetch } = useQuery<LinkEstimate>({
     queryKey: [`/api/estimate-link/${token}`],
     enabled: Boolean(token),
     staleTime: Infinity,
   });
+
+  // ── Payment tap — the artist pays their press bill off the accepted
+  // estimate. Amount is server-side; we only ask to start / confirm.
+  const [payBusy, setPayBusy] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
+  // Optimistic "paid" once pay-status confirms, so the pill hides even before
+  // the estimate query refetches paidAt.
+  const [justPaid, setJustPaid] = useState(false);
+
+  // On return from Checkout (?paid=1&session_id=…), confirm fail-closed.
+  useEffect(() => {
+    if (!token) return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('paid') !== '1') return;
+    const sid = q.get('session_id');
+    if (!sid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await apiRequest('GET', `/api/estimate-link/${token}/pay-status?session_id=${encodeURIComponent(sid)}`);
+        const body = await res.json();
+        if (!cancelled && body?.paid) {
+          setJustPaid(true);
+          refetch();
+        }
+      } catch {
+        /* leave the pay pill available to retry */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [token, refetch]);
+
+  const startPay = async () => {
+    if (!token || payBusy) return;
+    setPayBusy(true);
+    setPayError(null);
+    try {
+      const res = await apiRequest('POST', `/api/estimate-link/${token}/pay-session`, {});
+      const body = await res.json();
+      if (body?.url) {
+        window.location.href = body.url as string;
+        return;
+      }
+      setPayError("We couldn't start the payment — please try again.");
+    } catch (e: any) {
+      setPayError(e?.body?.message ?? "We couldn't start the payment — please try again.");
+    } finally {
+      setPayBusy(false);
+    }
+  };
 
   if (isLoading || !est) {
     return <div style={{ minHeight: '100dvh', background: CANVAS }} />;
@@ -228,6 +282,7 @@ export default function PressClientEstimateAcceptedMRP() {
   const totalLabel = totalDollars != null ? moneyFmt(totalDollars) : '—';
   const depositLabel = totalDollars != null ? moneyFmt(totalDollars / 2) : '—';
   const acceptedDate = fmtDate(est.acceptedAt) ?? fmtDate(new Date().toISOString());
+  const isPaid = Boolean(est.paidAt) || justPaid;
   const portalHost = window.location.host;
   const pressEmail = (est.brand?.contactLine ?? '').match(/\S+@\S+\.\S+/)?.[0] ?? '';
 
@@ -250,7 +305,7 @@ export default function PressClientEstimateAcceptedMRP() {
             </h1>
             <p style={{ fontSize: 15, color: SUBINK, margin: '12px 0 0', lineHeight: 1.65 }}>
               {firstName} has your project at {pressName}. Estimate {estimateNo} is now your
-              working numbers — an estimate, not a binding quote, so nothing is owed until you approve
+              working numbers — an estimate, not a final order, so nothing is owed until you approve
               the details together.
             </p>
           </section>
@@ -285,6 +340,49 @@ export default function PressClientEstimateAcceptedMRP() {
               <div style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.5, fontVariantNumeric: 'tabular-nums' }}>{totalLabel}</div>
             </div>
           </section>
+
+          {/* ── Billing band — pay the press bill off the accepted estimate.
+              One filled BLUE pill (house rule); paid state is word + check
+              icon, never color alone (Bill is colorblind). ── */}
+          {totalDollars != null && (
+          <section
+            style={{ marginTop: 20, border: `1px solid ${HAIRLINE}`, background: CARD, padding: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}
+            data-testid="billing-band"
+          >
+            <div style={{ minWidth: 0 }}>
+              {isPaid ? (
+                <>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 600 }} data-testid="billing-paid">
+                    <CheckIcon />
+                    Paid
+                  </div>
+                  <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 3 }}>
+                    {totalLabel} received — thank you.
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: 13, color: SUBINK }}>You owe</div>
+                  <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.4, fontVariantNumeric: 'tabular-nums' }}>{totalLabel}</div>
+                  {payError && (
+                    <div style={{ fontSize: 12, color: SUBINK, marginTop: 4 }} data-testid="billing-error">{payError}</div>
+                  )}
+                </>
+              )}
+            </div>
+            {!isPaid && (
+              <button
+                type="button"
+                onClick={startPay}
+                disabled={payBusy}
+                data-testid="billing-pay"
+                style={{ padding: '12px 26px', borderRadius: 0, border: 'none', cursor: payBusy ? 'default' : 'pointer', background: BLUE, color: '#ffffff', fontSize: 14.5, fontWeight: 700, opacity: payBusy ? 0.7 : 1, whiteSpace: 'nowrap' }}
+              >
+                {payBusy ? 'Starting…' : `Pay ${totalLabel}`}
+              </button>
+            )}
+          </section>
+          )}
 
           {/* ── What just happened / what's next — word + icon each ── */}
           <section style={{ marginTop: 28, border: `1px solid ${HAIRLINE}`, background: CARD }} data-testid="accepted-next-list">
@@ -394,7 +492,7 @@ export default function PressClientEstimateAcceptedMRP() {
                   </div>
                   <p style={{ fontSize: 13, color: SUBINK, margin: '10px 0 0', lineHeight: 1.65 }}>
                     {jobTitle} is now a live project at {pressName}, with estimate {estimateNo} as
-                    your working numbers. It stays an estimate — not a binding quote — until you and{' '}
+                    your working numbers. It stays an estimate — not a final order — until you and{' '}
                     {firstName} finalize the order together. Nothing is billed yet.
                   </p>
 

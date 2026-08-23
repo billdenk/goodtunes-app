@@ -29,7 +29,12 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import type { UploadValidationResult } from "@shared/uploadValidation";
 import { UploadValidationsPanel } from "@/components/admin/UploadValidationsPanel";
-import { CompletedTemplatePanel } from "@/components/admin/CompletedTemplatePanel";
+import {
+  CompletedTemplatePanel,
+  trackedCompletedDownload,
+  type CompletedTemplateResponse,
+} from "@/components/admin/CompletedTemplatePanel";
+import { FileText, Music } from "lucide-react";
 import { PressTemplateDownloads, type PressTemplate } from "@/components/admin/PressTemplateDownloads";
 import { PackagePrintTemplates } from "@/pages/PressAlbumPackageBuilder";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
@@ -191,18 +196,270 @@ function EarlyCutPoolReadout({ albumId }: { albumId: string }) {
   );
 }
 
+// Task #3308 follow-up (Monday MRP demo) — the press-only "Downloads"
+// surface. One honest place for the plant to pull everything they cut a
+// record from: the FINISHED print files (completed art per component, only
+// the slots that actually carry a downloadable file — the server's
+// fail-closed lock is what admits/denies each download) and the MUSIC
+// (per-track masters + the whole-album zip). Every download routes through
+// an authed fetch/POST (never a bare <a href> at a private /objects/ path,
+// which drops auth and 404s). Empty/broken states are explicit — never a
+// dead button: no finished art yet reads "No finished print files yet", and
+// a broken master surfaces the mastersHealth classifier reason.
+type PressDownloadsSong = {
+  id: string;
+  title: string;
+  trackNumber: number;
+  audioUrl?: string | null;
+  audioSourceUrl?: string | null;
+};
+function PressDownloadsPanel({
+  albumId,
+  songs,
+  healthBySong,
+  onDownloadTrack,
+  onDownloadAllMasters,
+}: {
+  albumId: string;
+  songs: PressDownloadsSong[];
+  healthBySong: Map<string, string>;
+  onDownloadTrack: (s: PressDownloadsSong) => Promise<void>;
+  onDownloadAllMasters: () => void;
+}) {
+  const { toast } = useToast();
+  const [busyTrack, setBusyTrack] = useState<string | null>(null);
+
+  // Finished print files — same payload + gate the Art tab's Completed Art
+  // grid reads (operator OR the album's assigned press). Only components that
+  // actually carry a file (presence !== "missing" && assetUrl) are
+  // downloadable; that mirrors the fail-closed lock the download route
+  // enforces server-side.
+  const completed = useQuery<CompletedTemplateResponse>({
+    queryKey: ["/api/admin/albums", albumId, "completed-template"],
+  });
+  const printFiles = useMemo(
+    () =>
+      (completed.data?.components ?? []).filter(
+        (c) => c.presence !== "missing" && !!c.assetUrl,
+      ),
+    [completed.data],
+  );
+
+  const usableTracks = songs.filter(
+    (s) => masterPtrStatus(s) === "usable" && healthBySong.get(s.id) !== "missing_object",
+  );
+
+  async function downloadTrack(s: PressDownloadsSong) {
+    setBusyTrack(s.id);
+    try {
+      await onDownloadTrack(s);
+    } catch (e) {
+      toast({
+        title: "Couldn't download that master",
+        description: masterDownloadErrorMessage(e),
+        variant: "destructive",
+      });
+    } finally {
+      setBusyTrack(null);
+    }
+  }
+
+  async function downloadPrintFile(componentId: string) {
+    if (await trackedCompletedDownload(albumId, componentId)) return;
+    toast({
+      title: "Couldn't download that print file",
+      description: "The download could not be recorded or the private file could not be fetched. Try again.",
+      variant: "destructive",
+    });
+  }
+
+  return (
+    <div data-testid="press-subtab-downloads" className="space-y-10">
+      {/* ── Finished print files ─────────────────────────────────────── */}
+      <section data-testid="section-downloads-print">
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-1">
+          <h2 className="text-[15px] font-semibold text-[color:var(--apple-ink)]">Finished print files</h2>
+          {printFiles.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                printFiles.forEach((c, i) =>
+                  setTimeout(() => void downloadPrintFile(c.componentId), i * 400),
+                )}
+              className="shrink-0 inline-flex items-center gap-2 px-3 h-9 rounded-md bg-[var(--brand-blue)] text-white text-xs font-semibold hover:opacity-90"
+              data-testid="button-download-all-print"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download all print files
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-[color:var(--apple-subink)] mb-3">
+          The press-ready art uploaded onto this album's templates. Files download through your
+          signed-in session.
+        </p>
+        {completed.isLoading ? (
+          <p className="text-xs text-[color:var(--apple-subink)]" data-testid="text-print-loading">
+            Loading…
+          </p>
+        ) : completed.isError ? (
+          <div
+            className="rounded-xl border border-[color:var(--apple-critical)] bg-[color:var(--apple-critical-wash)] px-6 py-8 text-center"
+            data-testid="text-print-files-error"
+          >
+            <AlertTriangle className="w-6 h-6 text-[color:var(--apple-critical)] mx-auto mb-2" />
+            <p className="text-sm font-medium text-[color:var(--apple-ink)]">Couldn't load finished print files</p>
+            <p className="text-xs text-[color:var(--apple-critical)] mt-1">Refresh the album and try again.</p>
+          </div>
+        ) : printFiles.length === 0 ? (
+          <div
+            className="rounded-xl border border-[color:var(--apple-hairline)] bg-[color:var(--apple-card)] px-6 py-8 text-center"
+            data-testid="text-no-print-files"
+          >
+            <FileText className="w-6 h-6 text-[color:var(--apple-subink)] mx-auto mb-2" />
+            <p className="text-sm font-medium text-[color:var(--apple-ink)]">No finished print files yet</p>
+            <p className="text-xs text-[color:var(--apple-subink)] mt-1">
+              Finished art appears here once it's uploaded onto this album's templates.
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-1.5" data-testid="list-print-files">
+            {printFiles.map((c) => (
+              <li key={c.componentId}>
+                <button
+                  type="button"
+                  onClick={() => void downloadPrintFile(c.componentId)}
+                  className="w-full flex items-center gap-2.5 rounded-md border border-[color:var(--apple-hairline)] bg-[color:var(--apple-card)] px-3 py-2 text-sm text-[color:var(--apple-ink)] hover:border-[var(--brand-blue)] hover:text-[var(--brand-blue)] transition-colors"
+                  data-testid={`button-download-print-${c.componentId}`}
+                >
+                  <FileText className="w-4 h-4 shrink-0 text-[color:var(--apple-subink)]" />
+                  <span className="font-medium truncate">{c.label}</span>
+                  {c.fileName && (
+                    <span className="text-[color:var(--apple-subink)] truncate min-w-0">{c.fileName}</span>
+                  )}
+                  <Download className="w-4 h-4 ml-auto shrink-0" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* ── Music (masters) ──────────────────────────────────────────── */}
+      <section data-testid="section-downloads-music">
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-1">
+          <h2 className="text-[15px] font-semibold text-[color:var(--apple-ink)]">Music</h2>
+          {usableTracks.length > 0 && (
+            <button
+              type="button"
+              onClick={onDownloadAllMasters}
+              className="shrink-0 inline-flex items-center gap-2 px-3 h-9 rounded-md border border-[color:var(--apple-hairline)] bg-[color:var(--apple-card)] text-xs font-semibold text-[color:var(--apple-ink)] hover:bg-[color:var(--apple-tile)]"
+              data-testid="button-download-all-masters-downloads"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download all masters
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-[color:var(--apple-subink)] mb-3">
+          The uploaded masters — the artist's original upload where we hold it, otherwise the
+          lossless playback copy. Zip is named after the album.
+        </p>
+        {songs.length === 0 ? (
+          <div
+            className="rounded-xl border border-[color:var(--apple-hairline)] bg-[color:var(--apple-card)] px-6 py-8 text-center"
+            data-testid="text-no-tracks"
+          >
+            <Music className="w-6 h-6 text-[color:var(--apple-subink)] mx-auto mb-2" />
+            <p className="text-sm font-medium text-[color:var(--apple-ink)]">No tracks on this album yet</p>
+          </div>
+        ) : (
+          <ul className="space-y-1.5" data-testid="list-master-files">
+            {[...songs]
+              .sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0))
+              .map((s) => {
+                const ptr = masterPtrStatus(s);
+                const health = healthBySong.get(s.id);
+                const reason =
+                  ptr === "none"
+                    ? "No master uploaded for this track yet."
+                    : ptr === "external"
+                      ? "The master is an external link that was never mirrored into storage — re-upload it on the Tracks tab."
+                      : health === "missing_object"
+                        ? "The master file is missing from storage — re-upload it on the Tracks tab."
+                        : null;
+                const usable = reason == null;
+                const busy = busyTrack === s.id;
+                return (
+                  <li key={s.id}>
+                    <div
+                      className="flex items-center gap-2.5 rounded-md border border-[color:var(--apple-hairline)] bg-[color:var(--apple-card)] px-3 py-2 text-sm"
+                      data-testid={`row-master-${s.id}`}
+                    >
+                      <span className="text-[color:var(--apple-subink)] tabular-nums w-6 shrink-0">
+                        {String(s.trackNumber ?? 0).padStart(2, "0")}
+                      </span>
+                      <span className="font-medium text-[color:var(--apple-ink)] truncate min-w-0">
+                        {s.title}
+                      </span>
+                      {usable ? (
+                        <button
+                          type="button"
+                          onClick={() => downloadTrack(s)}
+                          disabled={busy}
+                          className="ml-auto shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--brand-blue)] hover:underline disabled:opacity-50"
+                          data-testid={`button-download-master-${s.id}`}
+                        >
+                          {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          Download
+                        </button>
+                      ) : (
+                        <span
+                          className="ml-auto shrink-0 inline-flex items-center gap-1.5 text-xs font-medium text-rose-700"
+                          title={reason}
+                          data-testid={`text-master-unavailable-${s.id}`}
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          Unavailable
+                        </span>
+                      )}
+                    </div>
+                    {!usable && reason && (
+                      <p className="text-[11px] text-rose-600 mt-1 ml-[calc(0.75rem+1.5rem+0.625rem)]">
+                        {reason}
+                      </p>
+                    )}
+                  </li>
+                );
+              })}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
 // Task #2701 — sub-tab split of the Physical tab. Audio is the default;
 // the active sub-tab persists in the URL as `ptab` merged with the
 // page's existing `?tab=` handling so refresh + deep links restore it.
-type PhysicalSubTab = "audio" | "art" | "fulfillment";
+type PhysicalSubTab = "audio" | "art" | "fulfillment" | "downloads";
 const PHYSICAL_SUB_TABS: Array<{ id: PhysicalSubTab; label: string; Icon: typeof AudioLines }> = [
   { id: "audio", label: "Audio", Icon: AudioLines },
   { id: "art", label: "Art", Icon: Palette },
   { id: "fulfillment", label: "Fulfillment", Icon: Truck },
 ];
+// Task #3308 follow-up (Monday MRP demo) — a press-only "Downloads" sub-tab
+// consolidating the finished print files + music the plant actually pulls to
+// press a record. Appended to the sub-tab row only in pressMode so operators
+// keep their existing Audio/Art/Fulfillment surfaces untouched.
+const PRESS_DOWNLOADS_SUB_TAB: { id: PhysicalSubTab; label: string; Icon: typeof AudioLines } = {
+  id: "downloads",
+  label: "Downloads",
+  Icon: Download,
+};
 function readSubTabFromUrl(): PhysicalSubTab {
   const v = new URLSearchParams(window.location.search).get("ptab");
-  return v === "art" || v === "fulfillment" ? v : "audio";
+  return v === "art" || v === "fulfillment" || v === "downloads" ? v : "audio";
 }
 
 export function PressPanel({
@@ -277,6 +534,7 @@ export function PressPanel({
     (s) => !s.audioFormat || !s.audioSampleRate || !s.audioBitDepth,
   );
   const bannerRef = useRef<HTMLDivElement | null>(null);
+  const [pqOpening, setPqOpening] = useState(false);
   function scrollToReprobeBanner() {
     bannerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
@@ -488,6 +746,33 @@ export function PressPanel({
     }
   }
 
+  // PQ / cutting-master sheet — quiet press-portal entry beside the Audio
+  // tools. The authed helper mints the stateless link only for an operator
+  // or the album's assigned press; the new tab then works signed-out.
+  async function openPqSheet() {
+    const tab = window.open("", "_blank");
+    setPqOpening(true);
+    try {
+      const r = await apiRequest(
+        "GET",
+        `/api/admin/albums/${albumId}/pq-link`,
+      );
+      const body = (await r.json()) as { url: string };
+      if (!body.url) throw new Error("PQ link was not returned");
+      if (tab) tab.location.href = body.url;
+      else window.location.href = body.url;
+    } catch (e: any) {
+      tab?.close();
+      toast({
+        title: "Couldn't open PQ sheet",
+        description: e?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setPqOpening(false);
+    }
+  }
+
   // Task #2701 — the "Send the order to GoodTunes" card (all states) is
   // hidden for now. UI-only: the submit endpoint + pressing-order flow
   // stay intact server-side, and `readyToSend` / `sendBlockers` keep
@@ -610,7 +895,7 @@ export function PressPanel({
           data-testid="press-subtabs"
         >
           <div className="flex items-center gap-5">
-            {PHYSICAL_SUB_TABS.map(({ id, label, Icon }) => (
+            {(pressMode ? [...PHYSICAL_SUB_TABS, PRESS_DOWNLOADS_SUB_TAB] : PHYSICAL_SUB_TABS).map(({ id, label, Icon }) => (
               <button
                 key={id}
                 type="button"
@@ -666,6 +951,18 @@ export function PressPanel({
                     </span>
                   )}
                   {preflightChip}
+                  {!hideEntityLinks && (
+                    <button
+                      type="button"
+                      onClick={openPqSheet}
+                      disabled={pqOpening}
+                      className="shrink-0 inline-flex items-center gap-1.5 px-2 h-9 text-xs font-semibold text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                      data-testid="button-pq-sheet"
+                    >
+                      {pqOpening && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      PQ sheet
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setMastersOpen(true)}
@@ -1057,6 +1354,26 @@ export function PressPanel({
               Fulfillment routing for this release is handled by GoodTunes and the press.
             </p>
           </div>
+        )}
+
+        {/* ── DOWNLOADS sub-tab (press-only, Monday MRP demo) ──────────
+            Guarded on pressMode: the tab only renders in the sub-tab row
+            for presses, but a deep-linked ?ptab=downloads could carry it in
+            for anyone — fail closed to nothing rather than exposing it. */}
+        {subTab === "downloads" && pressMode && (
+          <PressDownloadsPanel
+            albumId={albumId}
+            songs={sorted.map((s) => ({
+              id: s.id,
+              title: s.title,
+              trackNumber: s.trackNumber,
+              audioUrl: s.audioUrl,
+              audioSourceUrl: s.audioSourceUrl,
+            }))}
+            healthBySong={healthBySong}
+            onDownloadTrack={(s) => downloadOne(s)}
+            onDownloadAllMasters={downloadAll}
+          />
         )}
 
         {/* ── View Masters dialog (Task #2701) ─────────────────────────
