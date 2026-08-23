@@ -597,3 +597,23 @@ gets tested.**
     counts (Prepping 12 / At press 1 / Staged 0 / Released 2 / Sunset 57 /
     Needs attention 68), grid/list toggle, one filled "+ Add" action.
     
+
+    ## Artist Vinyl → Art: ragged card heights (from Bill)
+
+    The three art cards (Cover · jacket / Center labels / Printed inner
+    sleeve) each size themselves to their artwork's aspect ratio, so the
+    cards end at three different heights and the captions float at three
+    different altitudes — the empty inner-sleeve drop zone is the tallest
+    thing on the row.
+
+    **Fix:** uniform card grid. Every card gets the same fixed image
+    window (artwork fits inside it, letterboxed on the card surface —
+    never cropped or stretched), the caption + "Custom art uploaded ✓"
+    row pins to a shared baseline, and the empty drop-zone card is
+    byte-identical in size to a filled card. One row, one height.
+
+    **Confirmed while here:** the "+" add-format chip next to
+    Master / GoodTunes® Player / Vinyl STAYS — the earlier decision was
+    to trim the modal behind it to three cards (Vinyl / Cassette / CD,
+    size picked in the builder), not to remove the entry point.
+    
