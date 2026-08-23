@@ -670,3 +670,36 @@ gets tested.**
     If it's ambiguous WHICH ladder that is, ask Bill before wiring —
     don't guess between candidates.
     
+
+## HANDOFF: Album Overview redesign (super-admin) — hold lifted
+
+Bill approved the Overview mock. File: handoff/AdminAlbumOverview.tsx
+(this commit) plus six service-logo SVGs in handoff/assets/. Handoff
+law applies (delete-first, verbatim presentational copy, wire data
+only, both themes, screenshot diff at 1440/1024/768).
+
+Structure: at-a-glance strip on top (Status / Release date / Press /
+Share link / Needs attention with its own header and an in-place
+expanding blockers panel), then four groups: The record / Where fans
+find it / Marketing / GoodDeed(R) and giving. Split shipments lives on
+Physical -> Fulfillment now. Legacy settings (SPIN) is ABSENT on this
+album - new artist; render the disclosure only on pre-Nightbirde
+imports per the SPIN law.
+
+Naming decision (also lifts half the Catalog hold): the admin catalog
+is "Releases" - rail item Releases, list page title Releases,
+"+ Add release". "Project" stays reserved for in-production efforts
+(Release -> Draft -> Project). The Releases LIST page mock is still
+with Bill; that half of the hold stays until it lands.
+
+Must work (everything else is decorative chrome):
+- Needs-attention control in the glance strip: expands/collapses the blockers panel in place; each blocker's "Fix on Physical ->" navigates to Physical -> Art
+- Hover pencils on every section card: reveal on hover/focus, open that section's edit state
+- Release / Pre-save segmented chip: swaps the link row; Pre-save shows the honest empty state until a pre-save date exists, then shows its own URL with Open/Copy
+- GoodTunes link tile: Open opens the live share page, Copy copies the URL
+- Streaming service tiles: click toggles the detail row - linked services show real URL + Open/Copy/Remove; unlinked show paste field + Save (Save earns blue only on a valid link)
+- Service logos: accurate brand marks on white carrier circles, never recolored or inverted (SVGs supplied; source better ones from brand kits if licensing requires)
+- Marketing "Preview email" opens the real email preview
+- Theme: light + dark THEMES both ship; the floating View light/dark pill is mock-only chrome - drop it
+
+All MOCK_ consts (album fields, service URLs) are dummy data to wire.
