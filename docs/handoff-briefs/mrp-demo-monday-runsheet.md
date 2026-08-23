@@ -405,7 +405,20 @@ gets tested.**
 
     Otherwise this page follows the intended grammar (honest "0 of 5
     priced" counter, rates-are-between-you-and-GoodTunes footnote).
-    Open design question with Bill — whether the empty $/unit fields
-    should show suggested/reference prices — decision to follow; don't
-    build anything for that yet.
+    DECIDED (Bill, Aug 22): the $/unit fields get "typical range" hints —
+    reference only, NEVER prefilled. Spec:
+
+    - Ghost text inside/under each empty field: "Typical: $X.XX–$X.XX",
+    one range per batch tier, declining as tiers grow (same shape as the
+    package quantity ladder).
+    - It's a hint, not a value: the field still reads as empty, "0 of 5
+    priced" stays honest until MRP types real numbers, and the hint
+    disappears once a price is entered.
+    - The hint never submits, never becomes a default, and is never shown
+    to artists (rates stay between the press and GoodTunes).
+    - The actual range numbers come from GoodTunes (Bill/Andrew will
+    supply them) — ship the mechanism with the numbers configurable
+    per service, don't hardcode guesses.
+    - Same pattern applies to the Finishing (holograms + shrinkwrap)
+    pricing when that section is on.
     
