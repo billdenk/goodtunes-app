@@ -32,7 +32,7 @@ export const WHATS_NEW_CARDS: ReadonlyArray<WhatsNewCard> = [
   {
     key: "goodsync_lyrics",
     icon: "Mic2",
-    title: "LiveLyrics™ lyrics",
+    title: "LyricFlow™ lyrics",
     body: "Line-by-line lyrics that scroll with the song — the way fans actually want to read along.",
   },
   {

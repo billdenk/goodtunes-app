@@ -297,7 +297,7 @@ export function SyncedLyrics({
           const isPast = activeLineIdx >= 0 && i < activeLineIdx;
           const seekable = line.time != null;
           const distance = activeLineIdx < 0 ? 0 : Math.abs(i - activeLineIdx);
-          // Apple-Music LiveLyrics™ focus stack: every line is the SAME size;
+          // Apple-Music LyricFlow™ focus stack: every line is the SAME size;
           // differentiation comes entirely from blur depth + opacity. Blur
           // ramp is monotonic (once blurry, stays at least that blurry the
           // further from active) and caps at 6px.

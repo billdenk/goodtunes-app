@@ -17,7 +17,7 @@ The third-party services GoodTunes already runs against, and what each one unloc
 - **Shopify Bundle** — Labels already selling physical product on Shopify bundle GoodTunes digital access into the same checkout, with no plugin and no developer — the fan lands on a label-branded redeem page that already knows their name.
 - **OrderDesk** — Every paid physical order (vinyl, cassette, CD, signed certificate, bundled merch) hands off to OrderDesk on payment, with signed status webhooks driving the fan's order-tracking pill from submitted through delivered.
 - **OpenAI** — Powers the operator-facing AI tools: biography drafting, content suggestion, structured metadata extraction, and SuperCredits™ enrichment, so the catalog gets built fast in the artist's voice.
-- **ElevenLabs** — Transcribes vocals from a master and aligns artist-supplied lyrics word-by-word, so LiveLyrics™ synced lyrics ship without weeks of manual timing work.
+- **ElevenLabs** — Transcribes vocals from a master and aligns artist-supplied lyrics word-by-word, so LyricFlow™ synced lyrics ship without weeks of manual timing work.
 - **Spotify** — Catalog-level metadata enrichment for albums, artists, and tracks — release dates, artwork, identifiers — without depending on Spotify for playback.
 - **Google Sign-In** — One-tap sign-in for fans and admins, no password to remember.
 - **Apple Sign-In** — Apple ID wired as a first-class fan login on iOS-heavy devices, with deliverable-email capture when Apple returns a private-relay address (final activation pending a real PKCS#8 signing key).
@@ -32,7 +32,7 @@ The third-party services GoodTunes already runs against, and what each one unloc
 ### Platform capabilities
 - **Catalog as a graph** — Vendors, Artists, Gear, Makers, and Labels are first-class entities that link to every other, so a guitar in a credit row leads to the maker, then to every artist on GoodTunes who plays it.
 - **Dropbox album ingestion** — One pasted folder link pulls masters, lyric files, and bonus images and videos in a single pass; hours of manual upload become minutes.
-- **LiveLyrics™ synced lyrics** — Lyrics scroll in time with the song, tap any line to seek there, and a chorus finder can snap the 30-second preview window to the hook automatically.
+- **LyricFlow™ synced lyrics** — Lyrics scroll in time with the song, tap any line to seek there, and a chorus finder can snap the 30-second preview window to the hook automatically.
 - **SuperCredits™** — Per-track credits down to "1973 Martin D-28," with tappable affiliate links to buy the gear and the artist keeping the lion's share of any sale.
 - **Encrypted adaptive streaming** — Per-play, user-bound tokens deliver encrypted segments, giving Spotify-Web-grade leak resistance with instant playback on any connection.
 - **Dual sign-in shells, one product** — Fans and operators sign in through separate accounts on `my.goodtunes.music` and `admin.goodtunes.music`; admin always requires a second factor. Both shells offer a self-serve **Forgot password?** recovery (single-use, 30-minute, non-enumerating) so locked-out fans and admins reset themselves without operator help.

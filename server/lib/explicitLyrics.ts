@@ -1,4 +1,4 @@
-// Auto-LiveLyrics™ explicit-content detector.
+// Auto-LyricFlow™ explicit-content detector.
 //
 // Best-effort profanity scan over a track's lyrics, used by the auto-
 // GoodSync orchestrator to advisory-flag a song's `isExplicit` after it

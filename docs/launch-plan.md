@@ -10,7 +10,7 @@ This document captures the conversation between Bill and Replit Agent about what
 
 ### What's built in the codebase
 - **Mobile-first web player** (React + TypeScript + Vite), Apple-Music-style, persistent, lives on the existing Replit project.
-  - Album list, album detail with tracks, full audio player with line-level synced lyrics (LiveLyrics™), credits sheet with people + gear, playlists, favorites, in-app cache toggle per song, photos viewer, video gallery, chat (vendor-messaging demo), GoodDeed digital certificate page.
+  - Album list, album detail with tracks, full audio player with line-level synced lyrics (LyricFlow™), credits sheet with people + gear, playlists, favorites, in-app cache toggle per song, photos viewer, video gallery, chat (vendor-messaging demo), GoodDeed digital certificate page.
   - Player dock primitive (Apple-Music-style floating pill) graduated to `client/src/components/ui/PlayerDock.tsx`.
 - **Admin/CMS surfaces** for albums, people, instruments (gear), vendors, labels, label assignments. The Tracks tab is mid-redesign: the P/L/C (Preview/Lyrics/Credits) system mockup graduated this week into `artifacts/mockup-sandbox/.../Seamless.tsx`; the production `AdminAlbum.tsx` still uses the older dot system pending validation.
 - **Object storage** for image uploads (album art, person photos, vendor logos/covers, scraped instrument images) — survives redeploys via Replit Object Storage.

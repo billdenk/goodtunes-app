@@ -4,7 +4,7 @@
 // (findChorusStartMs in AdminAlbum.tsx) and is the cheap first tier. This
 // module is the *fallback* for tracks whose lyrics carry no section labels
 // at all (LRC / Apple / plain-text / Dropbox imports). It takes the
-// time-aligned LiveLyrics™ cues (and the raw lyrics if present) and asks the
+// time-aligned LyricFlow™ cues (and the raw lyrics if present) and asks the
 // LLM which cue line the chorus/hook begins on, then maps that answer back
 // to a real cue timestamp.
 //

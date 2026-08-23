@@ -639,7 +639,7 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
   const text = [
     `Hi ${friendly},`,
     ``,
-    `Welcome back. GoodTunes just got a major upgrade — enhanced features, LiveLyrics™ lyrics, and playlist capabilities — and the whole library you already own is right here waiting for you.`,
+    `Welcome back. GoodTunes just got a major upgrade — enhanced features, LyricFlow™ lyrics, and playlist capabilities — and the whole library you already own is right here waiting for you.`,
     ``,
     `Tap to open your library (no password — this link signs you in):`,
     signInUrl,
@@ -670,7 +670,7 @@ export async function sendWelcomeBackEmail(toEmail: string, displayName: string 
       <div style="font-size: 14px; color: #319ED8; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600;">Welcome back</div>
       <h1 style="font-size: 26px; margin: 12px 0 16px; font-weight: 700; line-height: 1.2;">Hi ${escapeHtml(friendly)}, GoodTunes just got a major upgrade.</h1>
       <p style="font-size: 15px; color: #333; line-height: 1.55; margin: 0 0 20px;">
-        <strong>GoodTunes</strong> just got a major upgrade — enhanced features, LiveLyrics™ lyrics, and playlist capabilities — and the whole library you already own is right here waiting for you.
+        <strong>GoodTunes</strong> just got a major upgrade — enhanced features, LyricFlow™ lyrics, and playlist capabilities — and the whole library you already own is right here waiting for you.
       </p>
       <div style="margin: 28px 0 8px;">
         ${bulletproofButton(signInUrl, "Open my GoodTunes player", { bgColor: "#1D5E8F", gradient: "linear-gradient(135deg,#1D5E8F,#319ED8)", paddingV: 14, paddingH: 24, borderRadius: 12 })}

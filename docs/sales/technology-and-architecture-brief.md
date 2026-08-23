@@ -52,7 +52,7 @@ These are wired, configured, and running. They are real dependencies, not stubs.
 | **Mux** | Encrypted, adaptive-bitrate streaming for both audio masters and bonus video, with short-lived signed playback tokens — masters never leave as a file. |
 | **Replit Object Storage** | Durable cloud storage (above) for all uploaded media and generated documents. |
 | **OpenAI** | Operator-facing AI assists (e.g. the chorus finder that places preview windows; metadata/credit drafting). |
-| **ElevenLabs** | Forced-alignment + speech-to-text that powers LiveLyrics™ word-by-word synced lyrics, so timing ships without weeks of manual work. |
+| **ElevenLabs** | Forced-alignment + speech-to-text that powers LyricFlow™ word-by-word synced lyrics, so timing ships without weeks of manual work. |
 | **Spotify** | Catalog metadata enrichment (release dates, artwork, identifiers, canonical streaming links) — not used for playback. |
 | **Shopify** | Labels already on Shopify bundle GoodTunes digital access into their own checkout; paid orders unlock the album and mint a redemption code. |
 | **OrderDesk** | Physical-fulfillment hand-off: every paid physical order routes to OrderDesk, which feeds fulfillment partners; shipping-status webhooks drive the fan's tracking pill. |

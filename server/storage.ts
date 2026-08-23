@@ -240,7 +240,7 @@ export interface IStorage {
   // Returns true if THIS caller claimed it — false means someone else
   // already started, so the caller should bail out.
   claimSongForMuxIngest(id: string): Promise<boolean>;
-  // Auto-LiveLyrics™ atomic claim. Flips a song from the "pending" status
+  // Auto-LyricFlow™ atomic claim. Flips a song from the "pending" status
   // (stamped at fresh-master upload) to "processing" in a single
   // compare-and-swap, returning true only to the ONE caller that won. The
   // Mux "ready" webhook can be delivered more than once; this guarantees

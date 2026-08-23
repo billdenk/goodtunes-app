@@ -956,7 +956,7 @@ export const songs = pgTable("songs", {
   // outro). The Lyrics status dot then reads "intentionally none" (grey
   // Ban glyph) instead of "missing" (empty grey ring). Default false.
   instrumental: boolean("instrumental").notNull().default(false),
-  // Auto-LiveLyrics™ orchestration status. Stamped "pending" ONLY when a
+  // Auto-LyricFlow™ orchestration status. Stamped "pending" ONLY when a
   // fresh master is uploaded (create / master-swap / Dropbox import) and
   // queued for Mux ingest; never by the catalog-wide reconcile/backfill
   // sweeps. Once Mux flips the asset to "ready", the orchestrator atomic-

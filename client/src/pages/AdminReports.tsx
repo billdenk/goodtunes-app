@@ -290,7 +290,7 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
           <div className="border-b border-[var(--apple-hairline)] -mx-1 overflow-x-auto">
             <TabsList className="bg-transparent border-0 p-0 h-auto gap-6 px-1 flex-nowrap justify-start rounded-none">
               {showAlbumScopedTabs && <ReportTab value="sales" testId="tab-sales">Sales</ReportTab>}
-              {showAlbumScopedTabs && <ReportTab value="plays" testId="tab-plays">Plays &amp; LiveLyrics™</ReportTab>}
+              {showAlbumScopedTabs && <ReportTab value="plays" testId="tab-plays">Plays &amp; LyricFlow™</ReportTab>}
               {showAlbumScopedTabs && <ReportTab value="payouts" testId="tab-payouts">Payouts</ReportTab>}
               {showAlbumScopedTabs && <ReportTab value="redemption" testId="tab-redemption">Shopify redemption</ReportTab>}
               {showAlbumScopedTabs && <ReportTab value="fans" testId="tab-fans">Top fans</ReportTab>}
@@ -749,7 +749,7 @@ function PlaysTab({ qs }: { qs: string }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <Card><Stat label="Play starts" value={t.playStarts.toLocaleString()} /></Card>
         <Card><Stat label="Completions" value={t.playCompletes.toLocaleString()} sub={`${fmtPct(t.completionRate)} of starts`} /></Card>
-        <Card><Stat label="LiveLyrics™ opens" value={t.lyricsOpens.toLocaleString()} sub={`${fmtPct(t.goodSyncRate)} of starts`} /></Card>
+        <Card><Stat label="LyricFlow™ opens" value={t.lyricsOpens.toLocaleString()} sub={`${fmtPct(t.goodSyncRate)} of starts`} /></Card>
         <Card><Stat label="30s holds" value={t.play30s.toLocaleString()} /></Card>
       </div>
       <Card>

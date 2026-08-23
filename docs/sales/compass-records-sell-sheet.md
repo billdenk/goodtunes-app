@@ -60,7 +60,7 @@ We charge **per redemption**, plus a small share of any *future* GoodTunes-side 
 | Optional add-on: Printed & signed GoodDeed certificate | Cost + ~$3 (you set retail) |
 | Future GoodTunes purchases by a fan you brought us | 10% rev-share |
 
-Everything else — the player, the SuperCredits™ engine, the engagement dashboard, refund handling, LiveLyrics™ synced lyrics, streaming infrastructure — is included.
+Everything else — the player, the SuperCredits™ engine, the engagement dashboard, refund handling, LyricFlow™ synced lyrics, streaming infrastructure — is included.
 
 ### What that looks like for a 1,000-copy release at $9.60 each
 
