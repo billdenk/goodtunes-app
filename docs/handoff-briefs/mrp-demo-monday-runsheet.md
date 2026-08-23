@@ -134,3 +134,27 @@ gets tested.**
     Copy check here too: the modal subtitle says "Sell-tab quote flow" —
     "estimate", never "quote".
     
+
+    ## Artist Assets tab issues (from Bill, pre-Monday)
+
+    Viewing-as-artist (Niina) → release → Assets → Vinyl → Audio:
+
+    1. **CRITICAL — "No tracks yet" with no way to upload.** The artist sees
+     an empty vinyl-audio list and no upload control. The artist uploading
+     music is the heart of flow 2 — this page needs an obvious upload path
+     (or a clear pointer to wherever upload actually lives). If upload is
+     press-side only by design, the empty state must say who provides the
+     tracks and what happens next — never a dead end.
+    2. **"Master with Wave" is still here.** This is the exact spot the Wave
+     removal needs to hit: the "Master these for vinyl with Wave" banner +
+     "→ Master with Wave" button, and the "…until Wave prepares a vinyl
+     cut" line in the intro copy. Wave doesn't exist yet — remove all of it.
+    3. **Artist can add asset sets?** The "+" next to the
+     Master / GoodTunes® Player / Vinyl tabs is visible to the artist.
+     Creating new asset sets looks like an operator action — the artist
+     shouldn't see that "+" (confirm intended permissions; Bill believes
+     artists shouldn't add asset sets here).
+
+    Also canon nits on this page while it's open: "Vinyl audio." heading has
+    a trailing period — headings don't end in periods.
+    
