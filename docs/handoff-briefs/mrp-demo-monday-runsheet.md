@@ -371,3 +371,25 @@ gets tested.**
     Heading nit: "Settings. Team and connections." — trailing periods
     again (same global sweep).
     
+
+    ## Super-admin release page: pre-canon look + phantom save toast (from Bill)
+
+    Super-admin → Catalog → Projects → an artist release:
+
+    1. **Whole page is the old look and feel.** Split shipments, SPIN Promo,
+     Email appearance, Share link — dense pre-canon sections, purple
+     accent glyphs, raw hex codes inline ("#1D5E8F (default)"), stacked
+     upload boxes. This page is squarely in the canon cleanup pass
+     (per the "Design guardrails" section above): charcoal admin canon,
+     one filled action per section, sentence case, no raw hex in UI copy
+     (show a color swatch + name; hex belongs in a detail/edit control).
+     Don't invent new design — apply the canon grammar; flag anything the
+     canon doesn't cover.
+    2. **Phantom "Album URL saved." toast.** Bill touched nothing and got
+     an "Album URL saved." toast on page load/scroll. A save toast firing
+     without a user save means something is writing on load (autosave on
+     mount?) — that's a data-integrity smell, not just noise. Find why it
+     fired; save confirmations only appear when the user actually changed
+     something. Also: toast copy should not end in a period per canon
+     short-label rules.
+    
