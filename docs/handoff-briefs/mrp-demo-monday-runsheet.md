@@ -557,3 +557,20 @@ gets tested.**
     revenue ("These don't count toward revenue" line is exactly the right
     honesty).
     
+
+    ## Early access tab: same canon pass (from Bill)
+
+    Same album, Early access tab:
+
+    - **TWO filled blue buttons on one page** ("Send early access email"
+    and "Announce to 15") — canon is ONE filled accent action per page.
+    "Announce to 15" is the real primary here; "Send early access email"
+    goes hairline (and it's acting on an empty waitlist — it should be
+    disabled with an honest reason while signups are 0).
+    - ALL-CAPS micro headers ("TOTAL SIGNUPS", "NOTIFIED", "CAME BACK",
+    table header row) → canon sentence case.
+    - Keep the substance — it's good: honest zeros, "No signups yet.",
+    the two-audience explanation (waitlist vs new-music list), one-tap
+    unsubscribe note, and the "announced to this list only once"
+    double-send protection is exactly the right honesty. Dress only.
+    
