@@ -451,3 +451,31 @@ gets tested.**
     `handoff/billing-tab/` (README + ArtistBillingTab.tsx) — restyle the
     "You owe / Pay $X" moment to it per that README's Must-work list.
     
+
+    ## Super-admin album Physical → Art page: look-and-feel cleanup (from Bill)
+
+    Super-admin → album (CALIFORNIALAND) → Physical → Art. The substance is
+    right (honest "Not ready to send — 2 blockers" with real measured
+    reasons, per-piece cards, Download all artwork) — keep all of that.
+    The dress is pre-canon; bring it into the canon cleanup pass:
+
+    - **Status chips**: "WARN" / "× FAIL" pills in yellow/red are shouting
+    abbreviations. Canon: word + icon, sentence case — "Needs attention"
+    (triangle) / "Failed check" (x-circle). Never color alone, and FAIL/
+    WARN aren't words we show artists or partners.
+    - **Blocker banner**: the pink slab reads harsh; use the canon callout
+    grammar — quiet surface, icon + "Not ready to send" title, blocker
+    lines beneath (content is already good and honest — keep the measured
+    detail like the 0.147" bleed number).
+    - **Tab rows**: colored dot bullets before Overview/Package/Digital/…
+    aren't canon; tabs are plain text with the active underline. Same for
+    the second row (Audio/Art/Fulfillment).
+    - **"Open test view (temporary)" underlined links** — arrows only on
+    links per canon (→), no bare underlines, and "(temporary)" shouldn't
+    ship in UI copy.
+    - Dense micro-type throughout (12px caps rows, cramped meta line under
+    the title) — apply canon type scale and spacing.
+    - Keep: per-piece card layout, real artwork previews, honest empty
+    sleeve-PDF placeholder, "Download all artwork" as the one filled
+    action top right.
+    
