@@ -122,3 +122,6 @@ artist allowlist) where `embedded=false` — operator-directed pointers (/admin/
 must branch on `portalViewer` (embedded OR partner role), never `embedded` alone.
 Artist self-serve store connect lives at /artist?tab=shopify (ArtistShopifyTab, #2892).
 Fresh artist login lands on /admin/albums (landingPathForUser), NOT the /artist portal.
+
+## Reduced partner JSX is not a data boundary
+A shared admin component that early-returns a reduced view for partner viewers still FIRES every useQuery declared above the return — operator payloads land in the partner's network/cache. Gate each operator-only query `enabled: !isPartnerViewer` AND scope the server route (requireAdmin admits all partners; use findAlbumScopeMembership for album reads). Caught by architect review on the Overview rebuild, Aug 2026.
