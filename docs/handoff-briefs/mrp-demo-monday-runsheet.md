@@ -512,3 +512,30 @@ gets tested.**
     - Buttons top right (PQ sheet / View Masters / Download all masters):
     ONE filled action max; the rest hairline.
     
+
+    ## Payments tab: same canon pass + "quote" wording (from Bill)
+
+    Same album, Payments tab — same cleanup family, plus a wording strike:
+
+    - **"Quote" everywhere.** Section header "Quotes", "Upload quote PDF",
+    "$ Total (no active quote total)", "The quoted figure is…" — canon is
+    "estimate", never "quote", in every surface including admin. Rename
+    the section, buttons, and helper copy (Estimates / Upload estimate
+    PDF / "no active estimate total" / "The estimated figure…").
+    - **Chips and pills:** "Paid" chip, "Held — release pending →" pill —
+    word + icon per canon; the arrow only if it's actually a link. The
+    blue selected "Artist pays GoodTunes" / quiet "GoodTunes pays from
+    sales" funded-by pair should be the same segmented-control pattern as
+    the Physical sub-tabs (one rounded rect, two segments).
+    - **Money summary row** (Quoted / Paid / Outstanding): keep the honest
+    three-figure grammar; dress with canon type. Green paid figure —
+    remember color is never the only signal.
+    - **One filled action per section:** "Request payment", "Pay vendor",
+    "Close out run" all compete; keep the section's true primary filled,
+    the rest hairline ("Close out run" reads destructive — hairline with
+    confirm).
+    - ALL-CAPS/micro headers and raw selects ("Choose…", "$ Total") get the
+    same field dress as the Fulfillment tab note.
+    - Substance keep: staged payments to plant, held-until-release states,
+    vendor payout ledger with dates, "Reversible." honesty.
+    
