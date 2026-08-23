@@ -432,3 +432,22 @@ gets tested.**
     logo + wordmark treated the same way as Shopify's. Same white-logo
     rule anywhere else connections appear.
     
+
+    ## DECIDED — Shopify row & rail item (Bill deferred to Ruby, apple-canon)
+
+    - **Settings → Connections: Shopify row STAYS** — "Shopify store"
+    (artist/label fulfills) is still a valid sell model, so the
+    account-level connection is legitimate. Wire it (no dead tap), white
+    Shopify logo per the connections-logo rule above.
+    - **Artist nav rail: remove the top-level "Shopify" item** for now.
+    Canon keeps the rail minimal; a nav item duplicating a Settings
+    connection is clutter. If/when a real Shopify management surface
+    exists (orders sync, store status), it can earn a rail spot — until
+    then, the Settings row is the single home.
+
+    ## DECIDED — Billing tab is the pay-moment canon
+
+    Bill approved Ruby's Billing tab mock. It's in
+    `handoff/billing-tab/` (README + ArtistBillingTab.tsx) — restyle the
+    "You owe / Pay $X" moment to it per that README's Must-work list.
+    
