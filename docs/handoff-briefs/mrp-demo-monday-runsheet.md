@@ -324,3 +324,25 @@ gets tested.**
     the empty state), sized to the press template's aspect ratio.
     - Heading nit: "Vinyl art." trailing period (same sweep as before).
     
+
+    ## Template editor: bright white stage in dark mode (from Bill)
+
+    Assets → 12" single jacket → "Add your art" editor, Front panel
+    selected: the whole preview area below the panel tabs is a huge bright
+    white box on the dark surface — jarring, and most of it is empty white
+    on either side of the template strip.
+
+    Fix:
+
+    - The stage AROUND the template renders dark gray/charcoal in dark
+    mode — the white box should never bleed edge to edge.
+    - The template itself can stay light where that's honest (it represents
+    the physical print file / paper), but render it as a contained
+    "sheet" at its own aspect ratio, centered on the charcoal stage with
+    a subtle edge — like a document preview — not a full-width white
+    slab.
+    - If the template asset has transparent or empty margins, those pick up
+    the stage color, not white.
+    - Check the other panels (Back, Spine, Full template) and other piece
+    editors (labels, inner sleeve) for the same white-stage problem.
+    
