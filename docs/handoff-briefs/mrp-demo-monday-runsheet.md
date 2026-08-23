@@ -393,3 +393,19 @@ gets tested.**
      something. Also: toast copy should not end in a period per canon
      short-label rules.
     
+
+    ## GoodDeed® Certificates pricing page — stray media player (from Bill)
+
+    Press portal → Product Specs → GoodDeed® Certificates: scrolling down
+    past the Finishing section, a floating AUDIO/MEDIA PLAYER control
+    (play button, scrubber, 02:35/-00:54, AirPlay glyph) appears at the
+    bottom center of the page. Nothing on this page should be playing
+    media — find where that player comes from and remove it (leaked
+    component? global player rendering on the wrong page?).
+
+    Otherwise this page follows the intended grammar (honest "0 of 5
+    priced" counter, rates-are-between-you-and-GoodTunes footnote).
+    Open design question with Bill — whether the empty $/unit fields
+    should show suggested/reference prices — decision to follow; don't
+    build anything for that yet.
+    
