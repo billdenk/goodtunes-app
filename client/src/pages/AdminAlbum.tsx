@@ -75,6 +75,7 @@ import {
   Factory,
   HeartHandshake,
   CircleDashed,
+  Mail,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { LyricsGapDots } from "@/components/LyricsGapDots";
@@ -4886,11 +4887,18 @@ function AlbumOverviewBody({ album, disabled, disabledReason, isPartnerViewer, o
           </div>
           <div className="ml-auto">
             <div className="text-[13px]" style={{ color: t.faint }}>Needs attention</div>
-            <button type="button" onClick={() => setBlockersOpen((v) => !v)} aria-expanded={blockersOpen} className="mt-1 inline-flex items-center gap-1.5 text-[15px] font-medium" style={{ color: t.ink }} data-testid="button-needs-attention">
-              <AlertTriangle className="w-3.5 h-3.5" style={{ color: t.subink }} />
-              {blockers.length} art {blockers.length === 1 ? "blocker" : "blockers"}
-              <ChevronDown className="w-3.5 h-3.5 transition-transform" style={{ color: t.faint, transform: blockersOpen ? "rotate(180deg)" : "none" }} />
-            </button>
+            {blockers.length === 0 ? (
+              <div className="mt-1 inline-flex items-center gap-1.5 text-[15px] font-medium" style={{ color: t.ink }} data-testid="status-needs-attention-clear">
+                <CheckCircle2 className="w-3.5 h-3.5" style={{ color: t.subink }} />
+                Nothing blocking
+              </div>
+            ) : (
+              <button type="button" onClick={() => setBlockersOpen((v) => !v)} aria-expanded={blockersOpen} className="mt-1 inline-flex items-center gap-1.5 text-[15px] font-medium" style={{ color: t.ink }} data-testid="button-needs-attention">
+                <AlertTriangle className="w-3.5 h-3.5" style={{ color: t.subink }} />
+                {blockers.length} art {blockers.length === 1 ? "blocker" : "blockers"}
+                <ChevronDown className="w-3.5 h-3.5 transition-transform" style={{ color: t.faint, transform: blockersOpen ? "rotate(180deg)" : "none" }} />
+              </button>
+            )}
           </div>
         </div>
         {blockersOpen && blockers.length > 0 && (
