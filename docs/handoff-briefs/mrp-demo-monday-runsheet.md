@@ -54,3 +54,22 @@ artist receives the branded invite and starts on their own.
 NOT READY. Bill and Andrew are testing the full loop with their own
 emails as pieces come online — the sooner a line flips, the sooner it
 gets tested.**
+
+
+    ## Design guardrails (from Bill)
+
+    - **No unapproved design.** Do not invent new layouts, colors, or patterns.
+    The style guide at `handoff/style-guide/apple-canon.md` is the source of
+    truth for every screen. When a screen needs design that the canon or a
+    handoff doesn't cover, flag it — don't improvise.
+    - **Cleanup pass, not creation:** bring existing screens up to canon —
+    the artist portal, the super-admin, and anywhere else that predates the
+    canon. Charcoal admin (never navy), one filled action per page,
+    sentence-case headings, word + icon statuses (never color alone),
+    "estimate" never "quote", commas in dollar amounts.
+    - **MRP pricing must be viewable and connected end-to-end:** super-admin
+    can open Memphis's pricing (per `handoff/admin-pricing-setup/`), see
+    which components have prices on file, and trace how those exact rows
+    feed the estimate builder. No orphaned prices, honest "no price on
+    file" gaps.
+    
