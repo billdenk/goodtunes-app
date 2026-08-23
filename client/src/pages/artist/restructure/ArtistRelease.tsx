@@ -538,6 +538,17 @@ function AudioMasterList({
   return (
     <div style={{ marginTop: 18 }}>
       <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid={forVinyl ? 'audio-list-vinyl' : 'audio-list-master'}>
+        {assetFormat === 'master' && canUpload && (
+          <input
+            ref={inputRef}
+            type="file"
+            accept="audio/*,.wav,.flac,.aif,.aiff,.mp3,.m4a,.aac,.ogg"
+            multiple
+            className="sr-only"
+            onChange={(event) => acceptFiles(event.target.files)}
+            data-testid="input-upload-masters"
+          />
+        )}
         {tracks.length === 0 ? (
           assetFormat === 'master' && canUpload ? (
             <div
@@ -552,15 +563,6 @@ function AudioMasterList({
               <UploadCloud className="w-7 h-7" style={{ color: t.faint }} aria-hidden />
               <p className="text-[14px] font-semibold" style={{ marginTop: 10, color: t.ink }}>No tracks yet</p>
               <p className="text-[12.5px]" style={{ marginTop: 5, color: t.subink }}>Drop audio files here or choose them from your device</p>
-              <input
-                ref={inputRef}
-                type="file"
-                accept="audio/*,.wav,.flac,.aif,.aiff,.mp3,.m4a,.aac,.ogg"
-                multiple
-                className="sr-only"
-                onChange={(event) => acceptFiles(event.target.files)}
-                data-testid="input-upload-masters"
-              />
               <button
                 type="button"
                 onClick={() => inputRef.current?.click()}
@@ -592,18 +594,35 @@ function AudioMasterList({
               </button>
             </div>
           )
-        ) : tracks.map((song, i) => (
-          <div key={`${song.title}-${i}`} className="flex items-center gap-3 px-4" style={{ height: 52, borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`track-${i + 1}`}>
-            <span className="text-[12px] font-semibold tabular-nums flex-shrink-0" style={{ width: 22, color: t.faint }}>{i + 1}</span>
-            <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: t.soft }}>
-              <Disc3 className="w-4 h-4" style={{ color: t.subink }} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="text-[13.5px] font-medium truncate" style={{ color: t.ink }}>{song.title}</div>
-              <div className="text-[11.5px]" style={{ color: t.faint }}>{forVinyl ? 'Lacquer master · from your album masters' : 'Album master'}</div>
-            </div>
-          </div>
-        ))}
+        ) : (
+          <>
+            {tracks.map((song, i) => (
+              <div key={`${song.title}-${i}`} className="flex items-center gap-3 px-4" style={{ height: 52, borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`track-${i + 1}`}>
+                <span className="text-[12px] font-semibold tabular-nums flex-shrink-0" style={{ width: 22, color: t.faint }}>{i + 1}</span>
+                <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: t.soft }}>
+                  <Disc3 className="w-4 h-4" style={{ color: t.subink }} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13.5px] font-medium truncate" style={{ color: t.ink }}>{song.title}</div>
+                  <div className="text-[11.5px]" style={{ color: t.faint }}>{forVinyl ? 'Lacquer master · from your album masters' : 'Album master'}</div>
+                </div>
+              </div>
+            ))}
+            {assetFormat === 'master' && canUpload && (
+              <div className="flex justify-end" style={{ padding: '12px 16px', borderTop: `1px solid ${t.hairline}` }}>
+                <button
+                  type="button"
+                  onClick={() => inputRef.current?.click()}
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold"
+                  style={{ color: BLUE, border: `1px solid ${BLUE}`, background: 'transparent' }}
+                  data-testid="button-upload-more-masters"
+                >
+                  <UploadCloud className="w-4 h-4" aria-hidden /> Upload masters
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -828,7 +847,7 @@ function ReleaseStore({ portal, albumId, t }: { portal: PortalPayload; albumId: 
   const channel: 'goodtunes' | 'shopify' | null = !sellMode ? null : isShopify ? 'shopify' : 'goodtunes';
   const cl = portal.store.checklist;
   const checklist = [
-    { id: 'art', label: 'Artwork approved', pending: 'Artwork — not started', done: cl.art, href: `/artist/albums/${albumId}?tab=assets` },
+    { id: 'art', label: 'Artwork added', pending: 'Artwork — not started', done: cl.art, href: `/artist/albums/${albumId}?tab=assets` },
     { id: 'audio', label: 'Audio in the player', pending: 'Audio — not started', done: cl.audio, href: `/artist/albums/${albumId}?tab=assets` },
     { id: 'price', label: 'Price set', pending: 'Price — not set', done: cl.price, href: `/admin/albums/${albumId}?tab=sell` },
     { id: 'channel', label: isShopify ? 'Shopify channel connected' : 'Sales channel chosen', pending: 'Sales channel — not chosen', done: cl.channel, href: `/admin/albums/${albumId}?tab=sell` },

@@ -182,24 +182,25 @@ async function releaseHandler(req: Request, res: Response) {
 
   // Report the same mutation gates the album/master endpoints enforce so the
   // portal never advertises an editable state that the save will reject.
-  // Locked releases are known without probing (and therefore without
-  // consuming a one-shot override on this read request).
+  // Metadata observes the post-sale lock; master upload is operational.
   const { getUserRole } = await import("./auth/roles");
   const callerRole = await getUserRole(req.session.userId!);
   const isOperator = callerRole?.role === "super_admin" || callerRole?.role === "admin";
-  let canEditMetadata = isOperator || !album.first_sold_at;
-  let canUploadMasters = isOperator || !album.first_sold_at;
-  if (!album.first_sold_at && !isOperator) {
+  let canEditMetadata = isOperator;
+  let canUploadMasters = isOperator;
+  if (!isOperator) {
     const { checkPartnerVerbForScope, resolveAlbumScope } = await import("./auth/partnerPermissions");
     const resolved = await resolveAlbumScope(albumId);
     const userId = req.session.userId!;
     if (resolved?.scope) {
-      canEditMetadata = !(await checkPartnerVerbForScope(userId, "edit_metadata", resolved.scope, {
+      canEditMetadata = !album.first_sold_at && !(await checkPartnerVerbForScope(userId, "edit_metadata", resolved.scope, {
         albumIdForLock: albumId,
         albumIdForScope: albumId,
       }));
+      // Master upload is an operational permission, not album metadata.
+      // Match the song-create gate without applying the post-sale metadata
+      // lock; albumIdForScope still enables label/primary-artist resolution.
       canUploadMasters = !(await checkPartnerVerbForScope(userId, "upload_masters", resolved.scope, {
-        albumIdForLock: albumId,
         albumIdForScope: albumId,
       }));
     }
