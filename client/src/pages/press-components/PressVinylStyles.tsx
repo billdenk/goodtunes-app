@@ -3089,11 +3089,11 @@ function PhotoSamplePanel({ src, onPick, onClose, t }: { src: string; onPick: (h
   }, [src]);
   return (
     <div data-testid="gen-picker-photo-sample">
-      <p className="text-[12px]" style={{ color: t.subink, margin: '2px 0 8px' }}>
+      <p className="text-xs" style={{ color: t.subink, margin: "2px 0 8px" }}>
         Tap their photo to sample a color.
       </p>
       {failed ? (
-        <p className="text-[12px]" style={{ color: t.subink }}>The photo could not be loaded for sampling.</p>
+        <p className="text-xs" style={{ color: t.subink }}>The photo could not be loaded for sampling.</p>
       ) : (
         <canvas
           ref={canvasRef}
