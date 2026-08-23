@@ -335,50 +335,58 @@ export function AdminFrame({
   // The sidebar count mirrors what the Albums index actually shows —
   // imported streaming catalog (`!isGoodTunesRelease`) is hidden from
   // the admin, so it would be misleading to include it in the total.
-  const { data: albums = [] } = useQuery<{ isGoodTunesRelease: boolean }[]>({
+  const { data: albumsData } = useQuery<{ isGoodTunesRelease: boolean }[]>({
     queryKey: ["/api/albums"],
     enabled: !!user?.isAdmin,
   });
+  const albums = albumsData ?? [];
   const albumCount = albums.filter((a) => a.isGoodTunesRelease).length;
-  const { data: people = [] } = useQuery<unknown[]>({
+  const { data: peopleData } = useQuery<unknown[]>({
     queryKey: ["/api/people"],
     enabled: !!user?.isAdmin,
   });
-  const { data: instruments = [] } = useQuery<unknown[]>({
+  const people = peopleData ?? [];
+  const { data: instrumentsData } = useQuery<unknown[]>({
     queryKey: ["/api/instruments"],
     enabled: !!user?.isAdmin,
   });
+  const instruments = instrumentsData ?? [];
   // Task #174 — Vendors split into Makers + Resellers. Both feed off the
   // same `/api/vendors` table; the sidebar uses the `?role=` query so
   // each row counts only its half of the world. A vendor with both
   // flags (e.g. Gibson) counts on both sides — that's the point.
-  const { data: vendors = [] } = useQuery<Array<{ isMaker?: boolean; isReseller?: boolean }>>({
+  const { data: vendorsData } = useQuery<Array<{ isMaker?: boolean; isReseller?: boolean }>>({
     queryKey: ["/api/vendors"],
     enabled: !!user?.isAdmin,
   });
+  const vendors = vendorsData ?? [];
   const makerCount = vendors.filter((v) => v.isMaker).length;
   const resellerCount = vendors.filter((v) => v.isReseller).length;
-  const { data: labels = [] } = useQuery<unknown[]>({
+  const { data: labelsData } = useQuery<unknown[]>({
     queryKey: ["/api/labels"],
     enabled: !!user?.isAdmin,
   });
+  const labels = labelsData ?? [];
   // Task #1425 — managers are a label-style partner roster; count feeds
   // the Partners-section nav badge next to Labels.
-  const { data: managers = [] } = useQuery<unknown[]>({
+  const { data: managersData } = useQuery<unknown[]>({
     queryKey: ["/api/managers"],
     enabled: !!user?.isAdmin,
   });
+  const managers = managersData ?? [];
   // Task #69 — pressing plants + fulfillment warehouses live in the
   // same admin shell, gated to super_admin today + visible to their
   // own role-scope rows when role-gating ships.
-  const { data: manufacturers = [] } = useQuery<unknown[]>({
+  const { data: manufacturersData } = useQuery<unknown[]>({
     queryKey: ["/api/manufacturers"],
     enabled: !!user?.isAdmin,
   });
-  const { data: fulfillment = [] } = useQuery<unknown[]>({
+  const manufacturers = manufacturersData ?? [];
+  const { data: fulfillmentData } = useQuery<unknown[]>({
     queryKey: ["/api/fulfillment-partners"],
     enabled: !!user?.isAdmin,
   });
+  const fulfillment = fulfillmentData ?? [];
   // Task #131 — Customers directory. The list payload is { rows, total }
   // so the sidebar count uses `total` (full unfiltered fan count) rather
   // than rows.length (capped to the page).
@@ -392,12 +400,13 @@ export function AdminFrame({
   // not refunded, not returned). Same /api/admin/orders payload the
   // page itself uses so the badge stays in lockstep without a second
   // endpoint.
-  const { data: fanOrders = [] } = useQuery<
+  const { data: fanOrdersData } = useQuery<
     Array<{ status: string; fulfillmentStatus?: string | null; returnedAt?: string | null }>
   >({
     queryKey: ["/api/admin/orders"],
     enabled: !!user?.isAdmin,
   });
+  const fanOrders = fanOrdersData ?? [];
   const fanOrdersActiveCount = fanOrders.filter(
     (o) =>
       (o.status === "paid" || o.status === "shipped") &&
@@ -417,10 +426,11 @@ export function AdminFrame({
   });
   const feedbackIsOperator =
     feedbackRoleInfo?.role === "super_admin" || feedbackRoleInfo?.role === "admin";
-  const { data: feedbackRows = [] } = useQuery<Array<{ status: string }>>({
+  const { data: feedbackRowsData } = useQuery<Array<{ status: string }>>({
     queryKey: ["/api/admin/feedback"],
     enabled: !!user?.isAdmin && feedbackIsOperator,
   });
+  const feedbackRows = feedbackRowsData ?? [];
   const feedbackNewCount = feedbackRows.filter((f) => !FEEDBACK_TERMINAL_STATUSES.has(f.status)).length;
   // Task #2279 — QA Orders cleanup nav entry is only meaningful when
   // Stripe is in test mode (pk_test_ key), i.e. dev / non-production.
@@ -434,31 +444,45 @@ export function AdminFrame({
   // Only fetch the QA-order count when we're actually in test mode and
   // the link will render — keeps prod from polling an endpoint whose
   // nav entry never shows.
-  const { data: qaOrders = [] } = useQuery<unknown[]>({
+  const { data: qaOrdersData } = useQuery<unknown[]>({
     queryKey: ["/api/admin/qa-orders"],
     enabled: !!user?.isAdmin && isStripeTestMode,
   });
+  const qaOrders = qaOrdersData ?? [];
   const qaOrderCount = qaOrders.length;
   // Task #230 — NPO directory count drives the badge on the new NPOs
   // sidebar entry. Reuses the same /api/non-profits payload the rest
   // of the admin already hits.
-  const { data: nonProfits = [] } = useQuery<unknown[]>({
+  const { data: nonProfitsData } = useQuery<unknown[]>({
     queryKey: ["/api/non-profits"],
     enabled: !!user?.isAdmin,
   });
+  const nonProfits = nonProfitsData ?? [];
   // Task #119 — Platform Pricing is super-admin-only; we hide the
   // sidebar link entirely for other roles so they don't see a tab
   // that 403s when they click it.
-  const { data: roleInfo } = useQuery<{
+  const { data: roleInfo, isSuccess: roleResolved } = useQuery<{
     role: string;
     roleScopeId: string | null;
     canInvite?: boolean;
     devImpersonating?: boolean;
     devPersonaLabel?: string | null;
-  }>({
+  } | null>({
     queryKey: ["/api/me/role"],
     enabled: !!user?.isAdmin,
   });
+  // Task #3318 — auth loss mid-session (e.g. browser cache clear wipes the
+  // bearer token while /api/me still resolves off a stale cache/session).
+  // The default queryFn returns literal `null` on a 401, so a "successful"
+  // null role payload means the admin APIs no longer recognize us: send the
+  // operator to the login screen instead of rendering a shell whose badge
+  // queries are all null. /admin/login is exempt from the App-level access
+  // guard (onAdminAuthPath), so this never loops through the denied dialog.
+  useEffect(() => {
+    if (user?.isAdmin && roleResolved && roleInfo === null) {
+      navigate("/admin/login");
+    }
+  }, [user?.isAdmin, roleResolved, roleInfo, navigate]);
   const isSuperAdmin = roleInfo?.role === "super_admin";
   // Task #1791 — hide the Invites nav entry entirely when the backend
   // says this caller can't send invites (matches the AdminInvites gate +
