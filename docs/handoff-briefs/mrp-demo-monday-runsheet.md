@@ -346,3 +346,28 @@ gets tested.**
     - Check the other panels (Back, Spine, Full template) and other piece
     editors (labels, inner sleeve) for the same white-stage problem.
     
+
+    ## Settings → Connections: dead taps on Shopify + Payout (from Bill)
+
+    Artist Settings → Team and connections:
+
+    1. **Both connection rows are dead ends.** Tapping the Shopify row
+     ("Not connected") does nothing, and tapping Payout account's
+     "Set up →" also does nothing. A row that shows a chevron/"Set up"
+     affordance MUST go somewhere. Payout is the more serious one — an
+     artist who can't set up a payout account can't get paid. Wire both
+     flows, or if a flow isn't built yet, the row must say so honestly
+     ("Coming soon" style, no chevron, not tappable) rather than
+     silently ignoring taps.
+    2. **Should the Shopify row/logo be here at all?** Bill recalls the
+     Shopify logo being removed. Note the current model: GoodTunes
+     Shopify+ is retired, but "Shopify store" (artist/label fulfills)
+     is still a valid sell model — so an artist-level Shopify connection
+     may still be legitimate. Otis: confirm with Bill/Ruby whether the
+     artist Settings Shopify row (and the "Shopify" item in the artist
+     nav rail) should stay. Don't remove without confirmation, but don't
+     leave it dead either.
+
+    Heading nit: "Settings. Team and connections." — trailing periods
+    again (same global sweep).
+    
