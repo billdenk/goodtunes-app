@@ -182,3 +182,25 @@ gets tested.**
     Heading nit here too: "GoodTunes® Player audio." — no trailing period
     on headings.
     
+
+    ## CRITICAL — Master tab has no upload either (from Bill)
+
+    Assets → Master → Audio, viewing as the artist: "No tracks yet." and NO
+    upload control. Combined with the previous two notes, this means the
+    artist has **no way to upload music anywhere** in the release Assets
+    area — Master, GoodTunes® Player, and Vinyl are all dead ends. The
+    Master tab is supposed to be the one place masters come in ("Your
+    canonical album masters" per its own copy).
+
+    Fix, top priority for flow 2:
+
+    - The Master → Audio empty state gets a real **Upload masters** action
+    (filled button — this is THE action of the page) with drag-and-drop
+    and file picker. After upload, Player and Vinyl inherit automatically,
+    per their empty-state copy.
+    - If upload exists somewhere else (next-steps page on the white-label
+    side?), it must ALSO exist here — the artist landed here looking for
+    it, which is proof enough of where it belongs.
+
+    Heading nit again: "Master audio." — no trailing period.
+    
