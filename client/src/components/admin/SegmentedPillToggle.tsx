@@ -49,7 +49,7 @@ export function SegmentedPillToggle<T extends string>({
           onClick={() => onChange(opt.value)}
           aria-pressed={value === opt.value}
           className={[
-            "h-8 inline-flex items-center justify-center rounded-full text-xs font-semibold transition-colors",
+            "h-8 inline-flex items-center justify-center rounded-full py-0 text-xs leading-none font-semibold transition-colors",
             dense ? "px-2.5" : "px-3",
             value === opt.value
               ? "bg-white text-[var(--apple-ink)] shadow-sm"

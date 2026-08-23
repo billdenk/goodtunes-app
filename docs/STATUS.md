@@ -1,6 +1,6 @@
 # GoodTunes — Living Status
 
-Last updated: 2026-08-21
+Last updated: 2026-08-23
 
 - **White-label domains LIVE end-to-end** (Aug 21 2026, Task #3279): makesvinyl.com + pressesvinyl.com apexes serve production with valid TLS (200, neutral page, no 301 to goodtunes.music); wildcard CNAME added in GoDaddy so any slug resolves. Replit issues no wildcard certs, so each press subdomain must be individually linked in the Replit Domains panel (one-time, ~1 min, zero GoDaddy edits thanks to the wildcard). Live now: mrp/memphis on both domains. Memphis Record Pressing assigned slug `memphis` — branded landing, skinned login, and estimate `/e/:token` viewer all verified on memphis.makesvinyl.com; unassigned linked subdomains show the neutral page.
 
@@ -8,6 +8,14 @@ This file is the current-state summary for the design studio. It is kept
 current, not appended to: stale lines are overwritten when things change.
 
 ## 1. Recent changes
+
+- **Album Overview rebuilt to Ruby's approved handoff (Aug 23 2026)**: `handoff/AdminAlbumOverview.tsx` ported per handoff law (old eleven-panel Overview deleted, presentational code verbatim, real data wired). At-a-glance strip (Status / Release date / Press / Share link / Needs attention with in-place blockers expander → "Fix on Physical" deep-links to Physical → Art), then four groups: The record (hover-pencil edits, lineup), Where fans find it (Release/Pre-save segmented chip, GoodTunes link tile Open/Copy, six streaming service tiles — real brand SVGs on white carrier circles, linked = URL + Open/Copy/Remove, unlinked = paste field with Save earning blue on a valid URL), Marketing (button color swatch, per-format hero graphics, campaign gallery, real Preview email), GoodDeed® & giving (real NPO splits + post-sale lock). Split shipments evicted to Physical → Fulfillment; SPIN sits under a quiet Legacy settings disclosure — super-admin + pre-Nightbirde (legacyGogoodsId) only, ABSENT elsewhere (also gated the header badge). Partner viewers keep change requests, share link, and reviewer/preview-link management only. Both themes via body.gt-admin-dark. Honest gaps: no distinct pre-save URL in schema; button color shows "Custom color"/"GoodTunes blue" (hex-only storage). Needs prod publish.
+
+- **Admin catalog renamed "Releases" (Aug 23 2026, Bill's ruling)**: rail item, list-pane heading, search entries, add-CTA ("Add release"), album breadcrumb. Routes/testids/identifiers unchanged; discography Albums/EPs/Singles grouping (musical type) stays. "Project" reserved for in-production efforts. Releases LIST page redesign still HELD for Ruby's mock.
+
+- **Track-row regression fixed (Aug 23 2026, Bill's law: a canon pass changes how rows LOOK, never what they DO)**: artist Player-audio + Vinyl-audio track rows regained the full disclosure set (expand, drag-reorder, per-track audio detail, bonus content, GoodSync, lyrics, splits, Upload masters on populated lists) via a thin adapter onto the shared TracksPanel — quiet dressing kept, interactions in lockstep with super-admin Digital. All other row-treated lists audited vs the pre-pass build: visual/copy only.
+
+- **Pricing walk fixes (Aug 23 2026)**: GoodDeed Printing section now collapses behind the same toggle as Finishing (wired to the existing `active` flag; rates keep when off) — the typical-range hint numbers are officially dropped (Bill). Segmented-control labels vertically centered in the shared SegmentedPillToggle + tonight's local segmented controls (size chips, funded-by pair). OPEN: Splatter pricing rows still show raw color codes ("O02 w/ O03 O22") — the stored names ARE the codes; waiting on Bill's ruling for what replaces them.
 
 - **Super-admin album canon dress pass + shared page shell (Aug 22 2026, late night)**: Physical Art/Fulfillment/Side Breaks + Payments + Customers + Early access tabs brought to canon (word+icon statuses, quiet callouts, segmented sub-tab controls, one filled action per page/section, estimate-not-quote in admin, sentence-case headers, dark comped cards) — Overview tab HELD for Ruby's redesign; shared PageColumn/PageHeader shell + type tokens (centered 1240px column, heading rhythm, breathable rows, shared meta lifted above lists) adopted on artist release tabs + super-admin album body; artist Vinyl Art cards uniform height grid; artist "+" add-format chip restored (3-card modal behind it). Needs prod publish.
 

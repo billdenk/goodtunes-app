@@ -257,7 +257,7 @@ export function PressComponentPricing({
               role="tab"
               aria-selected={active}
               onClick={() => setSize(c.id)}
-              className="inline-flex items-baseline gap-1.5 rounded-full px-4 h-8 text-[13px] font-semibold transition-colors"
+              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-full px-4 py-0 text-[13px] leading-none font-semibold transition-colors"
               style={{
                 background: active ? t.card : "transparent",
                 color: active ? t.ink : t.subink,

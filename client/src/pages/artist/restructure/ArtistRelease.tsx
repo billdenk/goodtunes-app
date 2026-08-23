@@ -25,6 +25,7 @@ import { uploadAdminDocWithProgress } from '@/lib/adminUpload';
 import { useUploadManager } from '@/context/UploadManagerContext';
 import { NewAlbumModeDialog } from '@/components/admin/NewAlbumModeDialog';
 import { PageColumn, PageHeader } from '@/components/admin/PageShell';
+import { ArtistReleaseTrackRows } from '@/pages/AdminAlbum';
 import type { AlbumPhysicalFormat, AlbumSellMode } from '@shared/schema';
 import {
   BLUE, PILL_SHADOW, cn, useRestructureTheme, CanonPill, MilestoneStatus, SegChip,
@@ -540,7 +541,12 @@ function AudioMasterList({
           {forVinyl ? 'Lacquer masters derived from your album masters' : 'Album masters'}
         </p>
       )}
-      <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid={forVinyl ? 'audio-list-vinyl' : 'audio-list-master'}>
+      <div
+        id="artist-audio-track-controls"
+        className={tracks.length === 0 ? 'rounded-2xl overflow-hidden' : undefined}
+        style={tracks.length === 0 ? { border: `1px solid ${t.hairline}`, background: t.card } : undefined}
+        data-testid={forVinyl ? 'audio-list-vinyl' : 'audio-list-master'}
+      >
         {assetFormat === 'master' && canUpload && (
           <input
             ref={inputRef}
@@ -599,17 +605,9 @@ function AudioMasterList({
           )
         ) : (
           <>
-            {tracks.map((song, i) => (
-              <div key={`${song.title}-${i}`} className="flex items-center gap-3 px-4" style={{ minHeight: 64, paddingTop: 10, paddingBottom: 10, borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`track-${i + 1}`}>
-                <span className="text-[12px] font-semibold tabular-nums flex-shrink-0" style={{ width: 22, color: t.faint }}>{i + 1}</span>
-                <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: t.soft }}>
-                  <Disc3 className="w-4 h-4" style={{ color: t.subink }} />
-                </span>
-                <div className="min-w-0 flex-1 text-[length:var(--apple-type-secondary)] font-medium truncate" style={{ color: t.ink }}>{song.title}</div>
-              </div>
-            ))}
+            <ArtistReleaseTrackRows albumId={albumId} />
             {assetFormat === 'master' && canUpload && (
-              <div className="flex justify-end" style={{ padding: '12px 16px', borderTop: `1px solid ${t.hairline}` }}>
+              <div className="flex justify-end pt-3">
                 <button
                   type="button"
                   onClick={() => inputRef.current?.click()}
@@ -759,7 +757,14 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
             titleExtras={<>
               {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
               {assetFormat === 'digital' && (
-                  <button type="button" className="inline-flex items-center gap-1.5 text-[13px] font-medium flex-shrink-0 transition-opacity hover:opacity-80" style={{ color: t.subink }} data-testid="button-add-bonus-content" title="Add bonus content to the GoodTunes® Player">
+                  <button
+                    type="button"
+                    onClick={() => document.getElementById('album-bonus-content')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                    className="inline-flex items-center gap-1.5 text-[13px] font-medium flex-shrink-0 transition-opacity hover:opacity-80"
+                    style={{ color: t.subink }}
+                    data-testid="button-add-bonus-content"
+                    title="Add bonus content to the GoodTunes® Player"
+                  >
                     <Plus className="w-3.5 h-3.5 flex-shrink-0" /> Add bonus content
                   </button>
               )}

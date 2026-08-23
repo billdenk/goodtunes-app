@@ -338,6 +338,7 @@ export function PressGoodDeedPricingComponent({
   };
   const [printPrices, setPrintPrices] = useState<Record<string, number | null>>(() => seedLadder(payload.tiers));
   const [finishPrices, setFinishPrices] = useState<Record<string, number | null>>(() => seedLadder(payload.finishing?.tiers));
+  const [printingActive, setPrintingActive] = useState<boolean>(payload.active ?? false);
   const [finishingOffered, setFinishingOffered] = useState<boolean>(payload.finishing?.offered ?? false);
   const [shipToFulfillment, setShipToFulfillment] = useState<boolean>(payload.shipToFulfillment ?? false);
   const touched = useRef(false);
@@ -345,6 +346,7 @@ export function PressGoodDeedPricingComponent({
     if (!touched.current) {
       setPrintPrices(seedLadder(payload.tiers));
       setFinishPrices(seedLadder(payload.finishing?.tiers));
+      setPrintingActive(payload.active ?? false);
       setFinishingOffered(payload.finishing?.offered ?? false);
       setShipToFulfillment(payload.shipToFulfillment ?? false);
     }
@@ -358,6 +360,7 @@ export function PressGoodDeedPricingComponent({
   const serialize = (next: {
     print?: Record<string, number | null>;
     finish?: Record<string, number | null>;
+    active?: boolean;
     offered?: boolean;
     ship?: boolean;
   }): GoodDeedPrintingConfig => {
@@ -366,7 +369,7 @@ export function PressGoodDeedPricingComponent({
     const ladderTiers = (byQty: Record<string, number | null>) =>
       RUNGS.filter((r) => byQty[r.id] != null).map((r) => ({ qty: r.qty, perUnitCents: byQty[r.id] as number }));
     return {
-      active: payload.active ?? false,
+      active: next.active ?? printingActive,
       tiers: [
         ...(payload.tiers ?? []).filter((x) => !RUNG_QTYS.has(x.qty)),
         ...ladderTiers(p),
@@ -394,6 +397,14 @@ export function PressGoodDeedPricingComponent({
     const next = { ...finishPrices, [rung.id]: cents };
     setFinishPrices(next);
     save(serialize({ finish: next }));
+  };
+
+  const commitPrintingActive = (on: boolean) => {
+    touched.current = true;
+    setPrintingActive(on);
+    // Disabling printing only removes this press from print routing. Existing
+    // rates remain persisted so they are ready if the service is re-enabled.
+    save(serialize({ active: on }));
   };
 
   const commitOffered = (on: boolean) => {
@@ -446,41 +457,63 @@ export function PressGoodDeedPricingComponent({
         {/* LEFT — the editable ladders */}
         <section className="min-w-0">
           {/* ── Section 1: printing only ── */}
-          <div className="flex items-start justify-between gap-3">
-            <StepHeading lead="Printing." rest="Price each run size." t={t} />
-            <span className="text-[12px] tabular-nums flex-shrink-0 inline-flex items-center gap-1.5" style={{ marginTop: 6, color: t.faint }}>
-              {saving ? (
-                <span className="inline-flex items-center gap-1.5" data-testid="gooddeed-pricing-saving">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…
-                </span>
-              ) : (
-                <>
-                  <Check className="w-3.5 h-3.5" style={{ color: t.blue }} />
-                  {printPriced} of {RUNGS.length} priced
-                </>
-              )}
-            </span>
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <StepHeading lead="Printing." rest="Price each run size." t={t} />
+              <p className="text-[12.5px]" style={{ marginTop: 10, color: t.subink }}>
+                Per certificate — <span className="font-semibold" style={{ color: t.ink }}>printing only</span>.
+                Holograms and shrinkwrap are a separate service below. Larger batches usually earn a better rate.
+              </p>
+            </div>
+            <div style={{ marginTop: 6 }}>
+              <Toggle
+                on={printingActive}
+                disabled={!canEdit}
+                onChange={commitPrintingActive}
+                t={t}
+                testId="toggle-printing-active"
+              />
+            </div>
           </div>
-          <p className="text-[12.5px]" style={{ marginTop: 10, color: t.subink }}>
-            Per certificate — <span className="font-semibold" style={{ color: t.ink }}>printing only</span>.
-            Holograms and shrinkwrap are a separate service below. Larger batches usually earn a better rate.
-          </p>
 
-          <LadderTable
-            prices={printPrices}
-            canEdit={canEdit}
-            onCommit={commitPrintRung}
-            t={t}
-            idPrefix="print"
-            priceHeader="Your price / unit"
-            typicalRanges={payload.typicalRanges?.printing ?? []}
-          />
+          {printingActive && (
+            <div data-testid="printing-section">
+              <div className="flex items-center justify-end" style={{ marginTop: 4 }}>
+                <span className="text-[12px] tabular-nums flex-shrink-0 inline-flex items-center gap-1.5" style={{ color: t.faint }}>
+                  {saving ? (
+                    <span className="inline-flex items-center gap-1.5" data-testid="gooddeed-pricing-saving">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving…
+                    </span>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" style={{ color: t.blue }} />
+                      {printPriced} of {RUNGS.length} priced
+                    </>
+                  )}
+                </span>
+              </div>
+              <LadderTable
+                prices={printPrices}
+                canEdit={canEdit}
+                onCommit={commitPrintRung}
+                t={t}
+                idPrefix="print"
+                priceHeader="Your price / unit"
+                typicalRanges={payload.typicalRanges?.printing ?? []}
+              />
 
-          <p className="text-[12px]" style={{ marginTop: 14, maxWidth: 560, color: t.faint, lineHeight: 1.5 }}>
-            <span className="font-semibold" style={{ color: t.subink }}>25-certificate minimum.</span>{" "}
-            If fewer than 25 sell by window close, no print run happens — you&rsquo;re never
-            asked to run a batch below your smallest rung.
-          </p>
+              <p className="text-[12px]" style={{ marginTop: 14, maxWidth: 560, color: t.faint, lineHeight: 1.5 }}>
+                <span className="font-semibold" style={{ color: t.subink }}>25-certificate minimum.</span>{" "}
+                If fewer than 25 sell by window close, no print run happens — you&rsquo;re never
+                asked to run a batch below your smallest rung.
+              </p>
+            </div>
+          )}
+          {!printingActive && (
+            <p className="text-[12px]" style={{ marginTop: 12, maxWidth: 560, color: t.faint, lineHeight: 1.5 }} data-testid="printing-off-note">
+              Printing is off — GoodDeed Certificate runs route to another printer.
+            </p>
+          )}
 
           {/* ── Section 2: finishing (holograms + shrinkwrap) ── */}
           <div className="flex items-start justify-between gap-4" style={{ marginTop: 52 }}>

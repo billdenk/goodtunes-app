@@ -4651,124 +4651,386 @@ type ArtistLabelConflict = {
   toLabelName: string;
 };
 
-// Task #846 — re-run the Tidal/Deezer/Pandora resolver for an album that
-// was imported before the resolver shipped (or where Odesli was
-// rate-limited at import time). Only fills NULL link columns server-side;
-// an operator's manual link is never overwritten.
-//
-// Task #856 — also show this for albums WITHOUT an Apple Music URL when
-// their Spotify link is still blank: Spotify resolves off artist + title
-// (not the Apple collection id), so it can be filled even though
-// Tidal/Deezer/Pandora stay on search (those need Apple via Odesli).
-function RefreshStreamingLinksButton({ album }: { album: AlbumFull }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const hasApple = !!(album.appleMusicUrl && /\/album\/[^/]+\/\d+/.test(album.appleMusicUrl));
-  // Without an Apple album id, Spotify is the only thing we can resolve —
-  // so the button is still useful as long as the Spotify link is blank.
-  const spotifyOnly = !hasApple && !album.spotifyUrl;
-  const mut = useMutation({
-    mutationFn: async () => {
-      const r = await apiRequest(
-        "POST",
-        `/api/admin/albums/${album.id}/refresh-streaming-links`,
-      );
-      return (await r.json()) as { filledCount: number; attempted?: string[] };
-    },
-    onSuccess: async (data) => {
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: ["/api/albums", album.id] }),
-        qc.invalidateQueries({ queryKey: ["/api/albums"] }),
-      ]);
-      const spotifyOnlyAttempt =
-        Array.isArray(data.attempted) &&
-        data.attempted.length === 1 &&
-        data.attempted[0] === "spotify";
-      toast({
-        title:
-          data.filledCount > 0
-            ? `Filled ${data.filledCount} streaming link${data.filledCount === 1 ? "" : "s"}`
-            : "No new links found",
-        description:
-          data.filledCount > 0
-            ? "Existing links were left untouched."
-            : spotifyOnlyAttempt
-              ? "Spotify either resolved already or has no confident match. (No Apple URL, so Tidal/Deezer/Pandora can't be resolved.)"
-              : "Tidal/Deezer/Pandora/Spotify either resolved already or have no match.",
-      });
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Couldn't refresh streaming links",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      });
-    },
-  });
-  if (!hasApple && !spotifyOnly) return null;
+type AlbumOverviewTheme = {
+  blue: string; ink: string; subink: string; faint: string; hairline: string;
+  card: string; cardSoft: string; pillShadow: string; hoverWash: string;
+};
+
+const ALBUM_OVERVIEW_THEMES: Record<"light" | "dark", AlbumOverviewTheme> = {
+  light: {
+    blue: "#319ED8", ink: "#1d1d1f", subink: "rgba(0,0,0,0.62)", faint: "rgba(0,0,0,0.42)",
+    hairline: "#e6e6ea", card: "#ffffff", cardSoft: "#f5f5f7",
+    pillShadow: "0 1px 2px rgba(0,0,0,0.06)", hoverWash: "hover:bg-black/5",
+  },
+  dark: {
+    blue: "#319ED8", ink: "#f5f5f7", subink: "#98989d", faint: "#6e6e73",
+    hairline: "rgba(255,255,255,0.10)", card: "#1e1e20", cardSoft: "#26262a",
+    pillShadow: "0 1px 3px rgba(0,0,0,0.5)", hoverWash: "hover:bg-white/5",
+  },
+};
+
+function useAlbumOverviewTheme() {
+  const [dark, setDark] = useState(() => document.body.classList.contains("gt-admin-dark"));
+  useEffect(() => {
+    const sync = () => setDark(document.body.classList.contains("gt-admin-dark"));
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+  return ALBUM_OVERVIEW_THEMES[dark ? "dark" : "light"];
+}
+
+function OverviewSectionCard({ t, title, sub, onEdit, action, children, testid }: {
+  t: AlbumOverviewTheme; title: string; sub?: string; onEdit?: () => void;
+  action?: React.ReactNode; children: React.ReactNode; testid: string;
+}) {
   return (
-    <button
-      type="button"
-      onClick={() => mut.mutate()}
-      disabled={mut.isPending}
-      data-testid="button-refresh-streaming-links"
-      title={
-        hasApple
-          ? "Re-resolve Tidal/Deezer/Pandora (+ Spotify) links from Apple Music (fills blanks only)"
-          : "Resolve a Spotify link from artist + title (fills blank only; no Apple URL so Tidal/Deezer/Pandora stay on search)"
-      }
-      className="inline-flex items-center gap-1.5 rounded-full bg-[var(--apple-chip)] text-[var(--apple-subink)] hover:bg-[var(--apple-track)] px-3 h-7 text-xs font-semibold transition-colors disabled:opacity-50"
-    >
-      {mut.isPending ? (
-        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-      ) : (
-        <RotateCcw className="w-3.5 h-3.5" />
-      )}
-      Refresh links
+    <section className="group rounded-2xl" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }} data-testid={testid}>
+      <div className="flex items-start justify-between gap-4 px-7 pt-6 pb-1">
+        <h2 className="text-[21px] font-semibold tracking-tight leading-snug" style={{ color: t.ink, letterSpacing: "-0.02em" }}>
+          {title}.{" "}
+          {sub && <span className="font-medium" style={{ color: t.subink }}>{sub}.</span>}
+        </h2>
+        <div className="flex items-center gap-1 flex-shrink-0 pt-1">
+          {action}
+          {onEdit && (
+            <button type="button" onClick={onEdit} className={cn("w-8 h-8 rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100", t.hoverWash)} style={{ color: t.subink }} aria-label={`Edit ${title.toLowerCase()}`} data-testid={`button-edit-${testid}`}>
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="px-7 pb-7">{children}</div>
+    </section>
+  );
+}
+
+function OverviewField({ t, label, value, notSet }: { t: AlbumOverviewTheme; label: string; value?: string | null; notSet?: string }) {
+  return (
+    <div>
+      <div className="text-[13px]" style={{ color: t.faint }}>{label}</div>
+      {value ? <div className="mt-1 text-[15px] font-medium" style={{ color: t.ink }}>{value}</div>
+        : <div className="mt-1 text-[15px] italic" style={{ color: t.faint }}>{notSet ?? "Not set"}</div>}
+    </div>
+  );
+}
+
+function OverviewTextButton({ t, blue, children, testid, onClick, disabled }: {
+  t: AlbumOverviewTheme; blue?: boolean; children: React.ReactNode; testid: string;
+  onClick?: () => void; disabled?: boolean;
+}) {
+  return (
+    <button type="button" onClick={onClick} disabled={disabled} className="h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13.5px] font-medium transition-colors disabled:opacity-40" style={{ color: blue ? t.blue : t.subink, backgroundColor: "transparent" }} data-testid={testid}>
+      {children}
     </button>
   );
 }
 
-function OverviewPanel({ album }: { album: AlbumFull }) {
-  const invalidate: (readonly unknown[])[] = [
-    ["/api/albums", album.id],
-    ["/api/albums"],
-  ];
-  const endpoint = `/api/admin/albums/${album.id}`;
+function formatOverviewDate(value?: string | null) {
+  if (!value) return null;
+  const d = new Date(`${value}T12:00:00`);
+  return Number.isNaN(d.valueOf()) ? value : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+type OverviewSplitResponse = {
+  beneficiaries: Array<{ id: string | null; organizationId: string; perUnitCents: number; name: string }>;
+  locked: boolean;
+};
+
+function AlbumOverviewBody({ album, disabled, disabledReason, isPartnerViewer, overviewRole }: {
+  album: AlbumFull; disabled: boolean; disabledReason?: string; isPartnerViewer: boolean;
+  overviewRole?: { role: string };
+}) {
+  const t = useAlbumOverviewTheme();
   const qc = useQueryClient();
   const { toast } = useToast();
-  // Task #644 — when the server detects the album's primary artist is
-  // already signed to a different label than the one we just stamped on
-  // the album, it returns a structured `artistLabelConflict` payload on
-  // the album-PUT response. We surface a confirm dialog (mirrors the
-  // reassign dialog in AdminLabel) so the operator decides whether to
-  // move the artist over. Cancel leaves the artist on their old label;
-  // the album label change has already landed either way.
-  const [reassign, setReassign] = useState<ArtistLabelConflict | null>(null);
-  const reassignMut = useMutation({
-    mutationFn: async (c: ArtistLabelConflict) => {
-      await apiRequest("PUT", `/api/admin/people/${c.personId}`, {
-        labelId: c.toLabelId,
-      });
-    },
-    onSuccess: (_v, c) => {
-      qc.invalidateQueries({ queryKey: ["/api/people"] });
-      qc.invalidateQueries({ queryKey: ["/api/people", c.personId] });
-      qc.invalidateQueries({ queryKey: ["/api/labels"] });
-      toast({ title: `Moved ${c.personName} to ${c.toLabelName}` });
-      setReassign(null);
-    },
-    onError: (e: any) => {
-      toast({
-        title: "Couldn't reassign artist",
-        description: e?.message || "Try again in a moment.",
-        variant: "destructive",
-      });
-    },
+  const [blockersOpen, setBlockersOpen] = useState(true);
+  const [linkTab, setLinkTab] = useState<"Release" | "Pre-save">("Release");
+  const [openService, setOpenService] = useState<string | null>(null);
+  const [serviceDraft, setServiceDraft] = useState("");
+  const [recordEdit, setRecordEdit] = useState(false);
+  const [findEdit, setFindEdit] = useState(false);
+  const [marketingEdit, setMarketingEdit] = useState(false);
+  const [givingEdit, setGivingEdit] = useState(false);
+  const [recordReassign, setRecordReassign] = useState<ArtistLabelConflict | null>(null);
+  const emailPanelRef = useRef<HTMLDivElement>(null);
+
+  const { data: personData } = useQuery<{ artistShareSlug?: string | null }>({
+    queryKey: ["/api/people", album.primaryArtistId],
+    enabled: !!album.primaryArtistId,
   });
-  const { data: labels = [] } = useQuery<LabelLite[]>({
+  const { data: invitedPress } = useQuery<{
+    press: { name: string | null } | null;
+    effectivePress?: { name: string } | null;
+    effectivePressSource?: string | null;
+  }>({ queryKey: ["/api/admin/albums", album.id, "invited-press"] });
+  const { data: overviewLabels = [] } = useQuery<LabelLite[]>({
     queryKey: ["/api/labels"],
   });
+  const { data: validations = [] } = useQuery<UploadValidationResult[]>({
+    queryKey: ["/api/admin/albums", album.id, "upload-validations"],
+  });
+  const { data: lineup = [] } = useQuery<LineupRow[]>({
+    queryKey: ["/api/admin/albums", album.id, "lineup"],
+  });
+  const { data: gallery = [] } = useQuery<CampaignGalleryItem[]>({
+    queryKey: ["/api/albums", album.id, "gallery"],
+  });
+  const { data: npoSplit } = useQuery<OverviewSplitResponse>({
+    queryKey: ["/api/admin/albums", album.id, "npo-beneficiaries"],
+  });
+
+  if (isPartnerViewer) {
+    return (
+      <div className="space-y-5">
+        <MyChangeRequestsPanel albumId={album.id} />
+        <ShareLinkPanel album={album} disabled={disabled} disabledReason={disabledReason} />
+        <AccessWithoutPurchaseSection albumId={album.id} previewLinksOnly />
+      </div>
+    );
+  }
+
+  const artistSlug = personData?.artistShareSlug ?? "";
+  const albumSlug = album.shareSlug ?? "";
+  const shareUrl = artistSlug && albumSlug ? shareUrlForSlugs(artistSlug, albumSlug) : null;
+  const pressName = invitedPress?.press?.name ??
+    (invitedPress?.effectivePressSource === "platform_default" ? null : invitedPress?.effectivePress?.name) ?? null;
+  const lifecycle = album.isHidden ? "Sunset"
+    : !album.isGoodTunesRelease || album.isPrepping
+      ? album.isPrepping && album.submittedToPressAt ? "Submitted to press" : "Prepping"
+      : album.submittedToPressAt ? "At press" : "Released";
+  const blockers = validations
+    .filter((row) => row.kind === "art" && !row.override)
+    .flatMap((row) => row.checks
+      .filter((check) => check.status === "fail" || check.status === "warn" || check.status === "unverified")
+      .map((check) => ({ piece: row.fileName || check.label, issue: check.message })));
+  const services = [
+    { name: "Apple Music", key: "appleMusicUrl", url: album.appleMusicUrl, logo: logoAppleMusic },
+    { name: "Spotify", key: "spotifyUrl", url: album.spotifyUrl, logo: logoSpotify },
+    { name: "Tidal", key: "tidalUrl", url: album.tidalUrl, logo: logoTidal },
+    { name: "Deezer", key: "deezerUrl", url: album.deezerUrl, logo: logoDeezer },
+    { name: "Pandora", key: "pandoraUrl", url: album.pandoraUrl, logo: logoPandora },
+    { name: "Qobuz", key: "qobuzUrl", url: album.qobuzUrl, logo: logoQobuz },
+  ] as const;
+  const selectedService = services.find((s) => s.name === openService);
+  const validServiceDraft = (() => { try { return /^https?:$/.test(new URL(serviceDraft).protocol); } catch { return false; } })();
+  const saveService = async (key: string, value: string | null) => {
+    try {
+      await apiRequest("PUT", `/api/admin/albums/${album.id}`, { [key]: value });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["/api/albums", album.id] }),
+        qc.invalidateQueries({ queryKey: ["/api/albums"] }),
+      ]);
+      setServiceDraft("");
+      toast({ title: value ? "Streaming link saved" : "Streaming link removed" });
+    } catch (e: any) {
+      toast({ title: "Couldn't save streaming link", description: e?.message, variant: "destructive" });
+    }
+  };
+  const recordReassignMut = useMutation({
+    mutationFn: async (conflict: ArtistLabelConflict) => {
+      await apiRequest("PUT", `/api/admin/people/${conflict.personId}`, { labelId: conflict.toLabelId });
+    },
+    onSuccess: (_value, conflict) => {
+      qc.invalidateQueries({ queryKey: ["/api/people", conflict.personId] });
+      qc.invalidateQueries({ queryKey: ["/api/labels"] });
+      setRecordReassign(null);
+      toast({ title: `Moved ${conflict.personName} to ${conflict.toLabelName}` });
+    },
+    onError: (e: any) => toast({ title: "Couldn't reassign artist", description: e?.message, variant: "destructive" }),
+  });
+  const openUrl = (url: string) => window.open(url, "_blank", "noopener,noreferrer");
+  const copyUrl = async (url: string) => {
+    await navigator.clipboard.writeText(url);
+    toast({ title: "Link copied" });
+  };
+  const editInvalidate: (readonly unknown[])[] = [["/api/albums", album.id], ["/api/albums"]];
+  const endpoint = `/api/admin/albums/${album.id}`;
+  const appearance = album.emailAppearance ?? {};
+  const heroSlots = [
+    { label: "Default graphic", sub: appearance.heroDefaultUrl ? "Custom graphic" : album.artwork ? "Cover art (auto)" : "No graphic yet", url: appearance.heroDefaultUrl || album.artwork },
+    { label: "Vinyl orders", sub: appearance.heroByFormat?.vinyl ? "Custom graphic" : "No graphic yet", url: appearance.heroByFormat?.vinyl },
+    { label: "CD orders", sub: appearance.heroByFormat?.cd ? "Custom graphic" : "No graphic yet", url: appearance.heroByFormat?.cd },
+    { label: "Cassette orders", sub: appearance.heroByFormat?.cassette ? "Custom graphic" : "No graphic yet", url: appearance.heroByFormat?.cassette },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <MyChangeRequestsPanel albumId={album.id} />
+      <div className="rounded-2xl" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }} data-testid="strip-at-a-glance">
+        <div className="px-7 py-5 flex flex-wrap items-center gap-x-10 gap-y-4">
+          <div>
+            <div className="text-[13px]" style={{ color: t.faint }}>Status</div>
+            <div className="mt-1 inline-flex items-center gap-1.5 text-[15px] font-medium" style={{ color: t.ink }}>
+              <Factory className="w-3.5 h-3.5" style={{ color: t.subink }} /> {lifecycle}
+            </div>
+          </div>
+          <OverviewField t={t} label="Release date" value={formatOverviewDate(album.goodTunesReleaseDate)} />
+          <OverviewField t={t} label="Press" value={pressName} />
+          <div className="min-w-0">
+            <div className="text-[13px]" style={{ color: t.faint }}>Share link</div>
+            <div className="mt-1 inline-flex items-center gap-1.5 text-[15px] font-medium" style={{ color: t.ink }}>
+              {shareUrl ? <CheckCircle2 className="w-3.5 h-3.5" style={{ color: t.subink }} /> : <CircleDashed className="w-3.5 h-3.5" style={{ color: t.faint }} />}
+              {shareUrl ? "Live" : "Not set"}
+              {shareUrl && <span className="truncate font-normal" style={{ color: t.subink }}>· {shareUrl.replace(/^https?:\/\//, "")}</span>}
+            </div>
+          </div>
+          <div className="ml-auto">
+            <div className="text-[13px]" style={{ color: t.faint }}>Needs attention</div>
+            <button type="button" onClick={() => setBlockersOpen((v) => !v)} aria-expanded={blockersOpen} className="mt-1 inline-flex items-center gap-1.5 text-[15px] font-medium" style={{ color: t.ink }} data-testid="button-needs-attention">
+              <AlertTriangle className="w-3.5 h-3.5" style={{ color: t.subink }} />
+              {blockers.length} art {blockers.length === 1 ? "blocker" : "blockers"}
+              <ChevronDown className="w-3.5 h-3.5 transition-transform" style={{ color: t.faint, transform: blockersOpen ? "rotate(180deg)" : "none" }} />
+            </button>
+          </div>
+        </div>
+        {blockersOpen && blockers.length > 0 && (
+          <div className="px-7 pb-5 space-y-2.5" style={{ borderTop: `1px solid ${t.hairline}` }} data-testid="panel-art-blockers">
+            {blockers.map((b, i) => (
+              <div key={`${b.piece}-${i}`} className="pt-4 first:pt-5 flex items-center gap-3">
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} />
+                <div className="flex-1 min-w-0 text-[14px]"><span className="font-medium" style={{ color: t.ink }}>{b.piece}</span><span className="mx-1.5">·</span><span style={{ color: t.subink }}>{b.issue}</span></div>
+                <button type="button" onClick={() => { window.location.href = `${window.location.pathname}?tab=press&ptab=art`; }} className="text-[13px] font-medium flex-shrink-0" style={{ color: t.blue }}>Fix on Physical →</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <OverviewSectionCard t={t} title="The record" sub="What this album is — identity, dates, and who played on it" onEdit={() => setRecordEdit((v) => !v)} testid="section-record">
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4">
+          <OverviewField t={t} label="Title" value={album.title} />
+          <OverviewField t={t} label="Artist" value={album.artist} />
+          <OverviewField t={t} label="Type" value={album.type === "LP" ? "LP (8+ tracks)" : album.type === "EP" ? "EP (3–7 tracks)" : album.type} />
+          <OverviewField t={t} label="Year" value={album.year ? String(album.year) : null} />
+          <OverviewField t={t} label="Genre" value={album.genre} />
+          <OverviewField t={t} label="Label" value={album.label?.name ?? "Independent"} />
+          <OverviewField t={t} label="Copyright" value={album.copyrightLine ? `${album.copyrightSymbol ?? "℗"} ${album.copyrightLine}` : null} />
+          <OverviewField t={t} label="Catalog number" value={album.catalogNumber} />
+          <OverviewField t={t} label="UPC code" value={album.upc} />
+          <OverviewField t={t} label="Bundle price (USD)" value={album.priceCents == null ? null : `$${(album.priceCents / 100).toFixed(2)}`} />
+        </div>
+        <div className="mt-5 pt-4 grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-4" style={{ borderTop: `1px solid ${t.hairline}` }}>
+          <OverviewField t={t} label="GoodTunes release" value={formatOverviewDate(album.goodTunesReleaseDate)} />
+          <OverviewField t={t} label="Original release" value={formatOverviewDate(album.originalReleaseDate)} />
+          <OverviewField t={t} label="Streaming release" value={formatOverviewDate(album.streamingAvailableDate)} />
+          <OverviewField t={t} label="Pre-save date" value={formatOverviewDate(album.preSaveDate)} />
+        </div>
+        <div className="mt-5 pt-4 flex items-center justify-between gap-4" style={{ borderTop: `1px solid ${t.hairline}` }}>
+          <div className="text-[14px]" style={{ color: t.subink }}><span className="font-medium" style={{ color: t.ink }}>Lineup</span><span className="mx-1.5">·</span>{lineup.length ? lineup.map((m) => m.memberName).join(", ") : "No one credited yet — add a member and per-track credits roll up here"}</div>
+          <OverviewTextButton t={t} testid="button-add-member" onClick={() => setRecordEdit(true)}><Plus className="w-3.5 h-3.5" /> Add member</OverviewTextButton>
+        </div>
+        {recordEdit && (
+          <div className="mt-5 space-y-4">
+            <EditablePanel title="Release" testId="panel-overview-release" endpoint={endpoint} columns={2} disabled={disabled} disabledReason={disabledReason} values={{ goodTunesReleaseDate: album.goodTunesReleaseDate, streamingReleaseDate: album.streamingReleaseDate, originalReleaseDate: album.originalReleaseDate, preSaveDate: album.preSaveDate, streamingAvailableDate: album.streamingAvailableDate }} invalidate={editInvalidate} fields={[
+              { key: "goodTunesReleaseDate", label: "GoodTunes release date", type: "date" },
+              { key: "streamingReleaseDate", label: "Sunset date", type: "date" },
+              { key: "originalReleaseDate", label: "Original release date", type: "date" },
+              { key: "preSaveDate", label: "Pre-save date", type: "date" },
+              { key: "streamingAvailableDate", label: "Streaming release date", type: "date" },
+            ]} />
+            <EditablePanel title="Metadata" testId="panel-overview-metadata" endpoint={endpoint} columns={4} disabled={disabled} disabledReason={disabledReason} values={{ title: album.title, artist: album.artist, primaryArtistId: album.primaryArtistId ?? "", type: album.type, year: album.year ? String(album.year) : "", genre: album.genre, labelId: album.labelId ?? "", copyrightSymbol: album.copyrightSymbol ?? "℗", copyrightLine: album.copyrightLine, description: album.description, priceCents: album.priceCents == null ? "" : (album.priceCents / 100).toFixed(2), catalogNumber: album.catalogNumber, upc: album.upc }} invalidate={editInvalidate} fields={[
+              { key: "title", label: "Title", type: "text", required: true },
+              { key: "artist", label: "Artist", type: "artist-picker", required: true, idKey: "primaryArtistId" },
+              { key: "type", label: "Type", type: "select", options: [{ value: "LP", label: "LP (8+ tracks)" }, { value: "EP", label: "EP (3–7 tracks)" }, { value: "Duo", label: "Duo (2 tracks)" }, ...(album.type === "Single" ? [{ value: "Single", label: "Single (legacy)" }] : [])] },
+              { key: "year", label: "Year", type: "number" },
+              { key: "genre", label: "Genre", type: "text" },
+              { key: "labelId", label: "Label", type: "entity-combobox", options: [{ value: "", label: "Independent" }, ...overviewLabels.map((label) => ({ value: label.id, label: label.name }))], entityListEndpoint: "/api/labels", entityCreateEndpoint: "/api/admin/labels", emptyOptionLabel: "Independent" },
+              { key: "copyrightSymbol", label: "Copyright symbol", type: "select", options: [{ value: "℗", label: "℗ (sound recording)" }, { value: "©", label: "© (copyright)" }] },
+              { key: "copyrightLine", label: "Copyright line", type: "text" },
+              { key: "description", label: "Description", type: "textarea" },
+              { key: "priceCents", label: "Bundle Price (USD)", type: "currency" },
+              { key: "catalogNumber", label: "Catalog Number", type: "text" },
+              { key: "upc", label: "UPC Code", type: "text" },
+            ]} onSaved={(response) => {
+              const conflict = response?.artistLabelConflict as ArtistLabelConflict | undefined;
+              if (conflict) setRecordReassign(conflict);
+            }} />
+            {album.primaryArtistId && <AlbumLineupPanel album={album} disabled={disabled} disabledReason={disabledReason} />}
+          </div>
+        )}
+      </OverviewSectionCard>
+
+      <OverviewSectionCard t={t} title="Where fans find it" sub="The share link fans land on, and the streaming services this album links out to" onEdit={() => setFindEdit((v) => !v)} testid="section-find">
+        <div className="mt-3">
+          <span className="inline-flex rounded-full p-0.5" style={{ backgroundColor: t.cardSoft, border: `1px solid ${t.hairline}` }} role="group" aria-label="Link">
+            {(["Release", "Pre-save"] as const).map((v) => <button key={v} type="button" onClick={() => setLinkTab(v)} className="h-7 px-3.5 rounded-full text-[13px] font-medium transition-colors" style={{ backgroundColor: linkTab === v ? t.card : "transparent", color: linkTab === v ? t.ink : t.subink, boxShadow: linkTab === v ? t.pillShadow : undefined }} data-testid={`link-tab-${v.toLowerCase()}`}>{v}</button>)}
+          </span>
+        </div>
+        {linkTab === "Release" ? (shareUrl ? (
+          <>
+            <div className="mt-5 flex items-center gap-3.5 h-14 px-4 rounded-xl" style={{ border: `1px solid ${t.hairline}`, backgroundColor: t.cardSoft }} data-testid="tile-goodtunes-link">
+              <span className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center bg-white" style={{ border: `1px solid ${t.hairline}` }}><img src="/goodtunes-logo-color.png" alt="" className="w-5 h-5 object-contain" /></span>
+              <span className="text-[14px] font-medium truncate" style={{ color: t.ink }}>{shareUrl.replace(/^https?:\/\//, "")}</span>
+              <span className="inline-flex items-center gap-1.5 text-[13.5px] flex-shrink-0" style={{ color: t.subink }}><CheckCircle2 className="w-3.5 h-3.5" /> Live</span><span className="flex-1" />
+              <OverviewTextButton t={t} blue testid="button-open-share" onClick={() => openUrl(shareUrl)}><ExternalLink className="w-3.5 h-3.5" /> Open</OverviewTextButton>
+              <OverviewTextButton t={t} testid="button-copy-share" onClick={() => copyUrl(shareUrl)}><Copy className="w-3.5 h-3.5" /> Copy</OverviewTextButton>
+            </div>
+            <p className="mt-2.5 text-[13px]" style={{ color: t.faint }}>Live — fans can preview and buy. The artist part is shared across all of {album.artist}'s releases.</p>
+          </>
+        ) : <div className="mt-5 text-[14px] italic" style={{ color: t.faint }}>Not set — add the artist and album URLs to publish this link</div>
+        ) : album.preSaveDate && shareUrl ? (
+          <div className="mt-5 flex items-center gap-3.5 h-14 px-4 rounded-xl" style={{ border: `1px solid ${t.hairline}`, backgroundColor: t.cardSoft }}>
+            <span className="text-[14px] font-medium truncate" style={{ color: t.ink }}>{shareUrl}</span><span className="flex-1" />
+            <OverviewTextButton t={t} blue testid="button-open-presave" onClick={() => openUrl(shareUrl)}><ExternalLink className="w-3.5 h-3.5" /> Open</OverviewTextButton>
+            <OverviewTextButton t={t} testid="button-copy-presave" onClick={() => copyUrl(shareUrl)}><Copy className="w-3.5 h-3.5" /> Copy</OverviewTextButton>
+          </div>
+        ) : <div className="mt-5 flex items-center gap-3 text-[14px]"><CircleDashed className="w-3.5 h-3.5" style={{ color: t.faint }} /><span className="italic" style={{ color: t.faint }}>Not set — created when you schedule a pre-save date, and shared separately before release day</span></div>}
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          {services.map((s) => <button type="button" key={s.name} onClick={() => { setOpenService((v) => v === s.name ? null : s.name); setServiceDraft(""); }} className="flex items-center gap-2.5 h-12 px-3.5 rounded-lg text-left" style={{ border: `1px solid ${openService === s.name ? t.subink : t.hairline}`, backgroundColor: s.url ? t.cardSoft : "transparent" }} data-testid={`streaming-${s.name.toLowerCase().replace(/\s+/g, "-")}`}>
+            <span className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center bg-white" style={{ border: `1px solid ${t.hairline}`, opacity: s.url ? 1 : 0.45 }}><img src={s.logo} alt="" className="w-[18px] h-[18px] object-contain" /></span>
+            <span className="text-[14px] font-medium flex-1 truncate" style={{ color: s.url ? t.ink : t.subink }}>{s.name}</span>
+            <span className="inline-flex items-center gap-1 text-[13px]" style={{ color: s.url ? t.subink : t.faint }}>{s.url ? <CheckCircle2 className="w-3.5 h-3.5" /> : <CircleDashed className="w-3.5 h-3.5" />}{s.url ? "Linked" : "Not set"}</span>
+          </button>)}
+        </div>
+        {selectedService && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg px-4 py-3" style={{ border: `1px solid ${t.hairline}` }} data-testid="panel-service-link">
+          {selectedService.url ? <><span className="text-[13.5px] truncate" style={{ color: t.ink }}>{selectedService.url}</span><span className="flex-1" /><OverviewTextButton t={t} blue testid="button-open-service" onClick={() => openUrl(selectedService.url!)}><ExternalLink className="w-3.5 h-3.5" /> Open</OverviewTextButton><OverviewTextButton t={t} testid="button-copy-service" onClick={() => copyUrl(selectedService.url!)}><Copy className="w-3.5 h-3.5" /> Copy</OverviewTextButton><OverviewTextButton t={t} testid="button-remove-service" onClick={() => saveService(selectedService.key, null)}>Remove</OverviewTextButton></>
+            : <><input value={serviceDraft} onChange={(e) => setServiceDraft(e.target.value)} placeholder={`Paste the ${selectedService.name} album link`} className="flex-1 min-w-[220px] h-9 px-3.5 rounded-full text-[13.5px] focus:outline-none" style={{ border: `1px solid ${t.hairline}`, color: t.ink, backgroundColor: "transparent" }} /><button type="button" disabled={!validServiceDraft} onClick={() => saveService(selectedService.key, serviceDraft.trim())} className="h-9 px-4 rounded-full text-[13.5px] font-medium disabled:opacity-60" style={{ border: `1px solid ${validServiceDraft ? t.blue : t.hairline}`, color: validServiceDraft ? "#fff" : t.subink, backgroundColor: validServiceDraft ? t.blue : "transparent" }} data-testid="button-save-service">Save</button></>}
+        </div>}
+        {findEdit && <div className="mt-4"><ShareLinkPanel album={album} disabled={disabled} disabledReason={disabledReason} /></div>}
+      </OverviewSectionCard>
+
+      <OverviewSectionCard t={t} title="Marketing" sub="How this album looks in fans' inboxes and on the campaign page" onEdit={() => setMarketingEdit((v) => !v)} action={<OverviewTextButton t={t} testid="button-preview-email" onClick={() => emailPanelRef.current?.querySelector<HTMLButtonElement>('[data-testid="button-email-preview"]')?.click()}><Mail className="w-3.5 h-3.5" /> Preview email</OverviewTextButton>} testid="section-marketing">
+        <div className="mt-3 flex items-center gap-3"><span className="text-[13px]" style={{ color: t.subink }}>"Get my music" button</span><span className="inline-flex items-center gap-2 h-8 px-3 rounded-full text-[12.5px] font-medium" style={{ border: `1px solid ${t.hairline}`, color: t.ink }}><span className="w-4 h-4 rounded-full" style={{ backgroundColor: appearance.buttonColor ?? "#1D5E8F" }} />{appearance.buttonColor ? "Custom color" : "GoodTunes blue"}</span></div>
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">{heroSlots.map((g) => <div key={g.label}><div className="aspect-square rounded-lg overflow-hidden flex items-center justify-center" style={{ border: `1px solid ${t.hairline}`, backgroundColor: t.cardSoft }}>{g.url ? <img src={g.url} alt="" className="w-full h-full object-cover" /> : <ImagePlus className="w-5 h-5" style={{ color: t.faint }} />}</div><div className="mt-1.5 text-[12.5px] font-medium" style={{ color: t.ink }}>{g.label}</div><div className="text-[12px]" style={{ color: g.url ? t.subink : t.faint }}>{g.sub}</div></div>)}</div>
+        <div className="mt-4 flex items-center justify-between gap-4 pt-4" style={{ borderTop: `1px solid ${t.hairline}` }}><div className="text-[14px]" style={{ color: t.subink }}><span className="font-medium" style={{ color: t.ink }}>Campaign gallery</span><span className="mx-1.5">·</span>{gallery.length ? `${gallery.length} ${gallery.length === 1 ? "image" : "images"}` : "No images yet — the built-in gallery shows until you add one"}</div><OverviewTextButton t={t} testid="button-add-gallery-image-overview" onClick={() => setMarketingEdit(true)}><ImagePlus className="w-3.5 h-3.5" /> Add image</OverviewTextButton></div>
+        <div ref={emailPanelRef} className={marketingEdit ? "mt-5" : "hidden"}><AlbumEmailAppearancePanel albumId={album.id} artworkUrl={album.artwork || null} emailAppearance={album.emailAppearance ?? null} disabled={disabled} disabledReason={disabledReason} /></div>
+        {marketingEdit && <div className="mt-4"><CampaignGalleryPanel albumId={album.id} /></div>}
+      </OverviewSectionCard>
+
+      <OverviewSectionCard t={t} title="GoodDeed® & giving" sub="Non-profit shares per unit, funded from the GoodTunes margin — album price is unchanged" onEdit={() => setGivingEdit((v) => !v)} testid="section-giving">
+        <div className="mt-3 space-y-2">{(npoSplit?.beneficiaries ?? []).length ? npoSplit!.beneficiaries.map((n) => <div key={`${n.organizationId}-${n.id}`} className="flex items-center gap-3 h-12 px-4 rounded-lg" style={{ border: `1px solid ${t.hairline}`, backgroundColor: t.cardSoft }}><HeartHandshake className="w-4 h-4" style={{ color: t.subink }} /><span className="text-[13.5px] font-medium flex-1 truncate" style={{ color: t.ink }}>{n.name}</span><span className="text-[13.5px] font-medium tabular-nums" style={{ color: t.ink }}>${(n.perUnitCents / 100).toFixed(2)} / unit</span></div>) : <div className="text-[14px] italic" style={{ color: t.faint }}>No non-profit shares yet</div>}</div>
+        <div className="mt-2.5 flex items-center justify-between gap-4"><span className="inline-flex items-center gap-1.5 text-[13.5px]" style={{ color: t.subink }}>{npoSplit?.locked && <><Lock className="w-3.5 h-3.5" />Locked — this album has sold. You can add new NPOs or raise shares, but can't reduce or remove one.</>}</span><OverviewTextButton t={t} testid="button-add-npo-overview" onClick={() => setGivingEdit(true)}><Plus className="w-3.5 h-3.5" /> Add NPO</OverviewTextButton></div>
+        {givingEdit && <div className="mt-5"><AlbumNpoSplitPanel albumId={album.id} /></div>}
+      </OverviewSectionCard>
+
+      {overviewRole?.role === "super_admin" && !!(album as any).legacyGogoodsId && (
+        <details className="rounded-xl px-4 py-3" style={{ border: `1px solid ${t.hairline}`, color: t.subink }}>
+          <summary className="cursor-pointer text-[13px] font-medium">Legacy settings</summary>
+          <div className="mt-3"><SpinPromoPanel album={album} disabled={disabled} disabledReason={disabledReason} /></div>
+        </details>
+      )}
+      <Dialog open={!!recordReassign} onOpenChange={(open) => !open && !recordReassignMut.isPending && setRecordReassign(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reassign {recordReassign?.personName}?</DialogTitle>
+            <DialogDescription>
+              They're currently signed to {recordReassign?.fromLabelName}. Continuing will move them to {recordReassign?.toLabelName}. The album's label change has already been saved.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecordReassign(null)} disabled={recordReassignMut.isPending}>Keep current label</Button>
+            <Button onClick={() => recordReassign && recordReassignMut.mutate(recordReassign)} disabled={recordReassignMut.isPending}>Move to {recordReassign?.toLabelName}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <p className="text-[13px] pb-6" style={{ color: t.faint }}>Split shipments now lives on Physical → Fulfillment, with the destination it configures.</p>
+    </div>
+  );
+}
+
+function OverviewPanel({ album }: { album: AlbumFull }) {
   // Task #2524 — partner viewers (artist/label) never get the operator
   // Customers tab (it exposes the comped/free fan roster), so the place they
   // manage + revoke their OWN reviewer/preview links is here on Overview.
@@ -4781,12 +5043,6 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
     !!overviewRole?.role &&
     overviewRole.role !== "super_admin" &&
     overviewRole.role !== "admin";
-  // Task #1918 — fulfillment partners for the per-album routing override.
-  const { data: fulfillmentPartners = [] } = useQuery<
-    { id: string; name: string; isDefault?: boolean }[]
-  >({
-    queryKey: ["/api/fulfillment-partners"],
-  });
   // Task #79 — surface per-field read-only state when the session can't
   // edit. Same query key as AlbumEditAccessChip so this is a cache hit.
   const { data: editAccess } = useQuery<{
@@ -4817,406 +5073,14 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
         : editAccess.missingPermissions.includes("out_of_scope")
           ? "This album isn't managed by your team"
           : undefined;
-  // Build the dropdown options. Most-used label names first would be
-  // nicer but the list is short — alphabetical is fine.
-  const labelOptions = [
-    { value: "", label: "Independent" },
-    ...[...labels]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((l) => ({ value: l.id, label: l.name })),
-  ];
-  // Task #1918 — per-album fulfillment routing override options. The empty
-  // row falls back to the platform default partner; we tag which partner that
-  // is so the operator knows what "Platform default" actually means today.
-  const defaultPartner = fulfillmentPartners.find((p) => p.isDefault);
-  const fulfillmentOptions = [
-    {
-      value: "",
-      label: defaultPartner
-        ? `Platform default (${defaultPartner.name})`
-        : "Platform default",
-    },
-    ...[...fulfillmentPartners]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((p) => ({ value: p.id, label: p.name })),
-  ];
   return (
-    <div className="space-y-5">
-      <MyChangeRequestsPanel albumId={album.id} />
-      <EditablePanel
-        title="Release"
-        testId="panel-overview-release"
-        endpoint={endpoint}
-        columns={2}
-        disabled={disabled}
-        disabledReason={disabledReason}
-        values={{
-          goodTunesReleaseDate: album.goodTunesReleaseDate,
-          streamingReleaseDate: album.streamingReleaseDate,
-          originalReleaseDate: album.originalReleaseDate,
-          preSaveDate: album.preSaveDate,
-          streamingAvailableDate: album.streamingAvailableDate,
-        }}
-        invalidate={invalidate}
-        fields={[
-          {
-            key: "goodTunesReleaseDate",
-            label: "GoodTunes release date",
-            type: "date",
-          },
-          // Task #1112 — the Sunset date (end of the GoodTunes exclusive
-          // window) lives next to the GoodTunes release date (its sunrise)
-          // so the start and end of the window sit together. Still stored on
-          // the legacy `streamingReleaseDate` column and saved through the
-          // same endpoint/gate/normalization as before — placement only.
-          {
-            key: "streamingReleaseDate",
-            label: "Sunset date",
-            type: "date",
-            placeholder: "When this leaves GoodTunes for streaming",
-          },
-          {
-            key: "originalReleaseDate",
-            label: "Original release date",
-            type: "date",
-            placeholder: "First-ever release of this record",
-          },
-          // Task #2721 — two streaming-lifecycle dates gating the one-time
-          // fan pre-save / now-streaming cards. Stored on their own new
-          // columns (pre_save_date / streaming_available_date) — NOT the
-          // legacy streamingReleaseDate column, which is the Sunset date.
-          {
-            key: "preSaveDate",
-            label: "Pre-save date",
-            type: "date",
-            placeholder: "When fans may be nudged to pre-save",
-          },
-          {
-            key: "streamingAvailableDate",
-            label: "Streaming release date",
-            type: "date",
-            placeholder: "Day the album is live on streaming",
-          },
-        ]}
-      />
-      {/* Task #1049 — "Streaming" is its own panel. The six service URLs feed
-          the fan-facing "Listen on…" links; Refresh auto-fills them. Task
-          #1112 moved the Sunset date (the day the release leaves its GoodTunes
-          exclusive window) up into the Release panel so it sits next to the
-          GoodTunes release date (its sunrise). */}
-      <EditablePanel
-        title="Streaming"
-        testId="panel-overview-streaming"
-        endpoint={endpoint}
-        columns={4}
-        disabled={disabled}
-        disabledReason={disabledReason}
-        headerAction={<RefreshStreamingLinksButton album={album} />}
-        values={{
-          appleMusicUrl: album.appleMusicUrl,
-          spotifyUrl: album.spotifyUrl,
-          tidalUrl: album.tidalUrl,
-          qobuzUrl: album.qobuzUrl,
-          deezerUrl: album.deezerUrl,
-          pandoraUrl: album.pandoraUrl,
-        }}
-        invalidate={invalidate}
-        fields={[
-          {
-            key: "appleMusicUrl",
-            label: "Apple Music",
-            type: "url",
-            placeholder: "https://music.apple.com/…",
-          },
-          {
-            key: "spotifyUrl",
-            label: "Spotify",
-            type: "url",
-            placeholder: "https://open.spotify.com/album/…",
-          },
-          {
-            key: "tidalUrl",
-            label: "Tidal",
-            type: "url",
-            placeholder: "https://tidal.com/browse/album/…",
-          },
-          {
-            key: "qobuzUrl",
-            label: "Qobuz",
-            type: "url",
-            placeholder: "https://open.qobuz.com/album/…",
-          },
-          {
-            key: "deezerUrl",
-            label: "Deezer",
-            type: "url",
-            placeholder: "https://www.deezer.com/album/…",
-          },
-          {
-            key: "pandoraUrl",
-            label: "Pandora",
-            type: "url",
-            placeholder: "https://www.pandora.com/artist/…/album/…",
-          },
-        ]}
-      />
-      {/* Artwork editor is no longer a dedicated panel here — it lives
-          as a modal hanging off the page-header cover thumbnail (hover
-          → pencil). Killed the inline card so Overview is just the
-          text-editing surfaces (Release + Metadata + Description). */}
-      <EditablePanel
-        title="Metadata"
-        testId="panel-overview-metadata"
-        endpoint={endpoint}
-        columns={4}
-        disabled={disabled}
-        disabledReason={disabledReason}
-        values={{
-          title: album.title,
-          artist: album.artist,
-          primaryArtistId: album.primaryArtistId ?? "",
-          type: album.type,
-          year: album.year ? String(album.year) : "",
-          genre: album.genre,
-          labelId: album.labelId ?? "",
-          copyrightLine: album.copyrightLine,
-          // Task #1158 — default the picker to ℗ for albums with no explicit
-          // choice. EditablePanel only sends dirty fields, so this default is
-          // never stamped onto a null row by an unrelated save.
-          copyrightSymbol: album.copyrightSymbol ?? "℗",
-          description: album.description,
-          // Stored in cents on the wire, edited as dollars (e.g. "19.99")
-          // in the admin form — dollars-to-cents normalization happens in
-          // EditablePanel's onSave below.
-          priceCents:
-            album.priceCents == null ? "" : (album.priceCents / 100).toFixed(2),
-          // Task #3178 — Catalog Number and UPC.
-          catalogNumber: album.catalogNumber,
-          upc: album.upc,
-        }}
-        invalidate={invalidate}
-        fields={[
-          { key: "title", label: "Title", type: "text", required: true },
-          {
-            key: "artist",
-            label: "Artist",
-            type: "artist-picker",
-            required: true,
-            idKey: "primaryArtistId",
-          },
-          {
-            key: "type",
-            label: "Type",
-            type: "select",
-            required: true,
-            // "Single" stays in the option list only when the album already
-            // is one — that way streaming-imported 1-track rows don't lose
-            // their type label when the operator opens the editor, but the
-            // GoodTunes picker for new/curated releases is the three-way
-            // LP / EP / Duo set (no Single — minimum sold is two tracks).
-            options: [
-              { value: "LP", label: "LP (8+ tracks)" },
-              { value: "EP", label: "EP (3–7 tracks)" },
-              { value: "Duo", label: "Duo (2 tracks)" },
-              ...(album.type === "Single"
-                ? [{ value: "Single", label: "Single (legacy)" }]
-                : []),
-            ],
-          },
-          {
-            key: "year",
-            label: "Year",
-            type: "number",
-            placeholder: "2025",
-          },
-          {
-            key: "genre",
-            label: "Genre",
-            type: "combobox",
-            placeholder: "Search or add new…",
-            optionsEndpoint: "/api/admin/albums/genres",
-          },
-          {
-            key: "labelId",
-            label: "Label",
-            type: "entity-combobox",
-            placeholder: "Search labels or add new…",
-            // `options` drives the read-mode id→name lookup (incl. the
-            // empty "Independent" row); the live picker fetches its own
-            // list + create from these endpoints.
-            options: labelOptions,
-            entityListEndpoint: "/api/labels",
-            entityCreateEndpoint: "/api/admin/labels",
-            emptyOptionLabel: "Independent",
-            // Smart copyright: when a label is picked/created and the
-            // Copyright line is still blank, seed it "{year} {label}".
-            autofillKey: "copyrightLine",
-            autofillSiblingKey: "year",
-          },
-          {
-            key: "copyrightSymbol",
-            label: "Copyright symbol",
-            type: "select",
-            options: [
-              { value: "℗", label: "℗ (sound recording)" },
-              { value: "©", label: "© (copyright)" },
-            ],
-          },
-          {
-            key: "copyrightLine",
-            label: "Copyright line",
-            type: "text",
-            placeholder: "2009 Brash Music",
-          },
-          {
-            key: "description",
-            label: "Description",
-            type: "textarea",
-            placeholder: "Liner-notes-style blurb shown on the album page.",
-          },
-          {
-            key: "priceCents",
-            label: "Bundle Price (USD)",
-            type: "currency",
-            placeholder: "19.99",
-          },
-          // Task #3178 — Catalog Number (required for pressing) + UPC (optional).
-          {
-            key: "catalogNumber",
-            label: "Catalog Number",
-            type: "text",
-            placeholder: "GT-001",
-          },
-          {
-            key: "upc",
-            label: "UPC Code",
-            type: "text",
-            placeholder: "012345678901",
-          },
-        ]}
-        onSaved={(resp) => {
-          // Task #644 — server tells us when the album's primary artist
-          // is on a different label and asks us to confirm the move.
-          const c = resp?.artistLabelConflict as ArtistLabelConflict | undefined;
-          if (c) setReassign(c);
-        }}
-      />
-      {/* Task #1918 — per-album fulfillment routing override. Operational
-          config (which warehouse ships this release), not fan-facing
-          metadata, so it saves through the same PUT but rides the
-          operational-bypass path (stays editable after first sale). Empty =
-          platform default partner. */}
-      {/* Task #2670 — unified single-destination picker. Hidden when
-          split rows exist (they take precedence). Uses the same
-          UnifiedFulfillmentDest list as the splits editor below so
-          warehouse partners AND self-fulfill presses both appear. */}
-      <AlbumFulfillmentSingleDestPanel
-        album={album}
-        disabled={disabled}
-        disabledReason={disabledReason}
-      />
-      {/* Task #2670 — split shipments editor. Multiple destinations per
-          pressing order. When at least one split row exists, the single-dest
-          panel above hides and orderDesk.ts routes via the splits table. */}
-      <AlbumFulfillmentSplitsPanel albumId={album.id} pressedQty={(album as any).mechanicalUnitsPressed ?? null} />
-      {/* Task #799 — TEMPORARY admin-only "SPIN Promo (digital-only
-          legacy)" toggle. Self-contained block: when this flag is retired,
-          delete this single component + its render here and the schema
-          column. No fan-facing effect whatsoever. */}
-      {/* Visibility law (run-sheet, Aug 2026): SPIN Promo renders ONLY for
-          super-admins, and ONLY on pre-Nightbirde imports (albums carrying
-          a legacy gogoods id). Newer albums don't show the control at all —
-          absent, not toggled-off. Partners/artists never see it. */}
-      {overviewRole?.role === "super_admin" &&
-        !!(album as any).legacyGogoodsId && (
-          <SpinPromoPanel
-            album={album}
-            disabled={disabled}
-            disabledReason={disabledReason}
-          />
-        )}
-      {/* Task #3120 — redemption-email branding: CTA color + hero graphics
-          (default + per-format). Rides the standard album PUT gate, so
-          partner saves divert to review when approval is required. */}
-      <AlbumEmailAppearancePanel
-        albumId={album.id}
-        artworkUrl={album.artwork || null}
-        emailAppearance={(album as any).emailAppearance ?? null}
-        disabled={disabled}
-        disabledReason={disabledReason}
-      />
-      {/* Task #965 — clean per-release share link editor. */}
-      <ShareLinkPanel
-        album={album}
-        disabled={disabled}
-        disabledReason={disabledReason}
-      />
-      {/* Task #2524 — partner-facing manage/revoke for their OWN reviewer +
-          preview links. Preview-links-only mode: the comped/free "owners"
-          fan list stays hidden from partners for privacy. Operators manage
-          the same grants (plus the fan roster) on the Customers tab. */}
-      {isPartnerViewer && (
-        <AccessWithoutPurchaseSection albumId={album.id} previewLinksOnly />
-      )}
-      {/* Task #190 — per-album Lineup snapshot. Only meaningful when the
-          album's primary artist is a group (band/duo/orchestra). Renders
-          inside its own panel below Metadata. */}
-      {album.primaryArtistId && (
-        <AlbumLineupPanel album={album} disabled={disabled} disabledReason={disabledReason} />
-      )}
-      {/* Task #644 — artist reassign confirm. Mirrors the dialog in
-          AdminLabel's "Add artist already on another label" flow. */}
-      <Dialog
-        open={!!reassign}
-        onOpenChange={(v) => !reassignMut.isPending && !v && setReassign(null)}
-      >
-        <DialogContent
-          className="max-w-md bg-white rounded-2xl overflow-hidden border border-[var(--apple-hairline)] shadow-[0_20px_48px_rgba(0,0,0,0.18)] p-6 gap-4"
-          data-testid="dialog-reassign-album-artist"
-        >
-          <DialogHeader className="text-left space-y-1">
-            <DialogTitle className="text-[17px] font-semibold text-slate-900 pr-8">
-              Reassign <span className="italic">{reassign?.personName}</span>?
-            </DialogTitle>
-            <DialogDescription className="text-[13px] font-normal text-slate-500">
-              They're currently signed to{" "}
-              <span className="font-semibold text-slate-700">
-                {reassign?.fromLabelName}
-              </span>
-              . Continuing will move them to{" "}
-              <span className="font-semibold text-slate-700">
-                {reassign?.toLabelName}
-              </span>
-              {" "}— previous label loses the link. The album's label change has already been saved.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex justify-end gap-3 pt-1">
-            <Button
-              type="button"
-              onClick={() => setReassign(null)}
-              disabled={reassignMut.isPending}
-              className="bg-white text-slate-900 border border-slate-200 shadow-sm hover:bg-[var(--apple-track)]"
-              data-testid="button-reassign-album-artist-cancel"
-            >
-              Keep current label
-            </Button>
-            <Button
-              type="button"
-              onClick={() => reassign && reassignMut.mutate(reassign)}
-              disabled={reassignMut.isPending}
-              className="bg-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/90 text-white ml-2"
-              data-testid="button-reassign-album-artist-confirm"
-            >
-              {reassignMut.isPending
-                ? "Moving…"
-                : `Move to ${reassign?.toLabelName ?? "new label"}`}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      <CampaignGalleryPanel albumId={album.id} />
-      <AlbumNpoSplitPanel albumId={album.id} />
-    </div>
+    <AlbumOverviewBody
+      album={album}
+      disabled={disabled}
+      disabledReason={disabledReason}
+      isPartnerViewer={isPartnerViewer}
+      overviewRole={overviewRole}
+    />
   );
 }
 
@@ -5277,6 +5141,60 @@ type AdminCreditRole = {
   kind: "writer" | "performer";
   name: string;
 };
+
+/**
+ * The artist release audio lanes use the exact same functional track list as
+ * the album Digital tab. Keep this adapter here (beside TracksPanel) so a
+ * visual pass in the portal can never replace the disclosure editors,
+ * reordering, bonus stack, player, lyrics/GoodSync, credits, or splits with a
+ * lookalike row.
+ */
+export function ArtistReleaseTrackRows({ albumId }: { albumId: string }) {
+  const { data: album, isLoading, error } = useQuery<AlbumFull>({
+    queryKey: ["/api/albums", albumId],
+    enabled: !!albumId,
+  });
+  const [selectedTrackIds, setSelectedTrackIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  if (isLoading) {
+    return (
+      <p className="text-[length:var(--apple-type-secondary)] text-[var(--apple-subink)]">
+        Loading tracks…
+      </p>
+    );
+  }
+  if (error || !album) {
+    return (
+      <p
+        className="text-[length:var(--apple-type-secondary)] text-[var(--apple-subink)]"
+        data-testid="artist-audio-tracks-error"
+      >
+        Couldn’t load the track controls. Refresh to try again.
+      </p>
+    );
+  }
+
+  return (
+    <TracksPanel
+      album={album}
+      onEdit={() => undefined}
+      highlightTrackId={null}
+      initialSection={null}
+      selectionMode={false}
+      selectedTrackIds={selectedTrackIds}
+      onToggleTrack={(id) => {
+        setSelectedTrackIds((current) => {
+          const next = new Set(current);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          return next;
+        });
+      }}
+    />
+  );
+}
 
 function TracksPanel({
   album,
@@ -5812,14 +5730,14 @@ function TracksPanel({
   // in BOTH the empty and non-empty branches so operators on a fresh
   // album can still upload videos/photos before any tracks exist.
   const bonusStack = (
-    <>
+    <div id="album-bonus-content" className="space-y-5">
       <BonusVideos albumId={album.id} onEdit={onEdit} />
       <BonusPhotos albumId={album.id} onEdit={onEdit} />
       <p className="text-slate-400 text-[11px] leading-relaxed px-1">
         Liner notes, lyric sheets, commentary, and press-kit assets are
         deferred — see roadmap.
       </p>
-    </>
+    </div>
   );
 
   if (sorted.length === 0 && !adding) {

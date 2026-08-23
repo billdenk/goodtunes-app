@@ -1460,7 +1460,7 @@ function ManufacturingLedger({
                     <button
                       type="button"
                       onClick={() => setFundingSource("artist_direct")}
-                      className={`h-8 inline-flex items-center rounded-lg px-3 text-xs font-semibold transition-colors ${
+                      className={`h-8 inline-flex items-center justify-center rounded-lg px-3 py-0 text-xs leading-none font-semibold transition-colors ${
                         fundingSource === "artist_direct"
                           ? "bg-white text-slate-900 shadow-sm"
                           : "text-slate-600 hover:text-slate-900"
@@ -1472,7 +1472,7 @@ function ManufacturingLedger({
                     <button
                       type="button"
                       onClick={() => setFundingSource("goodtunes_sales")}
-                      className={`h-8 inline-flex items-center rounded-lg px-3 text-xs font-semibold transition-colors ${
+                      className={`h-8 inline-flex items-center justify-center rounded-lg px-3 py-0 text-xs leading-none font-semibold transition-colors ${
                         fundingSource === "goodtunes_sales"
                           ? "bg-white text-slate-900 shadow-sm"
                           : "text-slate-600 hover:text-slate-900"
