@@ -204,3 +204,23 @@ gets tested.**
 
     Heading nit again: "Master audio." — no trailing period.
     
+
+    ## Details tab — "Editing: 🔒 Open" contradiction + no editing (from Bill)
+
+    Release → Details tab, viewing as the artist:
+
+    1. **"Editing — 🔒 Open" contradicts itself.** A lock icon next to the
+     word "Open" reads as the opposite of open. Status = word + icon that
+     AGREE (canon: never rely on color, and never let the icon fight the
+     word). If editing is open: open-padlock or pencil icon + "Open".
+     If locked: closed padlock + "Locked". Two honest states, no mixes.
+    2. **It says Open but nothing is editable.** Every row on this Details
+     page (title, year, catalog number, UPC) is read-only — no edit
+     affordance anywhere. Either make the rows actually editable when
+     editing is Open (tap a row to edit is fine), or the status is lying.
+     Empty fields showing "—" should invite the artist to fill them in
+     when editing is open (e.g. "Add year").
+
+    Heading nit: "Details." — no trailing period. (Same pattern as the
+    Assets headings; sweep all these page headings at once.)
+    
