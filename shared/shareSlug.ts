@@ -85,6 +85,7 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   // Task #1953 — publisher portal route.
   "publisher",
   "press",
+  "pq",
   "presses",
   // /staging/:artist/:release — operator-only locked preview of a release
   // being prepped. First segment must be reserved so an artist slug can never

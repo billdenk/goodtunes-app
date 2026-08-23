@@ -65,6 +65,9 @@ const HAIRLINE = 'rgba(0,0,0,0.10)';
 const GOLD = '#D9C153'; // MRP's site gold (Andrew, Aug 21 2026)
 const GOLD_TINT_TOP = 'rgba(217,193,83,0.12)';
 const BLUE = '#319ED8'; // the single filled BLUE action per screen (house rule)
+const READY = '#1c8a5b';
+const WARN = '#c98a00';
+const PILL_SHADOW = '0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)';
 
 // ─── Status grammar — word + icon, never color alone ─────────────────
 function CheckIcon() {
@@ -87,6 +90,171 @@ function MailIcon() {
       <rect x="2" y="4.5" width="20" height="15" rx="2" />
       <path d="M2.5 6.5L12 13l9.5-6.5" />
     </svg>
+  );
+}
+
+type BillingEarning = {
+  id: string;
+  name: string;
+  note: string;
+  amountCents: number;
+};
+
+type BillingEarnings = {
+  /** Server-derived proceeds total; never reconstructed from line items. */
+  totalCents: number;
+  items: BillingEarning[];
+};
+
+type BillingLedgerProps = {
+  amountCents: number;
+  estimateNumber: string;
+  pressName: string;
+  build: string;
+  paid: boolean;
+  payBusy: boolean;
+  payError: string | null;
+  onPay: () => void;
+  onViewEstimate: () => void;
+  /** Intentionally optional until a real GoodTunes proceeds source exists. */
+  earnings?: BillingEarnings;
+  fundedByGoodTunes?: boolean;
+};
+
+function SectionHeading({ lead, rest }: { lead: string; rest: string }) {
+  return (
+    <h2 style={{ fontSize: 22, fontWeight: 600, lineHeight: 1.15, letterSpacing: -0.4, margin: 0 }}>
+      <span style={{ color: INK }}>{lead} </span>
+      <span style={{ color: '#a1a1a6', fontWeight: 500 }}>{rest}</span>
+    </h2>
+  );
+}
+
+function BillingStatus({ paid, fundedByGoodTunes, testId }: { paid: boolean; fundedByGoodTunes: boolean; testId?: string }) {
+  return (
+    <span data-testid={testId} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, borderRadius: 9999, padding: '3px 9px', background: '#f0f0f2', color: INK, fontSize: 11.5, fontWeight: 600 }}>
+      {paid || fundedByGoodTunes ? (
+        <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden>
+          <path d="M3 8.5L6.5 12L13 4.5" fill="none" stroke={READY} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      ) : (
+        <span aria-hidden style={{ width: 7, height: 7, borderRadius: '50%', border: `1.5px solid ${WARN}`, flexShrink: 0 }} />
+      )}
+      {fundedByGoodTunes ? 'Paid by GoodTunes presale' : paid ? 'Paid' : 'Due'}
+    </span>
+  );
+}
+
+function BillingLedger({
+  amountCents,
+  estimateNumber,
+  pressName,
+  build,
+  paid,
+  payBusy,
+  payError,
+  onPay,
+  onViewEstimate,
+  earnings,
+  fundedByGoodTunes = false,
+}: BillingLedgerProps) {
+  const amountDueCents = paid || fundedByGoodTunes ? 0 : amountCents;
+  const amountLabel = moneyFmt(amountCents / 100);
+  const dueLabel = moneyFmt(amountDueCents / 100);
+
+  const invoiceRow = (
+    <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }} data-testid="invoice-pressing">
+      <div style={{ minWidth: 0 }}>
+        <div style={{ color: INK, fontSize: 14, fontWeight: 600 }}>Pressing estimate — {pressName}</div>
+        <div style={{ color: SUBINK, fontSize: 12.5, marginTop: 3 }}>{build || `Estimate ${estimateNumber}`}</div>
+        <button type="button" onClick={onViewEstimate} style={{ display: 'block', border: 0, padding: 0, background: 'none', cursor: 'pointer', color: BLUE, fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>
+          View estimate &rarr;
+        </button>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+        <BillingStatus paid={paid} fundedByGoodTunes={fundedByGoodTunes} testId={paid ? 'billing-paid' : undefined} />
+        <span style={{ color: INK, fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{amountLabel}</span>
+      </div>
+    </div>
+  );
+
+  return (
+    <section
+      data-testid="billing-band"
+      style={{
+        marginTop: 32,
+        display: 'grid',
+        gridTemplateColumns: earnings ? 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))' : 'minmax(0, 1fr)',
+        gap: 28,
+        alignItems: 'start',
+      }}
+    >
+      <section data-testid="col-owe">
+        <SectionHeading lead="You owe" rest="Invoices from your press" />
+        <div style={{ color: INK, fontSize: 34, fontWeight: 700, letterSpacing: -0.7, marginTop: 14, fontVariantNumeric: 'tabular-nums' }} data-testid="amount-due">
+          {dueLabel}
+        </div>
+        <p style={{ color: SUBINK, fontSize: 12.5, margin: '6px 0 0', lineHeight: 1.55 }}>
+          {amountDueCents === 0
+            ? fundedByGoodTunes
+              ? 'Nothing due right now — your presale covered the press bill.'
+              : 'Nothing due right now — your press bill is paid.'
+            : 'This is the number the Billing chip carries — what needs you.'}
+        </p>
+        {amountDueCents > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <button
+              type="button"
+              onClick={onPay}
+              disabled={payBusy}
+              data-testid="billing-pay"
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 9999, border: 'none', padding: '10px 20px', cursor: payBusy ? 'default' : 'pointer', background: BLUE, boxShadow: PILL_SHADOW, color: '#ffffff', fontSize: 13.5, fontWeight: 600, opacity: payBusy ? 0.7 : 1, whiteSpace: 'nowrap' }}
+            >
+              {payBusy ? 'Starting…' : `Pay ${amountLabel}`}
+            </button>
+            <p style={{ color: SUBINK, fontSize: 12, margin: '8px 0 0' }}>Card or bank transfer — securely handled by Stripe.</p>
+          </div>
+        )}
+        {payError && <div style={{ color: SUBINK, fontSize: 12, marginTop: 8 }} data-testid="billing-error">{payError}</div>}
+        <div style={{ border: `1px solid ${HAIRLINE}`, borderRadius: 16, background: CARD, overflow: 'hidden', marginTop: 18 }}>
+          {invoiceRow}
+        </div>
+        {fundedByGoodTunes && (
+          <p style={{ color: SUBINK, fontSize: 12.5, margin: '10px 0 0', lineHeight: 1.55 }}>
+            Your fans funded the pressing — the bill exists, and it&rsquo;s already handled.
+          </p>
+        )}
+      </section>
+
+      {earnings && (
+        <section data-testid="col-earned">
+          <SectionHeading lead="You’ve earned" rest="Proceeds from your presale" />
+          <div style={{ color: INK, fontSize: 34, fontWeight: 700, letterSpacing: -0.7, marginTop: 14, fontVariantNumeric: 'tabular-nums' }} data-testid="amount-earned">
+            {moneyFmt(earnings.totalCents / 100)}
+          </div>
+          <p style={{ color: SUBINK, fontSize: 12.5, margin: '6px 0 0', lineHeight: 1.55 }}>
+            Presale proceeds and signed GoodDeed® premiums, paid out after launch.
+          </p>
+          <div style={{ border: `1px solid ${HAIRLINE}`, borderRadius: 16, background: CARD, overflow: 'hidden', marginTop: 18 }}>
+            {earnings.items.map((item, index) => (
+              <div key={item.id} style={{ padding: '16px 20px', borderTop: index === 0 ? 'none' : `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }} data-testid={`earned-${item.id}`}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: INK, fontSize: 14, fontWeight: 600 }}>{item.name}</div>
+                  <div style={{ color: SUBINK, fontSize: 12.5, marginTop: 3 }}>{item.note}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+                  <BillingStatus paid fundedByGoodTunes={false} />
+                  <span style={{ color: INK, fontSize: 14, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{moneyFmt(item.amountCents / 100)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p style={{ color: SUBINK, fontSize: 12.5, margin: '10px 0 0', lineHeight: 1.55 }}>
+            Paid out to your account after launch. Full statement lands here with the payout.
+          </p>
+        </section>
+      )}
+    </section>
   );
 }
 
@@ -274,7 +442,7 @@ export default function PressClientEstimateAcceptedMRP() {
   const spec = est.build ?? '';
   const qty = est.builderState?.quantity ?? null;
   const qtyLabel = qty ? `${Number(qty).toLocaleString()} units` : '';
-  const totalDollars = est.totalCents ? est.totalCents / 100 : null;
+  const totalDollars = est.totalCents != null ? est.totalCents / 100 : null;
   const runDollars = totalDollars != null ? Math.max(0, totalDollars - SETUP_TOTAL_DOLLARS) : null;
   const unitLabel = runDollars != null && qty ? `$${(runDollars / Number(qty)).toFixed(2)} /unit` : '';
   const runLabel = runDollars != null ? moneyFmt(runDollars) : '—';
@@ -341,47 +509,18 @@ export default function PressClientEstimateAcceptedMRP() {
             </div>
           </section>
 
-          {/* ── Billing band — pay the press bill off the accepted estimate.
-              One filled BLUE pill (house rule); paid state is word + check
-              icon, never color alone (Bill is colorblind). ── */}
-          {totalDollars != null && (
-          <section
-            style={{ marginTop: 20, border: `1px solid ${HAIRLINE}`, background: CARD, padding: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}
-            data-testid="billing-band"
-          >
-            <div style={{ minWidth: 0 }}>
-              {isPaid ? (
-                <>
-                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 13.5, fontWeight: 600 }} data-testid="billing-paid">
-                    <CheckIcon />
-                    Paid
-                  </div>
-                  <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 3 }}>
-                    {totalLabel} received — thank you.
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: 13, color: SUBINK }}>You owe</div>
-                  <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: -0.4, fontVariantNumeric: 'tabular-nums' }}>{totalLabel}</div>
-                  {payError && (
-                    <div style={{ fontSize: 12, color: SUBINK, marginTop: 4 }} data-testid="billing-error">{payError}</div>
-                  )}
-                </>
-              )}
-            </div>
-            {!isPaid && (
-              <button
-                type="button"
-                onClick={startPay}
-                disabled={payBusy}
-                data-testid="billing-pay"
-                style={{ padding: '12px 26px', borderRadius: 0, border: 'none', cursor: payBusy ? 'default' : 'pointer', background: BLUE, color: '#ffffff', fontSize: 14.5, fontWeight: 700, opacity: payBusy ? 0.7 : 1, whiteSpace: 'nowrap' }}
-              >
-                {payBusy ? 'Starting…' : `Pay ${totalLabel}`}
-              </button>
-            )}
-          </section>
+          {est.totalCents != null && (
+            <BillingLedger
+              amountCents={est.totalCents}
+              estimateNumber={estimateNo}
+              pressName={pressName}
+              build={spec}
+              paid={isPaid}
+              payBusy={payBusy}
+              payError={payError}
+              onPay={startPay}
+              onViewEstimate={() => navigate(`/e/${token}`)}
+            />
           )}
 
           {/* ── What just happened / what's next — word + icon each ── */}
@@ -418,7 +557,7 @@ export default function PressClientEstimateAcceptedMRP() {
             </div>
           </section>
 
-          {/* ── THE action — one filled gold button, right-aligned (canon) ── */}
+          {/* Sign-in stays secondary; Billing owns the page's sole filled action. */}
           <section style={{ marginTop: 26, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 22 }}>
             <button
               type="button"
@@ -433,7 +572,7 @@ export default function PressClientEstimateAcceptedMRP() {
                 type="button"
                 onClick={() => navigate('/next-steps')}
                 data-testid="accepted-sign-in"
-                style={{ padding: '12px 26px', borderRadius: 0, border: 'none', cursor: 'pointer', background: GOLD, color: '#1d1d1f', fontSize: 14.5, fontWeight: 700 }}
+                style={{ padding: '11px 25px', borderRadius: 0, border: `1px solid ${HAIRLINE}`, cursor: 'pointer', background: 'transparent', color: INK, fontSize: 14.5, fontWeight: 600 }}
               >
                 Sign in at {portalHost}
               </button>

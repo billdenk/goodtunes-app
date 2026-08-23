@@ -141,7 +141,6 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // (pre-vetted, no approval gate). Same connect card as /admin/shopify.
   // Rail standard (Ruby nav-restructure handoff, Aug 19 2026): Shopify
   // sits directly after Reports, before Referrals.
-  { id: "shopify",     label: "Shopify",     icon: Store,     roles: ["artist"] },
   { id: "referrals",   label: "Referrals",   icon: UserPlus,  roles: ["artist"] },
   // Settings renders PINNED to the rail bottom (cross-vendor rail
   // standard, Bill Aug 16 2026) — OperatorShell hoists any `settings`
