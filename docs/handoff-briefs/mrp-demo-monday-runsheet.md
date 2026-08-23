@@ -73,3 +73,26 @@ gets tested.**
     feed the estimate builder. No orphaned prices, honest "no price on
     file" gaps.
     
+
+    ## Loading / splash screen fix (from Bill, pre-Monday)
+
+    Bill sees a blueish full-screen flash with the GoodTunes logo when moving
+    between screens — in super-admin dark mode, as an artist, and as MRP.
+    Two rules for that interstitial:
+
+    1. **It must respect the surface's theme.** In dark surfaces (super-admin,
+     press portal dark) the loading screen is charcoal — the same background
+     the destination screen uses. Never the blue/navy flash. Light surfaces
+     get the light background. The rule is: the loading state should be
+     invisible as a "different screen" — same background, thin sweep
+     progress bar at the top, no logo card, no color change.
+    2. **White-label surfaces show the white-label brand, not GoodTunes.**
+     On memphis.makesvinyl.com and any press/client-facing white-label page,
+     a branded interstitial (if one shows at all) uses that press's logo
+     (MRP), never the GoodTunes logo. GoodTunes branding on a white-label
+     surface breaks the whole white-label promise. Prefer no logo at all —
+     just the themed background + sweep bar.
+
+    This one matters for Monday: the flash happens exactly while Bill is
+    navigating in front of the room.
+    
