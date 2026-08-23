@@ -574,3 +574,13 @@ gets tested.**
     unsubscribe note, and the "announced to this list only once"
     double-send protection is exactly the right honesty. Dress only.
     
+
+    ## Overview tab: HOLD — redesign coming from Ruby (from Bill)
+
+    The album Overview tab needs real reorganization, not just the canon
+    dress pass — Bill and Ruby are designing it together. **Don't
+    canon-sweep this tab yet**; a mock + handoff will follow. (Everything
+    already on it — release dates, streaming links, metadata, split
+    shipments, SPIN legacy, email appearance, share link, lineup, campaign
+    gallery, NPO split — stays functional in the meantime.)
+    
