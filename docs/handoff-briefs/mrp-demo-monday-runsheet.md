@@ -539,3 +539,21 @@ gets tested.**
     - Substance keep: staged payments to plant, held-until-release states,
     vendor payout ledger with dates, "Reversible." honesty.
     
+
+    ## Customers tab: same canon pass (from Bill)
+
+    Same album, Customers tab:
+
+    - **The two comped-access cards render as light-gray slabs on the dark
+    surface** — jarring theme break (same family as the template editor's
+    white stage). Cards use the dark card surface like everything else.
+    - ALL-CAPS micro headers ("TOTAL ORDERS", "DISTINCT FANS", "GROSS
+    REVENUE", "COMPED & FREE ACCESS") → canon sentence case.
+    - "COMP" chip → word + icon, sentence case ("Comped copy").
+    - "Create a preview link →" — arrow on a link is right; keep, but style
+    as canon link.
+    - Keep the substance: honest zeros on the stat cards, honest "No
+    customers yet." empty state, comped access counted separately from
+    revenue ("These don't count toward revenue" line is exactly the right
+    honesty).
+    
