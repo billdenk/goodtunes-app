@@ -282,7 +282,7 @@ type Swatch = {
   /** Generator-made color: style + assigned hexes. Presence means the disc
       renders through GenDisc (the stencil art), and the swatch stays
       re-openable in the generator for hex tweaks. */
-  gen?: { styleId: string; colors: string[]; option?: string; splatterCount?: number; baseKind?: 'opaque' | 'translucent' };
+  gen?: { styleId: string; colors: string[]; option?: string; splatterCount?: number; baseKind?: 'opaque' | 'translucent'; locations?: number[] };
   /** Hidden = not offered to artists right now. Never deleted — pressed
       records keep their history. (Bill, Aug 20 2026.) */
   hidden?: boolean;
@@ -2809,7 +2809,7 @@ const GEN_STYLES: GenStyleDef[] = [
     id: 'metallic', name: 'Metallic Blend', psdGroup: 'metallic-blend',
     rows: [], gradient: { stops: ['Vinyl', 'Metallic'] },
     layers: [{ file: 'metallic-texture.png', gradient: true }],
-    hints: ['The swirl takes the Metallic color in the highlights — the vinyl color holds the body.'],
+    hints: [],
     example: ['#6E6E73', '#F2F2F5'],
   },
   {
@@ -2850,7 +2850,9 @@ const hexToRgb01 = (hex: string): [number, number, number] => {
 /** The color rows the sheet shows for a style at a given splatter count. */
 const genRowNames = (s: GenStyleDef, spl: number, extraStops = 0): string[] => [
   ...s.rows.map((r) => r.name),
-  ...(s.gradient ? [...s.gradient.stops, ...Array.from({ length: extraStops }, (_, i) => `Color ${s.gradient!.stops.length + i + 1}`)] : []),
+  // Stops read numerically — "Color 1", "Color 2", … (Andrew, Aug 21 2026);
+  // the PSD's own stop names stay in the data, not the labels.
+  ...(s.gradient ? Array.from({ length: s.gradient.stops.length + extraStops }, (_, i) => `Color ${i + 1}`) : []),
   ...Array.from({ length: s.splatter ? spl : 0 }, (_, i) => `Splatter ${i + 1}`),
 ];
 
@@ -2861,6 +2863,9 @@ type GenColorSpec = {
   option?: string;
   splatterCount?: number;
   baseKind?: 'opaque' | 'translucent';
+  /** Advanced Gradient (Andrew, Aug 21 2026): per-stop ramp positions (0–1),
+      one per gradient stop. Absent = the style's own default locations. */
+  locations?: number[];
 };
 
 // One PSD stencil layer, tinted: the PNG's alpha is the mask, the hex is flat.
@@ -2948,7 +2953,15 @@ function GenDisc({
   const splOffset = style.rows.length + stopCount;
   const option = gen.option ?? style.pickOne?.default ?? '';
   const col = (i: number) => (HEX_RE.test(gen.colors[i] ?? '') ? gen.colors[i] : '#c7c7cc');
-  const stops = Array.from({ length: stopCount }, (_, i) => col(style.rows.length + i));
+  let stops = Array.from({ length: stopCount }, (_, i) => col(style.rows.length + i));
+  // Advanced Gradient (Andrew, Aug 21 2026): custom stop positions ride on
+  // the spec. The luminance table needs them ascending, so sort as pairs.
+  let gradLocs = style.gradient?.locations;
+  if (gen.locations && gen.locations.length === stops.length) {
+    const pairs = stops.map((c, i) => [gen.locations![i], c] as const).sort((a, b) => a[0] - b[0]);
+    gradLocs = pairs.map((p) => p[0]);
+    stops = pairs.map((p) => p[1]);
+  }
   const baseKind = gen.baseKind ?? 'opaque';
   const LABEL_RATIO = labelRatio ?? PSD_LABEL_RATIO;
   const labelSize = size * LABEL_RATIO;
@@ -2983,7 +2996,7 @@ function GenDisc({
             color = col(splOffset + L.splatterSlot);
           }
           if (!file) return null;
-          if (L.gradient) return <GenGradientMap key={i} src={url(file)} stops={stops} locations={style.gradient?.locations} opacity={opacity} />;
+          if (L.gradient) return <GenGradientMap key={i} src={url(file)} stops={stops} locations={gradLocs} opacity={opacity} />;
           if (L.neutral) {
             return (
               <img
@@ -3046,7 +3059,73 @@ const GEN_SIZE_CONTEXTS = [
 
 // ─── Color picker popover (Andrew's macOS Color Fill reference) ──────
 // Wheel / Spectrum / Sliders / Swatches tabs, apple-canon styled. The
-// eyedropper (screen pick) lives in the picker footer.
+// eyedropper lives in the picker footer.
+
+// Eyedropper source (run-sheet Must-work, Aug 23 2026): the eyedropper
+// samples from the press's UPLOADED REFERENCE PHOTO — not the browser
+// screen pick. The handoff tsx used the EyeDropper API; the Must-work list
+// wins (divergence flagged in the task summary). Screen pick survives only
+// as the fallback when there is no photo to sample from.
+const PhotoSampleCtx = createContext<string | null>(null);
+
+/** Click-to-sample panel: the reference photo on a canvas, one tap = one
+    pixel. Opens inside the picker in place of the tabs. */
+function PhotoSamplePanel({ src, onPick, onClose, t }: { src: string; onPick: (hex: string) => void; onClose: () => void; t: Theme }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const el = new Image();
+    el.crossOrigin = 'anonymous';
+    el.onload = () => {
+      const c = canvasRef.current;
+      if (!c) return;
+      const scale = Math.min(1, 280 / el.naturalWidth);
+      c.width = Math.max(1, Math.round(el.naturalWidth * scale));
+      c.height = Math.max(1, Math.round(el.naturalHeight * scale));
+      c.getContext('2d')?.drawImage(el, 0, 0, c.width, c.height);
+    };
+    el.onerror = () => setFailed(true);
+    el.src = src;
+  }, [src]);
+  return (
+    <div data-testid="gen-picker-photo-sample">
+      <p className="text-[12px]" style={{ color: t.subink, margin: '2px 0 8px' }}>
+        Tap their photo to sample a color.
+      </p>
+      {failed ? (
+        <p className="text-[12px]" style={{ color: t.subink }}>The photo could not be loaded for sampling.</p>
+      ) : (
+        <canvas
+          ref={canvasRef}
+          data-testid="gen-photo-sample-canvas"
+          style={{ width: '100%', borderRadius: 12, cursor: 'crosshair', display: 'block', border: `1px solid ${t.hairline}` }}
+          onPointerDown={(e) => {
+            const c = canvasRef.current;
+            if (!c) return;
+            const r = c.getBoundingClientRect();
+            const x = Math.min(c.width - 1, Math.max(0, Math.round(((e.clientX - r.left) / r.width) * c.width)));
+            const y = Math.min(c.height - 1, Math.max(0, Math.round(((e.clientY - r.top) / r.height) * c.height)));
+            try {
+              const d = c.getContext('2d')?.getImageData(x, y, 1, 1).data;
+              if (d) onPick(rgbArrToHex(d[0], d[1], d[2]));
+            } catch {
+              setFailed(true);
+            }
+          }}
+        />
+      )}
+      <button
+        type="button"
+        onClick={onClose}
+        data-testid="gen-photo-sample-back"
+        className="rounded-full text-[12.5px] font-semibold"
+        style={{ marginTop: 10, padding: '7px 12px', border: `1px solid ${t.hairline}`, background: 'transparent', color: t.subink, cursor: 'pointer' }}
+      >
+        Back to the picker
+      </button>
+    </div>
+  );
+}
 
 function hexToRgbArr(hex: string): [number, number, number] {
   const h = HEX_RE.test(hex) ? hex : '#C7C7CC';
@@ -3278,9 +3357,16 @@ function GenColorPicker({
   value, onChange, onClose, t, anchor,
 }: {
   value: string; onChange: (hex: string) => void; onClose: () => void; t: Theme;
-  anchor: { top: number; bottom: number; right: number };
+  /** With centerX set, the popup centers on that x and prefers to sit ABOVE
+      the anchor (clearing the stop's hex box) — ramp-chip behavior
+      (Andrew, Aug 21 2026). */
+  anchor: { top: number; bottom: number; right: number; centerX?: number };
 }) {
   const [tab, setTab] = useState<PickerTab>('wheel');
+  // Photo-first eyedropper (run-sheet Must-work): sample from the uploaded
+  // reference photo when one exists; screen pick is only the fallback.
+  const samplePhoto = useContext(PhotoSampleCtx);
+  const [sampling, setSampling] = useState(false);
   const seed = HEX_RE.test(value) ? value : '#319ED8';
   const [hsv, setHsv] = useState<[number, number, number]>(() => rgbToHsv(...hexToRgbArr(seed)));
   const lastEmitted = useRef(seed.toUpperCase());
@@ -3381,10 +3467,17 @@ function GenColorPicker({
           // Fixed positioning so scrollable sheet bodies can't clip us; flip
           // above the button when the viewport runs out of room below.
           position: 'fixed',
-          left: Math.max(12, Math.min(anchor.right, window.innerWidth - 12) - 312),
-          ...(anchor.bottom + 8 + 430 <= window.innerHeight || anchor.top - 8 - 430 < 12
-            ? { top: Math.min(anchor.bottom + 8, window.innerHeight - 12 - Math.min(430, window.innerHeight - 24)) }
-            : { top: anchor.top - 8 - 430 }),
+          left: anchor.centerX != null
+            ? Math.max(12, Math.min(anchor.centerX - 156, window.innerWidth - 12 - 312))
+            : Math.max(12, Math.min(anchor.right, window.innerWidth - 12) - 312),
+          ...(anchor.centerX != null
+            // Centered anchors ALWAYS sit above the stop's hex box — stop,
+            // hex input, and modal share one center line; pinned to the top
+            // edge rather than ever dropping below (Andrew, Aug 21 2026).
+            ? { top: Math.max(12, anchor.top - 56 - Math.min(430, window.innerHeight - 24)) }
+            : (anchor.bottom + 8 + 430 <= window.innerHeight || anchor.top - 8 - 430 < 12
+              ? { top: Math.min(anchor.bottom + 8, window.innerHeight - 12 - Math.min(430, window.innerHeight - 24)) }
+              : { top: anchor.top - 8 - 430 })),
           maxHeight: Math.min(430, window.innerHeight - 24),
           zIndex: 61, width: 312, padding: 16,
           backgroundColor: t.card, border: `1px solid ${t.hairline}`,
@@ -3392,6 +3485,20 @@ function GenColorPicker({
         }}
         onClick={(e) => e.stopPropagation()}
       >
+        {sampling && samplePhoto ? (
+          <PhotoSamplePanel
+            src={samplePhoto}
+            onPick={(hex) => {
+              lastEmitted.current = hex;
+              setHsv(rgbToHsv(...hexToRgbArr(hex)));
+              onChange(hex);
+              setSampling(false);
+            }}
+            onClose={() => setSampling(false)}
+            t={t}
+          />
+        ) : (
+        <>
         <GenSegmented
           options={PICKER_TABS.map((p) => ({ id: p.id, label: p.label }))}
           value={tab}
@@ -3520,6 +3627,8 @@ function GenColorPicker({
             })}
           </div>
         )}
+        </>
+        )}
 
         {/* The hex already reads out beside the row name, so the footer is
             just the two honest actions. (Bill, Aug 20 2026.) */}
@@ -3533,12 +3642,16 @@ function GenColorPicker({
               boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.12)',
             }}
           />
-          {/* TEMPORARY drawer (Andrew, Aug 21 2026): screen eyedropper is back
-              for a while — press-side only, and we'll pull it later. Uses the
-              browser EyeDropper API where available (Chrome/Edge). */}
+          {/* Eyedropper (run-sheet Must-work, Aug 23 2026): samples from the
+              press's uploaded reference photo. Screen pick (EyeDropper API)
+              is only the fallback when no photo exists to sample from. */}
           <button
             type="button"
             onClick={async () => {
+              if (samplePhoto) {
+                setSampling(true);
+                return;
+              }
               const ED = (window as unknown as { EyeDropper?: new () => { open: () => Promise<{ sRGBHex: string }> } }).EyeDropper;
               if (!ED) {
                 alert('Screen color picking needs Chrome or Edge — this browser does not support it.');
@@ -3554,8 +3667,8 @@ function GenColorPicker({
                 // Esc — the press changed their mind; nothing happens.
               }
             }}
-            aria-label="Pick a color from the screen"
-            title="Pick a color from the screen"
+            aria-label={samplePhoto ? 'Pick a color from their photo' : 'Pick a color from the screen'}
+            title={samplePhoto ? 'Pick a color from their photo' : 'Pick a color from the screen'}
             data-testid="gen-picker-eyedropper"
             className="rounded-full"
             style={{
@@ -3744,6 +3857,171 @@ function GenSegmented({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Advanced Gradient ramp editor (Andrew, Aug 21 2026) ─────────────
+// Illustrator's gradient bar, in the house style: a rounded ramp preview,
+// draggable stop chips beneath it, and the selected stop's normal color row
+// under that. Click an empty spot on the ramp to add a stop (up to the
+// PSD's five). Positions live per color, so the disc re-ramps live.
+// Bare hex box for the advanced-gradient ramp: no circle, no name — the
+// chip itself is the swatch, so only the number rides above it
+// (Andrew, Aug 21 2026).
+function GenStopHex({ value, onChange, t }: { value: string; onChange: (v: string) => void; t: Theme }) {
+  const valid = HEX_RE.test(value);
+  const empty = value === '';
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => {
+        const raw = e.target.value.trim();
+        const bare = raw.replace(/^#/, '');
+        onChange(bare === '' ? '' : /^[0-9a-fA-F]{1,6}$/.test(bare) ? `#${bare}` : raw);
+      }}
+      placeholder="#1B3A6B"
+      spellCheck={false}
+      data-testid="gen-stop-hex"
+      className="rounded-full focus:outline-none tabular-nums"
+      style={{
+        width: 118, height: 32, padding: '0 14px', fontSize: 13, letterSpacing: 0.3,
+        border: `1px solid ${!empty && !valid ? t.critical : t.hairline}`,
+        backgroundColor: t.searchBg, color: t.ink, textAlign: 'center',
+      }}
+    />
+  );
+}
+
+function GenGradientRamp({
+  colors, locs, selected, onSelect, onMove, onAddAt, onRemove, canRemove, onTap, t, canAdd,
+}: {
+  colors: string[];
+  locs: number[];
+  selected: number;
+  onSelect: (i: number) => void;
+  onMove: (i: number, loc: number) => void;
+  onAddAt: (loc: number) => void;
+  /** Drag a stop off the ramp to delete it (Andrew, Aug 21 2026). */
+  onRemove: (i: number) => void;
+  canRemove: (i: number) => boolean;
+  /** A tap (no drag) opens the stop's color picker, anchored to the chip
+      (Andrew, Aug 21 2026). */
+  onTap: (i: number, anchor: { top: number; bottom: number; right: number; centerX?: number }) => void;
+  t: Theme;
+  canAdd: boolean;
+}) {
+  const barRef = useRef<HTMLDivElement>(null);
+  const dragIdx = useRef<number | null>(null);
+  const movedRef = useRef(false);
+  const downX = useRef(0);
+  // Pulled far enough off the ramp that letting go deletes the stop.
+  const [dragOff, setDragOff] = useState(false);
+  const OFF_PX = 44;
+  const swatch = (c: string) => (HEX_RE.test(c) ? c : '#c7c7cc');
+  const css = colors
+    .map((c, i) => [locs[i] ?? 0, swatch(c)] as const)
+    .sort((a, b) => a[0] - b[0])
+    .map(([l, c]) => `${c} ${Math.round(l * 100)}%`)
+    .join(', ');
+  const locFrom = (clientX: number) => {
+    const r = barRef.current?.getBoundingClientRect();
+    if (!r) return 0;
+    return Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+  };
+  return (
+    <div>
+      <div
+        ref={barRef}
+        onPointerDown={(e) => {
+          if (!canAdd) return;
+          onAddAt(locFrom(e.clientX));
+        }}
+        title={canAdd ? 'Click to add a stop' : undefined}
+        style={{
+          height: 28, borderRadius: 999, cursor: canAdd ? 'copy' : 'default',
+          background: `linear-gradient(90deg, ${css})`,
+          border: '1px solid rgba(0,0,0,0.12)',
+          boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.35), inset 0 -2px 3px rgba(0,0,0,0.14)',
+        }}
+      />
+      {/* Stop chips — Illustrator's little houses, apple-canon dress.
+          Edge chips clamp inward so the first/last never clip (Andrew,
+          Aug 21 2026). */}
+      <div style={{ position: 'relative', height: 34 }}>
+        {colors.map((c, i) => {
+          const active = i === selected;
+          const valid = HEX_RE.test(c);
+          return (
+            <button
+              key={i}
+              type="button"
+              aria-label={`Gradient stop ${i + 1}${valid ? ` — ${c.toUpperCase()}` : ''}`}
+              data-testid={`gen-ramp-stop-${i}`}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onSelect(i);
+                dragIdx.current = i;
+                movedRef.current = false;
+                downX.current = e.clientX;
+                (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+              }}
+              onPointerMove={(e) => {
+                if (dragIdx.current !== i) return;
+                if (Math.abs(e.clientX - downX.current) > 3) movedRef.current = true;
+                if (!movedRef.current) return;
+                onMove(i, locFrom(e.clientX));
+                // Pull it off the ramp to delete (Andrew, Aug 21 2026) —
+                // only stops that are allowed to go.
+                const r = barRef.current?.getBoundingClientRect();
+                if (r && canRemove(i)) {
+                  setDragOff(e.clientY < r.top - OFF_PX || e.clientY > r.bottom + OFF_PX);
+                }
+              }}
+              onPointerUp={(e) => {
+                const wasOff = dragOff && dragIdx.current === i && canRemove(i);
+                const wasTap = !movedRef.current && !wasOff && dragIdx.current === i;
+                dragIdx.current = null;
+                setDragOff(false);
+                if (wasOff) onRemove(i);
+                else if (wasTap) {
+                  const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                  onTap(i, { top: r.top, bottom: r.bottom, right: r.right, centerX: (r.left + r.right) / 2 });
+                }
+              }}
+              className="focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+              style={{
+                position: 'absolute', top: 2, left: `clamp(11px, ${(locs[i] ?? 0) * 100}%, calc(100% - 11px))`,
+                transform: 'translateX(-50%)', padding: 0, border: 'none',
+                background: 'transparent', cursor: 'grab', touchAction: 'none',
+                zIndex: active ? 2 : 1,
+                opacity: active && dragOff ? 0.35 : 1,
+              }}
+            >
+              {/* Pointer nose */}
+              <span
+                aria-hidden
+                style={{
+                  display: 'block', margin: '0 auto', width: 0, height: 0,
+                  borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
+                  borderBottom: `6px solid ${active ? t.ink : '#ffffff'}`,
+                  filter: 'drop-shadow(0 -1px 1px rgba(0,0,0,0.12))',
+                }}
+              />
+              <span
+                aria-hidden
+                style={{
+                  display: 'block', width: 18, height: 18, borderRadius: 4,
+                  backgroundColor: valid ? c : 'transparent',
+                  border: valid ? `2px solid ${active ? t.ink : '#ffffff'}` : `2px dashed ${t.dashedBorder}`,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.22)',
+                }}
+              />
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -3954,6 +4232,9 @@ function GeneratorSheet({
     const spl = s.splatter?.default ?? 0;
     setSplatterCount(spl);
     setExtraStops(0);
+    setGradAdvanced(false);
+    setStopLocs([]);
+    setSelStop(0);
     setColors(Array.from({ length: genRowNames(s, spl).length }, () => ''));
     setGalleryOpen(false);
     if (variant === 'type') {
@@ -3970,11 +4251,19 @@ function GeneratorSheet({
     setColors((prev) => Array.from({ length: genRowNames(style, n, extraStops).length }, (_, i) => prev[i] ?? ''));
   };
 
+  // Advanced Gradient (Andrew, Aug 21 2026): a second face for ramp styles.
+  // "Gradient" keeps today's two-plus-colors rows; "Advanced Gradient" opens
+  // the Illustrator-style bar with draggable stop positions. Positions ride
+  // the saved spec, so a color built here reopens the same way.
+  const [gradAdvanced, setGradAdvanced] = useState(!!initial?.gen?.locations);
+  const [stopLocs, setStopLocs] = useState<number[]>(() => initial?.gen?.locations ?? []);
+  const [selStop, setSelStop] = useState(0);
+
   // "+ Add color" — gradient styles grow the ramp; splatter styles add a pass.
   // Fixed-layer styles can't take more (the PSD has no layer for it).
   const baseStopCount = style.gradient?.stops.length ?? 0;
   const stopEnd = style.rows.length + baseStopCount + extraStops; // colors index after the last stop
-  const canAddStop = !!style.gradient && baseStopCount + extraStops < 5;
+  const canAddStop = !!style.gradient && baseStopCount + extraStops < 8; // up to 8 (Andrew, Aug 21 2026)
   const canAddSplatter = !style.gradient && !!style.splatter && splatterCount < style.splatter.files.length;
   const addColor = () => {
     if (canAddStop) {
@@ -3992,6 +4281,36 @@ function GeneratorSheet({
   // own grammar (the Splatter segmented).
   const isRemovableRow = (idx: number) => !!style.gradient && extraStops > 0 && idx >= style.rows.length + baseStopCount && idx < stopEnd;
 
+  // Advanced Gradient derived state: one position per ramp stop. Falls back
+  // to the style's own PSD locations, then an even spread.
+  const stopCount = baseStopCount + extraStops;
+  const effLocs: number[] = stopLocs.length === stopCount
+    ? stopLocs
+    : style.gradient?.locations && style.gradient.locations.length === stopCount
+      ? style.gradient.locations
+      : Array.from({ length: stopCount }, (_, i) => stopCount <= 1 ? 0.5 : i / (stopCount - 1));
+  const selStopSafe = Math.min(selStop, Math.max(0, stopCount - 1));
+  const addStopAt = (loc: number) => {
+    if (!canAddStop) return;
+    setExtraStops((e) => e + 1);
+    setColors((prev) => { const next = [...prev]; next.splice(stopEnd, 0, ''); return next; });
+    setStopLocs([...effLocs, loc]);
+    setSelStop(stopCount); // the new stop is the last one
+  };
+  // Remove a ramp stop by index — the X button uses the selected one;
+  // drag-off-the-ramp passes its own (Andrew, Aug 21 2026). Only added
+  // stops can go; the style's own base stops stay.
+  const canRemoveStop = (i: number) => extraStops > 0 && i >= baseStopCount;
+  const removeStopAt = (i: number) => {
+    if (!canRemoveStop(i)) return;
+    removeStop(style.rows.length + i);
+    setStopLocs(effLocs.filter((_, j) => j !== i));
+    setSelStop((s) => Math.max(0, Math.min(s > i ? s - 1 : s, stopCount - 2)));
+  };
+  // Tapping a chip opens its picker right at the chip — the row below the
+  // ramp is gone (Andrew, Aug 21 2026).
+  const [stopPickerAnchor, setStopPickerAnchor] = useState<{ top: number; bottom: number; right: number; centerX?: number } | null>(null);
+
   // Fixed styles (Black) have no color rows — the record IS the color.
   const fixedStyle = rowNames.length === 0 && !style.gradient;
   const allValid = fixedStyle || (rowNames.length > 0 && rowNames.every((_, i) => HEX_RE.test(colors[i] ?? '')));
@@ -3999,7 +4318,7 @@ function GeneratorSheet({
   // Editing something that already exists? The confirm stays quiet until a
   // change earns it — no check mark, no filled blue, on a pristine sheet.
   // (Bill, Aug 20 2026.) Baseline re-snapshots when Update retargets.
-  const editSnapshot = JSON.stringify([name, colors, option, baseKind, splatterCount, styleId, styleNameEdit, offeredSizeIds, offeredFinishIds]);
+  const editSnapshot = JSON.stringify([name, colors, option, baseKind, splatterCount, styleId, styleNameEdit, offeredSizeIds, offeredFinishIds, gradAdvanced, stopLocs]);
   const editBaseline = useRef<string | null>(null);
   const baselineFor = useRef<string | undefined>(undefined);
   useEffect(() => {
@@ -4023,7 +4342,7 @@ function GeneratorSheet({
   const previewGen: GenColorSpec = savedPreview
     ? { styleId: savedPreview.styleId, colors: savedPreview.colors, option: savedPreview.option, splatterCount: savedPreview.splatterCount, baseKind: savedPreview.baseKind }
     : anyValid
-      ? { styleId, colors, option, splatterCount, baseKind }
+      ? { styleId, colors, option, splatterCount, baseKind, locations: style.gradient && gradAdvanced ? effLocs : undefined }
       : { styleId, colors: style.example, option: style.pickOne?.default, splatterCount: style.splatter?.default, baseKind: 'opaque' };
   const previewGhost = !anyValid && !savedPreview;
 
@@ -4041,6 +4360,7 @@ function GeneratorSheet({
       option: style.pickOne ? option : undefined,
       splatterCount: style.splatter ? splatterCount : undefined,
       baseKind: style.eitherOrBase ? baseKind : undefined,
+      locations: style.gradient && gradAdvanced ? effLocs : undefined,
     },
   });
 
@@ -4114,6 +4434,7 @@ function GeneratorSheet({
   };
 
   return (
+    <PhotoSampleCtx.Provider value={replaceOf?.customImg ?? null}>
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center"
       style={{ background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)', padding: 24 }}
@@ -4636,11 +4957,117 @@ function GeneratorSheet({
                 Nothing to assign — Black is the record. Name it and save.
               </p>
             ) : (
-            <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: t.faint, marginTop: 24 }}>
-              {style.gradient ? `Pick ${style.gradient.stops.length} colors — they form the gradient ramp` : 'Assign colors'}
+            <div className="flex items-center justify-between" style={{ marginTop: 24 }}>
+              {/* No "Pick N colors…" heading for gradient styles AT ALL —
+                  simple or advanced. The colors speak for themselves
+                  (Andrew, Aug 21 2026, asked three times — it stays gone). */}
+              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: t.faint }}>
+                {style.gradient ? '' : 'Assign colors'}
+              </div>
+              {/* Gradient / Advanced Gradient (Andrew, Aug 21 2026): same
+                  colors, two grammars — rows, or the Illustrator-style bar
+                  with draggable stop positions. */}
+              {style.gradient && (
+                <GenSegmented
+                  compact
+                  options={[{ id: 'simple', label: 'Gradient' }, { id: 'advanced', label: 'Advanced Gradient' }]}
+                  value={gradAdvanced ? 'advanced' : 'simple'}
+                  onChange={(id) => { setGradAdvanced(id === 'advanced'); setSelStop(0); }}
+                  t={t}
+                  testPrefix="gen-grad-mode"
+                />
+              )}
             </div>
             )}
-            <div className="flex flex-col" style={{ marginTop: 12, gap: 12 }}>
+            {style.gradient && gradAdvanced && !fixedStyle && (
+              <div style={{ marginTop: 14 }}>
+                {/* Base rows (e.g. Double Double's Base) keep their normal rows */}
+                {rowNames.slice(0, style.rows.length).map((rowName, i) => (
+                  <div key={`${style.id}-adv-${rowName}`} style={{ marginBottom: 12 }}>
+                    <GenColorRow
+                      name={rowName}
+                      note={genRowFinishNote(style, i)}
+                      value={colors[i] ?? ''}
+                      onChange={(v) => setColors((prev) => { const next = [...prev]; next[i] = v; return next; })}
+                      t={t}
+                    />
+                  </div>
+                ))}
+                {/* Just the hex box above the ramp — no circle, no name —
+                    centered over the selected stop; the ramp is inset from
+                    the margins so edge stops get room (Andrew, Aug 21 2026). */}
+                <div style={{ margin: '0 24px' }}>
+                  <div style={{ position: 'relative', height: 32, marginBottom: 12 }}>
+                    <div
+                      style={{
+                        position: 'absolute', top: 0,
+                        left: `clamp(35px, ${Math.round((effLocs[selStopSafe] ?? 0) * 100)}%, calc(100% - 35px))`,
+                        transform: 'translateX(-50%)',
+                      }}
+                    >
+                      <GenStopHex
+                        value={colors[style.rows.length + selStopSafe] ?? ''}
+                        onChange={(v) => setColors((prev) => { const next = [...prev]; next[style.rows.length + selStopSafe] = v; return next; })}
+                        t={t}
+                      />
+                    </div>
+                  </div>
+                  <GenGradientRamp
+                    colors={colors.slice(style.rows.length, stopEnd)}
+                    locs={effLocs}
+                    selected={selStopSafe}
+                    onSelect={setSelStop}
+                    onMove={(i, loc) => setStopLocs(effLocs.map((l, j) => (j === i ? loc : l)))}
+                    onAddAt={addStopAt}
+                    onRemove={removeStopAt}
+                    canRemove={canRemoveStop}
+                    onTap={(_, anchor) => {
+                      // Align the popup to the hex box's real on-screen
+                      // center — popup, hex, and stop tag share one axis
+                      // (Andrew, Aug 21 2026). Measure after the selection
+                      // renders so the hex box has moved to the tapped stop.
+                      requestAnimationFrame(() => {
+                        const el = document.querySelector('[data-testid="gen-stop-hex"]');
+                        if (el) {
+                          const r = el.getBoundingClientRect();
+                          setStopPickerAnchor({ ...anchor, centerX: (r.left + r.right) / 2 });
+                        } else {
+                          setStopPickerAnchor(anchor);
+                        }
+                      });
+                    }}
+                    t={t}
+                    canAdd={canAddStop}
+                  />
+                </div>
+                {/* Tap a chip → the picker opens right there; drag it off the
+                    ramp to delete. No row below the ramp (Andrew, Aug 21 2026). */}
+                {stopPickerAnchor && (
+                  <GenColorPicker
+                    value={colors[style.rows.length + selStopSafe] ?? ''}
+                    onChange={(v) => setColors((prev) => { const next = [...prev]; next[style.rows.length + selStopSafe] = v; return next; })}
+                    onClose={() => setStopPickerAnchor(null)}
+                    t={t}
+                    anchor={stopPickerAnchor}
+                  />
+                )}
+                {/* Splatter rows stay as rows below the ramp */}
+                {rowNames.slice(stopEnd).map((rowName, k) => {
+                  const i = stopEnd + k;
+                  return (
+                    <div key={`${style.id}-adv-${rowName}`} style={{ marginTop: 12 }}>
+                      <GenColorRow
+                        name={rowName}
+                        value={colors[i] ?? ''}
+                        onChange={(v) => setColors((prev) => { const next = [...prev]; next[i] = v; return next; })}
+                        t={t}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex flex-col" style={{ marginTop: 12, gap: 12, display: style.gradient && gradAdvanced ? 'none' : undefined }}>
               {rowNames.map((rowName, i) => (
                 <div key={`${style.id}-${rowName}`} className="flex items-center gap-2">
                   <div className="flex-1 min-w-0">
@@ -4670,7 +5097,7 @@ function GeneratorSheet({
                 </div>
               ))}
             </div>
-            {(canAddStop || canAddSplatter) && (
+            {((canAddStop && !(style.gradient && gradAdvanced)) || canAddSplatter) && (
               <button
                 type="button"
                 onClick={addColor}
@@ -4939,6 +5366,7 @@ function GeneratorSheet({
       </div>
       </div>
     </div>
+    </PhotoSampleCtx.Provider>
   );
 }
 

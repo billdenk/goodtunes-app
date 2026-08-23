@@ -48,6 +48,9 @@ export const vinylSwatchSchema = z.object({
       option: z.string().max(64).optional(),
       splatterCount: z.number().int().min(0).max(12).optional(),
       baseKind: z.enum(["opaque", "translucent"]).optional(),
+      // Advanced Gradient (handoff 01282b2, Aug 23 2026): per-stop ramp
+      // positions (0–1), one per gradient stop. Absent = style defaults.
+      locations: z.array(z.number().min(0).max(1)).max(8).optional(),
     })
     .optional(),
   // Hidden = not offered to artists right now. Never deleted — pressed
