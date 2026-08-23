@@ -2382,7 +2382,9 @@ export function registerPressPortalRoutes(
     },
   );
 
-  app.post("/api/press/:id/invite", requireAdmin, requirePressScope, async (req, res) => {
+  // requirePressEditor matches the existing-person invite path — this
+  // email-keyed path previously skipped the edit gate (review finding).
+  app.post("/api/press/:id/invite", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const parsed = inviteBodySchema.safeParse(req.body);
     if (!parsed.success) {
