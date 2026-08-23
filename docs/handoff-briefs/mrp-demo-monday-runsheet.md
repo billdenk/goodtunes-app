@@ -800,3 +800,23 @@ All MOCK_ consts (album fields, service URLs) are dummy data to wire.
     edge-to-edge in its window, no background bands, no distortion, both
     themes.
     
+
+    ## Package tab missed the canon pass (live in prod)
+
+    Bill published this morning and the Package tab (super-admin album,
+    "Design your Package") is still serving pre-canon dressing - it was
+    not in last night's tab-by-tab batch. Give it the same pass as the
+    other tabs:
+
+    - Caps section labels ("REQUIRED - VINYL", "TRACKS", "COLOR") ->
+    sentence case
+    - Raw color code "T01 Ruby" -> swatch + friendly name; raw codes
+    stay press-side only
+    - Adopt the shared page shell (PageColumn/PageHeader) like the other
+    album tabs
+    - One filled action on the page; word + icon for any status
+    - Both themes, usual acceptance (screenshot at 1440/1024/768)
+
+    Same law as everywhere: dressing changes only - every interaction
+    the tab has today keeps working.
+    
