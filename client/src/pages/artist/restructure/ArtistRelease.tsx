@@ -371,17 +371,9 @@ function TemplatesChip({ t }: { t: Theme }) {
 function AudioMasterList({ tracks, forVinyl, t }: { tracks: Array<{ title: string }>; forVinyl: boolean; t: Theme }) {
   return (
     <div style={{ marginTop: 18 }}>
-      {forVinyl && (
-        <div className="rounded-xl flex items-center justify-between gap-4 flex-wrap" style={{ padding: '14px 16px', marginBottom: 16, border: `1px solid ${t.hairline}`, background: t.canvas }} data-testid="callout-wave">
-          <div className="min-w-0">
-            <div className="text-[13.5px] font-semibold" style={{ color: t.ink }}>Master these for vinyl with Wave</div>
-            <p className="text-[12px]" style={{ marginTop: 3, color: t.subink, lineHeight: 1.45 }}>Vinyl cuts best from a dedicated master. Wave prepares a lacquer-ready set from your album masters.</p>
-          </div>
-          <button type="button" className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium flex-shrink-0 transition-colors', t.hoverCard)} style={{ padding: '8px 16px', color: t.subink, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="button-master-with-wave">
-            <ArrowRight className="w-3.5 h-3.5" /> Master with Wave
-          </button>
-        </div>
-      )}
+      {/* Wave mastering callout removed (Bill, Aug 22 2026) — the service
+          doesn't exist yet and must not be shown. Restore from git history
+          when Wave mastering is real. */}
       <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid={forVinyl ? 'audio-list-vinyl' : 'audio-list-master'}>
         {tracks.length === 0 ? (
           <div className="flex items-center justify-center" style={{ padding: '32px 16px' }}>
