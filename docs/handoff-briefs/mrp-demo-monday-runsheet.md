@@ -224,3 +224,26 @@ gets tested.**
     Heading nit: "Details." — no trailing period. (Same pattern as the
     Assets headings; sweep all these page headings at once.)
     
+
+    ## Tablet: album art slides over the quantity cards (from Bill)
+
+    Press portal → MRP Packages → the "Pick a quantity" section. The album
+    mock uses "hover to slide the sleeve and record out." On iPad there is
+    no hover — a TAP triggers the slide, and the record slides right out of
+    its container and over the quantity price cards.
+
+    Fix:
+
+    - On touch devices, the slide-out must stay inside its own bounds —
+    clip/contain the animation so it can never overlap the quantity cards
+    (or any neighboring content) at any viewport width.
+    - Reconsider the trigger on touch: hover doesn't exist on iPad, and
+    Bill is demoing ON an iPad Monday. Either make tap an explicit toggle
+    that animates within bounds, or disable the slide on touch and show
+    the composed sleeve+record state statically.
+    - Sweep the same hover-to-slide pattern anywhere else it's used
+    (estimate pages, package views) for the same overflow on touch.
+
+    Also note the copy under it says "hover to slide…" — on touch that
+    instruction is wrong; it should adapt (e.g. "tap to slide") or vanish.
+    
