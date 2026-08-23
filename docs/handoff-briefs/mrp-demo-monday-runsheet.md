@@ -158,3 +158,27 @@ gets tested.**
     Also canon nits on this page while it's open: "Vinyl audio." heading has
     a trailing period — headings don't end in periods.
     
+
+    ## GoodTunes® Player audio tab — same dead end (from Bill)
+
+    Same release, Assets → GoodTunes® Player → Audio: "No tracks yet" with
+    no upload path, same as the Vinyl tab.
+
+    If the intended flow is that the artist uploads masters once on the
+    **Master** tab and the Player/Vinyl sets reference them, then these
+    empty states must SAY so and LINK there. Apple-canon empty state,
+    something like:
+
+    > **No tracks yet**
+    > Player audio uses your album masters. Upload them once and they
+    > appear here automatically.
+    > Upload masters → *(link to the Master tab)*
+
+    Same treatment on the Vinyl audio empty state (minus the Wave copy,
+    which is being removed). Rule: an empty state always says what fills it
+    and gives the one link that gets you there — never a bare "No tracks
+    yet."
+
+    Heading nit here too: "GoodTunes® Player audio." — no trailing period
+    on headings.
+    
