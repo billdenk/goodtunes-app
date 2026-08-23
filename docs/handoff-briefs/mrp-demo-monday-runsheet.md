@@ -760,3 +760,24 @@ All MOCK_ consts (album fields, service URLs) are dummy data to wire.
     and passes acceptance, tell Bill it's ready so the next Publish
     includes it.
     
+
+    ## BUG: artwork floats unregistered in Full Template view (template checker)
+
+    Bill, viewing as Niina Soleil, 12" single jacket template
+    (CALIFORNIALAND, Memphis Record Pressing), Aug 23: with "Full
+    Template" selected, the uploaded artwork renders floating in the
+    middle of the die-line - centered over the whole spread - instead of
+    registered into the FRONT PANEL of the template.
+
+    Expected: in Full Template view, each art file sits registered in its
+    panel exactly as it will print - front art in the front-panel
+    die-line (respecting bleed/cut/fold guides), back art in the back
+    panel, spine in the spine. The Front / Back / Spine tabs already
+    isolate panels; Full Template must show the same registration, all
+    panels at once. Art must never render as a loose centered overlay at
+    any zoom.
+
+    Acceptance: Full Template at 100% shows the art seated in its panel
+    with the overlay guides (bleed / cut / fold / safety) lining up on
+    the art's edges - matching what the Front tab shows, in context.
+    
