@@ -1,0 +1,39 @@
+All logged. Everything you found this session is in the run-sheet on their main. Here's the combined message for Otis:
+
+---
+
+Otis — I went through the live app on my iPad this afternoon and logged a full punch list. **It's all in `docs/handoff-briefs/mrp-demo-monday-runsheet.md`** — each item has its own section with the fix spelled out. Work it alongside the flow gaps. The short version:
+
+**Critical for flow 2:**
+- **Artists cannot upload music anywhere.** Master, GoodTunes® Player, and Vinyl audio tabs all say "No tracks yet" with no upload control. The Master tab needs a real Upload masters action; Player and Vinyl inherit and their empty states link to it.
+- **Statuses are lying.** A brand-new empty release shows "Artwork approved ✓" and "Price set ✓" on the Store tab, and the vinyl art cards show "Using album art" when there's no art. Audit where these flags come from — if they default to true, other statuses are wrong too.
+
+**Old flows to remove:**
+- "How is this album being sold?" still offers the retired **GoodTunes Shopify+** — two options only now (GoodTunes Direct / Shopify store).
+- "Pick the physical format" still offers five cards — it's three formats (Vinyl / Cassette / CD); size and disc count live inside the builder.
+- **"Master with Wave"** — the exact removal spot is the Vinyl audio tab (banner, button, and intro copy).
+- Both modals say "Quote" — it's always "estimate."
+
+**iPad (I demo on one Monday):**
+- Portrait crushes the content under the fixed rail — collapse the rail below a breakpoint (standard panel-toggle icon) or float it as a translucent overlay. Rail gives way, never the content.
+- The sleeve/record hover-slide fires on tap and slides the record over the price cards — contain it.
+
+**Dark mode / branding:**
+- The loading flash: blueish GoodTunes splash between screens. It must match the surface's theme (charcoal in dark), and white-label pages never show the GoodTunes logo.
+- GoodTunes logo renders in an odd tint on dark surfaces (Store tab card) — sweep every dark-surface logo at once.
+- The template editor's stage is a bright white slab in dark mode — charcoal stage, template as a contained sheet.
+
+**Broken/odd:**
+- Details tab: "Editing — 🔒 Open" contradicts itself, and nothing is editable despite saying Open.
+- Settings → Connections: Shopify and Payout rows are dead taps. Payout matters — artists can't get paid without it. (Whether the Shopify row stays at all: Bill's decision pending, don't remove yet.)
+- A phantom "Album URL saved." toast fired with no user action — something is writing on page load. Trace it.
+- A floating audio player appears on the GoodDeed® Certificates pricing page — nothing there plays media.
+- Trailing periods on page headings everywhere ("Details.", "Vinyl art.") — one global sweep.
+
+The super-admin release page (Split shipments / SPIN Promo / Email appearance) is squarely in the canon cleanup pass — old grammar, purple glyphs, raw hex in copy.
+
+— Bill
+
+---
+
+On your GoodDeed question — my honest take: **yes, but as reference, not prefill.** An empty $0.00 ladder gives MRP nothing to anchor on — they've never priced certificate printing, so blank fields invite either a stall or a wild guess. The canon-honest version is a ghost "typical: $0.80–1.20" hint per tier, clearly labeled as reference, never auto-filled — their price is always theirs to type. The alternative view: any number we show becomes the negotiation ceiling.

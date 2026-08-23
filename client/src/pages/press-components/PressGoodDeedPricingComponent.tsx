@@ -115,12 +115,14 @@ function inputToCents(v: string): number | null | undefined {
 // ─── Price cell — quiet editable input, $-prefixed, tabular (handoff) ──
 function PriceCell({
   priceCents,
+  typicalRange,
   canEdit,
   onCommit,
   t,
   testId,
 }: {
   priceCents: number | null;
+  typicalRange?: { minCents: number; maxCents: number };
   canEdit: boolean;
   onCommit: (cents: number | null) => void;
   t: Theme;
@@ -163,39 +165,46 @@ function PriceCell({
   };
 
   return (
-    <div
-      className="flex items-center justify-end gap-0.5 rounded-lg transition-all"
-      style={{
-        width: 128,
-        height: 36,
-        paddingRight: 10,
-        border: focused ? `2px solid ${invalid ? "#e0245e" : t.blue}` : `1px solid ${invalid ? "#e0245e" : t.hairline}`,
-        backgroundColor: t.card,
-      }}
-    >
-      <span className="text-[13px]" style={{ color: value ? t.ink : t.faint }}>$</span>
-      <input
-        value={value}
-        onChange={(e) => {
-          dirty.current = true;
-          setInvalid(false);
-          setValue(e.target.value.replace(/[^0-9.]/g, ""));
+    <div className="flex flex-col items-end">
+      <div
+        className="flex items-center justify-end gap-0.5 rounded-lg transition-all"
+        style={{
+          width: 128,
+          height: 36,
+          paddingRight: 10,
+          border: focused ? `2px solid ${invalid ? "#e0245e" : t.blue}` : `1px solid ${invalid ? "#e0245e" : t.hairline}`,
+          backgroundColor: t.card,
         }}
-        onFocus={() => setFocused(true)}
-        onBlur={() => {
-          setFocused(false);
-          commit();
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-        placeholder="0.00"
-        inputMode="decimal"
-        aria-invalid={invalid || undefined}
-        data-testid={testId}
-        className={cn("text-right text-[14px] font-semibold tabular-nums focus:outline-none", t.searchPlaceholder)}
-        style={{ width: 68, background: "transparent", border: "none", color: t.ink }}
-      />
+      >
+        <span className="text-[13px]" style={{ color: value ? t.ink : t.faint }}>$</span>
+        <input
+          value={value}
+          onChange={(e) => {
+            dirty.current = true;
+            setInvalid(false);
+            setValue(e.target.value.replace(/[^0-9.]/g, ""));
+          }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            commit();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          placeholder="0.00"
+          inputMode="decimal"
+          aria-invalid={invalid || undefined}
+          data-testid={testId}
+          className={cn("text-right text-[14px] font-semibold tabular-nums focus:outline-none", t.searchPlaceholder)}
+          style={{ width: 68, background: "transparent", border: "none", color: t.ink }}
+        />
+      </div>
+      {!value && typicalRange && (
+        <span className="text-[10.5px] tabular-nums" style={{ marginTop: 4, color: t.faint }} data-testid={`${testId}-typical`}>
+          Typical: ${(typicalRange.minCents / 100).toFixed(2)}–${(typicalRange.maxCents / 100).toFixed(2)}
+        </span>
+      )}
     </div>
   );
 }
@@ -208,6 +217,7 @@ function LadderTable({
   t,
   idPrefix,
   priceHeader,
+  typicalRanges,
 }: {
   prices: Record<string, number | null>;
   canEdit: boolean;
@@ -215,6 +225,7 @@ function LadderTable({
   t: Theme;
   idPrefix: string;
   priceHeader: string;
+  typicalRanges: Array<{ qty: number; minCents: number; maxCents: number }>;
 }) {
   return (
     <div className="rounded-2xl overflow-hidden" style={{ marginTop: 18, border: `1px solid ${t.hairline}`, backgroundColor: t.card }}>
@@ -235,6 +246,7 @@ function LadderTable({
           </div>
           <PriceCell
             priceCents={prices[r.id] ?? null}
+            typicalRange={typicalRanges.find((range) => range.qty === r.qty)}
             canEdit={canEdit}
             onCommit={(cents) => onCommit(r, cents)}
             t={t}
@@ -364,6 +376,9 @@ export function PressGoodDeedPricingComponent({
         tiers: ladderTiers(f),
       },
       shipToFulfillment: next.ship ?? shipToFulfillment,
+      // Reference-only GoodTunes config is preserved byte-for-byte. It is
+      // never derived from or submitted as a field value.
+      typicalRanges: payload.typicalRanges ?? { printing: [], finishing: [] },
     };
   };
 
@@ -458,6 +473,7 @@ export function PressGoodDeedPricingComponent({
             t={t}
             idPrefix="print"
             priceHeader="Your price / unit"
+            typicalRanges={payload.typicalRanges?.printing ?? []}
           />
 
           <p className="text-[12px]" style={{ marginTop: 14, maxWidth: 560, color: t.faint, lineHeight: 1.5 }}>
@@ -502,6 +518,7 @@ export function PressGoodDeedPricingComponent({
                 t={t}
                 idPrefix="finishing"
                 priceHeader="Your price / unit"
+                typicalRanges={payload.typicalRanges?.finishing ?? []}
               />
 
               {/* Ship-to-fulfillment routing flag */}

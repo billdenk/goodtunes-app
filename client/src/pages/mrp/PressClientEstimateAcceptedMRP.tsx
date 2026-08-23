@@ -181,7 +181,7 @@ function MrpSiteFooter({ compact = false }: { compact?: boolean }) {
         <span style={{ flex: 1 }} />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)' }}>
           Powered by
-          <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 15, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.85 }} />
+          <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 15, width: 'auto', filter: 'invert(1) brightness(2)', opacity: 0.85 }} />
         </span>
       </div>
     </footer>

@@ -3652,7 +3652,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                     )}
                   </div>
                   <p className="text-[12px] text-center" style={{ marginTop: 6, color: '#a1a1a6', maxWidth: 280 }}>
-                    {picked('sleeve') ? sleeveType.note : 'Select a finish to add it to your quote.'}
+                    {picked('sleeve') ? sleeveType.note : 'Select a finish to add it to your estimate.'}
                   </p>
                 </div>
               </>
@@ -3902,11 +3902,11 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                     up front, inner sleeve a sliver + record peeking like the
                     Niina/Californialand card. Hover slides the sleeve out to a
                     full peek and the record further; off-hover they tuck back. */}
-                <div className="relative group" style={{ width: JS_BASE + 140, height: JS_BASE + 12 }} data-testid="qty-album-stage">
+                <div className="relative group" style={{ width: JS_BASE + 140, maxWidth: '100%', height: JS_BASE + 12, overflow: 'clip' }} data-testid="qty-album-stage">
                   {/* record — the real VinylDisc render of the chosen color
                       (splatter layers and all), peeking right of the jacket */}
                   <div
-                    className="absolute transition-transform duration-500 ease-out group-hover:translate-x-11"
+                    className="qty-slide-part absolute transition-transform duration-500 ease-out group-hover:translate-x-11"
                     style={{ left: 140, top: 14, width: JS_BASE - 16, height: JS_BASE - 16, zIndex: 1, borderRadius: '50%', boxShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
                     aria-hidden
                   >
@@ -3942,7 +3942,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                   </div>
                   {/* inner sleeve — a sliver at rest, expands out on hover */}
                   <div
-                    className="absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-6"
+                    className="qty-slide-part absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-6"
                     style={{
                       left: 38, top: 10, width: JS_BASE - 12, height: JS_BASE - 12, zIndex: 2,
                       background: look.printed
@@ -3981,7 +3981,8 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                   </div>
                 </div>
                 <p className="text-[12px] text-center" style={{ marginTop: 6, maxWidth: 360, color: '#a1a1a6' }}>
-                  {useArtistArt ? 'Artist temp artwork for this quote' : `${pressBrandName} house artwork by default`} — hover to slide the sleeve and record out.
+                  {useArtistArt ? 'Artist temp artwork for this estimate' : `${pressBrandName} house artwork by default`}
+                  <span className="qty-hover-instruction"> — hover to slide the sleeve and record out.</span>
                 </p>
                 {/* Swap-in point (Bill, Aug 16 2026): a press can drop in the
                     artist's temp artwork, sleeve, and label for the quote;

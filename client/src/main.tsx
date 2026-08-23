@@ -6,6 +6,7 @@ import { armBootWatchdog } from "@/lib/bootHeal";
 import { setAuthToken } from "@/lib/queryClient";
 import { setPreviewPass } from "@/lib/previewPass";
 import { applyAdminAppearance, setAdminAppearance } from "@/lib/adminAppearance";
+import { isWhitelabelHost } from "@shared/whitelabelHost";
 
 // Task #1631 — Cross-host purchase handoff pickup. After a sale on the buy
 // funnel (get./store.goodtunes.music), the fan is redirected to
@@ -131,6 +132,10 @@ try {
     // pass so a dark-mode admin never flashes light on first paint.
     applyAdminAppearance();
   }
+  // Keep the pre-React interstitial host classification tied to the shared
+  // parser used by the server and route surfaces. The tiny inline detector in
+  // index.html handles the literal first paint; this is its canonical backstop.
+  document.documentElement.classList.toggle("boot-whitelabel", isWhitelabelHost(h));
 } catch {}
 
 installGlobalErrorReporter();

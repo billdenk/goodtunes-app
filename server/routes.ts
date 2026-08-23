@@ -35821,6 +35821,10 @@ export async function registerRoutes(
             tiers: Array<{ qty: number; perUnitCents: number }>;
             finishing?: { offered: boolean; tiers: Array<{ qty: number; perUnitCents: number }> };
             shipToFulfillment?: boolean;
+            typicalRanges?: {
+              printing?: Array<{ qty: number; minCents: number; maxCents: number }>;
+              finishing?: Array<{ qty: number; minCents: number; maxCents: number }>;
+            };
           }
         | null
         | undefined;
@@ -35834,6 +35838,10 @@ export async function registerRoutes(
           tiers: raw?.finishing?.tiers ?? [],
         },
         shipToFulfillment: raw?.shipToFulfillment ?? false,
+        typicalRanges: {
+          printing: raw?.typicalRanges?.printing ?? [],
+          finishing: raw?.typicalRanges?.finishing ?? [],
+        },
       });
     },
   );
@@ -35883,7 +35891,14 @@ export async function registerRoutes(
       // wipe a press's saved finishing config: absent fields keep the stored
       // values instead of resetting them.
       const existing = (press as any).gooddeedPrintingJson as
-        | { finishing?: { offered: boolean; tiers: Array<{ qty: number; perUnitCents: number }> }; shipToFulfillment?: boolean }
+        | {
+            finishing?: { offered: boolean; tiers: Array<{ qty: number; perUnitCents: number }> };
+            shipToFulfillment?: boolean;
+            typicalRanges?: {
+              printing?: Array<{ qty: number; minCents: number; maxCents: number }>;
+              finishing?: Array<{ qty: number; minCents: number; maxCents: number }>;
+            };
+          }
         | null
         | undefined;
       let nextFinishing = existing?.finishing ?? { offered: false, tiers: [] };
@@ -35907,6 +35922,12 @@ export async function registerRoutes(
         tiers: printRes.tiers,
         finishing: nextFinishing,
         shipToFulfillment: nextShip,
+        // GoodTunes owns these reference hints. A press pricing PUT preserves
+        // the server-side config and cannot turn a hint into a submitted rate.
+        typicalRanges: {
+          printing: existing?.typicalRanges?.printing ?? [],
+          finishing: existing?.typicalRanges?.finishing ?? [],
+        },
       };
       await db
         .update(manufacturers)

@@ -3863,10 +3863,6 @@ function ShareLinkPanel({
     },
   });
   const albumPostSale = !!shareEditAccess?.locked;
-  // Don't silently auto-default when this session's edits would divert to the
-  // GoodTunes review queue (approval-mode partner) — that would file a pending
-  // change just for opening the page. Auto-defaulting is for the happy path.
-  const autoDefaultBlocked = !!shareEditAccess?.requiresApproval;
   const savedArtistSlug = personData?.artistShareSlug ?? "";
   const [artistDraft, setArtistDraft] = useState(savedArtistSlug);
   const [artistSuggesting, setArtistSuggesting] = useState(false);
@@ -3902,7 +3898,7 @@ function ShareLinkPanel({
         return;
       }
       qc.invalidateQueries({ queryKey: ["/api/people", artistId] });
-      toast({ title: "Artist URL saved." });
+      toast({ title: "Artist URL saved" });
     },
     onError: (e: any) => {
       toast({
@@ -4000,7 +3996,7 @@ function ShareLinkPanel({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/albums", album.id] });
       qc.invalidateQueries({ queryKey: ["/api/admin/albums"] });
-      toast({ title: "Album URL saved." });
+      toast({ title: "Album URL saved" });
     },
     onError: (e: any) => {
       toast({
@@ -4036,28 +4032,6 @@ function ShareLinkPanel({
     } catch { return false; }
   };
 
-  // Find an available album slug derived from the album's title (then
-  // artist + title as a secondary base). Returns the first free candidate,
-  // or null when there's no title to suggest from. Mirrors the manual
-  // suggestAlbum() walk but returns the slug instead of setting the draft.
-  const findAvailableAlbumSlug = async (): Promise<string | null> => {
-    const bases: string[] = [];
-    for (const raw of [album.title, `${album.artist} ${album.title}`]) {
-      const v = validateShareSlug(raw ?? "");
-      if (v.ok && !bases.includes(v.slug)) bases.push(v.slug);
-    }
-    if (bases.length === 0) return null;
-    for (const base of bases) {
-      for (let n = 1; n <= 9; n++) {
-        const candidate = n === 1 ? base : `${base}-${n}`;
-        const v = validateShareSlug(candidate);
-        if (!v.ok) continue;
-        if (await checkAlbumAvailable(v.slug)) return v.slug;
-      }
-    }
-    return bases[0]; // all taken — surface the base so the operator can tweak it
-  };
-
   const suggestAlbum = async () => {
     if (disabled || saveAlbum.isPending || albumSuggesting) return;
     const bases: string[] = [];
@@ -4085,50 +4059,6 @@ function ShareLinkPanel({
       toast({ title: "Suggestion may be taken", description: "Tweak it before saving." });
     } finally { setAlbumSuggesting(false); }
   };
-
-  // ── Task #1379 — auto-default both URLs from the real names ────────────
-  // When the panel opens for a release that has a primary artist but no
-  // saved Artist URL, derive a URL-safe default from the real artist name
-  // and save it — no manual "Suggest" click needed. Same for the Album URL
-  // from the album title. Idempotent: each side is attempted at most once
-  // per id (keyed by artistId / album.id), only fires when the value is
-  // genuinely missing, never overwrites an operator's value, and won't run
-  // while editing is frozen (post-sale lock / read-only). Reuses the same
-  // availability + per-person/per-artist uniqueness checks "Suggest" uses,
-  // falling back to a numbered variant when the base name is taken.
-  const autoArtistAttemptedFor = useRef<string | null>(null);
-  const autoAlbumAttemptedFor = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!artistId || disabled || autoDefaultBlocked) return;
-    if (personData === undefined) return; // person not loaded yet — don't assume "missing"
-    if (savedArtistSlug) return;          // already has one — never overwrite
-    if (saveArtist.isPending) return;
-    if (autoArtistAttemptedFor.current === artistId) return;
-    autoArtistAttemptedFor.current = artistId;
-    (async () => {
-      const slug = await findAvailableArtistSlug();
-      if (slug && !savedArtistSlug) {
-        setArtistDraft(slug);
-        saveArtist.mutate(slug);
-      }
-    })();
-  }, [artistId, disabled, autoDefaultBlocked, personData, savedArtistSlug, saveArtist.isPending]);
-
-  useEffect(() => {
-    if (!artistId || disabled || autoDefaultBlocked) return; // link needs an artist half
-    if (savedAlbumSlug) return;           // already has one — never overwrite
-    if (saveAlbum.isPending) return;
-    if (autoAlbumAttemptedFor.current === album.id) return;
-    autoAlbumAttemptedFor.current = album.id;
-    (async () => {
-      const slug = await findAvailableAlbumSlug();
-      if (slug && !savedAlbumSlug) {
-        setAlbumDraft(slug);
-        saveAlbum.mutate(slug);
-      }
-    })();
-  }, [album.id, artistId, disabled, autoDefaultBlocked, savedAlbumSlug, saveAlbum.isPending]);
 
   // ── Computed full URL + copy/open ─────────────────────────────────────
   const fullUrl = (savedArtistSlug && savedAlbumSlug)

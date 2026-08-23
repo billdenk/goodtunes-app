@@ -794,15 +794,25 @@ export function TemplateArtViewer({
       </div>
 
       {/* The composite: template raster · art · GT overlays */}
-      <div className="flex justify-center" style={{ marginTop: 14 }}>
+      <div
+        className="flex justify-center rounded-2xl"
+        style={{
+          marginTop: 14,
+          padding: 'clamp(16px, 3vw, 36px)',
+          backgroundColor: t.soft,
+          border: `1px solid ${t.hairline}`,
+        }}
+        data-testid="template-preview-stage"
+      >
         <div
-          className="relative overflow-hidden rounded-lg"
+          className="relative overflow-hidden"
           style={{
             width: `${viewportPct.toFixed(3)}%`,
             minWidth: 96,
             aspectRatio: focus ? `${focus.w} / ${focus.h}` : `${template.wMm} / ${template.hMm}`,
-            backgroundColor: '#ffffff',
-            border: `1px solid ${t.hairline}`,
+            backgroundColor: 'transparent',
+            border: '1px solid rgba(255,255,255,0.14)',
+            boxShadow: dark ? '0 18px 42px rgba(0,0,0,0.42)' : '0 12px 30px rgba(0,0,0,0.12)',
             cursor: zoom !== 1 ? (dragRef.current ? 'grabbing' : 'grab') : 'default',
             touchAction: zoom !== 1 ? 'none' : 'auto',
           }}

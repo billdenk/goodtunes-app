@@ -4,7 +4,7 @@
 // ArtistPortalRestructureFlow.tsx (Ruby, Aug 16 2026): SettingsSection /
 // SettingsRow hairline grammar, Team rows w/ initials circles + Invite row,
 // Connections rows. MOCK_TEAM swapped for GET /api/artist/team; Shopify state
-// from GET /api/artist/shopify/overview. Dead-end CTAs are quiet no-ops.
+// from GET /api/artist/shopify/overview.
 
 import { type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -27,15 +27,33 @@ function SettingsSection({ title, blurb, children, t, testid }: { title: string;
   );
 }
 
-function SettingsRow({ first, left, right, t, testid, dimmed }: { first?: boolean; left: ReactNode; right: ReactNode; t: Theme; testid: string; dimmed?: boolean }) {
+function SettingsRow({ first, left, right, t, testid, dimmed, onActivate }: { first?: boolean; left: ReactNode; right: ReactNode; t: Theme; testid: string; dimmed?: boolean; onActivate?: () => void }) {
+  const content = (
+    <>
+      <div className="flex items-center gap-3 min-w-0">{left}</div>
+      <div className="flex items-center gap-3 flex-shrink-0">{right}</div>
+    </>
+  );
+  if (onActivate) {
+    return (
+      <button
+        type="button"
+        onClick={onActivate}
+        className={cn('w-full flex items-center justify-between gap-6 text-left transition-colors', t.hoverCard)}
+        style={{ padding: '14px 18px', borderTop: first ? undefined : `1px solid ${t.hairline}`, opacity: dimmed ? 0.62 : 1 }}
+        data-testid={testid}
+      >
+        {content}
+      </button>
+    );
+  }
   return (
     <div
       className="flex items-center justify-between gap-6"
       style={{ padding: '14px 18px', borderTop: first ? undefined : `1px solid ${t.hairline}`, opacity: dimmed ? 0.62 : 1 }}
       data-testid={testid}
     >
-      <div className="flex items-center gap-3 min-w-0">{left}</div>
-      <div className="flex items-center gap-3 flex-shrink-0">{right}</div>
+      {content}
     </div>
   );
 }
@@ -55,12 +73,18 @@ export function ArtistSettingsPage({ personId: personIdProp }: { personId?: stri
   const members = teamQ.data?.team ?? [];
   const shopifyConnected = Boolean(shopifyQ.data?.configured && (shopifyQ.data?.stores?.length ?? 0) > 0);
   const payoutReady = teamQ.data?.payout?.status === 'enabled';
+  const openShopify = () => {
+    const sp = new URLSearchParams(window.location.search);
+    sp.set('tab', 'shopify');
+    window.history.pushState(null, '', `${window.location.pathname}?${sp.toString()}`);
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
 
   return (
     <div className="mx-auto w-full" style={{ maxWidth: 860, padding: '32px 40px 96px' }}>
       <h1 className="font-semibold" style={{ fontSize: 30, lineHeight: 1.12, letterSpacing: '-0.03em' }}>
         <span style={{ color: t.ink }}>Settings. </span>
-        <span style={{ color: t.subink }}>Team and connections.</span>
+        <span style={{ color: t.subink }}>Team and connections</span>
       </h1>
 
       <SettingsSection title="Team" blurb="Who can work on your releases with you." t={t} testid="settings-team">
@@ -108,6 +132,7 @@ export function ArtistSettingsPage({ personId: personIdProp }: { personId?: stri
           first
           testid="connection-shopify"
           t={t}
+          onActivate={openShopify}
           left={
             <>
               <img src={shopifyLogo} alt="Shopify" style={{ height: 20, width: 'auto', filter: t.logoFilter }} />
@@ -125,14 +150,19 @@ export function ArtistSettingsPage({ personId: personIdProp }: { personId?: stri
                 <span className="inline-flex items-center gap-1.5 text-[12.5px] font-semibold" style={{ color: t.ready }}>
                   <Check className="w-3.5 h-3.5" strokeWidth={3} /> Connected
                 </span>
-                <button type="button" className="inline-flex items-center gap-1 text-[12.5px] font-medium" style={{ color: t.subink }} data-testid="button-manage-shopify">
+                <span className="inline-flex items-center gap-1 text-[12.5px] font-medium" style={{ color: t.subink }} data-testid="button-manage-shopify">
                   Manage <ChevronRight className="w-3.5 h-3.5" />
-                </button>
+                </span>
               </>
             ) : (
-              <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium" style={{ color: t.faint }}>
-                <X className="w-3.5 h-3.5" /> Not connected
-              </span>
+              <>
+                <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium" style={{ color: t.faint }}>
+                  <X className="w-3.5 h-3.5" /> Not connected
+                </span>
+                <span className="inline-flex items-center gap-1 text-[12.5px] font-medium" style={{ color: t.subink }}>
+                  Connect <ChevronRight className="w-3.5 h-3.5" />
+                </span>
+              </>
             )
           }
         />
@@ -141,10 +171,19 @@ export function ArtistSettingsPage({ personId: personIdProp }: { personId?: stri
           t={t}
           dimmed={!payoutReady}
           left={
-            <div className="min-w-0">
-              <div className="text-[13.5px] font-semibold" style={{ color: t.ink }}>Payout account</div>
-              <div className="text-[11.5px]" style={{ color: t.faint }}>Where your earnings land</div>
-            </div>
+            <>
+              <span
+                aria-label="Stripe"
+                className="inline-flex items-center text-[15px] font-bold tracking-tight"
+                style={{ color: t.ink, width: 54 }}
+              >
+                Stripe
+              </span>
+              <div className="min-w-0">
+                <div className="text-[13.5px] font-semibold" style={{ color: t.ink }}>Payout account</div>
+                <div className="text-[11.5px]" style={{ color: t.faint }}>Powered by Stripe</div>
+              </div>
+            </>
           }
           right={
             payoutReady ? (
@@ -152,14 +191,9 @@ export function ArtistSettingsPage({ personId: personIdProp }: { personId?: stri
                 <Check className="w-3.5 h-3.5" strokeWidth={3} /> Ready
               </span>
             ) : (
-              <>
-                <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium" style={{ color: t.faint }}>
-                  <X className="w-3.5 h-3.5" /> Not set up
-                </span>
-                <button type="button" className="inline-flex items-center gap-1 text-[12.5px] font-medium" style={{ color: t.subink }} data-testid="button-setup-payout">
-                  Set up <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </>
+              <span className="inline-flex items-center gap-1.5 text-[12.5px] font-medium" style={{ color: t.faint }} data-testid="payout-coming-soon">
+                <X className="w-3.5 h-3.5" /> Coming soon
+              </span>
             )
           }
         />

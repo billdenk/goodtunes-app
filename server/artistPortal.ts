@@ -39,6 +39,7 @@ type FmtRow = {
   kind: string;
   label: string;
   active: boolean;
+  priceCents: number;
   lockedAt: string | null;
   status: "live" | "press" | "draft";
 };
@@ -58,7 +59,8 @@ async function loadAlbums(albumIds: string[]) {
     SELECT id, title, artwork, year, good_tunes_release_date, share_slug,
            is_prepping, is_hidden, first_sold_at, sell_mode,
            submitted_to_press_at, primary_artist_id,
-           catalog_number, upc
+           catalog_number, upc, price_cents,
+           created_by_scope_kind, created_by_scope_id
     FROM albums
     WHERE id = ANY(${pgArray(albumIds)})
       AND deleted_at IS NULL
@@ -71,7 +73,8 @@ async function loadAlbums(albumIds: string[]) {
 async function loadSkus(albumIds: string[]) {
   if (!albumIds.length) return new Map<string, FmtRow[]>();
   const r: any = await db.execute(sql`
-    SELECT s.id, s.album_id, s.format, s.display_name, s.active, s.locked_at
+    SELECT s.id, s.album_id, s.format, s.display_name, s.active, s.locked_at,
+           s.price_cents
     FROM album_skus s
     WHERE s.album_id = ANY(${pgArray(albumIds)})
     ORDER BY s.position ASC
@@ -94,6 +97,7 @@ function shapeFormats(album: any, skus: any[]): FmtRow[] {
       kind,
       label: s.display_name || KIND_WORD[kind] || s.format,
       active: !!s.active,
+      priceCents: Number(s.price_cents ?? 0),
       lockedAt: s.locked_at ? new Date(s.locked_at).toISOString() : null,
       status: skuStatus(album, !!s.active, kind),
     };
@@ -176,6 +180,31 @@ async function releaseHandler(req: Request, res: Response) {
   const album = albums[0];
   if (!album) return res.status(404).json({ message: "Album not found" });
 
+  // Report the same mutation gates the album/master endpoints enforce so the
+  // portal never advertises an editable state that the save will reject.
+  // Locked releases are known without probing (and therefore without
+  // consuming a one-shot override on this read request).
+  const { getUserRole } = await import("./auth/roles");
+  const callerRole = await getUserRole(req.session.userId!);
+  const isOperator = callerRole?.role === "super_admin" || callerRole?.role === "admin";
+  let canEditMetadata = isOperator || !album.first_sold_at;
+  let canUploadMasters = isOperator || !album.first_sold_at;
+  if (!album.first_sold_at && !isOperator) {
+    const { checkPartnerVerbForScope, resolveAlbumScope } = await import("./auth/partnerPermissions");
+    const resolved = await resolveAlbumScope(albumId);
+    const userId = req.session.userId!;
+    if (resolved?.scope) {
+      canEditMetadata = !(await checkPartnerVerbForScope(userId, "edit_metadata", resolved.scope, {
+        albumIdForLock: albumId,
+        albumIdForScope: albumId,
+      }));
+      canUploadMasters = !(await checkPartnerVerbForScope(userId, "upload_masters", resolved.scope, {
+        albumIdForLock: albumId,
+        albumIdForScope: albumId,
+      }));
+    }
+  }
+
   const skuMap = await loadSkus([albumId]);
   const formats = shapeFormats(album, skuMap.get(albumId) ?? []);
 
@@ -233,13 +262,26 @@ async function releaseHandler(req: Request, res: Response) {
 
   const artistShareSlug = (person as any)?.artistShareSlug ?? null;
   const shareSlug = album.share_slug ?? null;
+  let artworkIsPlaceholder =
+    !album.artwork ||
+    album.artwork === "/album-placeholder.svg";
+  if (
+    !artworkIsPlaceholder &&
+    album.created_by_scope_kind === "manufacturer" &&
+    album.created_by_scope_id
+  ) {
+    const creatingPress = await storage.getManufacturerById(String(album.created_by_scope_id));
+    artworkIsPlaceholder =
+      !!creatingPress?.vinylPlaceholderUrl &&
+      album.artwork === creatingPress.vinylPlaceholderUrl;
+  }
 
   return res.json({
     release: {
       id: album.id,
       title: album.title,
       artist: person?.name ?? "",
-      artworkUrl: album.artwork || null,
+      artworkUrl: artworkIsPlaceholder ? null : album.artwork,
       year: album.good_tunes_release_date
         ? String(album.good_tunes_release_date).slice(0, 4)
         : album.year != null
@@ -247,11 +289,12 @@ async function releaseHandler(req: Request, res: Response) {
           : "",
       tracks: Number(songCounts.n),
       visibility: album.is_hidden ? "Hidden" : album.is_prepping ? "Preview" : "Live",
-      editing: album.first_sold_at ? "Locked" : "Open",
+      editing: canEditMetadata ? "Open" : "Locked",
       // Task #3178 — catalog identifiers surfaced on the Details tab.
       catalogNumber: album.catalog_number ?? null,
       upc: album.upc ?? null,
     },
+    access: { canEditMetadata, canUploadMasters },
     formats,
     store: {
       sellMode: album.sell_mode || null,
@@ -261,10 +304,12 @@ async function releaseHandler(req: Request, res: Response) {
           ? `https://get.goodtunes.music/${artistShareSlug}/${shareSlug}`
           : null,
       checklist: {
-        art: !!album.artwork,
-        audio: Number(songCounts.ready) > 0,
-        price: formats.some((f) => f.active),
-        channel: !!album.sell_mode || formats.some((f) => f.status === "live"),
+        art: !artworkIsPlaceholder,
+        audio: Number(songCounts.n) > 0 && Number(songCounts.ready) === Number(songCounts.n),
+        price:
+          Number(album.price_cents ?? 0) > 0 ||
+          formats.some((f) => f.active && f.priceCents > 0),
+        channel: !!album.sell_mode,
       },
     },
     payments,

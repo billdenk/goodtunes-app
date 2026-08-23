@@ -13,15 +13,23 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ALBUM_FORMAT_LABEL, type AlbumFormat } from "@shared/schema";
+import { type AlbumFormat } from "@shared/schema";
 
-const FORMAT_BLURB: Record<AlbumFormat, string> = {
-  "7_inch": "7″ single — fastest turn.",
-  "12_lp": "Standard 12″ vinyl.",
-  "12_double": "Two-disc 12″ set.",
-  cassette: "Tape — short-run friendly.",
-  cd: "Compact disc.",
-};
+type FormatFamily = "vinyl" | "cassette" | "cd";
+
+const FORMAT_FAMILIES: Array<{
+  id: FormatFamily;
+  label: string;
+  blurb: string;
+}> = [
+  { id: "vinyl", label: "Vinyl", blurb: "Choose size and disc count in the builder." },
+  { id: "cassette", label: "Cassette", blurb: "Tape — short-run friendly." },
+  { id: "cd", label: "CD", blurb: "Compact disc." },
+];
+
+function formatFamily(format: AlbumFormat): FormatFamily {
+  return format === "cassette" || format === "cd" ? format : "vinyl";
+}
 
 export function ChangeFormatDialog({
   open,
@@ -38,9 +46,20 @@ export function ChangeFormatDialog({
   onPick: (target: AlbumFormat) => void;
   busy?: boolean;
 }) {
-  // Always include the current format in the grid so the "Current"
-  // pill is visible — even if the parent forgot to thread it through.
-  const formats = Array.from(new Set<AlbumFormat>([current, ...options]));
+  // Collapse the legacy vinyl SKUs into one family while threading an
+  // available backend AlbumFormat value through to the existing adapter.
+  const availableFamilies = new Set<FormatFamily>(
+    [current, ...options].map(formatFamily),
+  );
+  const currentFamily = formatFamily(current);
+  const formats = FORMAT_FAMILIES
+    .filter(({ id }) => availableFamilies.has(id))
+    .map((family) => {
+      if (family.id === currentFamily) return { ...family, target: current };
+      const target = options.find((option) => formatFamily(option) === family.id);
+      return target ? { ...family, target } : null;
+    })
+    .filter((format): format is (typeof FORMAT_FAMILIES)[number] & { target: AlbumFormat } => format !== null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -57,15 +76,16 @@ export function ChangeFormatDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-2.5">
-          {formats.map((f) => {
-            const isCurrent = f === current;
+          {formats.map((format) => {
+            const isCurrent = format.id === currentFamily;
+            const target = format.target;
             return (
               <button
-                key={f}
+                key={format.id}
                 type="button"
                 disabled={busy || isCurrent}
-                onClick={() => onPick(f)}
-                data-testid={`card-change-format-${f}`}
+                onClick={() => onPick(target)}
+                data-testid={`card-change-format-${target}`}
                 aria-current={isCurrent || undefined}
                 className={[
                   "group relative rounded-lg border p-4 text-left transition-all",
@@ -83,15 +103,15 @@ export function ChangeFormatDialog({
                       : "text-slate-900 group-hover:text-[color:var(--brand-blue)]",
                   ].join(" ")}
                 >
-                  {ALBUM_FORMAT_LABEL[f]}
+                  {format.label}
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
-                  {FORMAT_BLURB[f] ?? ""}
+                  {format.blurb}
                 </div>
                 {isCurrent && (
                   <span
                     className="absolute top-2 right-2 inline-flex items-center gap-1 rounded-full bg-[color:var(--brand-blue)] text-white text-xs font-semibold uppercase tracking-wider px-2 py-0.5"
-                    data-testid={`pill-current-format-${f}`}
+                    data-testid={`pill-current-format-${target}`}
                   >
                     <Check className="w-3 h-3" />
                     Current

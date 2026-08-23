@@ -3264,7 +3264,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                     )}
                   </div>
                   <p className="text-[12px] text-center" style={{ marginTop: 6, color: '#a1a1a6', maxWidth: 280 }}>
-                    {picked('sleeve') ? sleeveType.note : 'Select a finish to add it to your quote.'}
+                    {picked('sleeve') ? sleeveType.note : 'Select a finish to add it to your estimate.'}
                   </p>
                 </div>
               </>
@@ -3514,11 +3514,11 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                     up front, inner sleeve a sliver + record peeking like the
                     Niina/Californialand card. Hover slides the sleeve out to a
                     full peek and the record further; off-hover they tuck back. */}
-                <div className="relative group" style={{ width: JS_BASE + 140, height: JS_BASE + 12 }} data-testid="qty-album-stage">
+                <div className="relative group" style={{ width: JS_BASE + 140, maxWidth: '100%', height: JS_BASE + 12, overflow: 'clip' }} data-testid="qty-album-stage">
                   {/* record — the real VinylDisc render of the chosen color
                       (splatter layers and all), peeking right of the jacket */}
                   <div
-                    className="absolute transition-transform duration-500 ease-out group-hover:translate-x-11"
+                    className="qty-slide-part absolute transition-transform duration-500 ease-out group-hover:translate-x-11"
                     style={{ left: 140, top: 14, width: JS_BASE - 16, height: JS_BASE - 16, zIndex: 1, borderRadius: '50%', boxShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
                     aria-hidden
                   >
@@ -3554,7 +3554,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                   </div>
                   {/* inner sleeve — a sliver at rest, expands out on hover */}
                   <div
-                    className="absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-6"
+                    className="qty-slide-part absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-6"
                     style={{
                       left: 38, top: 10, width: JS_BASE - 12, height: JS_BASE - 12, zIndex: 2,
                       background: look.printed
@@ -3593,7 +3593,8 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                   </div>
                 </div>
                 <p className="text-[12px] text-center" style={{ marginTop: 6, maxWidth: 360, color: '#a1a1a6' }}>
-                  {useArtistArt ? 'Artist temp artwork for this quote' : `${pressBrandName} house artwork by default`} — hover to slide the sleeve and record out.
+                  {useArtistArt ? 'Artist temp artwork for this estimate' : `${pressBrandName} house artwork by default`}
+                  <span className="qty-hover-instruction"> — hover to slide the sleeve and record out.</span>
                 </p>
                 {/* Swap-in point (Bill, Aug 16 2026): a press can drop in the
                     artist's temp artwork, sleeve, and label for the quote;
@@ -3712,7 +3713,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                             {l.note && <div className="text-[11px]" style={{ color: '#a1a1a6', marginTop: 1 }}>{l.note}</div>}
                           </div>
                           {l.v == null ? (
-                            <span className="text-[12px] font-medium" style={{ color: '#b25e09', whiteSpace: 'nowrap' }} data-testid={`quote-line-pending-${l.id}`}>Pricing pending · custom quote</span>
+                            <span className="text-[12px] font-medium" style={{ color: '#b25e09', whiteSpace: 'nowrap' }} data-testid={`quote-line-pending-${l.id}`}>Pricing pending · custom estimate</span>
                           ) : (
                             <span className="text-[12.5px]" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(l.v * unitFactor)} <span style={{ color: '#a1a1a6', fontSize: 11 }}>/unit</span></span>
                           )}
@@ -3765,7 +3766,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                       <div className="text-[11.5px]" style={{ marginTop: 3, color: SUBINK }}>If {clientFirst} presses the full run</div>
                       {pricingPending && (
                         <div className="text-[11.5px] font-medium" style={{ marginTop: 4, color: '#b25e09', maxWidth: 320 }} data-testid="quote-total-pending-note">
-                          Excludes {pendingCount} line{pendingCount === 1 ? '' : 's'} awaiting pricing — this build can be saved as a draft, but not sent as a firm quote yet.
+                          Excludes {pendingCount} line{pendingCount === 1 ? '' : 's'} awaiting pricing — this build can be saved as a draft, but not sent as a firm estimate yet.
                         </div>
                       )}
                     </div>
@@ -3869,7 +3870,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                           </div>
                           {pricingPending && (
                             <div role="note" style={{ fontSize: 12.5, color: '#f2a35c', marginTop: 12, lineHeight: 1.6 }} data-testid="quote-send-pending-block">
-                              This build includes {pendingCount} component{pendingCount === 1 ? '' : 's'} awaiting pricing — it's saved as a draft, but it can't be sent as a firm quote until every line has a real price.
+                              This build includes {pendingCount} component{pendingCount === 1 ? '' : 's'} awaiting pricing — it's saved as a draft, but it can't be sent as a firm estimate until every line has a real price.
                             </div>
                           )}
                           <input

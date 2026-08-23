@@ -514,7 +514,7 @@ export function AdminManufacturer() {
   };
   const pressRail = (
     <aside
-      className="w-64 flex-shrink-0 bg-[var(--apple-rail)] hidden md:flex md:flex-col"
+      className="w-64 h-full flex-shrink-0 bg-[var(--apple-rail)] flex flex-col"
       data-testid="rail-admin-press"
     >
       <nav className="flex-1 px-2.5 pt-3 pb-3 space-y-0.5 overflow-y-auto border-r border-[var(--apple-hairline)]">

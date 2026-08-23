@@ -80,7 +80,7 @@ export const THEMES = {
     dropFill: '#202024',
     dashed: '#46464d',
     dot: '#46464d',
-    logoFilter: 'invert(1)',
+    logoFilter: 'invert(1) brightness(2)',
   },
 };
 
@@ -97,10 +97,9 @@ export function useRestructureTheme(): Theme {
   return dark ? THEMES.dark : THEMES.light;
 }
 
-// Channel — logo only, no name text. Larger glyph, monochrome WHITE on dark
-// (brightness(0) invert(1)) so GoodTunes and Shopify read the same regardless of
-// their source colors.
-export const WHITE_GLYPH = 'brightness(0) invert(1)';
+// Channel — logo only, no name text. The GoodTunes dark asset becomes white
+// on dark surfaces with the canon CSS inversion.
+export const WHITE_GLYPH = 'invert(1) brightness(2)';
 
 // ═══════════════════════════════════════════════════════════════════
 // Shared small primitives — copied grammar from source mocks

@@ -379,6 +379,7 @@ async function videoRowExists(albumId: string, videoUrl: string): Promise<boolea
 
 function invalidateForBatch(batch: UploadBatch) {
   if (batch.kind === "audio") {
+    queryClient.invalidateQueries({ queryKey: [`/api/albums/${batch.albumId}`] });
     queryClient.invalidateQueries({ queryKey: ["/api/albums", batch.albumId] });
     queryClient.invalidateQueries({ queryKey: ["/api/albums"] });
   } else {

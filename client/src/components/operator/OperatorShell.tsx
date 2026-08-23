@@ -27,7 +27,7 @@ import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ChevronRight, Circle, Eye, type LucideIcon } from "lucide-react";
+import { ChevronRight, Circle, Eye, PanelLeftClose, PanelLeftOpen, type LucideIcon } from "lucide-react";
 import { DashboardTabs, type TabDef } from "@/components/partner/dashboard-controls";
 import { SECTION_LABELS, type OperatorSectionId } from "@/components/operator/registry";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
@@ -198,6 +198,8 @@ export function OperatorShell<TabId extends string>({
   // behind it so it never disappears (dark-mark sampling handles legacy
   // single-slot uploads too).
   const adminDark = useAdminDark();
+  const [mobileRailOpen, setMobileRailOpen] = React.useState(false);
+  React.useEffect(() => setMobileRailOpen(false), [activeTab]);
   const resolvedLogoUrl = (adminDark ? logoUrl ?? lightLogoUrl : lightLogoUrl ?? logoUrl) ?? null;
   const resolvedNavLogoUrl = (adminDark ? navLogoUrl ?? lightNavLogoUrl : lightNavLogoUrl ?? navLogoUrl) ?? null;
   const logoIsDarkMark = useDarkMarkLogo(resolvedLogoUrl);
@@ -304,6 +306,16 @@ export function OperatorShell<TabId extends string>({
           style={{ background: "var(--apple-glass)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
           data-testid="operator-shell-topbar"
         >
+          <button
+            type="button"
+            onClick={() => setMobileRailOpen((open) => !open)}
+            className="lg:hidden h-9 w-9 flex-shrink-0 rounded-lg inline-flex items-center justify-center text-[var(--apple-subink)] hover:bg-slate-200 transition-colors"
+            aria-label={mobileRailOpen ? "Hide navigation" : "Show navigation"}
+            aria-expanded={mobileRailOpen}
+            data-testid="button-toggle-operator-rail"
+          >
+            {mobileRailOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+          </button>
           <div className="flex min-w-0 items-center gap-2.5">
             {resolvedNavLogoUrl ? (
               <span
@@ -333,8 +345,16 @@ export function OperatorShell<TabId extends string>({
           </div>
         </div>
         <div
-          className="flex-1 min-h-0 overflow-hidden flex bg-[var(--apple-canvas)] text-[var(--apple-ink)]"
+          className="relative flex-1 min-h-0 overflow-x-clip flex bg-[var(--apple-canvas)] text-[var(--apple-ink)]"
         >
+        {mobileRailOpen && (
+          <button
+            type="button"
+            className="absolute inset-0 z-20 bg-black/20 lg:hidden"
+            onClick={() => setMobileRailOpen(false)}
+            aria-label="Close navigation"
+          />
+        )}
         {/* Left rail — 220px white column (AdminFrame parity). Partner logo
             + name in the top
             header band (replacing the GoodTunes logo). Vertical nav in the
@@ -343,7 +363,13 @@ export function OperatorShell<TabId extends string>({
         {/* Apple-canon rail — w-64 gray rail with hairline right border,
             byte-identical to AdminFrame's sidebar so partner portals and the
             super admin read as the same product. */}
-        <aside className="w-64 flex-shrink-0 bg-[var(--apple-rail)] hidden md:flex md:flex-col">
+        <aside
+          className={cn(
+            "absolute inset-y-0 left-0 z-30 w-64 flex-shrink-0 bg-[var(--apple-rail)] flex flex-col transition-transform duration-200",
+            mobileRailOpen ? "translate-x-0" : "-translate-x-full",
+            "lg:static lg:translate-x-0",
+          )}
+        >
           {/* Partner logo + name — top-left rail header (h-14 band). When a
               full-size navLogoUrl is set (press whitelabel), render it
               height-constrained so the band never grows; otherwise fall back to
@@ -533,9 +559,9 @@ export function OperatorShell<TabId extends string>({
 
         {/* Main column — flex-col + overflow-hidden so only the inner
             content div scrolls (the sticky top strip stays visible). */}
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-          {/* Phone fallback navigation — the rail is hidden < md. */}
-          <div className="md:hidden">
+        <div className="flex-1 min-w-0 flex flex-col overflow-x-clip overflow-y-hidden">
+          {/* Phone fallback navigation — the rail is hidden < lg. */}
+          <div className="lg:hidden">
             <DashboardTabs tabs={tabs.filter((t) => !t.soon)} value={activeTab} onChange={onTabChange} />
           </div>
 

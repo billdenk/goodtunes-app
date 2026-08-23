@@ -32,6 +32,8 @@ import {
   ShoppingCart,
   PanelRightClose,
   PanelRightOpen,
+  PanelLeftClose,
+  PanelLeftOpen,
   Bell,
   Receipt,
   ScrollText,
@@ -198,6 +200,8 @@ export function AdminFrame({
 }) {
   const { user } = useAuth();
   const [location, navigate] = useLocation();
+  const [mobileRailOpen, setMobileRailOpen] = useState(false);
+  useEffect(() => setMobileRailOpen(false), [location]);
 
   // Opt every admin route that uses this frame into the light theme by
   // tagging <body>. The matching `body.gt-admin` rule in index.css
@@ -566,6 +570,16 @@ export function AdminFrame({
         className="h-16 flex-shrink-0 border-b border-[var(--apple-hairline)] flex items-center gap-3 pl-4 pr-4 sm:pr-8"
         style={{ background: "var(--apple-glass)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)" }}
       >
+        <button
+          type="button"
+          onClick={() => setMobileRailOpen((open) => !open)}
+          className="lg:hidden h-9 w-9 flex-shrink-0 rounded-lg inline-flex items-center justify-center text-[var(--apple-subink)] hover:bg-slate-200 transition-colors"
+          aria-label={mobileRailOpen ? "Hide navigation" : "Show navigation"}
+          aria-expanded={mobileRailOpen}
+          data-testid="button-toggle-admin-rail"
+        >
+          {mobileRailOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+        </button>
         <Link
           href={isArtist ? "/admin/dashboard" : isTrimmedPartner ? partnerHome : "/admin/dashboard"}
           className="flex items-center flex-shrink-0"
@@ -579,7 +593,7 @@ export function AdminFrame({
             registerShortcut=false — only the desktop sidebar copy owns
             the ⌘K window listener. */}
         {!isTrimmedPartner && (
-          <div className="flex-1 max-w-xs md:hidden">
+          <div className="flex-1 max-w-xs lg:hidden">
             <AdminSearchBar registerShortcut={false} />
           </div>
         )}
@@ -608,9 +622,28 @@ export function AdminFrame({
           widen this row and slide the rail/topbar icons off-screen. `clip`
           (not `hidden`) so the row doesn't become a scroll container —
           sticky headers and the raise-on-save bar keep their behavior. */}
-      <div className="flex flex-1 min-h-0 w-full min-w-0 overflow-x-clip">
-      {sidebar ? sidebar : (
-      <aside className="w-64 flex-shrink-0 bg-[var(--apple-rail)] hidden md:flex md:flex-col">
+      <div className="relative flex flex-1 min-h-0 w-full min-w-0 overflow-x-clip">
+      {mobileRailOpen && (
+        <button
+          type="button"
+          className="absolute inset-0 z-20 bg-black/20 lg:hidden"
+          onClick={() => setMobileRailOpen(false)}
+          aria-label="Close navigation"
+        />
+      )}
+      {sidebar ? (
+        <div className={[
+          "absolute inset-y-0 left-0 z-30 transition-transform duration-200 lg:static lg:translate-x-0",
+          mobileRailOpen ? "translate-x-0" : "-translate-x-full",
+        ].join(" ")}>
+          {sidebar}
+        </div>
+      ) : (
+      <aside className={[
+        "absolute inset-y-0 left-0 z-30 w-64 flex-shrink-0 bg-[var(--apple-rail)] flex flex-col transition-transform duration-200",
+        mobileRailOpen ? "translate-x-0" : "-translate-x-full",
+        "lg:static lg:translate-x-0",
+      ].join(" ")}>
         {/* Task #336 — Global admin search. Sits above Dashboard so it
             anchors the top of the sidebar; ⌘K opens/focuses from
             anywhere in the admin shell. */}

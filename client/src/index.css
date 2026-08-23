@@ -4,6 +4,16 @@
 @tailwind components;
 @tailwind utilities;
 
+@media (hover: none), (pointer: coarse) {
+  [data-testid="qty-album-stage"] .qty-slide-part {
+    transform: none !important;
+  }
+
+  .qty-hover-instruction {
+    display: none;
+  }
+}
+
 @layer components {
   .all-\[unset\] {
     all: unset;

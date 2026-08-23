@@ -12,18 +12,22 @@
 // /artist/albums/:id/art-test/:componentId route. Dead-end CTAs ship as
 // quiet no-ops per the handoff contract.
 
-import { useMemo, useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocation, useSearch } from 'wouter';
 import {
   ArrowRight, Check, ChevronDown, ChevronRight, Circle, Clock, Copy, Disc3,
-  Download, ExternalLink, Eye, FileImage, Link2, Lock, Mail, Plus, UploadCloud, X,
+  Download, ExternalLink, Eye, FileImage, Link2, Lock, Mail, Pencil, Plus, UploadCloud, X,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/queryClient';
+import { uploadAdminDocWithProgress } from '@/lib/adminUpload';
+import { useAuth } from '@/hooks/useAuth';
+import { useUploadManager } from '@/context/UploadManagerContext';
 import {
   BLUE, PILL_SHADOW, cn, useRestructureTheme, CanonPill, MilestoneStatus, SegChip,
-  VerdictChip, InheritanceChip, FORMAT_WORD, fmtDollars, goodtunesLogo, shopifyLogo,
-  type Theme, type StatusWord, type ArtBlock, type CheckRow, type Inheritance,
+  FORMAT_WORD, fmtDollars, goodtunesLogo, shopifyLogo,
+  type Theme, type StatusWord,
 } from './shared';
 import mrpLabelLogo from '@/assets/artist-portal/mrp-logo.svg';
 
@@ -32,6 +36,7 @@ type PortalFormat = { id: string; kind: string; label: string; status: 'live' | 
 type PortalMilestone = { id: string; label: string; amountCents: number; status: StatusWord; note: string; payUrl?: string | null };
 type PortalPayload = {
   release: { id: string; title: string; artist: string; artworkUrl?: string | null; year: string; tracks: number; visibility: string; editing: string; catalogNumber?: string | null; upc?: string | null };
+  access?: { canEditMetadata: boolean; canUploadMasters: boolean };
   formats: PortalFormat[];
   store: {
     sellMode: string;
@@ -226,19 +231,91 @@ function ReleaseDashboard({ portal, albumId, t, onOpenFormat }: { portal: Portal
 // ═══════════════════════════════════════════════════════════════════
 // DETAILS TAB — quiet hairline fact rows (word + icon states)
 // ═══════════════════════════════════════════════════════════════════
-function ReleaseDetails({ portal, t }: { portal: PortalPayload; t: Theme }) {
+type EditableDetailKey = 'title' | 'year' | 'catalogNumber' | 'upc';
+
+function ReleaseDetails({ portal, albumId, portalQueryKey, t }: { portal: PortalPayload; albumId: string; portalQueryKey: string; t: Theme }) {
   const r = portal.release;
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const editingOpen = portal.access?.canEditMetadata ?? r.editing === 'Open';
+  const [editingKey, setEditingKey] = useState<EditableDetailKey | null>(null);
+  const [draft, setDraft] = useState('');
   const primaryFormat = portal.formats.find((f) => f.kind === 'vinyl') ?? portal.formats[0];
+  const save = useMutation({
+    mutationFn: async ({ key, value }: { key: EditableDetailKey; value: string }) => {
+      const body = key === 'year'
+        ? { year: value.trim() ? Number(value) : null }
+        : { [key]: value.trim() };
+      const response = await apiRequest('PUT', `/api/admin/albums/${albumId}`, body);
+      return { status: response.status, body: await response.json() };
+    },
+    onSuccess: async (result) => {
+      setEditingKey(null);
+      await queryClient.invalidateQueries({ queryKey: [portalQueryKey] });
+      toast({ description: result.status === 202 ? 'Edit sent for review' : 'Release details saved' });
+    },
+    onError: (error: Error) => {
+      toast({ description: error.message || 'Couldn’t save release details', variant: 'destructive' });
+    },
+  });
+
+  const beginEdit = (key: EditableDetailKey, value: string) => {
+    if (!editingOpen || save.isPending) return;
+    setEditingKey(key);
+    setDraft(value);
+  };
+  const editableValue = (key: EditableDetailKey, value: string, emptyLabel: string, emphasis = false) => {
+    if (editingKey === key) {
+      return (
+        <span className="flex items-center justify-end gap-2 w-full">
+          <input
+            autoFocus
+            value={draft}
+            type={key === 'year' ? 'number' : 'text'}
+            inputMode={key === 'year' ? 'numeric' : undefined}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setEditingKey(null);
+              if (e.key === 'Enter' && !(key === 'title' && !draft.trim())) save.mutate({ key, value: draft });
+            }}
+            className="h-9 min-w-0 max-w-[280px] flex-1 rounded-xl px-3 text-[13.5px] outline-none"
+            style={{ color: t.ink, background: t.canvas, border: `1px solid ${t.hairline}` }}
+            aria-label={key === 'catalogNumber' ? 'Catalog number' : key === 'upc' ? 'UPC code' : key}
+          />
+          <button type="button" onClick={() => setEditingKey(null)} className="text-[13px] font-medium px-2 py-1.5 rounded-full" style={{ color: t.subink }}>Cancel</button>
+          <button
+            type="button"
+            disabled={save.isPending || (key === 'title' && !draft.trim())}
+            onClick={() => save.mutate({ key, value: draft })}
+            className="text-[13px] font-semibold text-white px-3 py-1.5 rounded-full disabled:opacity-45"
+            style={{ background: BLUE }}
+          >
+            Save
+          </button>
+        </span>
+      );
+    }
+    return (
+      <button
+        type="button"
+        disabled={!editingOpen}
+        onClick={() => beginEdit(key, value)}
+        className="inline-flex items-center justify-end gap-2 text-right rounded-lg px-2 py-1 -mr-2 disabled:cursor-default"
+        style={{ color: value ? (emphasis ? t.ink : t.subink) : editingOpen ? BLUE : t.faint }}
+      >
+        <span className={emphasis && value ? 'font-semibold' : undefined}>{value || (editingOpen ? emptyLabel : '—')}</span>
+        {editingOpen && <Pencil className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />}
+      </button>
+    );
+  };
   const rows: Array<{ label: string; value: ReactNode; testid: string }> = [
-    { label: 'Title', value: <span className="font-semibold" style={{ color: t.ink }}>{r.title}</span>, testid: 'detail-title' },
+    { label: 'Title', value: editableValue('title', r.title, 'Add title', true), testid: 'detail-title' },
     { label: 'Artist', value: r.artist, testid: 'detail-artist' },
     { label: 'Format', value: primaryFormat?.label ?? '—', testid: 'detail-format' },
-    { label: 'Year', value: r.year || '—', testid: 'detail-year' },
+    { label: 'Year', value: editableValue('year', r.year, 'Add year'), testid: 'detail-year' },
     { label: 'Tracks', value: `${r.tracks} tracks`, testid: 'detail-tracks' },
-    // Task #3178 — catalog identifiers. Catalog Number shown as-is;
-    // UPC always shown (empty state is a dash so artists know the field exists).
-    { label: 'Catalog Number', value: r.catalogNumber || '—', testid: 'detail-catalog-number' },
-    { label: 'UPC Code', value: r.upc || '—', testid: 'detail-upc' },
+    { label: 'Catalog Number', value: editableValue('catalogNumber', r.catalogNumber ?? '', 'Add catalog number'), testid: 'detail-catalog-number' },
+    { label: 'UPC Code', value: editableValue('upc', r.upc ?? '', 'Add UPC'), testid: 'detail-upc' },
     {
       label: 'Visibility',
       value: (
@@ -252,7 +329,10 @@ function ReleaseDetails({ portal, t }: { portal: PortalPayload; t: Theme }) {
       label: 'Editing',
       value: (
         <span className="inline-flex items-center gap-1.5">
-          <Lock className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} aria-hidden /> {r.editing}
+          {editingOpen
+            ? <Pencil className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
+            : <Lock className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} aria-hidden />}
+          {editingOpen ? 'Open' : 'Locked'}
         </span>
       ),
       testid: 'detail-editing',
@@ -261,7 +341,7 @@ function ReleaseDetails({ portal, t }: { portal: PortalPayload; t: Theme }) {
   return (
     <div style={{ marginTop: 26 }}>
       <div className="min-w-0" style={{ marginBottom: 18 }}>
-        <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>Details.</h2>
+        <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>Details</h2>
         <p className="text-[13.5px]" style={{ marginTop: 4, color: t.subink }}>Everything about this release at a glance.</p>
       </div>
       <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid="release-details">
@@ -285,55 +365,93 @@ function ReleaseDetails({ portal, t }: { portal: PortalPayload; t: Theme }) {
 // ASSETS TAB — Art / Audio lanes, Master / Player / Vinyl formats
 // ═══════════════════════════════════════════════════════════════════
 
-// BlockCard — GoodStudio-card treatment copied verbatim from PressTemplatesIndex
-// tiles (Bill, Aug 15/16 2026): the ART is the hero — full-bleed image bleeds
-// edge-to-edge across the tile's top, quiet text block flush-left below. Format
-// / size / spec detail is HIDDEN — the card shows only the art and that it's
-// good/certified. The whole tile is a link into the artist template Test page.
-// The pass/needs-fixes chip sits at the BOTTOM, under the info; the top is
-// reserved for art only.
-function BlockCard({ block, href, artUrl, t }: { block: ArtBlock; href: string; artUrl?: string | null; t: Theme }) {
+type VinylArtBlock = {
+  id: string;
+  title: string;
+  aspectRatio: string;
+  status: 'waiting' | 'album' | 'custom';
+  imageUrl: string | null;
+};
+
+function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: Theme }) {
   const [, navigate] = useLocation();
-  const s = block.state;
-  const filled = s.kind !== 'empty';
+  const queryClient = useQueryClient();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
+  const albumId = href.split('/')[3] ?? '';
+  const upload = async (file: File | undefined) => {
+    if (!file || uploading || !albumId) return;
+    setUploading(true);
+    try {
+      const url = await uploadAdminDocWithProgress(file, () => {});
+      await apiRequest('POST', `/api/admin/albums/${albumId}/completed-template/check`, {
+        componentId: block.id,
+        url,
+        fileName: file.name,
+      });
+      await queryClient.invalidateQueries({ queryKey: [`/api/admin/albums/${albumId}/completed-template`] });
+      toast({ description: 'Custom art uploaded' });
+    } catch (error: any) {
+      toast({ description: error?.message || 'Couldn’t upload that art', variant: 'destructive' });
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+  const status = block.status === 'custom'
+    ? { label: 'Custom art uploaded', icon: <FileImage className="w-3.5 h-3.5" aria-hidden /> }
+    : block.status === 'album'
+      ? { label: 'Using album art', icon: <Link2 className="w-3.5 h-3.5" aria-hidden /> }
+      : { label: 'Waiting for art', icon: <Circle className="w-3.5 h-3.5" aria-hidden /> };
   return (
-    <a
-      href={href}
-      onClick={(e) => { e.preventDefault(); navigate(href); }}
+    <div
       className={cn('gt-tile w-full h-full rounded-2xl overflow-hidden flex flex-col text-left transition-colors cursor-pointer', t.hoverCard)}
       style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}
       data-testid={`block-${block.id}`}
     >
-      {/* Hero — art bleeds edge-to-edge across the top. */}
-      <span className="block w-full flex-shrink-0" style={{ height: 200, backgroundColor: t.dropEmpty, borderBottom: `1px solid ${t.hairline}` }}>
-        {filled && artUrl ? (
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(event) => event.preventDefault()}
+        onDrop={(event) => {
+          event.preventDefault();
+          void upload(event.dataTransfer.files?.[0]);
+        }}
+        className="relative block w-full flex-shrink-0 overflow-hidden"
+        style={{ aspectRatio: block.aspectRatio, backgroundColor: t.dropEmpty, borderBottom: `1px solid ${t.hairline}` }}
+        data-testid={`upload-target-${block.id}`}
+        aria-label={`Upload ${block.title} art`}
+      >
+        {block.imageUrl ? (
           <img
-            src={artUrl}
+            src={block.imageUrl}
             alt={`${block.title} art`}
             className="w-full h-full object-cover object-top"
-            style={{ opacity: s.kind === 'fail' ? 0.55 : 1 }}
             data-testid={`img-block-${block.id}`}
           />
         ) : (
-          <span className="w-full h-full flex items-center justify-center">
-            <UploadCloud className="w-8 h-8" style={{ color: t.faint }} />
+          <span className="absolute inset-0 flex flex-col items-center justify-center text-center" style={{ border: `1px dashed ${t.dashed}` }}>
+            <UploadCloud className="w-6 h-6" style={{ color: t.faint }} aria-hidden />
+            <span className="text-[12.5px] font-medium" style={{ marginTop: 8, color: t.subink }}>{uploading ? 'Uploading…' : 'Drop file or tap to upload'}</span>
           </span>
         )}
-      </span>
+      </button>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,image/*"
+        className="sr-only"
+        onChange={(event) => void upload(event.target.files?.[0])}
+      />
 
-      {/* Info under the image — name + which file is in effect. No specs. */}
       <div className="w-full flex flex-col flex-1" style={{ padding: '14px 18px 16px' }}>
-        <div className="text-[15px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{block.title}</div>
-        <div style={{ marginTop: 8 }}>
-          <InheritanceChip inheritance={block.inheritance} t={t} />
-        </div>
-
-        {/* Status chip pinned to the BOTTOM — word + icon, never color alone. */}
-        <div style={{ marginTop: 'auto', paddingTop: 12 }}>
-          <VerdictChip kind={s.kind} t={t} />
-        </div>
+        <button type="button" onClick={() => navigate(href)} className="text-left text-[15px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{block.title}</button>
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ marginTop: 8, color: t.subink }}>
+          {status.icon} {status.label}
+        </span>
       </div>
-    </a>
+    </div>
   );
 }
 
@@ -368,17 +486,112 @@ function TemplatesChip({ t }: { t: Theme }) {
   );
 }
 
-function AudioMasterList({ tracks, forVinyl, t }: { tracks: Array<{ title: string }>; forVinyl: boolean; t: Theme }) {
+function deriveTrackTitle(name: string): string {
+  return name
+    .replace(/\.[^.]+$/, '')
+    .replace(/^\s*(?:\d+\s*[-_.]\s*|\d{1,3}\s+)/, '')
+    .replace(/[_]+/g, ' ')
+    .trim() || 'Untitled track';
+}
+
+function AudioMasterList({
+  tracks,
+  assetFormat,
+  albumId,
+  canUpload,
+  t,
+  onShowMaster,
+}: {
+  tracks: Array<{ title: string; trackNumber?: number }>;
+  assetFormat: 'digital' | 'master' | 'vinyl';
+  albumId: string;
+  canUpload: boolean;
+  t: Theme;
+  onShowMaster: () => void;
+}) {
+  const { enqueueAudioBatch } = useUploadManager();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const { toast } = useToast();
+  const forVinyl = assetFormat === 'vinyl';
+  const acceptFiles = (files: FileList | null) => {
+    if (!files?.length) return;
+    const accepted = Array.from(files).filter((file) => /\.(mp3|m4a|aac|wav|flac|ogg|aif|aiff)$/i.test(file.name));
+    if (!accepted.length) {
+      toast({ description: 'Choose MP3, M4A, AAC, WAV, FLAC, OGG, AIF, or AIFF audio files', variant: 'destructive' });
+      return;
+    }
+    const nextTrack = Math.max(0, ...tracks.map((track, index) => track.trackNumber ?? index + 1)) + 1;
+    enqueueAudioBatch({
+      albumId,
+      files: accepted.map((file) => ({ file, title: deriveTrackTitle(file.name) })),
+      suggestedStartNumber: nextTrack,
+    });
+    toast({ description: `Uploading ${accepted.length} ${accepted.length === 1 ? 'master' : 'masters'} in the background` });
+    if (inputRef.current) inputRef.current.value = '';
+  };
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragging(false);
+    acceptFiles(event.dataTransfer.files);
+  };
   return (
     <div style={{ marginTop: 18 }}>
-      {/* Wave mastering callout removed (Bill, Aug 22 2026) — the service
-          doesn't exist yet and must not be shown. Restore from git history
-          when Wave mastering is real. */}
       <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid={forVinyl ? 'audio-list-vinyl' : 'audio-list-master'}>
         {tracks.length === 0 ? (
-          <div className="flex items-center justify-center" style={{ padding: '32px 16px' }}>
-            <span className="text-[13px]" style={{ color: t.subink }}>No tracks yet.</span>
-          </div>
+          assetFormat === 'master' && canUpload ? (
+            <div
+              className="flex flex-col items-center justify-center text-center"
+              style={{ padding: '42px 20px', background: dragging ? t.soft : t.card }}
+              onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={() => setDragging(false)}
+              onDrop={onDrop}
+              data-testid="master-upload-dropzone"
+            >
+              <UploadCloud className="w-7 h-7" style={{ color: t.faint }} aria-hidden />
+              <p className="text-[14px] font-semibold" style={{ marginTop: 10, color: t.ink }}>No tracks yet</p>
+              <p className="text-[12.5px]" style={{ marginTop: 5, color: t.subink }}>Drop audio files here or choose them from your device</p>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="audio/*,.wav,.flac,.aif,.aiff,.mp3,.m4a,.aac,.ogg"
+                multiple
+                className="sr-only"
+                onChange={(event) => acceptFiles(event.target.files)}
+                data-testid="input-upload-masters"
+              />
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold text-white"
+                style={{ marginTop: 16, background: BLUE }}
+                data-testid="button-upload-masters"
+              >
+                <UploadCloud className="w-4 h-4" aria-hidden /> Upload masters
+              </button>
+            </div>
+          ) : assetFormat === 'master' ? (
+            <div className="flex flex-col items-center justify-center text-center" style={{ padding: '38px 20px' }}>
+              <Lock className="w-5 h-5" style={{ color: t.faint }} aria-hidden />
+              <p className="text-[14px] font-semibold" style={{ marginTop: 9, color: t.ink }}>Master uploads locked</p>
+              <p className="text-[12.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>
+                Your release team manages master uploads at this stage.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center text-center" style={{ padding: '38px 20px' }}>
+              <p className="text-[14px] font-semibold" style={{ color: t.ink }}>No tracks yet</p>
+              <p className="text-[12.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>
+                {assetFormat === 'digital'
+                  ? 'Player audio uses your album masters. Upload them once and they appear here automatically.'
+                  : 'Vinyl audio uses your album masters. Upload them once and they appear here automatically.'}
+              </p>
+              <button type="button" onClick={onShowMaster} className="inline-flex items-center gap-1 text-[13px] font-semibold" style={{ marginTop: 12, color: BLUE }}>
+                Upload masters <ArrowRight className="w-3.5 h-3.5" aria-hidden />
+              </button>
+            </div>
+          )
         ) : tracks.map((song, i) => (
           <div key={`${song.title}-${i}`} className="flex items-center gap-3 px-4" style={{ height: 52, borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`track-${i + 1}`}>
             <span className="text-[12px] font-semibold tabular-nums flex-shrink-0" style={{ width: 22, color: t.faint }}>{i + 1}</span>
@@ -397,23 +610,33 @@ function AudioMasterList({ tracks, forVinyl, t }: { tracks: Array<{ title: strin
 }
 
 // Component-id → friendly slot facts (mirrors the press-template component ids).
-const COMPONENT_SLOTS: Record<string, { title: string; shape: ArtBlock['shape'] }> = {
-  jacket: { title: 'Cover · jacket', shape: 'tall' },
-  labels: { title: 'Center labels', shape: 'circle' },
-  sleeve: { title: 'Inner sleeve', shape: 'square' },
-  insert: { title: 'Insert', shape: 'square' },
-  booklet: { title: 'Booklet', shape: 'square' },
+const COMPONENT_SLOTS: Record<string, { title: string }> = {
+  jacket: { title: 'Cover · jacket' },
+  labels: { title: 'Center labels' },
+  sleeve: { title: 'Printed inner sleeve' },
+  inner_sleeve: { title: 'Printed inner sleeve' },
+  insert: { title: 'Insert' },
+  booklet: { title: 'Booklet' },
 };
 
 function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId: string; t: Theme }) {
+  const { user } = useAuth();
   const hasVinyl = portal.formats.some((f) => f.kind === 'vinyl');
   const vinylFormat = portal.formats.find((f) => f.kind === 'vinyl');
   const pressName = vinylFormat?.pressName ?? 'the press';
   const [lane, setLane] = useState<'art' | 'audio'>('art');
   const [assetFormat, setAssetFormat] = useState<'digital' | 'master' | 'vinyl'>(hasVinyl ? 'vinyl' : 'master');
 
-  const album = useQuery<{ songs?: Array<{ title: string }> }>({ queryKey: [`/api/albums/${albumId}`] });
-  const scan = useQuery<{ components?: Array<{ componentId: string; checks?: Array<{ label: string; value: string; verdict: string }>; verdict?: string; fileName?: string | null }>; requiredComponents?: Array<string | { id: string; label?: string }> }>({
+  const album = useQuery<{ songs?: Array<{ title: string; trackNumber?: number }> }>({ queryKey: [`/api/albums/${albumId}`] });
+  const scan = useQuery<{
+    components?: Array<{ componentId: string; fileName?: string | null; previewUrl?: string | null }>;
+    requiredComponents?: Array<string | {
+      id: string;
+      label?: string;
+      templatePageInches?: { w: number; h: number } | null;
+      finishedInches?: { w: number; h: number } | null;
+    }>;
+  }>({
     queryKey: [`/api/admin/albums/${albumId}/completed-template`],
     enabled: hasVinyl,
     retry: false,
@@ -421,31 +644,33 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
 
   const tracks = album.data?.songs ?? [];
 
-  // Real vinyl art blocks from the completed-template scan; slots with no scan
-  // yet show as "Waiting for art" with an inherited-album-art chip.
-  const blocks: ArtBlock[] = useMemo(() => {
+  const blocks: VinylArtBlock[] = useMemo(() => {
     // requiredComponents rows are objects ({id, label, …}) from the
     // completed-template config; tolerate plain string ids too.
     const required = (scan.data?.requiredComponents ?? []).map((r) =>
-      typeof r === 'string' ? { id: r, label: undefined as string | undefined } : { id: r.id, label: r.label });
+      typeof r === 'string'
+        ? { id: r, label: undefined as string | undefined, templatePageInches: null, finishedInches: null }
+        : r);
     const byId = new Map((scan.data?.components ?? []).map((c) => [c.componentId, c]));
-    const rows = required.length ? required : Array.from(byId.keys()).map((id) => ({ id, label: undefined as string | undefined }));
-    return rows.map(({ id, label }) => {
+    const rows = required.length
+      ? required
+      : Array.from(byId.keys()).map((id) => ({ id, label: undefined as string | undefined, templatePageInches: null, finishedInches: null }));
+    return rows.map(({ id, label, templatePageInches, finishedInches }) => {
       const c = byId.get(id);
-      const meta = COMPONENT_SLOTS[id] ?? { title: label ?? id.charAt(0).toUpperCase() + id.slice(1), shape: 'square' as const };
-      const checks: CheckRow[] = (c?.checks ?? []).map((k) => ({ label: k.label, value: k.value, verdict: k.verdict === 'pass' ? 'pass' : 'fail' }));
-      const pass = c ? checks.every((k) => k.verdict === 'pass') && checks.length > 0 : false;
-      const inheritance: Inheritance = c?.fileName
-        ? { kind: 'format-specific', note: 'Format-specific file — overrides the album art' }
-        : { kind: 'inherited-pass', note: 'Using album art' };
-      const state: ArtBlock['state'] = !c
-        ? { kind: 'empty' }
-        : pass
-          ? { kind: 'pass', file: c.fileName ?? 'album art', checks }
-          : { kind: 'fail', file: c.fileName ?? 'album art', checks };
-      return { id, title: meta.title, hint: '', shape: meta.shape, inheritance, state };
+      const slotKey = id.startsWith('inner_sleeve') ? 'inner_sleeve' : id;
+      const meta = COMPONENT_SLOTS[slotKey] ?? { title: label ?? id.charAt(0).toUpperCase() + id.slice(1) };
+      const dimensions = templatePageInches ?? finishedInches;
+      const hasCustomArt = !!c?.fileName;
+      const hasAlbumArt = !!portal.release.artworkUrl;
+      return {
+        id,
+        title: meta.title,
+        aspectRatio: dimensions?.w && dimensions?.h ? `${dimensions.w} / ${dimensions.h}` : '1 / 1',
+        status: hasCustomArt ? 'custom' : hasAlbumArt ? 'album' : 'waiting',
+        imageUrl: hasCustomArt ? (c?.previewUrl ?? null) : hasAlbumArt ? (portal.release.artworkUrl ?? null) : null,
+      };
     });
-  }, [scan.data]);
+  }, [portal.release.artworkUrl, scan.data]);
 
   return (
     <>
@@ -463,7 +688,9 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
           testPrefix="assetformat"
           t={t}
         />
-        {/* Expanding add affordance — a "+" that grows rightward on hover to
+        {/* Expanding add affordance — operator-only; artists never create asset sets. */}
+        {(user?.role === 'admin' || user?.role === 'super_admin') && <>
+        {/* A "+" that grows rightward on hover to
             reveal "Add format" (smooth width/opacity), apple-clean. Scoped
             CSS keeps the width/opacity transition off arbitrary utilities. */}
         <style>{`
@@ -482,6 +709,7 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
           <Plus className="w-3.5 h-3.5 flex-shrink-0" />
           <span className="apr-add-label">Add format</span>
         </button>
+        </>}
       </div>
 
       {lane === 'audio' ? (
@@ -490,7 +718,7 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
             <div className="min-w-0">
               <div className="flex items-baseline gap-4 flex-wrap">
                 <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>
-                  {FORMAT_WORD[assetFormat]} audio.
+                  {FORMAT_WORD[assetFormat]} audio
                 </h2>
                 {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
                 {assetFormat === 'digital' && (
@@ -501,7 +729,7 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
               </div>
               <p className="text-[13.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 560, lineHeight: 1.5 }}>
                 {assetFormat === 'vinyl'
-                  ? 'The lacquer-ready set for this pressing. References your album masters until Wave prepares a vinyl cut.'
+                  ? 'The lacquer-ready set for this pressing. Uses your album masters for this pressing.'
                   : assetFormat === 'digital'
                     ? 'What buyers stream in the GoodTunes® Player. Uses your album masters — add any bonus content you want in the player.'
                     : 'Your canonical album masters. Every format references them until you override.'}
@@ -517,7 +745,7 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
               icons={{ art: FileImage, audio: Disc3 }}
             />
           </div>
-          <AudioMasterList tracks={tracks} forVinyl={assetFormat === 'vinyl'} t={t} />
+          <AudioMasterList tracks={tracks} assetFormat={assetFormat} albumId={albumId} canUpload={portal.access?.canUploadMasters ?? portal.release.editing === 'Open'} t={t} onShowMaster={() => setAssetFormat('master')} />
         </>
       ) : (
         <>
@@ -525,7 +753,7 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
             <div className="min-w-0">
               <div className="flex items-baseline gap-4 flex-wrap">
                 <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>
-                  {FORMAT_WORD[assetFormat]} art.
+                  {FORMAT_WORD[assetFormat]} art
                 </h2>
                 {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
                 <TemplatesChip t={t} />
@@ -553,7 +781,7 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
             blocks.length > 0 ? (
               <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 18 }}>
                 {blocks.map((b) => (
-                  <BlockCard key={b.id} block={b} href={`/artist/albums/${albumId}/art-test/${b.id}`} artUrl={portal.release.artworkUrl} t={t} />
+                  <BlockCard key={b.id} block={b} href={`/artist/albums/${albumId}/art-test/${b.id}`} t={t} />
                 ))}
               </div>
             ) : (
@@ -592,16 +820,18 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
 // STORE TAB — channel picker, share link, Shopify connect, toggle,
 // email appearance, Publish + readiness checklist
 // ═══════════════════════════════════════════════════════════════════
-function ReleaseStore({ portal, t }: { portal: PortalPayload; t: Theme }) {
+function ReleaseStore({ portal, albumId, t }: { portal: PortalPayload; albumId: string; t: Theme }) {
   const { toast } = useToast();
-  const isShopify = portal.store.sellMode.startsWith('shopify');
-  const channel: 'goodtunes' | 'shopify' = isShopify ? 'shopify' : 'goodtunes';
+  const [, navigate] = useLocation();
+  const sellMode = portal.store.sellMode ?? '';
+  const isShopify = sellMode.startsWith('shopify');
+  const channel: 'goodtunes' | 'shopify' | null = !sellMode ? null : isShopify ? 'shopify' : 'goodtunes';
   const cl = portal.store.checklist;
   const checklist = [
-    { id: 'art', label: 'Artwork approved', done: cl.art },
-    { id: 'audio', label: 'Audio in the player', done: cl.audio },
-    { id: 'price', label: 'Price set', done: cl.price },
-    { id: 'channel', label: isShopify ? 'Shopify channel connected' : 'Sales channel chosen', done: cl.channel },
+    { id: 'art', label: 'Artwork approved', pending: 'Artwork — not started', done: cl.art, href: `/artist/albums/${albumId}?tab=assets` },
+    { id: 'audio', label: 'Audio in the player', pending: 'Audio — not started', done: cl.audio, href: `/artist/albums/${albumId}?tab=assets` },
+    { id: 'price', label: 'Price set', pending: 'Price — not set', done: cl.price, href: `/admin/albums/${albumId}?tab=sell` },
+    { id: 'channel', label: isShopify ? 'Shopify channel connected' : 'Sales channel chosen', pending: 'Sales channel — not chosen', done: cl.channel, href: `/admin/albums/${albumId}?tab=sell` },
   ];
   const ready = checklist.every((c) => c.done);
 
@@ -692,7 +922,7 @@ function ReleaseStore({ portal, t }: { portal: PortalPayload; t: Theme }) {
               </div>
             ))}
           </div>
-        ) : (
+        ) : channel === 'shopify' ? (
           <div className="rounded-2xl" style={{ border: `1px solid ${t.hairline}`, background: t.card, padding: 20 }} data-testid="shopify-connect-section">
             <div className="flex items-center gap-2">
               <img src={shopifyLogo} alt="Shopify" style={{ height: 18, filter: t.logoFilter }} />
@@ -713,7 +943,7 @@ function ReleaseStore({ portal, t }: { portal: PortalPayload; t: Theme }) {
               </>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Email appearance — the post-purchase note fans get. */}
         <div className="rounded-2xl" style={{ border: `1px solid ${t.hairline}`, background: t.card, padding: 20 }} data-testid="email-appearance">
@@ -737,18 +967,30 @@ function ReleaseStore({ portal, t }: { portal: PortalPayload; t: Theme }) {
       {/* RIGHT — readiness checklist */}
       <div className="space-y-5">
         <div className="rounded-2xl sticky" style={{ top: 24, border: `1px solid ${t.hairline}`, background: t.card, padding: 20 }} data-testid="publish-panel">
-          <h3 className="text-[15px] font-semibold" style={{ color: t.ink }}>{ready ? 'Ready for fans.' : 'Getting ready.'}</h3>
+          <h3 className="text-[15px] font-semibold" style={{ color: t.ink }}>{ready ? 'Ready for fans' : 'Getting ready'}</h3>
           <p className="text-[12.5px]" style={{ marginTop: 4, color: t.subink, lineHeight: 1.5 }}>
-            {portal.release.title} sells on {channel === 'goodtunes' ? 'the GoodTunes® storefront' : 'your Shopify store'}.
+            {channel === 'goodtunes'
+              ? `${portal.release.title} sells on the GoodTunes® storefront.`
+              : channel === 'shopify'
+                ? `${portal.release.title} sells on your Shopify store.`
+                : 'Choose where this release will sell.'}
           </p>
           <div className="space-y-2" style={{ marginTop: 16 }}>
             {checklist.map((c) => (
-              <div key={c.id} className="flex items-center gap-2.5" data-testid={`readiness-${c.id}`}>
+              <button
+                key={c.id}
+                type="button"
+                onClick={c.done ? undefined : () => navigate(c.href)}
+                className="flex w-full items-center gap-2.5 text-left disabled:cursor-default"
+                disabled={c.done}
+                data-testid={`readiness-${c.id}`}
+              >
                 {c.done
                   ? <Check className="w-4 h-4 flex-shrink-0" style={{ color: t.ready }} strokeWidth={3} />
                   : <span aria-hidden className="rounded-full flex-shrink-0" style={{ width: 9, height: 9, border: `2px solid ${t.warn}` }} />}
-                <span className="text-[13px] font-medium" style={{ color: c.done ? t.ink : t.subink }}>{c.label}</span>
-              </div>
+                <span className="text-[13px] font-medium" style={{ color: c.done ? t.ink : BLUE }}>{c.done ? c.label : c.pending}</span>
+                {!c.done && <ChevronRight className="ml-auto w-3.5 h-3.5" style={{ color: BLUE }} aria-hidden />}
+              </button>
             ))}
           </div>
           {ready && (
@@ -876,7 +1118,8 @@ export function ArtistRelease({ albumId }: { albumId: string }) {
 
   // Super-admin god view passes ?personId= through the URL — thread it.
   const personId = new URLSearchParams(search).get('personId');
-  const portalQ = useQuery<PortalPayload>({ queryKey: [`/api/artist/albums/${albumId}/portal${personId ? `?personId=${personId}` : ''}`] });
+  const portalQueryKey = `/api/artist/albums/${albumId}/portal${personId ? `?personId=${personId}` : ''}`;
+  const portalQ = useQuery<PortalPayload>({ queryKey: [portalQueryKey] });
   const portal = portalQ.data;
 
   return (
@@ -889,11 +1132,11 @@ export function ArtistRelease({ albumId }: { albumId: string }) {
       ) : tab === 'dashboard' ? (
         <ReleaseDashboard portal={portal} albumId={albumId} t={t} onOpenFormat={() => setTab('assets')} />
       ) : tab === 'details' ? (
-        <ReleaseDetails portal={portal} t={t} />
+        <ReleaseDetails portal={portal} albumId={albumId} portalQueryKey={portalQueryKey} t={t} />
       ) : tab === 'assets' ? (
         <ReleaseAssets portal={portal} albumId={albumId} t={t} />
       ) : tab === 'store' ? (
-        <ReleaseStore portal={portal} t={t} />
+        <ReleaseStore portal={portal} albumId={albumId} t={t} />
       ) : (
         <ReleasePayments portal={portal} t={t} />
       )}

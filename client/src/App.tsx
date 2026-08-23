@@ -180,6 +180,15 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function PlayerOverlay() {
   const { showPlayer } = usePlayer();
+  const [location] = useLocation();
+  // The global fan player can retain showPlayer across navigation. Never let
+  // that persisted state leak a media surface into operator/partner portals;
+  // album/storefront playback surfaces render outside these route families.
+  const onNonPlaybackSurface =
+    onWhitelabelHost() ||
+    ["/admin", "/artist", "/label", "/manager", "/publisher", "/vendor", "/nonprofit"].some(
+      (prefix) => location === prefix || location.startsWith(`${prefix}/`),
+    );
   // Tablet+ web shells (md≥768, never native/phone) get the Apple-Music-style
   // full-screen DesktopNowPlaying; the phone shell keeps the mobile Player.
   const tabletPlus = useTabletShell();
@@ -188,7 +197,7 @@ function PlayerOverlay() {
   // vanishing. The open animation rides the motion.div's initial/animate.
   return (
     <AnimatePresence>
-      {showPlayer &&
+      {showPlayer && !onNonPlaybackSurface &&
         (tabletPlus ? (
           <DesktopNowPlaying key="now-playing-desktop" />
         ) : (

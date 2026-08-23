@@ -751,11 +751,11 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             </div>
             <div
               className="w-full overflow-hidden rounded-2xl flex items-center justify-center"
-              style={{ marginTop: 14, background: '#ffffff', border: `1px solid ${t.hairline}`, padding: '56px 40px' }}
+              style={{ marginTop: 14, background: t.soft, border: `1px solid ${t.hairline}`, padding: 'clamp(20px, 5vw, 56px)' }}
               data-testid="template-canvas"
             >
               {ART.image ? (
-                <img src={ART.image} alt={ART.alt} className="w-full h-auto" data-testid="canvas-art" />
+                <img src={ART.image} alt={ART.alt} className="w-full h-auto" style={{ maxWidth: 900, boxShadow: '0 14px 36px rgba(0,0,0,0.28)', border: `1px solid ${t.hairline}` }} data-testid="canvas-art" />
               ) : (
                 <p className="text-[13px]" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid="canvas-no-preview">
                   No preview could be generated for this file.
@@ -1662,8 +1662,8 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
           images mode the Full-template view is the stitched spread of the
           seated panels (unlocked once all three are in). */}
       {area === 'all' && mode === 'images' ? (
-        <div className="relative w-full overflow-hidden rounded-2xl" style={{ marginTop: 14, border: `1px solid ${t.hairline}`, background: '#ffffff' }} data-testid="raw-sheet-stitched">
-          <div className="relative w-full" style={{ aspectRatio: `${sheetAspect} / 1`, maxHeight: '70vh' }}>
+        <div className="relative w-full overflow-hidden rounded-2xl flex justify-center" style={{ marginTop: 14, padding: 'clamp(16px, 3vw, 32px)', border: `1px solid ${t.hairline}`, background: t.soft }} data-testid="raw-sheet-stitched">
+          <div className="relative w-full" style={{ aspectRatio: `${sheetAspect} / 1`, maxHeight: '70vh', maxWidth: `min(100%, calc(70vh * ${sheetAspect}))`, background: 'transparent', border: `1px solid ${t.hairline}`, boxShadow: '0 14px 36px rgba(0,0,0,0.28)' }}>
             {tplImg ? (
               <img src={tplImg} alt={`${templateName} template`} className="absolute inset-0 w-full h-full" style={{ objectFit: 'contain' }} aria-hidden />
             ) : (
@@ -1687,8 +1687,8 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
           </div>
         </div>
       ) : area === 'all' ? (
-        <div className="relative w-full overflow-hidden rounded-2xl" style={{ marginTop: 14, border: `1px solid ${t.hairline}`, background: '#ffffff' }} data-testid="raw-sheet">
-          <div className="relative w-full" style={{ aspectRatio: `${sheetAspect} / 1`, maxHeight: '70vh' }}>
+        <div className="relative w-full overflow-hidden rounded-2xl flex justify-center" style={{ marginTop: 14, padding: 'clamp(16px, 3vw, 32px)', border: `1px solid ${t.hairline}`, background: t.soft }} data-testid="raw-sheet">
+          <div className="relative w-full" style={{ aspectRatio: `${sheetAspect} / 1`, maxHeight: '70vh', maxWidth: `min(100%, calc(70vh * ${sheetAspect}))`, background: 'transparent', border: `1px solid ${t.hairline}`, boxShadow: '0 14px 36px rgba(0,0,0,0.28)' }}>
             {tplImg ? (
               <img src={tplImg} alt={`${templateName} template`} className="absolute inset-0 w-full h-full" style={{ objectFit: 'contain' }} data-testid="raw-sheet-img" />
             ) : (
@@ -1722,8 +1722,8 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
           const r = PANEL_REGIONS[area];
           const panelAspect = (r.width * JACKET_ASPECT) / r.height;
           return (
-            <div className="relative w-full overflow-hidden rounded-2xl" style={{ marginTop: 14, border: `1px solid ${t.hairline}`, background: '#ffffff' }} data-testid={`raw-panel-${area}`}>
-              <div className="relative w-full mx-auto" style={{ maxWidth: Math.round(460 * panelAspect), height: 'min(460px, 70vh)' }}>
+            <div className="relative w-full overflow-hidden rounded-2xl" style={{ marginTop: 14, padding: 'clamp(16px, 3vw, 32px)', border: `1px solid ${t.hairline}`, background: t.soft }} data-testid={`raw-panel-${area}`}>
+              <div className="relative w-full mx-auto" style={{ maxWidth: Math.round(460 * panelAspect), height: 'min(460px, 70vh)', background: 'transparent', border: `1px solid ${t.hairline}`, boxShadow: '0 14px 36px rgba(0,0,0,0.28)' }}>
                 {tplImg ? (
                   <div
                     className="absolute inset-0"

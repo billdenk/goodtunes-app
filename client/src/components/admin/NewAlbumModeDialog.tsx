@@ -1,45 +1,38 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { ArrowLeft, Check, PackagePlus, ShoppingBag, Store } from "lucide-react";
+import { ArrowLeft, ShoppingBag, Store } from "lucide-react";
 import {
-  ALBUM_PHYSICAL_FORMATS,
-  ALBUM_PHYSICAL_FORMAT_LABEL,
   type AlbumPhysicalFormat,
   type AlbumSellMode,
 } from "@shared/schema";
 
-// Short per-format blurbs shown under each card in the physical-format
-// picker. UI copy only — kept here (not in schema) because it's dialog
-// presentation, not domain data.
-const ALBUM_PHYSICAL_FORMAT_BLURB: Record<AlbumPhysicalFormat, string> = {
-  single_lp: "Standard 12″ vinyl.",
-  double_lp: "Two-disc 12″ set.",
-  seven_inch: "7″ single — fastest turn.",
-  cassette: "Tape — short-run friendly.",
-  cd: "Compact disc — low-cost run.",
-};
+// Format families shown in the picker. Vinyl starts with the backend's
+// existing single-LP value; size and disc count are refined in the builder.
+const FORMAT_CHOICES: Array<{
+  value: AlbumPhysicalFormat;
+  label: string;
+  blurb: string;
+}> = [
+  { value: "single_lp", label: "Vinyl", blurb: "Choose size and disc count in the builder." },
+  { value: "cassette", label: "Cassette", blurb: "Tape — short-run friendly." },
+  { value: "cd", label: "CD", blurb: "Compact disc — low-cost run." },
+];
 
 /**
  * Task #335 — Two-step "how is this album sold?" dialog.
  *
- * Stage 1: pick the SELL MODE.
+ * Stage 1: pick the SELL MODE. Retired modes remain supported by the data
+ * model for existing albums but cannot be selected here.
  *   - **Direct** — GoodTunes runs the press, takes the order, handles
- *     fulfillment. Unlocks the Sell-tab quote flow + Path-to-press +
+ *     fulfillment. Unlocks the Sell-tab estimate flow + Path-to-press +
  *     Press tab. Most originals + new GoodTunes releases live here.
  *   - **Shopify** — label/artist already has a Shopify store and
  *     fulfills the physical product themselves. We only sell the
  *     digital album + optional GoodDeed addon. No press path; the
  *     Shopify tab handles the per-album product mapping.
- *   - **Shopify+** (Task #2428) — the customer sells on their own
- *     Shopify BUT gets the full Direct production pipeline (press,
- *     GoodDeed, optional fulfillment), prepaid via a staged ACH
- *     ledger. Uses the Direct-style Physical tabs, not the plain
- *     Shopify mapping tab, and never sells on the GoodTunes fan surface.
- *
- * Stage 2 (Direct + Shopify+): pick the PHYSICAL FORMAT up-front so the
- * Sell-tab quote flow can scope the Hellbender catalog (colors, color
- * tiers, vinyl preview) to just that format. Plain Shopify mode skips
- * this step — the label picks SKUs in Shopify, not here.
+ * Stage 2 (Direct): pick the PHYSICAL FORMAT family up-front. Vinyl uses
+ * the existing single-LP value as a safe initial default; its size and disc
+ * count are choices inside the builder. Shopify mode skips this step.
  *
  * Returns `{ sellMode, physicalFormat | null }` to the opener, which
  * writes it back to the album via PUT /api/admin/albums/:id. The
@@ -132,7 +125,7 @@ export function NewAlbumModeDialog({
               <ModeCard
                 icon={<Store className="w-5 h-5" />}
                 title="GoodTunes Direct"
-                blurb="We press it, sell it, fulfill it. Quote + Path-to-press unlocks."
+                blurb="We press it, sell it, fulfill it. Estimate + Path-to-press unlocks."
                 testId="card-mode-direct"
                 onPick={() => {
                   setPickedMode("direct");
@@ -142,30 +135,18 @@ export function NewAlbumModeDialog({
               <ModeCard
                 icon={<ShoppingBag className="w-5 h-5" />}
                 title="Shopify store"
-                blurb="Label/artist fulfills. We sell digital + GoodDeed only."
+                blurb="Label/artist fulfills. We sell digital + GoodDeed® only."
                 testId="card-mode-shopify"
                 onPick={() => {
                   // Shopify mode has no format pick — submit immediately.
                   onSubmit({ sellMode: "shopify", physicalFormat: null });
                 }}
               />
-              <ModeCard
-                icon={<PackagePlus className="w-5 h-5" />}
-                title="GoodTunes Shopify+"
-                blurb="They sell on Shopify. We press, run GoodDeed & (optionally) fulfill — prepaid."
-                testId="card-mode-shopify-plus"
-                onPick={() => {
-                  // Shopify+ uses the Direct production pipeline, which is
-                  // scoped by physical format — go to the format stage.
-                  setPickedMode("shopify_plus");
-                  setStage("format");
-                }}
-              />
             </div>
           </>
         )}
 
-        {stage === "format" && (pickedMode === "direct" || pickedMode === "shopify_plus") && (
+        {stage === "format" && pickedMode === "direct" && (
           <>
             <DialogHeader className="text-left space-y-1">
               <div className="flex items-center gap-2">
@@ -183,33 +164,20 @@ export function NewAlbumModeDialog({
                 </DialogTitle>
               </div>
               <DialogDescription className="text-[13px] text-slate-500 pl-6">
-                Scopes the Sell-tab quote flow to this format's color catalog and
-                preview art. You can change it later.
+                Starts the Sell-tab estimate flow. You can change it later.
               </DialogDescription>
             </DialogHeader>
-            {/* The two 12″ LPs sit side by side on top; the shorter-run
-                formats (7″ / Cassette / CD) share the row below. */}
-            <div className="space-y-2.5">
-              <div className="grid grid-cols-2 gap-2.5">
-                {ALBUM_PHYSICAL_FORMATS.slice(0, 2).map((f) => (
-                  <FormatCard
-                    key={f}
-                    f={f}
-                    busy={busy}
-                    onPick={() => onSubmit({ sellMode: pickedMode ?? "direct", physicalFormat: f })}
-                  />
-                ))}
-              </div>
-              <div className="grid grid-cols-3 gap-2.5">
-                {ALBUM_PHYSICAL_FORMATS.slice(2).map((f) => (
-                  <FormatCard
-                    key={f}
-                    f={f}
-                    busy={busy}
-                    onPick={() => onSubmit({ sellMode: pickedMode ?? "direct", physicalFormat: f })}
-                  />
-                ))}
-              </div>
+            <div className="grid grid-cols-3 gap-2.5">
+              {FORMAT_CHOICES.map((choice) => (
+                <FormatCard
+                  key={choice.value}
+                  f={choice.value}
+                  label={choice.label}
+                  blurb={choice.blurb}
+                  busy={busy}
+                  onPick={() => onSubmit({ sellMode: "direct", physicalFormat: choice.value })}
+                />
+              ))}
             </div>
           </>
         )}
@@ -249,10 +217,14 @@ function ModeCard({
 
 function FormatCard({
   f,
+  label,
+  blurb,
   busy,
   onPick,
 }: {
   f: AlbumPhysicalFormat;
+  label: string;
+  blurb: string;
   busy: boolean;
   onPick: () => void;
 }) {
@@ -265,10 +237,10 @@ function FormatCard({
       className="group rounded-lg border border-slate-200 bg-white p-4 text-left hover:border-[color:var(--brand-blue)] hover:shadow-sm transition-all disabled:opacity-60"
     >
       <div className="text-[14px] font-semibold text-slate-900 group-hover:text-[color:var(--brand-blue)] flex items-center gap-1.5">
-        {ALBUM_PHYSICAL_FORMAT_LABEL[f]}
+        {label}
       </div>
       <div className="text-[11.5px] text-slate-500 mt-0.5">
-        {ALBUM_PHYSICAL_FORMAT_BLURB[f]}
+        {blurb}
       </div>
     </button>
   );

@@ -71,6 +71,12 @@ export type GoodDeedPrintingConfig = {
     tiers: Array<{ qty: number; perUnitCents: number }>;
   };
   shipToFulfillment: boolean;
+  // GoodTunes-authored reference ranges. These are display-only hints:
+  // press edits never submit them and artist surfaces never receive them.
+  typicalRanges: {
+    printing: Array<{ qty: number; minCents: number; maxCents: number }>;
+    finishing: Array<{ qty: number; minCents: number; maxCents: number }>;
+  };
 };
 
 export function useGoodDeedPrinting(pressId: string) {

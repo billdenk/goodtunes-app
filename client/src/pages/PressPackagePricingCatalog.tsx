@@ -1129,21 +1129,31 @@ export function JacketStage({
   }, [out]);
   return (
     <div data-testid="jacket-stage">
-      <div className="relative" style={{ width: jacketPx + jacketPx * 0.5, height: jacketPx + 24 }}>
+      <div className="relative" style={{ width: jacketPx + jacketPx * 0.5, height: jacketPx + 24, overflow: "clip" }}>
         {/* Hover zone — the discs + jacket + floor shadow. The rewind button
             sits OUTSIDE this zone so clicking it never re-triggers the
             hover spin/slide. */}
         <div
           className="absolute"
           style={{ inset: 0, cursor: "pointer" }}
-          onPointerEnter={() => {
+          onPointerEnter={(event) => {
+            if (event.pointerType === "touch") return;
             setHover(true);
             spinEnter();
           }}
-          onPointerLeave={() => {
+          onPointerLeave={(event) => {
+            if (event.pointerType === "touch") return;
             setHover(false);
             spinLeave();
           }}
+          onPointerDown={(event) => {
+            if (event.pointerType !== "touch") return;
+            setHover((value) => !value);
+            if (hover) spinLeave();
+            else spinEnter();
+          }}
+          aria-label="Tap to slide the record"
+          aria-pressed={out}
         >
         {/* Second record (Double LP) — peeks a touch further, on a slight delay */}
         {isDouble && (
