@@ -43,6 +43,7 @@ import {
 import { formatUsdCents } from "@shared/money";
 import { Award, Check, ChevronRight, Download, FileText, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageColumn, PageHeader } from "@/components/admin/PageShell";
 import { ColorBall, VinylDisc } from "./PressVinylColors";
 import { JacketStage } from "./PressPackagePricingCatalog";
 import {
@@ -69,6 +70,7 @@ import {
 } from "./press-create/PressPackageBuilder";
 import { useAdminDark } from "@/lib/adminAppearance";
 import { resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
+import { displayPressColorName } from "@/lib/pressColorName";
 
 // ─── Theme-aware brand tokens (Apple calm visual language) ───────────
 // Theme-aware: light = the ratified press-portal palette (apple-canon light);
@@ -101,41 +103,41 @@ type Theme = {
 
 const THEMES: Record<"light" | "dark", Theme> = {
   light: {
-    BLUE: "#319ED8",
-    INK: "#1d1d1f",
-    SUBINK: "#6e6e73",
-    FAINT: "#a1a1a6",
-    HAIRLINE: "#e6e6ea",
-    CANVAS: "#f5f5f7",
-    RAIL: "#f5f5f7",
-    CARD: "#ffffff",
-    TRACK: "#f0f0f2",
+    BLUE: "var(--apple-blue)",
+    INK: "var(--apple-ink)",
+    SUBINK: "var(--apple-subink)",
+    FAINT: "var(--apple-faint)",
+    HAIRLINE: "var(--apple-hairline)",
+    CANVAS: "var(--apple-canvas)",
+    RAIL: "var(--apple-canvas)",
+    CARD: "var(--apple-card)",
+    TRACK: "var(--apple-track)",
     HEADER_BG: "rgba(255,255,255,0.72)",
     HOVER_WASH: "rgba(0,0,0,0.05)",
     BLUE_WASH: "#f0f7fc",
     BLUE_TINT_TOP: "#f4faff",
-    RING: "#e2e8f0",
+    RING: "var(--apple-hairline)",
     CHECK_HALO: "rgba(255,255,255,0.85)",
-    READY: "#1c8a5b",
+    READY: "var(--apple-ready)",
     PILL_SHADOW: "0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)",
   },
   dark: {
-    BLUE: "#319ED8",
-    INK: "#f5f5f7",
-    SUBINK: "#98989d",
-    FAINT: "#6e6e73",
-    HAIRLINE: "rgba(255,255,255,0.10)",
-    CANVAS: "#161617",
-    RAIL: "#1c1c1e",
-    CARD: "#1e1e20",
-    TRACK: "#26262a",
+    BLUE: "var(--apple-blue)",
+    INK: "var(--apple-ink)",
+    SUBINK: "var(--apple-subink)",
+    FAINT: "var(--apple-faint)",
+    HAIRLINE: "var(--apple-hairline)",
+    CANVAS: "var(--apple-canvas)",
+    RAIL: "var(--apple-canvas)",
+    CARD: "var(--apple-card)",
+    TRACK: "var(--apple-track)",
     HEADER_BG: "rgba(22,22,23,0.72)",
     HOVER_WASH: "rgba(255,255,255,0.05)",
     BLUE_WASH: "rgba(49,158,216,0.14)",
     BLUE_TINT_TOP: "rgba(49,158,216,0.10)",
-    RING: "rgba(255,255,255,0.14)",
+    RING: "var(--apple-hairline)",
     CHECK_HALO: "rgba(0,0,0,0.55)",
-    READY: "#3fbf62",
+    READY: "var(--apple-ready)",
     PILL_SHADOW: "0 1px 3px rgba(0,0,0,0.4)",
   },
 };
@@ -269,17 +271,9 @@ function snapCatalogLadder(
 // ─── Handoff markup primitives ───────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT }}>
+    <div className="text-xs font-medium" style={{ color: SUBINK }}>
       {children}
     </div>
-  );
-}
-function PageHeading({ lead, rest }: { lead: string; rest: string }) {
-  return (
-    <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, marginTop: 10 }}>
-      <span style={{ color: INK }}>{lead} </span>
-      <span style={{ color: FAINT, fontWeight: 600 }}>{rest}</span>
-    </h1>
   );
 }
 function TwoTone({ lead, rest }: { lead: string; rest: string }) {
@@ -441,12 +435,14 @@ function ColorCards({
   colors,
   value,
   onChange,
+  fallbackLabel,
   labelLogoUrl,
   labelBgColor,
 }: {
   colors: CatalogColor[];
   value: string | null;
   onChange: (id: string) => void;
+  fallbackLabel: string;
   labelLogoUrl: string | null;
   labelBgColor: string | null;
 }) {
@@ -454,6 +450,7 @@ function ColorCards({
     <div className="grid grid-cols-4 gap-3" style={{ marginTop: 14 }}>
       {colors.map((c) => {
         const on = c.id === value;
+        const displayName = displayPressColorName(c.name);
         return (
           <button
             key={c.id}
@@ -465,7 +462,7 @@ function ColorCards({
             style={{ backgroundColor: CARD, padding: "16px 10px 12px", border: on ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}` }}
           >
             <div className="relative flex justify-center" style={{ marginBottom: 8 }}>
-              <ColorBall color={c} size={48} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
+              <ColorBall color={c} size={32} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
               {on && (
                 <span
                   className="absolute flex items-center justify-center rounded-full"
@@ -483,7 +480,7 @@ function ColorCards({
               )}
             </div>
             <div className="text-[12.5px] font-semibold leading-tight" style={{ color: on ? BLUE : INK }}>
-              {c.name}
+              {displayName ?? fallbackLabel}
             </div>
           </button>
         );
@@ -678,7 +675,7 @@ function GoodDeedCard({
               Offer Signed GoodDeed<sup style={{ fontSize: "0.6em", top: "-0.5em" }}>®</sup>
             </span>
             <span
-              className="inline-flex items-center gap-1 rounded-full text-[10px] font-bold uppercase tracking-wider px-2 h-5"
+              className="inline-flex items-center gap-1 rounded-full text-xs font-medium px-2 h-5"
               style={{ color: BLUE, backgroundColor: BLUE_WASH }}
             >
               <Sparkles className="w-3 h-3" /> Flagship
@@ -726,13 +723,13 @@ function GoodDeedCard({
               under No limit, cap stepper under Limit quantity). */}
           <div style={{ padding: "16px 18px", borderTop: `1px solid ${HAIRLINE}` }}>
             <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 8 }}>
+              <div className="text-xs font-medium" style={{ color: SUBINK, marginBottom: 8 }}>
                 Certificate price
               </div>
               <RetailControl cents={retailCents} onCents={onRetailCents} testId="input-deed-retail" />
             </div>
             <div style={{ marginTop: 20 }}>
-              <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 8 }}>
+              <div className="text-xs font-medium" style={{ color: SUBINK, marginBottom: 8 }}>
                 How many
               </div>
               <div className="grid grid-cols-2 gap-x-2.5 gap-y-0">
@@ -962,7 +959,7 @@ export function PackagePrintTemplates({
   return (
     <>
       <Divider />
-      <TwoTone lead="Print templates." rest="Everything your designer needs." />
+      <TwoTone lead="Print templates" rest="Everything your designer needs" />
       <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
         Sized for this package{pressName ? <> by {pressName}</> : null}. Download, hand to your artwork
         team, drop the files back in.
@@ -1029,7 +1026,7 @@ function StartPackageCard({ pkg, pressName, selected, onSelect, catalogSwatches 
       data-testid={`start-package-${pkg.id}`}
     >
       {/* eyebrow + title + subtitle above the image (Apple Music order) */}
-      <div style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: 1.2, textTransform: "uppercase", color: FAINT }}>
+      <div style={{ fontSize: 12.5, fontWeight: 500, color: SUBINK }}>
         {pressName} package
       </div>
       <div style={{ fontSize: 17, fontWeight: 600, letterSpacing: -0.2, marginTop: 4, color: INK }}>
@@ -1430,14 +1427,17 @@ export function PressAlbumPackageBuilder({
 
   if (catalogFormats.length === 0) {
     return (
-      <div className="max-w-[720px]" data-testid="package-builder-empty">
-        <SectionLabel>Design your package</SectionLabel>
-        <PageHeading lead="Design your package." rest="See what it earns." />
+      <PageColumn padded={false} className="!max-w-none" testId="package-builder-empty">
+        <PageHeader
+          title="Design your package"
+          subtitle="See what it earns"
+          contentGap={false}
+        />
         <p className="text-[14px]" style={{ color: SUBINK, marginTop: 16, lineHeight: 1.5 }}>
           Your press hasn't published a vinyl catalog yet. As soon as {press?.name ?? "the press"} adds
           sizes and pricing, you'll design your package right here.
         </p>
-      </div>
+      </PageColumn>
     );
   }
 
@@ -1451,35 +1451,40 @@ export function PressAlbumPackageBuilder({
         catalogFormats: (invited?.catalog?.formats as CatalogFormat[] | undefined) ?? null,
       }}
     >
-    <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }} data-testid="panel-package-builder">
+    <PageColumn
+      padded={false}
+      className="!max-w-none"
+      testId="panel-package-builder"
+    >
       {/* Page header + quiet save state */}
-      <div className="flex items-start justify-between gap-6">
-        <div className="min-w-0">
-          <SectionLabel>Your release · {albumTitle}</SectionLabel>
-          <PageHeading lead="Design your package." rest="See what it earns." />
-          <p className="text-[15px]" style={{ color: SUBINK, marginTop: 12, maxWidth: 560, lineHeight: 1.5 }}>
+      <PageHeader
+        title="Design your package"
+        subtitle={
+          <>
             One confident decision at a time — size, vinyl, price. Every choice updates the
             record on the left and your take-home on the right. Honest math, no surprises.
-          </p>
-        </div>
-        {canEdit && (
+          </>
+        }
+        titleExtras={<SectionLabel>Your release · {albumTitle}</SectionLabel>}
+        actions={canEdit ? (
           <div className="flex items-center gap-3 flex-shrink-0" style={{ marginTop: 24 }}>
-            <span className="text-[12.5px]" style={{ color: dirty ? SUBINK : FAINT }} data-testid="save-state">
+            <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: dirty ? SUBINK : FAINT }} data-testid="save-state">
+              {dirty ? <FileText className="h-3.5 w-3.5" aria-hidden /> : <Check className="h-3.5 w-3.5" aria-hidden />}
               {dirty ? "Edited" : "All changes saved"}
             </span>
             <Button
               disabled={!dirty || save.isPending}
               onClick={() => save.mutate()}
-              className="text-white hover:opacity-90 rounded-full disabled:opacity-40"
-              style={{ backgroundColor: BLUE, borderColor: BLUE, paddingLeft: 22, paddingRight: 22 }}
+              className="bg-[var(--apple-blue)] text-white hover:bg-[var(--apple-blue)] hover:opacity-90 rounded-full disabled:opacity-40"
+              style={{ borderColor: BLUE, paddingLeft: 22, paddingRight: 22 }}
               data-testid="button-save"
             >
               {save.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               Save
             </Button>
           </div>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       <div style={{ marginTop: 20 }}>
         <AlbumBanner
@@ -1528,7 +1533,7 @@ export function PressAlbumPackageBuilder({
                 opens on Pick-a-size exactly as before. */}
             {railPackages.length > 0 && (
               <section data-testid="section-start-packages" style={{ marginBottom: 40 }}>
-                <TwoTone lead="Start from a package." rest="Or build your own below." />
+                <TwoTone lead="Start from a package" rest="Or build your own below" />
                 <p style={{ fontSize: 13, color: SUBINK, marginTop: 8, maxWidth: 620, lineHeight: 1.45 }}>
                   Ready builds from {press?.name ?? "your press"} — pick one to prefill your
                   record, then keep tuning.
@@ -1556,7 +1561,7 @@ export function PressAlbumPackageBuilder({
             )}
 
             {/* Pick a size */}
-            <TwoTone lead="Pick a size." rest="Prices follow the record." />
+            <TwoTone lead="Pick a size" rest="Prices follow the record" />
             <SizeCards
               formats={catalogFormats.map((r) => r.format)}
               value={format}
@@ -1570,7 +1575,7 @@ export function PressAlbumPackageBuilder({
             <Divider />
 
             {/* Pick a type (tier) */}
-            <TwoTone lead="Pick your vinyl." rest="Black, color, or a wild splatter." />
+            <TwoTone lead="Pick your vinyl" rest="Black, color, or a wild splatter" />
             {!typeGridExpanded && activeTier ? (
               // Collapsed summary — the picked type, one quiet row (canon:
               // same as the press Vinyl-colors page).
@@ -1621,7 +1626,7 @@ export function PressAlbumPackageBuilder({
             <Divider />
 
             {/* Pick a color */}
-            <TwoTone lead="Pick a color." rest="This is the one fans hold." />
+            <TwoTone lead="Pick a color" rest="This is the one fans hold" />
             {activeTier && (
               <p className="text-[12.5px]" style={{ marginTop: 6 }}>
                 <span className="font-semibold" style={{ color: INK }}>{activeTier.name}</span>
@@ -1631,6 +1636,7 @@ export function PressAlbumPackageBuilder({
             <ColorCards
               colors={activeTier?.colors ?? []}
               value={selectedColor?.id ?? null}
+              fallbackLabel={activeTier?.name ?? "Vinyl color"}
               labelLogoUrl={labelLogoUrl}
               labelBgColor={labelBgColor}
               onChange={(id) => {
@@ -1644,7 +1650,7 @@ export function PressAlbumPackageBuilder({
             <Divider />
 
             {/* Pricing & earnings */}
-            <TwoTone lead="Set your price." rest="Watch what you earn." />
+            <TwoTone lead="Set your price" rest="Watch what you earn" />
             <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
               Pick a retail price and a run. GoodTunes<sup style={{ fontSize: "0.6em", top: "-0.5em" }}>®</sup> does the math live —
               this is your take-home, before a single record ships.
@@ -1652,7 +1658,7 @@ export function PressAlbumPackageBuilder({
 
             <div className="flex flex-wrap items-end gap-x-10 gap-y-5" style={{ marginTop: 18 }}>
               <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 8 }}>
+                <div className="text-xs font-medium" style={{ color: SUBINK, marginBottom: 8 }}>
                   Retail price
                 </div>
                 <RetailControl
@@ -1664,7 +1670,7 @@ export function PressAlbumPackageBuilder({
                 />
               </div>
               <div>
-                <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: FAINT, marginBottom: 8 }}>
+                <div className="text-xs font-medium" style={{ color: SUBINK, marginBottom: 8 }}>
                   Run quantity
                 </div>
                 <RunControl
@@ -1742,10 +1748,10 @@ export function PressAlbumPackageBuilder({
                   </>
                 ) : (
                   <div style={{ padding: "11px 0" }} data-testid="earnings-quote-needed">
-                    <div className="text-[13.5px] font-medium leading-tight" style={{ color: INK }}>Custom quote needed</div>
+                    <div className="text-sm font-medium leading-tight" style={{ color: INK }}>Custom estimate needed</div>
                     <div className="text-[11.5px]" style={{ color: FAINT, marginTop: 2, lineHeight: 1.4 }}>
                       {snap?.requiresQuote
-                        ? `Runs above ${snap.qty.toLocaleString("en-US")} are quoted by ${press?.name ?? "the press"} — your earnings appear once the quote lands.`
+                        ? `Runs above ${snap.qty.toLocaleString("en-US")} are estimated by ${press?.name ?? "the press"} — your earnings appear once the estimate arrives.`
                         : `${press?.name ?? "The press"} hasn't priced this combination yet.`}
                     </div>
                   </div>
@@ -1784,8 +1790,8 @@ export function PressAlbumPackageBuilder({
                 data-testid="artist-net"
               >
                 <div>
-                  <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BLUE }}>
-                    Artist Net
+                  <div className="text-xs font-medium" style={{ color: SUBINK }}>
+                    Artist net
                   </div>
                   <div className="text-[12px]" style={{ color: SUBINK, marginTop: 3 }}>
                     If the full run sells through
@@ -1802,7 +1808,7 @@ export function PressAlbumPackageBuilder({
             <Divider />
 
             {/* GoodDeed flagship */}
-            <TwoTone lead="GoodDeed®." rest="Make it collectible." />
+            <TwoTone lead="GoodDeed®" rest="Make it collectible" />
             <p className="text-[12.5px]" style={{ color: SUBINK, marginTop: 6, lineHeight: 1.4 }}>
               Every record includes a free certificate. Add a signed premium tier below.
             </p>
@@ -1846,7 +1852,7 @@ export function PressAlbumPackageBuilder({
           </div>
         </div>
       </fieldset>
-    </div>
+    </PageColumn>
     </PressBrandContext.Provider>
   );
 }
