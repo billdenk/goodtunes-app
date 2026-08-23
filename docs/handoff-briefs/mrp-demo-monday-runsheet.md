@@ -298,3 +298,29 @@ gets tested.**
      audit where these flags come from, because if they default to true,
      other status displays may be wrong too.
     
+
+    ## Vinyl art cards: double status pills look bad (from Bill)
+
+    Assets → Vinyl → Art, artist view. Each piece card (Cover · jacket,
+    Center labels, Printed inner sleeve) stacks TWO status pills:
+    "Using album art" AND "Waiting for art". Problems:
+
+    - Two statuses on one card contradict each other — is it using album
+    art, or waiting for art? One card = ONE status line (word + icon).
+    - On a release with no album art at all (this one), "Using album art"
+    is false anyway — there's nothing to use. Same dishonest-default
+    problem as the Store checklist.
+    - The big empty card area is just a cloud glyph — it should be the
+    upload target and say so.
+
+    Fix per canon:
+
+    - One status per card, honest to actual state:
+    - No album art + no piece file → "Waiting for art" only.
+    - Album art exists, no piece file → "Using album art" (and show the
+      art in the card, not a cloud glyph — that's the proof).
+    - Piece file uploaded → "Custom art uploaded".
+    - Card body = tappable upload target ("Drop file or tap to upload" on
+    the empty state), sized to the press template's aspect ratio.
+    - Heading nit: "Vinyl art." trailing period (same sweep as before).
+    
