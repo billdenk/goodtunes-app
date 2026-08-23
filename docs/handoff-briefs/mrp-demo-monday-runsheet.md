@@ -41,9 +41,13 @@ artist receives the branded invite and starts on their own.
 - Demo data: one clean press account (Memphis) + one clean artist
   (CALIFORNIALAND / Niina Soleil, NS-001 — matches the live Side Breaks
   page). No test junk in lists.
-- Estimate-email review redirect (PRESS_ESTIMATE_REVIEW_RECIPIENT) — make
-  sure Bill can actually receive/show the invite + estimate emails in the
-  room.
+- Emails while testing: route ALL demo/test sends (invites, estimate
+    emails, receipts) to Bill's and Andrew's own addresses — they will test
+    the full loop themselves this weekend. Swap recipients to Brandon and
+    the real MRP contacts only at go-live, not before. (The existing
+    PRESS_ESTIMATE_REVIEW_RECIPIENT redirect is the right mechanism — keep
+    it pointed at Bill/Andrew for now.) Bill must be able to show the
+    emails in the room Monday.
 - Client-only work needs a prod publish to show on the live domain —
   publish before Monday, not Monday morning.
 
