@@ -378,9 +378,9 @@ const STATUS_LABELS: Record<LedgerStep["status"], string> = {
 };
 
 const QUOTED_SOURCE_CAPTION: Record<LedgerData["totals"]["quotedSource"], string> = {
-  quote: "From the active quote",
-  system: "System-computed manufacturing cost (no active quote total)",
-  steps: "Sum of payment requests (no quote or system cost yet)",
+  quote: "From the active estimate",
+  system: "System-computed manufacturing cost (no active estimate total)",
+  steps: "Sum of payment requests (no estimate or system cost yet)",
 };
 
 // Task #3004 — copyable field row inside the bank-transfer instructions
@@ -399,7 +399,7 @@ function CopyField({
   return (
     <div className="flex items-center justify-between gap-3 py-2 border-b border-slate-100 last:border-b-0">
       <div className="min-w-0">
-        <div className="text-xs uppercase tracking-wide text-slate-400">
+        <div className="text-sm font-medium text-slate-500">
           {label}
         </div>
         <div
@@ -845,7 +845,7 @@ function ManufacturingLedger({
       await refresh();
     } catch (e: any) {
       toast({
-        title: "Couldn't remove quote",
+        title: "Couldn't remove estimate",
         description: String(e?.message ?? e),
         variant: "destructive",
       });
@@ -871,7 +871,7 @@ function ManufacturingLedger({
       await refresh();
     } catch (e: any) {
       toast({
-        title: "Couldn't save quote",
+        title: "Couldn't save estimate",
         description: String(e?.message ?? e),
         variant: "destructive",
       });
@@ -912,7 +912,7 @@ function ManufacturingLedger({
   // then record the /objects/... path. Mirrors the press-invoice uploader.
   async function uploadQuote(file: File) {
     if (file.type && file.type !== "application/pdf") {
-      toast({ title: "PDF only", description: "Quotes must be a PDF.", variant: "destructive" });
+      toast({ title: "PDF only", description: "Estimates must be a PDF.", variant: "destructive" });
       return;
     }
     setUploading(true);
@@ -1002,7 +1002,7 @@ function ManufacturingLedger({
       <div className="flex items-start gap-3">
         <Factory className="w-4 h-4 mt-0.5 shrink-0 text-slate-400" />
         <div className="min-w-0">
-          <h3 className="text-slate-900 text-sm font-semibold">
+          <h3 className="text-xl font-semibold tracking-tight text-slate-900">
             Manufacturing payments
           </h3>
           <p className="text-slate-500 text-xs mt-0.5">
@@ -1032,29 +1032,32 @@ function ManufacturingLedger({
       ) : (
         <>
           {/* Totals */}
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            <div className="rounded-lg bg-slate-50 px-3 py-2" data-testid="stat-ledger-quoted">
-              <div className="text-xs text-slate-500">Quoted</div>
-              <div className="text-sm font-semibold text-slate-900">
+          <div className="mt-5 grid grid-cols-3 gap-3">
+            <div className="rounded-xl bg-slate-50 px-4 py-3" data-testid="stat-ledger-quoted">
+              <div className="text-sm font-medium text-slate-500">Estimated</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-slate-900">
                 {formatUsdCents(totals.quotedCents)}
               </div>
             </div>
-            <div className="rounded-lg bg-slate-50 px-3 py-2" data-testid="stat-ledger-paid">
-              <div className="text-xs text-slate-500">Paid</div>
-              <div className="text-sm font-semibold text-emerald-700">
+            <div className="rounded-xl bg-slate-50 px-4 py-3" data-testid="stat-ledger-paid">
+              <div className="flex items-center gap-1.5 text-sm font-medium text-slate-500">
+                <BadgeCheck className="h-4 w-4" />
+                Paid
+              </div>
+              <div className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-slate-900">
                 {formatUsdCents(totals.paidCents)}
               </div>
             </div>
-            <div className="rounded-lg bg-slate-50 px-3 py-2" data-testid="stat-ledger-outstanding">
-              <div className="text-xs text-slate-500">Outstanding</div>
-              <div className="text-sm font-semibold text-slate-900">
+            <div className="rounded-xl bg-slate-50 px-4 py-3" data-testid="stat-ledger-outstanding">
+              <div className="text-sm font-medium text-slate-500">Outstanding</div>
+              <div className="mt-1 text-xl font-semibold tabular-nums tracking-tight text-slate-900">
                 {formatUsdCents(totals.outstandingCents)}
               </div>
             </div>
           </div>
           <p className="text-xs text-slate-400 mt-1.5" data-testid="text-quoted-source">
-            Quoted: {QUOTED_SOURCE_CAPTION[totals.quotedSource]}. Outstanding =
-            quoted − paid. The quoted figure is the plant's estimate and may
+            Estimated: {QUOTED_SOURCE_CAPTION[totals.quotedSource]}. Outstanding =
+            estimated − paid. The estimated figure is the plant's estimate and may
             change with the press's ±10% run tolerance.
           </p>
           {totals.processingCents > 0 && (
@@ -1082,7 +1085,7 @@ function ManufacturingLedger({
                 <button
                   onClick={() => setRunClosed(!runClosed)}
                   disabled={busy === "close"}
-                  className={`h-9 shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold disabled:opacity-50 ${
+                  className={`h-9 shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 text-xs font-semibold disabled:opacity-50 ${
                     runClosed
                       ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                       : "border border-amber-200 bg-white text-amber-800 hover:bg-amber-50"
@@ -1106,13 +1109,13 @@ function ManufacturingLedger({
               an editable dollar total and a single Active flag driving the
               Quoted stat. */}
           <div className="mt-5 pt-4 border-t border-slate-100">
-            <div className="text-xs font-semibold text-slate-700 mb-2">
-              Quotes
+            <div className="mb-3 text-base font-semibold text-slate-900">
+              Estimates
             </div>
             {quotes.length === 0 ? (
               <p className="text-xs text-slate-400" data-testid="text-no-quotes">
-                No quotes on file. Upload the plant's quote PDF to drive the
-                Quoted total.
+                No estimates on file. Upload the plant's estimate PDF to drive the
+                estimated total.
               </p>
             ) : (
               <div className="space-y-1.5">
@@ -1136,7 +1139,7 @@ function ManufacturingLedger({
             )}
             {canEdit && (
               <label
-                className="mt-2 inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer w-fit"
+                className="mt-3 inline-flex h-9 w-fit cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 data-testid="button-upload-quote"
               >
                 {uploading ? (
@@ -1144,7 +1147,7 @@ function ManufacturingLedger({
                 ) : (
                   <FileText className="w-3.5 h-3.5" />
                 )}
-                {uploading ? "Uploading…" : "Upload quote PDF"}
+                {uploading ? "Uploading…" : "Upload estimate PDF"}
                 <input
                   type="file"
                   accept="application/pdf,.pdf"
@@ -1165,7 +1168,7 @@ function ManufacturingLedger({
               for artist" indicator depend on both the step's fundingSource and
               whether this is the operator or artist view. */}
           <div className="mt-5 pt-4 border-t border-slate-100">
-            <div className="text-xs font-semibold text-slate-700 mb-2">
+            <div className="mb-3 text-base font-semibold text-slate-900">
               Payment requests
             </div>
             {steps.length === 0 ? (
@@ -1262,7 +1265,7 @@ function ManufacturingLedger({
                           {isOperatorView &&
                             canEdit &&
                             (step.status === "unpaid" || step.status === "failed") && (
-                              <div className="mt-1.5 flex items-center gap-1">
+                              <div className="mt-1.5 inline-flex items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5">
                                 <button
                                   onClick={() =>
                                     patchStep(
@@ -1274,10 +1277,10 @@ function ManufacturingLedger({
                                   disabled={
                                     busy === `fs-${step.id}` || isArtistDirect
                                   }
-                                  className={`text-xs px-2 py-0.5 rounded border font-medium transition-colors ${
+                                  className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
                                     isArtistDirect
-                                      ? "border-blue-400 bg-blue-50 text-blue-700"
-                                      : "border-slate-200 bg-white text-slate-500 hover:border-blue-300 hover:text-blue-600"
+                                      ? "bg-white text-slate-900 shadow-sm"
+                                      : "text-slate-500 hover:text-slate-700"
                                   }`}
                                   data-testid={`button-fs-artist-${step.id}`}
                                 >
@@ -1294,10 +1297,10 @@ function ManufacturingLedger({
                                   disabled={
                                     busy === `fs-${step.id}` || isGoodTunesPays
                                   }
-                                  className={`text-xs px-2 py-0.5 rounded border font-medium transition-colors ${
+                                  className={`rounded-md px-2 py-1 text-xs font-medium transition-colors ${
                                     isGoodTunesPays
-                                      ? "border-purple-400 bg-purple-50 text-purple-700"
-                                      : "border-slate-200 bg-white text-slate-500 hover:border-purple-300 hover:text-purple-600"
+                                      ? "bg-white text-slate-900 shadow-sm"
+                                      : "text-slate-500 hover:text-slate-700"
                                   }`}
                                   data-testid={`button-fs-goodtunes-${step.id}`}
                                 >
@@ -1308,9 +1311,20 @@ function ManufacturingLedger({
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span
-                            className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[step.status]}`}
+                            className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[step.status]}`}
                             data-testid={`status-step-${step.id}`}
                           >
+                            {step.status === "paid" ? (
+                              <Check className="h-3 w-3" />
+                            ) : step.status === "processing" ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : step.status === "awaiting_transfer" ? (
+                              <Clock className="h-3 w-3" />
+                            ) : step.status === "failed" ? (
+                              <AlertCircle className="h-3 w-3" />
+                            ) : (
+                              <Bell className="h-3 w-3" />
+                            )}
                             {STATUS_LABELS[step.status]}
                           </span>
 
@@ -1442,14 +1456,14 @@ function ManufacturingLedger({
                   <label className="block text-xs text-slate-500 mb-1">
                     Funded by
                   </label>
-                  <div className="flex items-center gap-2">
+                  <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-100 p-1">
                     <button
                       type="button"
                       onClick={() => setFundingSource("artist_direct")}
-                      className={`h-8 inline-flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold border transition-colors ${
+                      className={`h-8 inline-flex items-center rounded-lg px-3 text-xs font-semibold transition-colors ${
                         fundingSource === "artist_direct"
-                          ? "border-blue-400 bg-blue-50 text-blue-700"
-                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900"
                       }`}
                       data-testid="button-funding-artist-direct"
                     >
@@ -1458,10 +1472,10 @@ function ManufacturingLedger({
                     <button
                       type="button"
                       onClick={() => setFundingSource("goodtunes_sales")}
-                      className={`h-8 inline-flex items-center gap-1.5 rounded-lg px-3 text-xs font-semibold border transition-colors ${
+                      className={`h-8 inline-flex items-center rounded-lg px-3 text-xs font-semibold transition-colors ${
                         fundingSource === "goodtunes_sales"
-                          ? "border-purple-400 bg-purple-50 text-purple-700"
-                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                          ? "bg-white text-slate-900 shadow-sm"
+                          : "text-slate-600 hover:text-slate-900"
                       }`}
                       data-testid="button-funding-goodtunes-sales"
                     >
@@ -1484,7 +1498,7 @@ function ManufacturingLedger({
                       value={desc}
                       onChange={(e) => setDesc(e.target.value)}
                       placeholder="e.g. Vinyl run — 500 units"
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)]"
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
                       data-testid="input-step-description"
                     />
                   </div>
@@ -1498,7 +1512,7 @@ function ManufacturingLedger({
                       type="number"
                       step="0.01"
                       placeholder="0.00"
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)]"
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
                       data-testid="input-step-amount"
                     />
                   </div>
@@ -1512,14 +1526,14 @@ function ManufacturingLedger({
                       type="number"
                       step="0.01"
                       placeholder="0.00"
-                      className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)]"
+                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
                       data-testid="input-step-margin"
                     />
                   </div>
                   <button
                     onClick={addStep}
                     disabled={busy === "add"}
-                    className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    className="h-9 inline-flex items-center gap-1.5 rounded-full bg-[#319ED8] px-4 text-xs font-semibold text-white hover:bg-[#268dc4] disabled:opacity-50"
                     data-testid="button-add-step"
                   >
                     {busy === "add" ? (
@@ -1629,7 +1643,7 @@ function VendorMoneyOut({ albumId }: { albumId: string }) {
     <div className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="panel-vendor-money-out">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">Money out — vendor payouts</h3>
+          <h3 className="text-xl font-semibold tracking-tight text-slate-900">Money out — vendor payouts</h3>
           <p className="text-xs text-slate-500 mt-0.5">
             Manual Stripe Connect transfers to the press for this project. Money in (paid steps):{" "}
             <strong>{formatUsdCents(ledger?.moneyInTotalCents ?? 0)}</strong> · paid out:{" "}
@@ -1655,7 +1669,7 @@ function VendorMoneyOut({ albumId }: { albumId: string }) {
                 )}
               </div>
               <span
-                className={`shrink-0 rounded-full px-2 py-0.5 font-semibold ${
+                className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${
                   r.status === "released"
                     ? "bg-emerald-50 text-emerald-700"
                     : r.status === "failed"
@@ -1663,7 +1677,12 @@ function VendorMoneyOut({ albumId }: { albumId: string }) {
                       : "bg-slate-100 text-slate-600"
                 }`}
               >
-                {r.status === "released" ? "paid" : r.status}
+                {r.status === "released" ? (
+                  <Check className="h-3 w-3" />
+                ) : (
+                  <AlertCircle className="h-3 w-3" />
+                )}
+                {r.status === "released" ? "Paid" : r.status === "failed" ? "Failed" : r.status}
               </span>
             </div>
           ))}
@@ -1677,7 +1696,7 @@ function VendorMoneyOut({ albumId }: { albumId: string }) {
           <select
             value={vendorId}
             onChange={(e) => setVendorId(e.target.value)}
-            className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm text-slate-900"
+            className="h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
             data-testid="select-pay-vendor"
           >
             <option value="">Choose…</option>
@@ -1689,7 +1708,7 @@ function VendorMoneyOut({ albumId }: { albumId: string }) {
           </select>
           {activePayees.length === 0 && (
             <p className="text-xs text-slate-400 mt-1">
-              No Active presses yet — onboard one under System → Vendor payees.
+              No active presses yet — onboard one under System → Vendor payees.
             </p>
           )}
         </div>
@@ -1702,7 +1721,7 @@ function VendorMoneyOut({ albumId }: { albumId: string }) {
             step="0.01"
             min="0"
             placeholder="0.00"
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
             data-testid="input-pay-vendor-amount"
           />
         </div>
@@ -1710,6 +1729,7 @@ function VendorMoneyOut({ albumId }: { albumId: string }) {
           size="sm"
           onClick={() => setConfirming(true)}
           disabled={!canConfirm || paying}
+          className="rounded-full bg-[#319ED8] text-white hover:bg-[#268dc4]"
           data-testid="button-pay-vendor"
         >
           <Landmark className="w-3.5 h-3.5 mr-1.5" /> Pay vendor
@@ -1726,7 +1746,7 @@ function VendorMoneyOut({ albumId }: { albumId: string }) {
           <button
             type="button"
             onClick={() => setShowAttempts((v) => !v)}
-            className="text-xs text-slate-500 underline"
+            className="text-xs font-medium text-slate-500 hover:text-slate-900"
             data-testid="button-toggle-attempts"
           >
             {showAttempts ? "Hide" : "Show"} transfer attempt log ({ledger!.attempts.length})
@@ -1824,13 +1844,13 @@ function QuoteRow({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = quote.fileName || "Quote.pdf";
+      a.download = quote.fileName || "Estimate.pdf";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch {
-      toast({ title: "Download failed", description: "Could not retrieve the quote file.", variant: "destructive" });
+      toast({ title: "Download failed", description: "Could not retrieve the estimate file.", variant: "destructive" });
     } finally {
       setDownloading(false);
     }
@@ -1861,7 +1881,7 @@ function QuoteRow({
         <IconButton
           onClick={handleDownload}
           disabled={downloading}
-          label={`Download ${quote.fileName || "Quote.pdf"}`}
+          label={`Download ${quote.fileName || "Estimate.pdf"}`}
           variant="ghost"
           size="md"
           className="shrink-0 text-slate-400"
@@ -1870,13 +1890,14 @@ function QuoteRow({
           <Download className="w-4 h-4" />
         </IconButton>
         <span className="text-sm text-slate-700 truncate">
-          {quote.fileName || "Quote.pdf"}
+          {quote.fileName || "Estimate.pdf"}
         </span>
         {quote.isActive && (
           <span
-            className="text-xs px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 shrink-0"
+            className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200"
             data-testid={`badge-quote-active-${quote.id}`}
           >
+            <Check className="h-3 w-3" />
             Active
           </span>
         )}
@@ -1897,7 +1918,7 @@ function QuoteRow({
             step="0.01"
             placeholder="Total"
             disabled={!canEdit || busy === `total-${quote.id}`}
-            className="w-28 rounded-lg border border-slate-200 bg-white pl-6 pr-2 py-1.5 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)] disabled:opacity-60"
+            className="h-10 w-28 rounded-xl border border-slate-200 bg-slate-50 py-1.5 pl-6 pr-2 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20 disabled:opacity-60"
             data-testid={`input-quote-total-${quote.id}`}
           />
         </div>
@@ -1907,8 +1928,8 @@ function QuoteRow({
             disabled={busy === `activate-${quote.id}` || quote.totalCents == null}
             title={
               quote.totalCents == null
-                ? "Set a total before making this the active quote"
-                : "Use this quote's total as the Quoted amount"
+                ? "Set a total before making this the active estimate"
+                : "Use this estimate's total as the estimated amount"
             }
             className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             data-testid={`button-activate-quote-${quote.id}`}
@@ -1925,7 +1946,7 @@ function QuoteRow({
           <button
             onClick={onRemove}
             disabled={busy === `delq-${quote.id}`}
-            aria-label="Remove quote"
+            aria-label="Remove estimate"
             className="h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 disabled:opacity-50"
             data-testid={`button-remove-quote-${quote.id}`}
           >

@@ -122,7 +122,7 @@ export function NewMusicAnnouncePanel({ albumId }: { albumId: string }) {
           type="button"
           onClick={handleSend}
           disabled={disabled}
-          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md bg-[var(--brand-blue)] text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex-shrink-0"
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-[var(--apple-blue)] text-sm font-medium text-white hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity flex-shrink-0"
           data-testid="button-announce-new-music"
         >
           {alreadySent ? <MailCheck className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}

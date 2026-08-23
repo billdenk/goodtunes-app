@@ -96,6 +96,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/hooks/useAuth";
 import { useSmartBackCrumb } from "@/hooks/useSmartBackCrumb";
 import { AdminFrame } from "@/components/admin/AdminFrame";
+import { PageColumn } from "@/components/admin/PageShell";
 import { AddEntityButton } from "@/components/admin/AddEntityButton";
 import { AlbumPreviewCard } from "@/components/admin/previews/AlbumPreviewCard";
 import { AlbumDesktopPreviewCard } from "@/components/admin/previews/AlbumDesktopPreviewCard";
@@ -1339,7 +1340,7 @@ export function AdminAlbum({
 
   const mainBody = (
     <>
-      <div className="space-y-6">
+      <PageColumn className="space-y-6" padded={false}>
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
           {backCrumb ? (
@@ -1706,12 +1707,6 @@ export function AdminAlbum({
                   ].join(" ")}
                   data-testid={`tab-${t.key}`}
                 >
-                  {status && (
-                    <SectionDot
-                      state={status.state}
-                      data-testid={`dot-${t.key}-${status.state}`}
-                    />
-                  )}
                   {t.label}
                   {isActive && (
                     <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
@@ -2075,7 +2070,7 @@ export function AdminAlbum({
             </>
           );
         })()}
-      </div>
+      </PageColumn>
 
       {/* Destructive confirm sheet — names the album being destroyed
           and lists what goes with it (per replit.md rule). Rose-tinted

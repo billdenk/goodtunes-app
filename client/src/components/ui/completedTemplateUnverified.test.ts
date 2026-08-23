@@ -102,8 +102,8 @@ function makeComponent(over: Record<string, any> = {}) {
       {
         key: "tmpl.size",
         label: "Artboard size",
-        status: "pass",
-        message: "Matches the template.",
+        status: "warn",
+        message: "Review the artboard size.",
       },
       {
         key: "tmpl.bleed",
@@ -160,9 +160,9 @@ test("review gates: status WORD + visible source text on the bleed row", async (
   const h = await render(makeComponent());
   const body = window.document.body.textContent ?? "";
   // Gate 2 — icon + word for every status shown.
-  assert.match(body, /PASS/);
-  assert.match(body, /UNVERIFIED/);
-  assert.match(body, /FAIL/);
+  assert.match(body, /Needs attention/);
+  assert.match(body, /Unverified/);
+  assert.match(body, /Failed check/);
   // Gate 1 — the measurement source is visible plain text (not a tooltip).
   const sourceEl = window.document.querySelector(
     '[data-testid="text-check-source-jacket-tmpl.bleed"]',

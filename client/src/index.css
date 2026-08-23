@@ -479,6 +479,11 @@ body.gt-admin::before {
   --apple-tile: #f2f2f5;
   --apple-card: #ffffff;
   --apple-ink: #1d1d1f;
+  --apple-type-page: 30px;
+  --apple-type-section: 22px;
+  --apple-type-secondary: 13.5px;
+  --apple-leading-page: 1.2;
+  --apple-space-header-content: 28px;
   --apple-subink: #6e6e73;
   --apple-faint: #a1a1a6;
   --apple-hairline: #e6e6ea;

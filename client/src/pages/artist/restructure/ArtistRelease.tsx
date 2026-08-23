@@ -22,8 +22,10 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
 import { uploadAdminDocWithProgress } from '@/lib/adminUpload';
-import { useAuth } from '@/hooks/useAuth';
 import { useUploadManager } from '@/context/UploadManagerContext';
+import { NewAlbumModeDialog } from '@/components/admin/NewAlbumModeDialog';
+import { PageColumn, PageHeader } from '@/components/admin/PageShell';
+import type { AlbumPhysicalFormat, AlbumSellMode } from '@shared/schema';
 import {
   BLUE, PILL_SHADOW, cn, useRestructureTheme, CanonPill, MilestoneStatus, SegChip,
   FORMAT_WORD, fmtDollars, goodtunesLogo, shopifyLogo,
@@ -340,10 +342,7 @@ function ReleaseDetails({ portal, albumId, portalQueryKey, t }: { portal: Portal
   ];
   return (
     <div style={{ marginTop: 26 }}>
-      <div className="min-w-0" style={{ marginBottom: 18 }}>
-        <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>Details</h2>
-        <p className="text-[13.5px]" style={{ marginTop: 4, color: t.subink }}>Everything about this release at a glance.</p>
-      </div>
+      <PageHeader as="h2" title="Details" subtitle="Everything about this release at a glance" />
       <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid="release-details">
         {rows.map((r2, i) => (
           <div
@@ -368,7 +367,6 @@ function ReleaseDetails({ portal, albumId, portalQueryKey, t }: { portal: Portal
 type VinylArtBlock = {
   id: string;
   title: string;
-  aspectRatio: string;
   status: 'waiting' | 'album' | 'custom';
   imageUrl: string | null;
 };
@@ -419,7 +417,7 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
           void upload(event.dataTransfer.files?.[0]);
         }}
         className="relative block w-full flex-shrink-0 overflow-hidden"
-        style={{ aspectRatio: block.aspectRatio, backgroundColor: t.dropEmpty, borderBottom: `1px solid ${t.hairline}` }}
+        style={{ height: 240, backgroundColor: t.dropEmpty, borderBottom: `1px solid ${t.hairline}` }}
         data-testid={`upload-target-${block.id}`}
         aria-label={`Upload ${block.title} art`}
       >
@@ -427,7 +425,7 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
           <img
             src={block.imageUrl}
             alt={`${block.title} art`}
-            className="w-full h-full object-cover object-top"
+            className="w-full h-full object-contain"
             data-testid={`img-block-${block.id}`}
           />
         ) : (
@@ -445,9 +443,9 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
         onChange={(event) => void upload(event.target.files?.[0])}
       />
 
-      <div className="w-full flex flex-col flex-1" style={{ padding: '14px 18px 16px' }}>
+      <div className="w-full flex flex-col" style={{ height: 78, padding: '14px 18px 16px' }}>
         <button type="button" onClick={() => navigate(href)} className="text-left text-[15px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{block.title}</button>
-        <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ marginTop: 8, color: t.subink }}>
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ marginTop: 'auto', color: t.subink }}>
           {status.icon} {status.label}
         </span>
       </div>
@@ -536,7 +534,12 @@ function AudioMasterList({
     acceptFiles(event.dataTransfer.files);
   };
   return (
-    <div style={{ marginTop: 18 }}>
+    <div>
+      {tracks.length > 0 && (
+        <p className="mb-3 text-[length:var(--apple-type-secondary)] font-medium leading-[1.5]" style={{ color: t.subink }}>
+          {forVinyl ? 'Lacquer masters derived from your album masters' : 'Album masters'}
+        </p>
+      )}
       <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid={forVinyl ? 'audio-list-vinyl' : 'audio-list-master'}>
         {assetFormat === 'master' && canUpload && (
           <input
@@ -597,15 +600,12 @@ function AudioMasterList({
         ) : (
           <>
             {tracks.map((song, i) => (
-              <div key={`${song.title}-${i}`} className="flex items-center gap-3 px-4" style={{ height: 52, borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`track-${i + 1}`}>
+              <div key={`${song.title}-${i}`} className="flex items-center gap-3 px-4" style={{ minHeight: 64, paddingTop: 10, paddingBottom: 10, borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`track-${i + 1}`}>
                 <span className="text-[12px] font-semibold tabular-nums flex-shrink-0" style={{ width: 22, color: t.faint }}>{i + 1}</span>
                 <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: t.soft }}>
                   <Disc3 className="w-4 h-4" style={{ color: t.subink }} />
                 </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13.5px] font-medium truncate" style={{ color: t.ink }}>{song.title}</div>
-                  <div className="text-[11.5px]" style={{ color: t.faint }}>{forVinyl ? 'Lacquer master · from your album masters' : 'Album master'}</div>
-                </div>
+                <div className="min-w-0 flex-1 text-[length:var(--apple-type-secondary)] font-medium truncate" style={{ color: t.ink }}>{song.title}</div>
               </div>
             ))}
             {assetFormat === 'master' && canUpload && (
@@ -639,12 +639,27 @@ const COMPONENT_SLOTS: Record<string, { title: string }> = {
 };
 
 function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId: string; t: Theme }) {
-  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const hasVinyl = portal.formats.some((f) => f.kind === 'vinyl');
   const vinylFormat = portal.formats.find((f) => f.kind === 'vinyl');
   const pressName = vinylFormat?.pressName ?? 'the press';
   const [lane, setLane] = useState<'art' | 'audio'>('art');
   const [assetFormat, setAssetFormat] = useState<'digital' | 'master' | 'vinyl'>(hasVinyl ? 'vinyl' : 'master');
+  const [addFormatOpen, setAddFormatOpen] = useState(false);
+  const addFormat = useMutation({
+    mutationFn: async ({ sellMode, physicalFormat }: { sellMode: AlbumSellMode; physicalFormat: AlbumPhysicalFormat | null }) => {
+      await apiRequest('PUT', `/api/admin/albums/${albumId}`, { sellMode, physicalFormat });
+    },
+    onSuccess: async () => {
+      setAddFormatOpen(false);
+      await queryClient.invalidateQueries({ queryKey: [`/api/artist/albums/${albumId}/portal`] });
+      toast({ description: 'Physical format added' });
+    },
+    onError: (error: Error) => {
+      toast({ description: error.message || 'Couldn’t add the physical format', variant: 'destructive' });
+    },
+  });
 
   const album = useQuery<{ songs?: Array<{ title: string; trackNumber?: number }> }>({ queryKey: [`/api/albums/${albumId}`] });
   const scan = useQuery<{
@@ -674,17 +689,15 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
     const rows = required.length
       ? required
       : Array.from(byId.keys()).map((id) => ({ id, label: undefined as string | undefined, templatePageInches: null, finishedInches: null }));
-    return rows.map(({ id, label, templatePageInches, finishedInches }) => {
+    return rows.map(({ id, label }) => {
       const c = byId.get(id);
       const slotKey = id.startsWith('inner_sleeve') ? 'inner_sleeve' : id;
       const meta = COMPONENT_SLOTS[slotKey] ?? { title: label ?? id.charAt(0).toUpperCase() + id.slice(1) };
-      const dimensions = templatePageInches ?? finishedInches;
       const hasCustomArt = !!c?.fileName;
       const hasAlbumArt = !!portal.release.artworkUrl;
       return {
         id,
         title: meta.title,
-        aspectRatio: dimensions?.w && dimensions?.h ? `${dimensions.w} / ${dimensions.h}` : '1 / 1',
         status: hasCustomArt ? 'custom' : hasAlbumArt ? 'album' : 'waiting',
         imageUrl: hasCustomArt ? (c?.previewUrl ?? null) : hasAlbumArt ? (portal.release.artworkUrl ?? null) : null,
       };
@@ -707,8 +720,6 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
           testPrefix="assetformat"
           t={t}
         />
-        {/* Expanding add affordance — operator-only; artists never create asset sets. */}
-        {(user?.role === 'admin' || user?.role === 'super_admin') && <>
         {/* A "+" that grows rightward on hover to
             reveal "Add format" (smooth width/opacity), apple-clean. Scoped
             CSS keeps the width/opacity transition off arbitrary utilities. */}
@@ -719,6 +730,7 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
         `}</style>
         <button
           type="button"
+          onClick={() => setAddFormatOpen(true)}
           className={cn('apr-add inline-flex items-center h-9 px-2.5 rounded-full text-[13px] font-semibold flex-shrink-0', t.hoverCard)}
           style={{ color: t.subink, border: `1px solid ${t.hairline}` }}
           data-testid="button-add-format"
@@ -728,33 +740,40 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
           <Plus className="w-3.5 h-3.5 flex-shrink-0" />
           <span className="apr-add-label">Add format</span>
         </button>
-        </>}
       </div>
+      <NewAlbumModeDialog
+        open={addFormatOpen}
+        required={false}
+        formatOnly
+        busy={addFormat.isPending}
+        onClose={() => setAddFormatOpen(false)}
+        onSubmit={(selection) => addFormat.mutate(selection)}
+      />
 
       {lane === 'audio' ? (
         <>
-          <div className="flex items-start justify-between gap-6 flex-wrap" style={{ marginTop: 36 }}>
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-4 flex-wrap">
-                <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>
-                  {FORMAT_WORD[assetFormat]} audio
-                </h2>
-                {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
-                {assetFormat === 'digital' && (
+          <PageHeader
+            as="h2"
+            className="mt-9"
+            title={`${FORMAT_WORD[assetFormat]} audio`}
+            titleExtras={<>
+              {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
+              {assetFormat === 'digital' && (
                   <button type="button" className="inline-flex items-center gap-1.5 text-[13px] font-medium flex-shrink-0 transition-opacity hover:opacity-80" style={{ color: t.subink }} data-testid="button-add-bonus-content" title="Add bonus content to the GoodTunes® Player">
                     <Plus className="w-3.5 h-3.5 flex-shrink-0" /> Add bonus content
                   </button>
-                )}
-              </div>
-              <p className="text-[13.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 560, lineHeight: 1.5 }}>
+              )}
+            </>}
+            subtitle={
+              <>
                 {assetFormat === 'vinyl'
                   ? 'The lacquer-ready set for this pressing. Uses your album masters for this pressing.'
                   : assetFormat === 'digital'
                     ? 'What buyers stream in the GoodTunes® Player. Uses your album masters — add any bonus content you want in the player.'
                     : 'Your canonical album masters. Every format references them until you override.'}
-              </p>
-            </div>
-            <SegChip
+              </>
+            }
+            actions={<SegChip
               options={[['art', 'Art'], ['audio', 'Audio']]}
               value={lane}
               onChange={(v) => setLane(v)}
@@ -762,30 +781,30 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
               testPrefix="lane"
               t={t}
               icons={{ art: FileImage, audio: Disc3 }}
-            />
-          </div>
+            />}
+          />
           <AudioMasterList tracks={tracks} assetFormat={assetFormat} albumId={albumId} canUpload={portal.access?.canUploadMasters ?? portal.release.editing === 'Open'} t={t} onShowMaster={() => setAssetFormat('master')} />
         </>
       ) : (
         <>
-          <div className="flex items-start justify-between gap-6 flex-wrap" style={{ marginTop: 36 }}>
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-4 flex-wrap">
-                <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>
-                  {FORMAT_WORD[assetFormat]} art
-                </h2>
-                {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
-                <TemplatesChip t={t} />
-              </div>
-              <p className="text-[13.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 560, lineHeight: 1.5 }}>
+          <PageHeader
+            as="h2"
+            className="mt-9"
+            title={`${FORMAT_WORD[assetFormat]} art`}
+            titleExtras={<>
+              {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
+              <TemplatesChip t={t} />
+            </>}
+            subtitle={
+              <>
                 {assetFormat === 'master'
                   ? 'Your canonical album art. Every format references it until you override.'
                   : assetFormat === 'digital'
                     ? 'What buyers see in the GoodTunes® Player. Uses your album art as-is — no press template to meet.'
                     : `Each piece references your album art until you drop a file to ${pressName}'s templates. Tap any piece to open its test view.`}
-              </p>
-            </div>
-            <SegChip
+              </>
+            }
+            actions={<SegChip
               options={[['art', 'Art'], ['audio', 'Audio']]}
               value={lane}
               onChange={(v) => setLane(v)}
@@ -793,12 +812,12 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
               testPrefix="lane"
               t={t}
               icons={{ art: FileImage, audio: Disc3 }}
-            />
-          </div>
+            />}
+          />
 
           {assetFormat === 'vinyl' ? (
             blocks.length > 0 ? (
-              <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 18 }}>
+              <div style={{ marginTop: 18, display: 'grid', gridAutoFlow: 'column', gridAutoColumns: 'minmax(260px, 1fr)', gap: 18, overflowX: 'auto' }}>
                 {blocks.map((b) => (
                   <BlockCard key={b.id} block={b} href={`/artist/albums/${albumId}/art-test/${b.id}`} t={t} />
                 ))}
@@ -1096,21 +1115,19 @@ function ReleasePayments({ portal, t }: { portal: PortalPayload; t: Theme }) {
   const [expanded, setExpanded] = useState<string | null>(withSchedule?.id ?? null);
   return (
     <>
-      <div className="flex items-end justify-between gap-6 flex-wrap" style={{ marginTop: 24 }}>
-        <div className="min-w-0">
-          <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>Money out to the plant</h2>
-          <p className="text-[13.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 560, lineHeight: 1.5 }}>
-            One row per project — a format pressed by one plant. You only ever pay GoodTunes®; we release funds to the plant at each milestone.
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        as="h2"
+        className="mt-6"
+        title="Money out to the plant"
+        subtitle="One row per project — a format pressed by one plant. You only ever pay GoodTunes®; we release funds to the plant at each milestone"
+      />
       {portal.payments.length === 0 ? (
-        <div className="rounded-2xl flex flex-col items-center justify-center text-center" style={{ marginTop: 20, padding: '48px 24px', border: `1px solid ${t.hairline}`, background: t.card }}>
-          <p className="text-[14px] font-semibold" style={{ color: t.ink }}>Nothing owed on this release.</p>
+        <div className="rounded-2xl flex flex-col items-center justify-center text-center" style={{ padding: '48px 24px', border: `1px solid ${t.hairline}`, background: t.card }}>
+          <p className="text-[14px] font-semibold" style={{ color: t.ink }}>Nothing owed on this release</p>
           <p className="text-[12.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>Payment schedules appear here once a pressing project starts.</p>
         </div>
       ) : (
-        <div className="space-y-3" style={{ marginTop: 20 }}>
+        <div className="space-y-3">
           {portal.payments.map((p) => (
             <ProjectRow key={p.id} project={p} expanded={expanded === p.id} onToggle={() => setExpanded((cur) => (cur === p.id ? null : p.id))} t={t} />
           ))}
@@ -1142,7 +1159,7 @@ export function ArtistRelease({ albumId }: { albumId: string }) {
   const portal = portalQ.data;
 
   return (
-    <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
+    <PageColumn>
       <ReleaseHeader activeTab={tab} title={portal?.release.title ?? '…'} t={t} onTab={setTab} onCrumb={() => navigate('/artist?tab=catalog')} />
       {portalQ.isLoading ? (
         <p className="text-[13.5px]" style={{ marginTop: 26, color: t.subink }}>Loading this release…</p>
@@ -1159,6 +1176,6 @@ export function ArtistRelease({ albumId }: { albumId: string }) {
       ) : (
         <ReleasePayments portal={portal} t={t} />
       )}
-    </div>
+    </PageColumn>
   );
 }

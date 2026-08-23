@@ -22,7 +22,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Check,
   AlertTriangle,
-  X,
+  XCircle,
   Lock,
   Loader2,
   Trash2,
@@ -131,21 +131,21 @@ export type CompletedTemplateResponse = {
   }[];
 };
 
-const STATUS_STYLE: Record<CheckStatus, { text: string; bg: string; border: string; label: string }> = {
-  pass: { text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", label: "PASS" },
-  warn: { text: "text-amber-700", bg: "bg-amber-50", border: "border-amber-200", label: "WARN" },
-  fail: { text: "text-rose-700", bg: "bg-rose-50", border: "border-rose-200", label: "FAIL" },
+const STATUS_STYLE: Record<CheckStatus, { text: string; bg: string; label: string }> = {
+  pass: { text: "text-emerald-700", bg: "", label: "Passed check" },
+  warn: { text: "text-amber-700", bg: "", label: "Needs attention" },
+  fail: { text: "text-rose-700", bg: "", label: "Failed check" },
   // Task #3030 — Unverified: the check ran but only against a weaker
   // measurement source (the file's own PDF bleed box). Distinct icon +
   // word so the state never reads by color alone.
-  unverified: { text: "text-sky-700", bg: "bg-sky-50", border: "border-sky-200", label: "UNVERIFIED" },
+  unverified: { text: "text-sky-700", bg: "", label: "Unverified" },
 };
 
 function StatusIcon({ s, className = "w-3 h-3" }: { s: CheckStatus; className?: string }) {
   if (s === "pass") return <Check className={className} />;
   if (s === "warn") return <AlertTriangle className={className} />;
   if (s === "unverified") return <HelpCircle className={className} />;
-  return <X className={className} />;
+  return <XCircle className={className} />;
 }
 
 // One-line human summary of the derived package ("12" vinyl · 2 discs ·
@@ -267,12 +267,12 @@ export function CompletedTemplatePanel({
       {/* ── Section header ────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-base font-semibold text-slate-900 mb-1">Completed Art</h2>
+          <h2 className="text-xl font-semibold text-slate-900 mb-1">Completed art</h2>
           <p className="text-sm text-slate-500">
             Download the templates. Then drag and drop the art. The system will automatically validate the files.
           </p>
           {configured && (
-            <p className="mt-1 text-xs text-slate-500" data-testid="text-completed-package-summary">
+            <p className="mt-1 text-[13px] text-slate-500" data-testid="text-completed-package-summary">
               {packageSummary(effectiveConfig)}
               <span className="text-slate-400"> — from this album's formats on the Sell tab</span>
             </p>
@@ -293,12 +293,13 @@ export function CompletedTemplatePanel({
                   download
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-[var(--brand-blue)] hover:underline"
+                  className="inline-flex items-center gap-1 text-[13px] text-[var(--apple-blue)]"
                   data-testid={`link-completed-artifact-${a.kind}`}
                 >
                   <Download className="w-3 h-3" />
                   {a.label}
                   {a.fileName ? ` (${a.fileName})` : ""}
+                  <span aria-hidden>→</span>
                 </a>
               ))}
             </div>
@@ -308,7 +309,7 @@ export function CompletedTemplatePanel({
           type="button"
           onClick={downloadAll}
           disabled={suppliedFiles.length === 0}
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border border-slate-200 bg-white text-sm font-medium text-[var(--brand-blue)] hover:border-slate-300 disabled:text-slate-400 disabled:hover:border-slate-200 shrink-0"
+          className="inline-flex items-center gap-2 px-4 h-10 rounded-full bg-[var(--apple-blue)] text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50 shrink-0"
           data-testid="button-download-all-artwork"
         >
           <Download className="w-4 h-4" />
@@ -463,11 +464,11 @@ function VerdictBanner({
   if (verdict === "ready") {
     return (
       <div
-        className="rounded-md border border-emerald-200 bg-emerald-50 p-3 flex items-start gap-2"
+        className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex items-start gap-3"
         data-testid="banner-completed-verdict"
       >
         <Check className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-        <div className="text-sm font-semibold text-emerald-900">
+        <div className="text-sm font-semibold text-slate-900">
           Ready to send to {vendorLabel}
           {sourceLines}
         </div>
@@ -477,11 +478,11 @@ function VerdictBanner({
   if (verdict === "warnings") {
     return (
       <div
-        className="rounded-md border border-amber-200 bg-amber-50 p-3 flex items-start gap-2"
+        className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex items-start gap-3"
         data-testid="banner-completed-verdict"
       >
         <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-        <div className="text-sm font-semibold text-amber-900">
+        <div className="text-sm font-semibold text-slate-900">
           Ready to send to {vendorLabel} · {advisories} {advisories === 1 ? "advisory" : "advisories"}
           {unverified > 0 && (
             <> · {unverified} unverified {unverified === 1 ? "result" : "results"} awaiting acknowledgment</>
@@ -494,11 +495,11 @@ function VerdictBanner({
   if (verdict === "blocked") {
     return (
       <div
-        className="rounded-md border border-rose-200 bg-rose-50 p-3 flex items-start gap-2"
+        className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex items-start gap-3"
         data-testid="banner-completed-verdict"
       >
         <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
-        <div className="text-sm font-semibold text-rose-900">
+        <div className="text-sm font-semibold text-slate-900">
           Not ready to send · {blockers} {blockers === 1 ? "blocker" : "blockers"}
           {unverified > 0 && (
             <> · {unverified} unverified {unverified === 1 ? "result" : "results"} awaiting acknowledgment</>
@@ -594,10 +595,10 @@ function ArtCard({
       {present && (component?.checks?.length ?? 0) > 0 && (
         <a
           href={`/artist/albums/${albumId}/art-test/${encodeURIComponent(componentId)}`}
-          className="block text-center text-[11.5px] text-slate-400 hover:text-slate-600 underline underline-offset-2 mb-2"
+          className="block text-center text-[13px] text-[var(--apple-blue)] hover:opacity-80 mb-2"
           data-testid={`link-art-test-${componentId}`}
         >
-          Open test view (temporary)
+          Open test view →
         </a>
       )}
 
@@ -680,14 +681,14 @@ function ArtCard({
           <button
             type="button"
             onClick={onPreview}
-            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand-blue)] hover:underline min-w-0"
+            className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--apple-blue)] min-w-0"
             data-testid={`button-completed-view-${componentId}`}
           >
             <ZoomIn className="w-3.5 h-3.5 shrink-0" />
             <span className="truncate">{noun}</span>
           </button>
         ) : (
-          <span className="text-xs text-slate-400 truncate">View {noun}</span>
+          <span className="text-[13px] text-slate-400 truncate">View {noun}</span>
         )}
 
         {present ? (
@@ -695,26 +696,26 @@ function ArtCard({
             <button
               type="button"
               onClick={onPreview}
-              className="inline-flex items-center gap-1 rounded-full bg-violet-50 border border-violet-200 text-violet-700 px-2 py-0.5 text-xs font-bold tracking-wider"
+              className="inline-flex items-center gap-1 text-[13px] font-medium text-violet-700"
               data-testid={`chip-completed-status-${componentId}`}
             >
-              <Lock className="w-2.5 h-2.5" /> OVERRIDE
+              <Lock className="w-3.5 h-3.5" /> Override
             </button>
           ) : sty ? (
             <button
               type="button"
               onClick={onPreview}
-              className={`inline-flex items-center gap-1 rounded-full ${sty.bg} ${sty.text} border ${sty.border} px-2 py-0.5 text-xs font-bold tracking-wider`}
+              className={`inline-flex items-center gap-1.5 ${sty.text} text-[13px] font-medium`}
               data-testid={`chip-completed-status-${componentId}`}
             >
-              <StatusIcon s={status!} className="w-2.5 h-2.5" /> {sty.label}
+              <StatusIcon s={status!} className="w-3.5 h-3.5" /> {sty.label}
             </button>
           ) : (
             <span
-              className="inline-flex items-center rounded-full bg-slate-100 text-slate-500 px-2 py-0.5 text-xs font-bold tracking-wider"
+              className="inline-flex items-center text-slate-500 text-[13px] font-medium"
               data-testid={`chip-completed-status-${componentId}`}
             >
-              CHECKING…
+              Checking…
             </span>
           )
         ) : spec?.templateFileUrl ? (
@@ -731,7 +732,7 @@ function ArtCard({
                 });
               }
             }}
-            className="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand-blue)] hover:underline shrink-0"
+            className="inline-flex items-center gap-1 text-[13px] font-medium text-[var(--apple-blue)] shrink-0"
             data-testid={`link-completed-template-${componentId}`}
           >
             Template <Download className="w-3.5 h-3.5" />
@@ -815,7 +816,7 @@ function UploadArtDialog({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           {/* Current file. */}
           <div>
-            <div className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">
+            <div className="text-sm font-semibold text-slate-700 mb-2">
               Current file
             </div>
             <div className="aspect-square rounded-md border border-slate-200 bg-slate-50 overflow-hidden flex items-center justify-center">
@@ -836,7 +837,7 @@ function UploadArtDialog({
 
           {/* Replace / upload zone. */}
           <div>
-            <div className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-2">
+            <div className="text-sm font-semibold text-slate-700 mb-2">
               {present ? "Replace file" : "Upload file"}
             </div>
             <button
@@ -869,7 +870,7 @@ function UploadArtDialog({
 
             <div className="flex items-center gap-2 my-3">
               <div className="h-px flex-1 bg-slate-100" />
-              <span className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+              <span className="text-[13px] font-medium text-slate-500">
                 Or paste a URL
               </span>
               <div className="h-px flex-1 bg-slate-100" />
@@ -1052,15 +1053,15 @@ export function PreviewArtDialog({
             // read as guidance, not a passed test.
             const advisory = (c as { tier?: string }).tier === "advisory";
             const cs = advisory
-              ? { bg: "bg-slate-100", text: "text-slate-500", label: "ADVISORY" }
+              ? { bg: "", text: "text-slate-500", label: "Advisory" }
               : STATUS_STYLE[c.status];
             return (
               <div
                 key={c.key}
-                className="flex items-start gap-2 text-xs"
+                className="flex items-start gap-2 text-[13px]"
                 data-testid={`check-completed-${componentId}-${c.key}`}
               >
-                <span className={`mt-0.5 inline-flex items-center justify-center rounded-full ${cs.bg} ${cs.text} w-4 h-4 shrink-0`}>
+                <span className={`mt-0.5 inline-flex items-center justify-center ${cs.bg} ${cs.text} w-4 h-4 shrink-0`}>
                   {advisory ? (
                     <Info className="w-2.5 h-2.5" />
                   ) : (
@@ -1072,7 +1073,7 @@ export function PreviewArtDialog({
                     {c.label}{" "}
                     {/* Task #3030 colorblind rule — every status renders as
                         icon + word, never color alone. */}
-                    <span className={`ml-1 text-xs font-bold tracking-wide ${cs.text}`}>
+                    <span className={`ml-1 text-[13px] font-medium ${cs.text}`}>
                       {cs.label}
                     </span>
                   </div>

@@ -19,7 +19,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Pencil, Truck } from "lucide-react";
+import { Info, Pencil, Truck } from "lucide-react";
 
 export interface FulfillmentDestOption {
   id: string;
@@ -41,7 +41,7 @@ export interface FulfillmentDestOption {
 }
 
 const INPUT_CLS =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[var(--brand-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--brand-blue)] disabled:opacity-60";
+  "w-full min-h-11 rounded-xl border border-[var(--apple-hairline)] bg-[var(--apple-track)] px-3 py-2 text-sm text-[var(--apple-ink)] placeholder:text-[var(--apple-subink)] focus:border-[var(--apple-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--apple-blue)] disabled:opacity-60";
 
 const OTHER_NEW = "__other_new__";
 
@@ -316,22 +316,23 @@ export function FulfillmentAssignmentPanel({
       <div className="rounded-xl border border-slate-200 bg-white p-4">
         <div className="flex items-center gap-2 mb-1">
           <Truck className="w-4 h-4 text-slate-400" />
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+          <h2 className="text-lg font-semibold text-slate-900">
             Fulfillment destination
-          </p>
+          </h2>
         </div>
-        <p className="text-xs text-slate-400 mb-3">
+        <p className="text-sm text-slate-500 mb-3">
           Who ships this release to customers: a fulfillment warehouse, the press
           itself, or another company.
         </p>
         {splits.length > 0 && (
-          <p
-            className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700"
+          <div
+            className="mb-3 flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-600"
             data-testid="note-fulfillment-splits-precedence"
           >
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
             Split shipments are configured on the Overview tab — those rows take
             precedence over this single destination.
-          </p>
+          </div>
         )}
         <select
           value={selectedId}
@@ -404,9 +405,9 @@ export function FulfillmentAssignmentPanel({
           data-testid="card-fulfillment-contact"
         >
           <div className="flex items-start justify-between gap-2">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+            <h2 className="text-lg font-semibold text-slate-900">
               Contact
-            </p>
+            </h2>
             {!editingContact && (
               <Button
                 type="button"
@@ -492,10 +493,10 @@ export function FulfillmentAssignmentPanel({
         className="rounded-xl border border-slate-200 bg-white p-4"
         data-testid="card-shipper-display"
       >
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+        <h2 className="text-lg font-semibold text-slate-900">
           Customers see
-        </p>
-        <p className="text-xs text-slate-400 mt-1 mb-3">
+        </h2>
+        <p className="text-sm text-slate-500 mt-1 mb-3">
           The shipper name shown to customers (for example in the "your record
           shipped" email). Leave blank for the default, GoodTunes.
         </p>

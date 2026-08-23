@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { PageHeader } from "@/components/admin/PageShell";
 
 /**
  * AdminPageHeader — canonical admin index-page header.
@@ -39,27 +40,13 @@ export function AdminPageHeader({
 }) {
   return (
     <div>
-      <div className="flex items-end justify-between gap-3 pb-1">
-        <div className="min-w-0">
-          {/* Apple canon (docs/apple-canon.md): page h1 ~30px semibold ink,
-              letter-spacing -0.02em; subtitle is the quiet clause in subink.
-              Tokens flip automatically under .gt-admin-dark. */}
-          <h1
-            className="text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] leading-tight"
-            data-testid={testId}
-          >
-            {title}
-          </h1>
-          {subtitle && (
-            <p className="text-[var(--apple-subink)] text-[13px] font-medium mt-0.5">{subtitle}</p>
-          )}
-        </div>
-        {actions && (
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {actions}
-          </div>
-        )}
-      </div>
+      <PageHeader
+        title={title}
+        subtitle={subtitle}
+        actions={actions}
+        testId={testId}
+        contentGap={false}
+      />
       {belowHeader ? (
         belowHeader
       ) : (

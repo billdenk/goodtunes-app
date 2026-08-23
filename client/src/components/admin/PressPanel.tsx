@@ -20,7 +20,7 @@
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
-import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Check, X, AudioLines, Palette, Truck } from "lucide-react";
+import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Check, X, Circle, Truck } from "lucide-react";
 import { apiRequest, queryClient, fetchBlob } from "@/lib/queryClient";
 import { masterDownloadErrorMessage } from "@/lib/masterDownload";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +40,7 @@ import { PackagePrintTemplates } from "@/pages/PressAlbumPackageBuilder";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { FulfillmentAssignmentPanel } from "@/components/admin/FulfillmentAssignmentPanel";
 import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
+import { SegmentedPillToggle } from "@/components/admin/SegmentedPillToggle";
 import type { VinylFormat } from "@shared/vinylFormatRules";
 import { PHYSICAL_FORMAT_TO_ALBUM_FORMAT } from "@shared/schema";
 import type { AlbumPhysicalFormat, AlbumFormat } from "@shared/schema";
@@ -443,19 +444,18 @@ function PressDownloadsPanel({
 // the active sub-tab persists in the URL as `ptab` merged with the
 // page's existing `?tab=` handling so refresh + deep links restore it.
 type PhysicalSubTab = "audio" | "art" | "fulfillment" | "downloads";
-const PHYSICAL_SUB_TABS: Array<{ id: PhysicalSubTab; label: string; Icon: typeof AudioLines }> = [
-  { id: "audio", label: "Audio", Icon: AudioLines },
-  { id: "art", label: "Art", Icon: Palette },
-  { id: "fulfillment", label: "Fulfillment", Icon: Truck },
+const PHYSICAL_SUB_TABS: Array<{ id: PhysicalSubTab; label: string }> = [
+  { id: "audio", label: "Audio" },
+  { id: "art", label: "Art" },
+  { id: "fulfillment", label: "Fulfillment" },
 ];
 // Task #3308 follow-up (Monday MRP demo) — a press-only "Downloads" sub-tab
 // consolidating the finished print files + music the plant actually pulls to
 // press a record. Appended to the sub-tab row only in pressMode so operators
 // keep their existing Audio/Art/Fulfillment surfaces untouched.
-const PRESS_DOWNLOADS_SUB_TAB: { id: PhysicalSubTab; label: string; Icon: typeof AudioLines } = {
+const PRESS_DOWNLOADS_SUB_TAB: { id: PhysicalSubTab; label: string } = {
   id: "downloads",
   label: "Downloads",
-  Icon: Download,
 };
 function readSubTabFromUrl(): PhysicalSubTab {
   const v = new URLSearchParams(window.location.search).get("ptab");
@@ -858,24 +858,24 @@ export function PressPanel({
   const preflightChip =
     preflightState === "pass" ? (
       <span
-        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200"
+        className="inline-flex items-center gap-1.5 text-[13px] font-medium text-emerald-700"
         data-testid="chip-audio-preflight"
       >
-        <Check className="w-3 h-3" /> Pass
+        <CheckCircle2 className="w-4 h-4" /> Within limits
       </span>
     ) : preflightState === "fail" ? (
       <span
-        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-rose-50 text-rose-700 border-rose-200"
+        className="inline-flex items-center gap-1.5 text-[13px] font-medium text-rose-700"
         data-testid="chip-audio-preflight"
       >
-        <X className="w-3 h-3" /> Fail
+        <AlertTriangle className="w-4 h-4" /> Needs attention
       </span>
     ) : (
       <span
-        className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-slate-50 text-slate-500 border-slate-200"
+        className="inline-flex items-center gap-1.5 text-[13px] font-medium text-slate-500"
         data-testid="chip-audio-preflight"
       >
-        Not checked
+        <Circle className="w-3.5 h-3.5" /> Not checked
       </span>
     );
 
@@ -886,33 +886,22 @@ export function PressPanel({
         {/* Task #533 — pool-funded early-cut ledger readout. */}
         <EarlyCutPoolReadout albumId={albumId} />
 
-        {/* ── Audio | Art | Fulfillment sub-tabs (Task #2701) ─────────
-            Quiet text tabs with small leading icons; the "Press:"
-            readout (name + round logo avatar) sits far right on the
-            same line. */}
+        {/* ── Audio | Art | Fulfillment segmented control ───────────── */}
         <div
-          className="flex items-center justify-between gap-4 mb-8 border-b border-slate-200 pb-2"
+          className="flex items-center justify-between gap-4 mb-8"
           data-testid="press-subtabs"
         >
-          <div className="flex items-center gap-5">
-            {(pressMode ? [...PHYSICAL_SUB_TABS, PRESS_DOWNLOADS_SUB_TAB] : PHYSICAL_SUB_TABS).map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setSubTab(id)}
-                className={[
-                  "inline-flex items-center gap-1.5 text-[13px] py-1",
-                  subTab === id
-                    ? "font-semibold text-slate-900"
-                    : "font-medium text-slate-500 hover:text-slate-700",
-                ].join(" ")}
-                data-testid={`subtab-${id}`}
-              >
-                <Icon className={`w-3.5 h-3.5 ${subTab === id ? "text-slate-700" : "text-slate-400"}`} />
-                {label}
-              </button>
-            ))}
-          </div>
+          <SegmentedPillToggle
+            value={subTab}
+            onChange={setSubTab}
+            options={(pressMode ? [...PHYSICAL_SUB_TABS, PRESS_DOWNLOADS_SUB_TAB] : PHYSICAL_SUB_TABS).map(({ id, label }) => ({
+              value: id,
+              label,
+              testId: `subtab-${id}`,
+            }))}
+            testId="physical-subtab-segments"
+            ariaLabel="Physical section"
+          />
           <div className="flex items-center gap-2 min-w-0" data-testid="press-readout">
             <span className="text-[12.5px] text-slate-400 shrink-0">Press:</span>
             <span className="text-[12.5px] font-semibold text-slate-900 truncate" data-testid="text-press-readout-name">
@@ -934,7 +923,7 @@ export function PressPanel({
           <div data-testid="press-subtab-audio">
             <div className="mb-10" data-testid="section-side-breaks">
               <div className="flex items-center justify-between gap-4 flex-wrap mb-3">
-                <h2 className="text-[15px] font-semibold text-slate-900">Side Breaks</h2>
+                <h2 className="text-xl font-semibold text-slate-900">Side breaks</h2>
                 <div className="flex items-center gap-2">
                   {/* Task #3197 — up-front flag when any track has no usable
                       master (no upload, un-mirrored external link, or file
@@ -942,7 +931,7 @@ export function PressPanel({
                       clicking download. Details per-row in View Masters. */}
                   {brokenMasters.length > 0 && (
                     <span
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-rose-50 text-rose-700 border-rose-200"
+                      className="inline-flex items-center gap-1.5 text-[13px] font-medium text-rose-700"
                       title="Some tracks can't be downloaded — open View Masters for the per-track reason."
                       data-testid="chip-broken-masters"
                     >
@@ -956,7 +945,7 @@ export function PressPanel({
                       type="button"
                       onClick={openPqSheet}
                       disabled={pqOpening}
-                      className="shrink-0 inline-flex items-center gap-1.5 px-2 h-9 text-xs font-semibold text-slate-500 hover:text-slate-800 disabled:opacity-50"
+                      className="shrink-0 inline-flex items-center gap-1.5 px-3 h-9 rounded-full border border-slate-200 bg-white text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
                       data-testid="button-pq-sheet"
                     >
                       {pqOpening && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -966,16 +955,16 @@ export function PressPanel({
                   <button
                     type="button"
                     onClick={() => setMastersOpen(true)}
-                    className="shrink-0 inline-flex items-center gap-2 px-3 h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    className="shrink-0 inline-flex items-center gap-2 px-3 h-9 rounded-full border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50"
                     data-testid="button-view-masters"
                   >
-                    View Masters
+                    View masters
                   </button>
                   <button
                     type="button"
                     onClick={downloadAll}
                     disabled={withMaster.length === 0}
-                    className="shrink-0 inline-flex items-center gap-2 px-3 h-9 rounded-md border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    className="shrink-0 inline-flex items-center gap-2 px-4 h-9 rounded-full bg-[var(--apple-blue)] text-sm font-semibold text-white hover:brightness-95 disabled:opacity-50"
                     data-testid="button-download-all-masters"
                   >
                     <Download className="w-3.5 h-3.5" />

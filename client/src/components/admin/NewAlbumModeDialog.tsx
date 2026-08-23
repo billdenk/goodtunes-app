@@ -45,6 +45,7 @@ const FORMAT_CHOICES: Array<{
 export function NewAlbumModeDialog({
   open,
   required,
+  formatOnly = false,
   onSubmit,
   onClose,
   onRequestDelete,
@@ -57,6 +58,8 @@ export function NewAlbumModeDialog({
    * so the operator has an escape hatch out of a half-created album.
    */
   required: boolean;
+  /** Open directly on the canonical Vinyl / Cassette / CD picker. */
+  formatOnly?: boolean;
   onSubmit: (v: { sellMode: AlbumSellMode; physicalFormat: AlbumPhysicalFormat | null }) => void;
   onClose: () => void;
   /**
@@ -82,8 +85,15 @@ export function NewAlbumModeDialog({
   // parent flips it back to true. Without this reset, reopening from
   // "Change" lands on whatever stage the operator last left it on.
   useEffect(() => {
-    if (open) reset();
-  }, [open]);
+    if (open) {
+      if (formatOnly) {
+        setPickedMode("direct");
+        setStage("format");
+      } else {
+        reset();
+      }
+    }
+  }, [formatOnly, open]);
 
   return (
     <Dialog
@@ -150,15 +160,17 @@ export function NewAlbumModeDialog({
           <>
             <DialogHeader className="text-left space-y-1">
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStage("mode")}
-                  className="text-slate-400 hover:text-slate-700"
-                  data-testid="button-mode-back"
-                  aria-label="Back"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
+                {!formatOnly && (
+                  <button
+                    type="button"
+                    onClick={() => setStage("mode")}
+                    className="text-slate-400 hover:text-slate-700"
+                    data-testid="button-mode-back"
+                    aria-label="Back"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                  </button>
+                )}
                 <DialogTitle className="text-[18px] font-semibold text-slate-900">
                   Pick the physical format
                 </DialogTitle>

@@ -1,0 +1,21 @@
+Here's the message for Otis covering everything since the last send — the Overview stays with us:
+
+---
+
+Otis — I walked the whole CALIFORNIALAND album in super-admin. Full details are in the run-sheet (each has its own section); the theme is the same everywhere: **the substance is right — honest statuses, real measured numbers — but the dress is pre-canon.** Tab by tab:
+
+- **Physical → Art**: "WARN"/"FAIL" pills become word + icon, sentence case ("Needs attention" / "Failed check"); the pink blocker slab becomes the quiet canon callout (keep the measured detail like the 0.147" bleed); colored tab dots go; "(temporary)" never ships in UI copy.
+- **All Physical sub-tabs**: the Audio / Art / Fulfillment row becomes a **segmented control** — one fully-rounded rect, three segments, active filled, no little icons. Same pattern as the artist Assets Master/Player/Vinyl pill.
+- **Fulfillment**: ALL-CAPS micro headers → sentence case; the yellow "split shipments" strip is information, not an error — quiet callout; raw selects get canon field dress.
+- **Audio → Side Breaks**: this is the PQ-sheet companion sweep you already have queued — same grammar as the PQ sheet. Row structure is right; "✓ PASS" becomes word + icon; only one of the three top-right buttons stays filled.
+- **Payments**: "Quote" everywhere — section header, "Upload quote PDF", helper copy. It's **estimate**, never quote, admin included. Chips become word + icon; funded-by pair becomes a two-segment control; one filled action per section ("Close out run" reads destructive — hairline with confirm).
+- **Customers**: the two comped-access cards render as light-gray slabs on dark — theme break, same family as the template-editor stage. Caps headers → sentence case; "COMP" → "Comped copy."
+- **Early access**: two filled blue buttons on one page — "Announce to 15" keeps the fill, "Send early access email" goes hairline and disabled-with-reason while signups are 0.
+
+**One hold: don't touch the Overview tab.** It needs reorganization, not a dress pass — Ruby's designing it with me now; mock + handoff to follow.
+
+— Bill
+
+---
+
+Now building the Overview mock. Let me look at the canon admin shell to copy from.
