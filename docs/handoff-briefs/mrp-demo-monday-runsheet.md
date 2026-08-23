@@ -422,3 +422,13 @@ gets tested.**
     - Same pattern applies to the Finishing (holograms + shrinkwrap)
     pricing when that section is on.
     
+
+    ## Connections rows: logos (from Bill, follow-up to dead-taps note)
+
+    On artist Settings → Connections, each row carries its service's logo
+    in white (dark surface): Shopify row = white Shopify logo (already
+    there), and the **Payout account row = white Stripe logo** — payouts
+    run on Stripe (Connect), so say so: subtitle "Powered by Stripe" style,
+    logo + wordmark treated the same way as Shopify's. Same white-logo
+    rule anywhere else connections appear.
+    
