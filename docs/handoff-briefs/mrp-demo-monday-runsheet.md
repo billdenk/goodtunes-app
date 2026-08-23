@@ -617,3 +617,29 @@ gets tested.**
     to trim the modal behind it to three cards (Vinyl / Cassette / CD,
     size picked in the builder), not to remove the entry point.
     
+
+    ## SITE-WIDE: page layout & type canon (from Bill — spotted on Vinyl audio, applies everywhere)
+
+    The Vinyl → Audio track list shows the same disease as several other
+    pages, so fix it as ONE law across the whole app, not per page:
+
+    - **Centered content column, equal left/right margins.** Every content
+    page lays its column with a max width and auto side margins — content
+    never hugs the left edge with all the spare width dumped on the right.
+    - **Heading rhythm.** Page title gets canon scale + breathing room above
+    and below (title, then subtitle line, then a real gap before content —
+    "Vinyl audio" and its subtitle currently sit cramped on top of the
+    list).
+    - **Row breathability.** List rows (tracks here) need taller row height
+    and more air between the title line and its meta line
+    ("Lacquer master · from your album masters" is nearly touching the
+    title, and every row repeats it at whisper size). Consider stating
+    shared meta ONCE above the list and keeping rows to what differs
+    per row.
+    - **Type scale.** Meta/secondary text has drifted too small in places —
+    use the canon secondary size, not ever-smaller grays.
+
+    Apply as a shared page-shell/layout component + type tokens so every
+    admin and artist page inherits it, rather than page-by-page CSS.
+    The mocks Ruby ships (AdminAlbumOverview etc.) show the target grammar.
+    
