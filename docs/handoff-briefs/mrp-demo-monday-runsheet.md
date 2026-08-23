@@ -643,3 +643,17 @@ gets tested.**
     admin and artist page inherits it, rather than page-by-page CSS.
     The mocks Ruby ships (AdminAlbumOverview etc.) show the target grammar.
     
+
+    ## SPIN Promo visibility rule (from Bill)
+
+    SPIN Promo is a legacy marker for artists imported from the old system
+    **before Nightbirde**. Visibility law:
+
+    - It appears ONLY on albums belonging to those pre-Nightbirde imports,
+    and only in super-admin (in the Overview redesign it lives inside the
+    quiet "Legacy settings" disclosure at the bottom).
+    - Albums for newer artists never render the control at all — not
+    toggled-off, absent.
+    - Artists themselves, MRP/press users, and every other role never see
+    it anywhere, on any album.
+    
