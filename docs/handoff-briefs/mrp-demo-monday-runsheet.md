@@ -781,3 +781,22 @@ All MOCK_ consts (album fields, service URLs) are dummy data to wire.
     with the overlay guides (bleed / cut / fold / safety) lining up on
     the art's edges - matching what the Front tab shows, in context.
     
+
+    ## Vinyl art cards: art must FILL the image window (cover, not stretch)
+
+    Bill, viewing as Niina Soleil, Assets -> Vinyl art, Aug 23: the
+    uploaded art sits letterboxed inside each card's image window with
+    card-background bands around it.
+
+    The rule, extending the uniform-card-grid item already in this
+    sheet: the art fills the card's image window edge to edge -
+    object-fit: cover semantics (scale to fill, center, crop overflow)
+    - NEVER stretched/distorted, and never letterboxed. Square art in a
+    square window fills exactly; non-square art (center labels, sleeves)
+    fills and crops, aspect ratio preserved. The empty drop-zone card
+    keeps the identical window size.
+
+    Acceptance: on the Vinyl art grid, every filled card shows art
+    edge-to-edge in its window, no background bands, no distortion, both
+    themes.
+    
