@@ -144,14 +144,22 @@
         var bootWhiteLabel =
           bootHost === "makesvinyl.com" || bootHost.endsWith(".makesvinyl.com") ||
           bootHost === "pressesvinyl.com" || bootHost.endsWith(".pressesvinyl.com");
-        var bootAdmin =
-          bootHost === "admin.goodtunes.music" ||
-          bootPath.indexOf("/admin") === 0 ||
+        /* Keep this rule in lock-step with isAdminSurfacePath in
+           client/src/lib/bootSurface.ts (parity-tested by
+           client/src/lib/bootSurface.test.ts). /e/:token is the PUBLIC
+           dark client-estimate page and stays fan/dark even on the
+           admin host. */
+        var bootLightPortal =
           bootPath === "/artist" || bootPath.indexOf("/artist/albums/") === 0 ||
           bootPath === "/label" || bootPath === "/manager" ||
           bootPath === "/vendor" || bootPath.indexOf("/vendor/albums/") === 0 ||
           bootPath === "/non-profit" || bootPath === "/publisher" ||
           bootPath === "/invite" || bootPath.indexOf("/invite/") === 0;
+        var bootAdmin =
+          bootPath.indexOf("/e/") !== 0 &&
+          (bootHost === "admin.goodtunes.music" ||
+            bootPath.indexOf("/admin") === 0 ||
+            bootLightPortal);
         var bootPref = localStorage.getItem("gt:admin-appearance") || "system";
         var bootDark = bootPref === "dark" ||
           (bootPref === "system" && matchMedia("(prefers-color-scheme: dark)").matches);

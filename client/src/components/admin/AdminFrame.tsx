@@ -43,6 +43,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { AdminUserMenu } from "@/components/admin/AdminUserMenu";
 import { AutoSyncAlertBanner } from "@/components/admin/AutoSyncAlertBanner";
 import { MuxStatusBanner } from "@/components/admin/MuxStatusBanner";
@@ -213,18 +214,18 @@ export function AdminFrame({
   // fall back to the fan-player dark tokens and render with a black
   // active tab pill, dark date inputs, and a dark "Try again" button.
   //
-  // Task #425 — Re-apply on every location change and NEVER remove on
-  // unmount. The synchronous bootstrap in main.tsx handles the very
-  // first paint, but a wouter transition that briefly unmounts
-  // AdminFrame between two admin pages (or an HMR refresh) would
-  // otherwise run a cleanup that strips the class and re-introduces
-  // the dark fan-player gradient flash. The pre-React handoff in
-  // main.tsx + this idempotent re-apply guarantee `body.gt-admin`
-  // stays attached for the entire time the URL is on an admin route;
-  // it's harmless to leave attached afterwards because the customer
-  // shell on a hard navigation reloads the page and resets <body>.
+  // Task #425 — Re-apply on every location change; Task #3322 — release
+  // destination-aware. The synchronous bootstrap in main.tsx handles the
+  // very first paint, and cleanup goes through releaseAdminBodyClass(),
+  // which keeps the class when the (already-updated) location is still an
+  // admin/partner surface — so a wouter transition that briefly unmounts
+  // AdminFrame between two admin pages (or an HMR refresh) can't strip the
+  // class and re-introduce the dark fan-player gradient flash — but drops
+  // it when the user genuinely navigates in-app to a fan surface, so fan
+  // pages get their dark theme back without a hard reload.
   useEffect(() => {
     document.body.classList.add("gt-admin");
+    return () => releaseAdminBodyClass();
   }, [location]);
 
   // Toggle state for the right preview pane. Persisted so once you tuck
