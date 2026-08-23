@@ -276,3 +276,25 @@ gets tested.**
     portal rails; test portrait AND landscape on iPad since Bill demos on
     one Monday.
     
+
+    ## Store tab: wrong-color logo + dishonest checklist (from Bill)
+
+    Release → Store tab, viewing as the artist, on a brand-new empty
+    "Test" release:
+
+    1. **GoodTunes logo at an odd color again.** The GoodTunes® Direct card
+     shows the logo in a yellowish/odd tint on the dark surface. Bill
+     thought this was fixed already. Reminder of the asset rule: only
+     dark logo assets exist — on dark surfaces the white version is made
+     via CSS invert of the dark asset, never a tinted/recolored variant.
+     Sweep every place the logo renders on dark (cards, "Powered by"
+     footer, email previews) and fix them all at once, not spot by spot.
+    2. **"Getting ready" checklist is lying.** This release has NO artwork,
+     NO price, NO audio — yet the checklist shows "Artwork approved ✓"
+     and "Price set ✓". Checkmarks must reflect reality: a fresh release
+     shows every line unchecked (word + icon, e.g. "Artwork — not started")
+     with each line linking to where you complete it. A checklist that
+     pre-approves nothing-yet destroys trust in every status in the app —
+     audit where these flags come from, because if they default to true,
+     other status displays may be wrong too.
+    
