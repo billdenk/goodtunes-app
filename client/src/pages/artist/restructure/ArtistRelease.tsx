@@ -426,7 +426,7 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
           <img
             src={block.imageUrl}
             alt={`${block.title} art`}
-            className="w-full h-full object-contain"
+            className="w-full h-full object-cover"
             data-testid={`img-block-${block.id}`}
           />
         ) : (

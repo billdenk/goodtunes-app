@@ -53,3 +53,56 @@ export function computePdfArtRect(
   const cy = anchor2.yMm + anchor2.hMm / 2;
   return { xMm: cx - art.wMm / 2, yMm: cy - art.hMm / 2, wMm: art.wMm, hMm: art.hMm };
 }
+
+/** Relative aspect tolerance for "matches this box's proportions". */
+const ASPECT_TOL = 0.02;
+
+function aspectErr(pxAspect: number, box: { wMm: number; hMm: number }): number {
+  return Math.abs(pxAspect / (box.wMm / box.hMm) - 1);
+}
+
+/**
+ * Placement rect for RASTER art (no physical dims — aspect only).
+ *
+ * Niina's Full-Template ruling (Aug 23 2026): art must never float
+ * unregistered over the spread. Decision ladder:
+ * - No known aspect yet → fill the anchor (pre-scan behavior, unchanged).
+ * - Aspect matches the FULL sheet (within tolerance, strictly better than
+ *   the anchor) → full-artboard export, seat edge-to-edge (unchanged).
+ * - Aspect matches the anchor (Bleed/Cut) within tolerance → contain-fit on
+ *   the anchor (unchanged — full-spread art authored to the bleed).
+ * - Otherwise the art is PANEL art (e.g. a square front cover on a wide
+ *   jacket spread): seat it in the side-panel zone whose proportions it
+ *   matches best (Front wins ties — `sideBoxes` arrives Front-first), so the
+ *   panel's own die-line guides land on its edges. Only promoted when the
+ *   panel is a strictly better aspect match than the anchor.
+ * - No side zones / nothing better → centered on the anchor as before.
+ */
+export function computeRasterArtRect(
+  template: { wMm: number; hMm: number },
+  anchor: BoxMm | null,
+  pxAspect: number | undefined,
+  sideBoxes: readonly BoxMm[],
+): BoxMm {
+  const anchor2 = anchor ?? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm };
+  if (!pxAspect) return anchor2;
+  const page = { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm };
+  const pageErr = aspectErr(pxAspect, page);
+  const anchorErr = aspectErr(pxAspect, anchor2);
+  let box: BoxMm = anchor2;
+  if (pageErr <= ASPECT_TOL && pageErr < anchorErr) {
+    box = page;
+  } else if (anchorErr > ASPECT_TOL) {
+    // The spread anchor doesn't fit this art — try the panel zones.
+    let bestErr = anchorErr;
+    for (const b of sideBoxes) {
+      const e = aspectErr(pxAspect, b);
+      if (e < bestErr) { box = b; bestErr = e; }
+    }
+  }
+  // Contain-fit centered inside the winning box at the image's own aspect.
+  const boxAspect = box.wMm / box.hMm;
+  let w = box.wMm, h = box.hMm;
+  if (pxAspect > boxAspect) h = w / pxAspect; else w = h * pxAspect;
+  return { xMm: box.xMm + (box.wMm - w) / 2, yMm: box.yMm + (box.hMm - h) / 2, wMm: w, hMm: h };
+}

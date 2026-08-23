@@ -87,3 +87,48 @@ test('no GT boxes at all (layerless PDF): anchor falls back to the full page', (
   assert.equal(r.xMm, template.wMm / 2 - art.wMm / 2);
   assert.equal(r.yMm, template.hMm / 2 - art.hMm / 2);
 });
+
+// ── computeRasterArtRect — panel seating (Niina's Full Template ruling) ──
+import { computeRasterArtRect } from './artPlacement';
+
+test('raster: square cover on a wide jacket spread seats in the Front panel', () => {
+  const tpl = { wMm: 700, hMm: 340 };
+  const anchor: BoxMm = { xMm: 10, yMm: 10, wMm: 680, hMm: 320 }; // spread bleed
+  const front: BoxMm = { xMm: 360, yMm: 10, wMm: 320, hMm: 320 };
+  const back: BoxMm = { xMm: 20, yMm: 10, wMm: 320, hMm: 320 };
+  const r = computeRasterArtRect(tpl, anchor, 1, [front, back]);
+  // Front-first order wins the square tie; art fills the front panel exactly.
+  assert.deepEqual(r, front);
+});
+
+test('raster: full-artboard export still seats edge-to-edge over the sheet', () => {
+  const tpl = { wMm: 700, hMm: 340 };
+  const anchor: BoxMm = { xMm: 10, yMm: 10, wMm: 680, hMm: 320 };
+  const front: BoxMm = { xMm: 360, yMm: 10, wMm: 320, hMm: 320 };
+  const r = computeRasterArtRect(tpl, anchor, 700 / 340, [front]);
+  for (const [k, v] of Object.entries({ xMm: 0, yMm: 0, wMm: 700, hMm: 340 })) {
+    assert.ok(Math.abs((r as any)[k] - v) < 1e-9, `${k}: ${(r as any)[k]}`);
+  }
+});
+
+test('raster: spread-shaped art (anchor aspect) stays centered on the anchor', () => {
+  const tpl = { wMm: 700, hMm: 340 };
+  const anchor: BoxMm = { xMm: 10, yMm: 10, wMm: 680, hMm: 320 };
+  const front: BoxMm = { xMm: 360, yMm: 10, wMm: 320, hMm: 320 };
+  const r = computeRasterArtRect(tpl, anchor, 680 / 320, [front]);
+  assert.deepEqual(r, anchor);
+});
+
+test('raster: no side zones — panel-shaped art contain-fits centered on the anchor (old behavior)', () => {
+  const tpl = { wMm: 700, hMm: 340 };
+  const anchor: BoxMm = { xMm: 10, yMm: 10, wMm: 680, hMm: 320 };
+  const r = computeRasterArtRect(tpl, anchor, 1, []);
+  // contain-fit: h=320, w=320, centered in the anchor
+  assert.deepEqual(r, { xMm: 10 + (680 - 320) / 2, yMm: 10, wMm: 320, hMm: 320 });
+});
+
+test('raster: no aspect yet (pre-scan) fills the anchor', () => {
+  const tpl = { wMm: 700, hMm: 340 };
+  const anchor: BoxMm = { xMm: 10, yMm: 10, wMm: 680, hMm: 320 };
+  assert.deepEqual(computeRasterArtRect(tpl, anchor, undefined, []), anchor);
+});

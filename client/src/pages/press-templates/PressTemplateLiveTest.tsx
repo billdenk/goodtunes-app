@@ -57,7 +57,7 @@ import { saveLiveTestDraft, loadLiveTestDraft, clearLiveTestDraft, type LiveTest
 import { templateTestPath } from './apiPaths';
 import { useAdminDark } from '@/lib/adminAppearance';
 import { computeCropCanvasSize } from './cropDimensions';
-import { computePdfArtRect } from './artPlacement';
+import { computePdfArtRect, computeRasterArtRect } from './artPlacement';
 // ZONE_ORDER/zoneSort + side grouping live in sidePillGroups.ts (Task #3163)
 // so the consolidation rule is testable without jsdom.
 import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, type SideName, type FamilyGroup } from './sidePillGroups';
@@ -1237,41 +1237,32 @@ export default function PressTemplateLiveTest({
 
   // Art placement: centered on the GT Bleed box (fallback: Cut, then full page).
   const anchor = bleedBox ?? cutBox ?? null;
+  // Side-panel seats (Front-first) for raster panel art — Niina's Full
+  // Template ruling (Aug 23 2026): art never floats unregistered over the
+  // spread; a square front cover on a wide jacket spread seats in the
+  // front-panel die-line instead of hovering centered on the whole sheet.
+  const sideBoxes = useMemo(() => {
+    const measurable = zones.filter((zz) => zz.line || zz.area).map((zz) => zz.zone);
+    return SIDE_NAMES
+      .map((s) => pickSideFocusZone(measurable, s))
+      .map((name) => (name ? zones.find((zz) => zz.zone === name) : undefined))
+      .map((z) => z?.line ?? z?.area)
+      .filter((b): b is NonNullable<typeof b> => !!b)
+      .map((b) => ({ xMm: b.xMm, yMm: b.yMm, wMm: b.wMm, hMm: b.hMm }));
+  }, [zones]);
+
   const artRect = useMemo(() => {
     if (!template || !art) return null;
-    // No GT Bleed/Cut box in the template (layerless PDF): never go blank —
-    // anchor to the full page instead so you can still look (Bill, Aug 16 2026).
-    const anchor2 = anchor ?? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm };
     if (art.wMm === null || art.hMm === null) {
-      // Raster: contain-fit inside the anchor at the image's own aspect —
-      // stretch-filling squished the JPG (gogoods, Aug 16 2026). Before the
-      // server scan reports pixel dims, fill the anchor as before.
-      if (!art.pxAspect) return anchor2;
-      // A raster whose proportions match the FULL template sheet is a
-      // full-artboard export — place it edge-to-edge over the template, not
-      // inside the bleed box (gogoods, Aug 16 2026: the full-artboard JPG
-      // rendered shrunken inside the bleed frame).
-      const pageAspect = template.wMm / template.hMm;
-      // Closest-aspect-wins (review, Aug 16 2026): on templates where the
-      // bleed frame and the full sheet have near-identical proportions, an
-      // aspect-only 2% gate could promote a bleed-sized JPG to full-sheet.
-      // Promote only when the full sheet is BOTH within tolerance and a
-      // strictly better aspect match than the anchor box; ties stay on the
-      // anchor (the safer placement — art never renders larger than intended).
-      const pageErr = Math.abs(art.pxAspect / pageAspect - 1);
-      const anchorErr = Math.abs(art.pxAspect / (anchor2.wMm / anchor2.hMm) - 1);
-      const box = pageErr <= 0.02 && pageErr < anchorErr
-        ? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm }
-        : anchor2;
-      const boxAspect = box.wMm / box.hMm;
-      let w = box.wMm, h = box.hMm;
-      if (art.pxAspect > boxAspect) h = w / art.pxAspect; else w = h * art.pxAspect;
-      return { xMm: box.xMm + (box.wMm - w) / 2, yMm: box.yMm + (box.hMm - h) / 2, wMm: w, hMm: h };
+      // Raster: shared decision (artPlacement.ts) — full-artboard exports
+      // seat edge-to-edge, spread-shaped art centers on the anchor, and
+      // panel-shaped art seats registered in the best-matching side panel.
+      return computeRasterArtRect(template, anchor, art.pxAspect, sideBoxes);
     }
     // PDF with real physical dims: full-artboard exports seat edge-to-edge,
     // everything else centers on the anchor (shared decision, Task #3189).
     return computePdfArtRect(template, anchor, { wMm: art.wMm, hMm: art.hMm });
-  }, [template, art, anchor]);
+  }, [template, art, anchor, sideBoxes]);
 
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(3)}%`;
 

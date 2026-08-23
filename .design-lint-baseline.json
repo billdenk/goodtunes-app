@@ -16597,7 +16597,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "Search LiveLyrics<sup className=\"text-[8px] font-medium\">™</sup>"
+    "snippet": "Search LyricFlow<sup className=\"text-[8px] font-medium\">™</sup>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16967,7 +16967,7 @@
   {
     "rule": "naked-icon-button",
     "file": "client/src/pages/AdminAlbum.tsx",
-    "snippet": "<button type=\"button\" aria-label=\"What is LiveLyrics™?\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-cen"
+    "snippet": "<button type=\"button\" aria-label=\"What is LyricFlow™?\" className=\"w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-cent"
   },
   {
     "rule": "naked-icon-button",

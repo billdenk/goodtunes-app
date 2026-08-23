@@ -21,7 +21,7 @@ import { createFullSharpController } from './fullSharpRender';
 // Bounded-retry hi-DPI crop render (Task #3213) — never strands the viewer on
 // the blurry base raster silently.
 import { renderCropOnce, runWithRetry, type CropRender } from './cropSharpRender';
-import { computePdfArtRect } from './artPlacement';
+import { computePdfArtRect, computeRasterArtRect } from './artPlacement';
 
 export type ViewerTemplate = { img: string; wMm: number; hMm: number; layers: GtLayer[] };
 export type ViewerArt = {
@@ -119,26 +119,31 @@ export function TemplateArtViewer({
 
   // Art placement: centered on the GT Bleed box (fallback: Cut, then full page).
   const anchor = bleedBox ?? cutBox ?? null;
+  // Side-panel seats (Front-first) for raster panel art — Niina's Full
+  // Template ruling: art never floats unregistered over the spread.
+  const sideBoxes = useMemo(() => {
+    const measurable = zones.filter((zz) => zz.line || zz.area).map((zz) => zz.zone);
+    return SIDE_NAMES
+      .map((s) => pickSideFocusZone(measurable, s))
+      .map((name) => (name ? zones.find((zz) => zz.zone === name) : undefined))
+      .map((z) => z?.line ?? z?.area)
+      .filter((b): b is NonNullable<typeof b> => !!b)
+      .map((b) => ({ xMm: b.xMm, yMm: b.yMm, wMm: b.wMm, hMm: b.hMm }));
+  }, [zones]);
+
   const artRect = useMemo(() => {
     if (!art) return null;
-    const anchor2 = anchor ?? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm };
     if (art.wMm === null || art.hMm === null) {
-      if (!art.pxAspect) return anchor2;
-      const pageAspect = template.wMm / template.hMm;
-      const pageErr = Math.abs(art.pxAspect / pageAspect - 1);
-      const anchorErr = Math.abs(art.pxAspect / (anchor2.wMm / anchor2.hMm) - 1);
-      const box = pageErr <= 0.02 && pageErr < anchorErr
-        ? { xMm: 0, yMm: 0, wMm: template.wMm, hMm: template.hMm }
-        : anchor2;
-      const boxAspect = box.wMm / box.hMm;
-      let w = box.wMm, h = box.hMm;
-      if (art.pxAspect > boxAspect) h = w / art.pxAspect; else w = h * art.pxAspect;
-      return { xMm: box.xMm + (box.wMm - w) / 2, yMm: box.yMm + (box.hMm - h) / 2, wMm: w, hMm: h };
+      // Raster: shared decision — full-artboard exports seat edge-to-edge,
+      // spread-shaped art centers on the anchor, panel-shaped art (e.g. a
+      // square front cover on a wide jacket spread) seats registered in the
+      // best-matching side panel so the die-line guides land on its edges.
+      return computeRasterArtRect(template, anchor, art.pxAspect, sideBoxes);
     }
     // PDF with real physical dims: full-artboard exports seat edge-to-edge,
     // everything else centers on the anchor (shared decision, Task #3189).
     return computePdfArtRect(template, anchor, { wMm: art.wMm, hMm: art.hMm });
-  }, [template, art, anchor]);
+  }, [template, art, anchor, sideBoxes]);
 
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(3)}%`;
 
