@@ -778,6 +778,34 @@ export async function createEstimatePaySession(opts: {
   const jobTitle = String(row.title ?? "your record").trim() || "your record";
   const lineName = `Estimate ${displayId || "—"} — ${jobTitle}`;
 
+  // Reuse the pending session instead of minting a new one on every tap —
+  // repeated/concurrent calls must not overwrite paySessionId (an earlier
+  // session someone already paid would become unconfirmable) or open a
+  // second charge path.
+  if (payload.paySessionId) {
+    try {
+      const prev = await stripe.checkout.sessions.retrieve(payload.paySessionId);
+      if (prev?.payment_status === "paid") {
+        // Paid out-of-band (e.g. browser never returned) — stamp and refuse.
+        await mergeEstimatePayload(row.id, {
+          paidAt: new Date().toISOString(),
+          paidAmountCents:
+            typeof prev.amount_total === "number" && prev.amount_total > 0
+              ? prev.amount_total
+              : amountInt,
+          paidVia: "stripe",
+        });
+        return { ok: false, status: 409, message: "This estimate is already paid." };
+      }
+      if (prev?.status === "open" && prev.url) {
+        return { ok: true, url: prev.url, sessionId: prev.id };
+      }
+      // Expired/complete-unpaid → fall through and mint a fresh session.
+    } catch {
+      // Session unretrievable (e.g. test-mode wipe) → mint a fresh one.
+    }
+  }
+
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     payment_method_types: ["card"],
@@ -844,14 +872,16 @@ export async function confirmEstimatePayStatus(opts: {
   const sid = String(sessionId ?? "").trim();
   if (!sid) return { ok: false, status: 400, message: "Missing session id." };
 
-  // Bind the returned session id to the one we minted for this estimate. A
-  // mismatch means the id doesn't belong here — refuse, don't stamp.
-  if (!payload.paySessionId || payload.paySessionId !== sid) {
-    return { ok: true, paid: false, amountCents: serverAmountCents };
-  }
-
+  // Bind the returned session to this estimate. Primary binding is the
+  // persisted paySessionId; as recovery for a session that was superseded
+  // before its payer returned, also accept a session whose server-minted
+  // metadata names THIS estimate. Anything else: refuse, don't stamp.
   const session = await stripe.checkout.sessions.retrieve(sid);
-  const trulyPaid = session?.payment_status === "paid" && session?.id === payload.paySessionId;
+  const boundById = !!payload.paySessionId && session?.id === payload.paySessionId;
+  const boundByMetadata =
+    session?.metadata?.gt_kind === "press_estimate_pay" &&
+    session?.metadata?.pressEstimateId === row.id;
+  const trulyPaid = session?.payment_status === "paid" && (boundById || boundByMetadata);
   if (!trulyPaid) {
     return { ok: true, paid: false, amountCents: serverAmountCents };
   }

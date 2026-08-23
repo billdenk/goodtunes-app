@@ -1353,6 +1353,21 @@ function App() {
   useEffect(() => {
     markBootSucceeded();
   }, []);
+  // Public token surfaces (PQ cutting-master sheet) are chrome-free and
+  // signed-out by design: skip the player/auth shell entirely so the page
+  // fires zero authenticated requests (no /api/me, /api/songs, /api/my-albums,
+  // /api/favorites 401 noise on a mastering engineer's iPad).
+  if (window.location.pathname.startsWith("/pq/")) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <GlobalErrorBoundary>
+            <Route path="/pq/:token" component={PressPQSheet} />
+          </GlobalErrorBoundary>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+  }
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>

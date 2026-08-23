@@ -31,8 +31,14 @@ import {
   type VinylSide,
 } from "@shared/vinylFormatRules";
 
-const SECRET =
-  process.env.SESSION_SECRET ?? "goodtunes-pq-sheet-fallback-dev-key";
+// No fallback secret: a knowable default would let anyone mint valid eternal
+// PQ tokens for any album. SESSION_SECRET is always set in this repl's dev and
+// prod environments; fail loudly if it ever isn't.
+const SECRET = (() => {
+  const s = process.env.SESSION_SECRET;
+  if (!s) throw new Error("pqSheet: SESSION_SECRET is required to sign PQ tokens");
+  return s;
+})();
 
 // ─── Token ────────────────────────────────────────────────────────────
 // tok = base64url(albumId + "." + first 32 hex chars of
