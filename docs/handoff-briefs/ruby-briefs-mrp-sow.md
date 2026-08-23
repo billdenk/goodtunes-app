@@ -98,3 +98,26 @@ external source (CODA/Odoo), a rename or duplicate here must reconcile with
 the source rather than silently fork. Design the moments: what the operator
 sees when duplicating (e.g. "pricing copied from Opaque"), and what a
 rename/duplicate looks like when an external source is connected.
+
+
+## Flag — Bill, Aug 22 2026 (supersedes any ambiguity in briefs 6 & 8)
+Two clarifications from Bill after seeing the live Components › Pricing grid:
+
+1. **MRP never prices per color.** They update the TIER/STYLE price (Black,
+   Splatter, EcoMix…) and every color under it inherits. The per-color
+   upcharge grid in the live page is the Viryl shape, not the MRP shape.
+2. **The model choice lives in the GOODTUNES SUPER ADMIN, not press
+   settings.** GoodTunes chooses per press — "like Viryl" (component-
+   itemized) or "like MRP" (tier ladder), with room for more models later.
+   The press never sees the switch; their Pricing page simply takes the
+   chosen shape. The pricing source (GoodTunes native / CODA.io / Odoo)
+   is chosen in the same place, same rules as brief 8 (sync-lock,
+   honest gaps, visible source badge).
+
+A designed screen for this now exists in the Playground:
+`AdminPressPricingSetup` — super-admin, partner-scoped rail (Components ›
+Pricing leaf), model picker (Tier ladder = "How Memphis prices" vs
+Component-itemized = "How Viryl prices"), source cards with Shopify-connect
+feel and per-row sync stamps, and a "What Memphis will see" preview that
+restates the effect in words. Ask Ruby for the handoff copy when this brief
+is picked up.
