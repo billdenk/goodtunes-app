@@ -12,8 +12,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Check } from "lucide-react";
 import { useAdminDark } from "@/lib/adminAppearance";
+import { displayPressColorName } from "@/lib/pressColorName";
 import type { PressComponentsPayload } from "./usePressComponents";
-import type { PricingComponentConfig, PricingRow, VinylSizeId } from "@shared/pressComponents";
+import type { PricingComponentConfig, PricingRow, VinylSizeId, VinylSwatch } from "@shared/pressComponents";
 // Segmented size chips (canvas handoff: 7″ Single · 10″ EP · 12″ LP Standard)
 // + pure size-filter/group/count helpers (unit-tested in pricingView.test.ts).
 import {
@@ -78,6 +79,33 @@ function inputToCents(v: string): number | null | undefined {
   if (s === "") return null;
   if (!/^\d{1,6}(\.\d{1,2})?$/.test(s)) return undefined; // invalid
   return Math.round(parseFloat(s) * 100);
+}
+
+// Color pricing row identity: swatch first, name only when it's a human name
+// (raw MRP codes stay hidden — Bill's ruling, Aug 23 2026). The swatch circle
+// prefers the uploaded splatter photo, else the base hex.
+function ColorRowLabel({ row, swatch, t }: { row: PricingRow; swatch: VinylSwatch | null; t: Theme }) {
+  const name = displayPressColorName(row.label);
+  return (
+    <span className="min-w-0 inline-flex items-center gap-2.5">
+      {swatch && (
+        <span
+          aria-hidden
+          className="w-[22px] h-[22px] rounded-full flex-shrink-0 bg-cover bg-center"
+          style={{
+            background: swatch.customImg ? undefined : swatch.base,
+            backgroundImage: swatch.customImg ? `url(${swatch.customImg})` : undefined,
+            border: `1px solid ${t.hairline}`,
+          }}
+        />
+      )}
+      {(name || !swatch) && (
+        <span className="text-[13.5px] truncate" style={{ color: t.ink }}>
+          {name ?? row.label}
+        </span>
+      )}
+    </span>
+  );
 }
 
 function PriceCell({
@@ -190,6 +218,18 @@ export function PressComponentPricing({
   const [size, setSize] = useState<VinylSizeId>(() => defaultSizeChip(payload.pricing.rows));
 
   const priceFor = (r: PricingRow): number | null => priceForSize(r, size);
+
+  // Bill's ruling (Aug 23 2026): color rows never show raw internal codes —
+  // the swatch identifies the color; the name shows only once renamed.
+  // Row keys are "color:<categoryId>:<swatchId>", so the swatch resolves
+  // straight out of the press's Vinyl component config.
+  const swatchByRowKey = useMemo(() => {
+    const map = new Map<string, VinylSwatch>();
+    for (const cat of payload.vinyl.categories) {
+      for (const sw of cat.swatches) map.set(`color:${cat.id}:${sw.id}`, sw);
+    }
+    return map;
+  }, [payload.vinyl.categories]);
 
   // Group VISIBLE rows: each type row heads a card; its color rows nest
   // under it — filtered to the selected size (Splatter under 10″/12″ only).
@@ -311,9 +351,7 @@ export function PressComponentPricing({
                 className={`flex items-center justify-between gap-4 px-5 h-11 ${t.hoverWash}`}
                 style={{ borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }}
               >
-                <span className="text-[13.5px] truncate" style={{ color: t.ink }}>
-                  {r.label}
-                </span>
+                <ColorRowLabel row={r} swatch={swatchByRowKey.get(r.key) ?? null} t={t} />
                 <PriceCell rowKey={r.key} priceCents={priceFor(r)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
               </div>
             ))}

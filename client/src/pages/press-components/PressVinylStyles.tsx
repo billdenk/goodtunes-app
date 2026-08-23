@@ -58,6 +58,7 @@ import {
 } from '@/components/ui/popover';
 import { createContext, useContext } from 'react';
 import { useAdminDark } from '@/lib/adminAppearance';
+import { displayPressColorName } from '@/lib/pressColorName';
 import { postAdminImage } from '@/lib/adminUpload';
 import { resolvePressMarkLogo, type PressComponentsPayload } from './usePressComponents';
 import { WhiteMarkGlyph } from './PressMarkGlyph';
@@ -2074,7 +2075,7 @@ function CatalogSearchPopover({
                       <VinylDisc size={40} swatch={swatch} />
                       <div className="min-w-0 flex-1">
                         <div className="text-[13px] font-semibold truncate" style={{ color: on ? t.blue : t.ink }}>
-                          {swatch.name}
+                          {displayPressColorName(swatch.name) ?? `${categoryName} color`}
                         </div>
                         <div className="text-[11.5px]" style={{ color: t.subink }}>
                           {categoryName} · {swatch.sizes.join(', ')}
@@ -2159,9 +2160,11 @@ function SwatchTile({
           <VinylDisc size={40} swatch={swatch} />
           {active && <Check className="absolute inset-0 m-auto w-4 h-4 text-white drop-shadow" strokeWidth={3} />}
         </span>
-        <span className="text-[11.5px] font-semibold text-center leading-tight" style={{ color: active ? t.blue : t.ink }}>
-          {swatch.name}
-        </span>
+        {displayPressColorName(swatch.name) && (
+          <span className="text-[11.5px] font-semibold text-center leading-tight" style={{ color: active ? t.blue : t.ink }}>
+            {displayPressColorName(swatch.name)}
+          </span>
+        )}
         {/* Word + icon, never color alone */}
         {hidden && (
           <span className="inline-flex items-center gap-1 text-[10px] font-semibold" style={{ color: t.faint }}>
@@ -4155,7 +4158,7 @@ function GeneratorSheet({
             Their photo
           </span>
           <span className="text-[11.5px] font-semibold" style={{ color: t.subink, marginTop: 2, whiteSpace: 'nowrap' }}>
-            {replaceOf.name}
+            {displayPressColorName(replaceOf.name) ?? 'Current color'}
           </span>
           <span className="text-[11px]" style={{ color: t.faint, marginTop: 6, whiteSpace: 'nowrap' }}>
             {compareLarge ? 'Click to shrink' : 'Click to match the record size'}
@@ -4721,7 +4724,7 @@ function GeneratorSheet({
                       }}
                     >
                       <VinylDisc size={52} swatch={sc} />
-                      <span className="text-[11.5px] font-semibold truncate" style={{ color: t.ink, maxWidth: 84 }}>{sc.name}</span>
+                      <span className="text-[11.5px] font-semibold truncate" style={{ color: t.ink, maxWidth: 84 }}>{displayPressColorName(sc.name) ?? '\u00A0'}</span>
                     </button>
                   ))}
                   {!fixedStyle && !addingMore && (
@@ -5349,7 +5352,7 @@ export function PressVinylStylesComponent({
                 <span>{category.name}</span>
                 <span style={{ color: t.crumbDivider }}>·</span>
                 <span className="font-semibold" style={{ color: t.ink }}>
-                  {previewSwatch.name}
+                  {displayPressColorName(previewSwatch.name) ?? `${category.name} color`}
                 </span>
               </div>
             </div>

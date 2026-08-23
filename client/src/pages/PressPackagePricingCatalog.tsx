@@ -38,6 +38,7 @@ import {
 } from "@shared/schema";
 import { Check, ChevronDown, DollarSign, FileText, HelpCircle, Info, Loader2, MinusCircle, MoreHorizontal, Plus, RotateCcw, Search, UploadCloud, X } from "lucide-react";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT, postAdminImage } from "@/lib/adminUpload";
+import { displayPressColorName } from "@/lib/pressColorName";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertDialog,
@@ -578,7 +579,7 @@ function CatalogSearchPopover({
                       <VinylDisc size={40} color={color} labelLogoUrl={labelLogoUrl} labelBgColor={labelBgColor} />
                       <div className="min-w-0 flex-1">
                         <div className="text-[13px] font-semibold truncate" style={{ color: on ? BLUE : INK }}>
-                          {color.name}
+                          {displayPressColorName(color.name) ?? `${tierName} color`}
                         </div>
                         <div className="text-[11.5px]" style={{ color: SUBINK }}>
                           {tierName}
@@ -1312,7 +1313,7 @@ export function JacketStage({
           <span>{format === "7_inch" ? '7"' : '12"'}</span>
           <span style={{ color: dark ? FAINT : "#d1d1d6" }}>·</span>
           <span>{typeName ?? ALBUM_FORMAT_LABEL[format] ?? format}</span>
-          {color ? <><span style={{ color: dark ? FAINT : "#d1d1d6" }}>·</span><span className="font-semibold" style={{ color: INK }}>{color.name}</span></> : null}
+          {color && displayPressColorName(color.name) ? <><span style={{ color: dark ? FAINT : "#d1d1d6" }}>·</span><span className="font-semibold" style={{ color: INK }}>{displayPressColorName(color.name)}</span></> : null}
         </div>
         <div className="text-[12px] text-center" style={{ marginTop: 8, marginBottom: 16, color: FAINT, lineHeight: 1.4 }}>
           Printed jacket{format.startsWith("12") ? " and inner sleeve" : ""} included.
@@ -3280,7 +3281,7 @@ export function PressPackagePricingCatalog({
                                 size={28}
                               />
                               <div className="min-w-0 flex-1">
-                                <div className="text-sm font-semibold truncate" style={{ color: INK }}>{c.name}</div>
+                                <div className="text-sm font-semibold truncate" style={{ color: INK }}>{displayPressColorName(c.name) ?? `${c.tierName} color`}</div>
                                 <div className="text-[11.5px]" style={{ color: SUBINK }}>
                                   Color in {c.tierName} · archived {new Date(c.archivedAt).toLocaleDateString()}
                                 </div>
@@ -3432,7 +3433,7 @@ export function PressPackagePricingCatalog({
                             )}
                           </div>
                           <div className="text-[12.5px] font-semibold leading-tight" data-testid={`text-color-name-${c.id}`}>
-                            <MarqueeName text={c.name} color={on ? BLUE : INK} />
+                            {displayPressColorName(c.name) ? <MarqueeName text={displayPressColorName(c.name)!} color={on ? BLUE : INK} /> : <span aria-hidden>{"\u00A0"}</span>}
                           </div>
                         </div>
                       );

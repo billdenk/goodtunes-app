@@ -106,7 +106,7 @@ test("estimate-link returns exactly the sanitized allowlist incl. brand — no t
   assert.deepEqual(
     Object.keys(r.json).sort(),
     ["acceptedAt", "brand", "build", "builderState", "clientEmail", "clientName", "createdAt", "displayId",
-     "preparedBy", "pressName", "sentAt", "size", "status", "title", "totalCents"].sort(),
+     "paidAt", "preparedBy", "pressName", "sentAt", "size", "status", "title", "totalCents"].sort(),
     "public payload must be the exact allowlist — nothing extra",
   );
   assert.equal(r.json.pressName, "t3257 Press");

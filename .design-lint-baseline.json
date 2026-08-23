@@ -10285,16 +10285,6 @@
     "snippet": "*   - Subtitle: text-[12.5px] slate-500"
   },
   {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/AdminPageHeader.tsx",
-    "snippet": "className=\"text-[var(--apple-ink)] text-[30px] font-semibold tracking-[-0.02em] leading-tight\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/AdminPageHeader.tsx",
-    "snippet": "<p className=\"text-[var(--apple-subink)] text-[13px] font-medium mt-0.5\">{subtitle}</p>"
-  },
-  {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/components/admin/AdminPressesDashboard.tsx",
     "snippet": "<Link"
@@ -10522,7 +10512,62 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
-    "snippet": "className=\"block text-center text-[11.5px] text-slate-400 hover:text-slate-600 underline underline-offset-2 mb-2\""
+    "snippet": "<p className=\"mt-1 text-[13px] text-slate-500\" data-testid=\"text-completed-package-summary\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 text-[13px] text-[var(--apple-blue)]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "className=\"block text-center text-[13px] text-[var(--apple-blue)] hover:opacity-80 mb-2\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 text-[13px] font-medium text-[var(--apple-blue)] min-w-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "<span className=\"text-[13px] text-slate-400 truncate\">View {noun}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 text-[13px] font-medium text-violet-700\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "className={`inline-flex items-center gap-1.5 ${sty.text} text-[13px] font-medium`}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "className=\"inline-flex items-center text-slate-500 text-[13px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 text-[13px] font-medium text-[var(--apple-blue)] shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "<span className=\"text-[13px] font-medium text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "className=\"flex items-start gap-2 text-[13px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/CompletedTemplatePanel.tsx",
+    "snippet": "<span className={`ml-1 text-[13px] font-medium ${cs.text}`}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -11557,22 +11602,32 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200\""
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[color:var(--apple-ink)]\">Finished print files</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-rose-50 text-rose-700 border-rose-200\""
+    "snippet": "<h2 className=\"text-[15px] font-semibold text-[color:var(--apple-ink)]\">Music</h2>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full border bg-slate-50 text-slate-500 border-slate-200\""
+    "snippet": "<p className=\"text-[11px] text-rose-600 mt-1 ml-[calc(0.75rem+1.5rem+0.625rem)]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "\"inline-flex items-center gap-1.5 text-[13px] py-1\","
+    "snippet": "className=\"inline-flex items-center gap-1.5 text-[13px] font-medium text-emerald-700\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 text-[13px] font-medium text-rose-700\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/components/admin/PressPanel.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 text-[13px] font-medium text-slate-500\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -11583,11 +11638,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/PressPanel.tsx",
     "snippet": "<span className=\"text-[12.5px] font-semibold text-slate-900 truncate\" data-testid=\"text-press-readout-name\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/PressPanel.tsx",
-    "snippet": "<h2 className=\"text-[15px] font-semibold text-slate-900\">Side Breaks</h2>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -12650,9 +12700,34 @@
     "snippet": "<ol className=\"mt-3 text-[12px] text-slate-500 space-y-1 list-decimal list-inside leading-snug\">"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/ShopifyPlusPanel.tsx",
+    "snippet": "className=\"h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/ShopifyPlusPanel.tsx",
+    "snippet": "className=\"h-9 inline-flex items-center gap-1.5 rounded-full bg-[#319ED8] px-4 text-xs font-semibold text-white hover:bg-[#268dc4] disabled:opacity-50\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/ShopifyPlusPanel.tsx",
+    "snippet": "className=\"h-10 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/ShopifyPlusPanel.tsx",
+    "snippet": "className=\"rounded-full bg-[#319ED8] text-white hover:bg-[#268dc4]\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/admin/ShopifyPlusPanel.tsx",
+    "snippet": "className=\"h-10 w-28 rounded-xl border border-slate-200 bg-slate-50 py-1.5 pl-6 pr-2 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20 disabled"
+  },
+  {
     "rule": "naked-icon-button",
     "file": "client/src/components/admin/ShopifyPlusPanel.tsx",
-    "snippet": "<button onClick={onRemove} disabled={busy === `delq-${quote.id}`} aria-label=\"Remove quote\" className=\"h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600 ho"
+    "snippet": "<button onClick={onRemove} disabled={busy === `delq-${quote.id}`} aria-label=\"Remove estimate\" className=\"h-9 inline-flex items-center justify-center rounded-lg px-2 text-slate-400 hover:text-rose-600"
   },
   {
     "rule": "hardcoded-font-size",
@@ -13367,42 +13442,32 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "\"w-7 h-7 inline-flex items-center justify-center rounded-full text-[12px] font-bold\","
+    "snippet": "\"text-[13px] font-medium\","
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<div className=\"text-[12.5px] font-semibold text-slate-900\">"
+    "snippet": "<div className=\"flex items-center gap-2 text-[13px]\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<div className=\"flex items-center gap-2 text-[12px]\">"
+    "snippet": "<div className=\"px-4 py-6 text-center text-[13px] text-slate-400\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<div className=\"px-4 py-6 text-center text-[11.5px] text-slate-400\">"
+    "snippet": "<div className=\"w-6 text-center text-[13px] tabular-nums text-slate-400\">"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<div className=\"w-6 text-center text-[11.5px] tabular-nums text-slate-400\">"
+    "snippet": "className=\"mr-1.5 tabular-nums text-[13px] text-slate-400 font-medium\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<div className=\"flex-1 min-w-0 text-[13px] text-slate-900 truncate\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "className=\"mr-1.5 tabular-nums text-[11.5px] text-slate-400 font-medium\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/components/admin/VinylOrderPanel.tsx",
-    "snippet": "<div className=\"text-[11.5px] tabular-nums text-slate-500\">"
+    "snippet": "<div className=\"text-[13px] tabular-nums text-slate-500\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -15507,6 +15572,16 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "blue: \"#319ED8\", ink: \"#1d1d1f\", subink: \"rgba(0,0,0,0.62)\", faint: \"rgba(0,0,0,0.42)\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "blue: \"#319ED8\", ink: \"#f5f5f7\", subink: \"#98989d\", faint: \"#6e6e73\","
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "// (#00062B) because the mobile player needs it. Admin"
   },
   {
@@ -15693,6 +15768,166 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "<div className=\"text-[12px] text-slate-500\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<h2 className=\"text-[21px] font-semibold tracking-tight leading-snug\" style={{ color: t.ink, letterSpacing: \"-0.02em\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"text-[13px]\" style={{ color: t.faint }}>{label}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "{value ? <div className=\"mt-1 text-[15px] font-medium\" style={{ color: t.ink }}>{value}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": ": <div className=\"mt-1 text-[15px] italic\" style={{ color: t.faint }}>{notSet ?? \"Not set\"}</div>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<button type=\"button\" onClick={onClick} disabled={disabled} className=\"h-8 px-2.5 rounded-full inline-flex items-center gap-1.5 text-[13.5px] font-medium transition-colors disabled:opacity-40\" style={"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"text-[13px]\" style={{ color: t.faint }}>Status</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"mt-1 inline-flex items-center gap-1.5 text-[15px] font-medium\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"text-[13px]\" style={{ color: t.faint }}>Share link</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"text-[13px]\" style={{ color: t.faint }}>Needs attention</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"mt-1 inline-flex items-center gap-1.5 text-[15px] font-medium\" style={{ color: t.ink }} data-testid=\"status-needs-attention-clear\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<button type=\"button\" onClick={() => setBlockersOpen((v) => !v)} aria-expanded={blockersOpen} className=\"mt-1 inline-flex items-center gap-1.5 text-[15px] font-medium\" style={{ color: t.ink }} data-te"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"flex-1 min-w-0 text-[14px]\"><span className=\"font-medium\" style={{ color: t.ink }}>{b.piece}</span><span className=\"mx-1.5\">·</span><span style={{ color: t.subink }}>{b.issue}</span></"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<button type=\"button\" onClick={() => { window.location.href = `${window.location.pathname}?tab=press&ptab=art`; }} className=\"text-[13px] font-medium flex-shrink-0\" style={{ color: t.blue }}>Fix on Ph"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"text-[14px]\" style={{ color: t.subink }}><span className=\"font-medium\" style={{ color: t.ink }}>Lineup</span><span className=\"mx-1.5\">·</span>{lineup.length ? lineup.map((m) => m.membe"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "{([\"Release\", \"Pre-save\"] as const).map((v) => <button key={v} type=\"button\" onClick={() => setLinkTab(v)} className=\"h-7 px-3.5 rounded-full text-[13px] font-medium transition-colors\" style={{ backgr"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<span className=\"text-[14px] font-medium truncate\" style={{ color: t.ink }}>{shareUrl.replace(/^https?:\\/\\//, \"\")}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[13.5px] flex-shrink-0\" style={{ color: t.subink }}><CheckCircle2 className=\"w-3.5 h-3.5\" /> Live</span><span className=\"flex-1\" />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<p className=\"mt-2.5 text-[13px]\" style={{ color: t.faint }}>Live — fans can preview and buy. The artist part is shared across all of {album.artist}'s releases.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": ") : <div className=\"mt-5 text-[14px] italic\" style={{ color: t.faint }}>Not set — add the artist and album URLs to publish this link</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<span className=\"text-[14px] font-medium truncate\" style={{ color: t.ink }}>{shareUrl}</span><span className=\"flex-1\" />"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": ") : <div className=\"mt-5 flex items-center gap-3 text-[14px]\"><CircleDashed className=\"w-3.5 h-3.5\" style={{ color: t.faint }} /><span className=\"italic\" style={{ color: t.faint }}>Not set — created w"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<span className=\"text-[14px] font-medium flex-1 truncate\" style={{ color: s.url ? t.ink : t.subink }}>{s.name}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1 text-[13px]\" style={{ color: s.url ? t.subink : t.faint }}>{s.url ? <CheckCircle2 className=\"w-3.5 h-3.5\" /> : <CircleDashed className=\"w-3.5 h-3.5\" />}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "{selectedService.url ? <><span className=\"text-[13.5px] truncate\" style={{ color: t.ink }}>{selectedService.url}</span><span className=\"flex-1\" /><OverviewTextButton t={t} blue testid=\"button-open-ser"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": ": <><input value={serviceDraft} onChange={(e) => setServiceDraft(e.target.value)} placeholder={`Paste the ${selectedService.name} album link`} className=\"flex-1 min-w-[220px] h-9 px-3.5 rounded-full t"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"mt-3 flex items-center gap-3\"><span className=\"text-[13px]\" style={{ color: t.subink }}>\"Get my music\" button</span><span className=\"inline-flex items-center gap-2 h-8 px-3 rounded-ful"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3\">{heroSlots.map((g) => <div key={g.label}><div className=\"aspect-square rounded-lg overflow-hidden flex items-center justify-center\" style={{"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"mt-4 flex items-center justify-between gap-4 pt-4\" style={{ borderTop: `1px solid ${t.hairline}` }}><div className=\"text-[14px]\" style={{ color: t.subink }}><span className=\"font-mediu"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"mt-3 space-y-2\">{(npoSplit?.beneficiaries ?? []).length ? npoSplit!.beneficiaries.map((n) => <div key={`${n.organizationId}-${n.id}`} className=\"flex items-center gap-3 h-12 px-4 round"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<div className=\"mt-2.5 flex items-center justify-between gap-4\"><span className=\"inline-flex items-center gap-1.5 text-[13.5px]\" style={{ color: t.subink }}>{npoSplit?.locked && <><Lock className=\"w-3"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<summary className=\"cursor-pointer text-[13px] font-medium\">Legacy settings</summary>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<p className=\"text-[13px] pb-6\" style={{ color: t.faint }}>Split shipments now lives on Physical → Fulfillment, with the destination it configures.</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -16708,6 +16943,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminAlbum.tsx",
     "snippet": "className=\"text-[12px] font-semibold px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-[var(--apple-track)] disabled:opacity-50\""
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/AdminAlbum.tsx",
+    "snippet": "<button type=\"button\" onClick={onEdit} className={cn(\"w-8 h-8 rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100\", t.hoverWash)} s"
   },
   {
     "rule": "naked-icon-button",
@@ -21667,12 +21907,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<h2 className=\"text-[22px] font-semibold tracking-tight\" style={{ color: t.ink }}>Details.</h2>"
+    "snippet": "className=\"h-9 min-w-0 max-w-[280px] flex-1 rounded-xl px-3 text-[13.5px] outline-none\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 4, color: t.subink }}>Everything about this release at a glance.</p>"
+    "snippet": "<button type=\"button\" onClick={() => setEditingKey(null)} className=\"text-[13px] font-medium px-2 py-1.5 rounded-full\" style={{ color: t.subink }}>Cancel</button>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "className=\"text-[13px] font-semibold text-white px-3 py-1.5 rounded-full disabled:opacity-45\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -21687,7 +21932,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<div className=\"text-[15px] font-semibold truncate\" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{block.title}</div>"
+    "snippet": "<span className=\"text-[12.5px] font-medium\" style={{ marginTop: 8, color: t.subink }}>{uploading ? 'Uploading…' : 'Drop file or tap to upload'}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<button type=\"button\" onClick={() => navigate(href)} className=\"text-left text-[15px] font-semibold truncate\" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{block.title}</button>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12px] font-medium\" style={{ marginTop: 'auto', color: t.subink }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21697,57 +21952,47 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-semibold\" style={{ color: t.ink }}>Master these for vinyl with Wave</div>"
+    "snippet": "<p className=\"text-[14px] font-semibold\" style={{ marginTop: 10, color: t.ink }}>No tracks yet</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 3, color: t.subink, lineHeight: 1.45 }}>Vinyl cuts best from a dedicated master. Wave prepares a lacquer-ready set from your album masters.</p>"
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 5, color: t.subink }}>Drop audio files here or choose them from your device</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<button type=\"button\" className={cn('inline-flex items-center gap-1.5 rounded-full text-[13px] font-medium flex-shrink-0 transition-colors', t.hoverCard)} style={{ padding: '8px 16px', color: t.subink"
+    "snippet": "className=\"inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold text-white\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<span className=\"text-[13px]\" style={{ color: t.subink }}>No tracks yet.</span>"
+    "snippet": "<p className=\"text-[14px] font-semibold\" style={{ marginTop: 9, color: t.ink }}>Master uploads locked</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<span className=\"text-[12px] font-semibold tabular-nums flex-shrink-0\" style={{ width: 22, color: t.faint }}>{i + 1}</span>"
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-medium truncate\" style={{ color: t.ink }}>{song.title}</div>"
+    "snippet": "<p className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>No tracks yet</p>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ color: t.faint }}>{forVinyl ? 'Lacquer master · from your album masters' : 'Album master'}</div>"
+    "snippet": "<button type=\"button\" onClick={onShowMaster} className=\"inline-flex items-center gap-1 text-[13px] font-semibold\" style={{ marginTop: 12, color: BLUE }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "className=\"inline-flex items-center gap-2 rounded-full px-4 py-2 text-[13px] font-semibold\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
     "snippet": "className={cn('apr-add inline-flex items-center h-9 px-2.5 rounded-full text-[13px] font-semibold flex-shrink-0', t.hoverCard)}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<h2 className=\"text-[22px] font-semibold tracking-tight\" style={{ color: t.ink }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<button type=\"button\" className=\"inline-flex items-center gap-1.5 text-[13px] font-medium flex-shrink-0 transition-opacity hover:opacity-80\" style={{ color: t.subink }} data-testid=\"button-add-bonus-c"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<p className=\"text-[13.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 560, lineHeight: 1.5 }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21763,11 +22008,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
     "snippet": "<p className=\"text-[14px] font-semibold\" style={{ marginTop: portal.release.artworkUrl ? 16 : 0, color: t.ink }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21867,7 +22107,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<h3 className=\"text-[15px] font-semibold\" style={{ color: t.ink }}>{ready ? 'Ready for fans.' : 'Getting ready.'}</h3>"
+    "snippet": "<h3 className=\"text-[15px] font-semibold\" style={{ color: t.ink }}>{ready ? 'Ready for fans' : 'Getting ready'}</h3>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21877,7 +22117,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<span className=\"text-[13px] font-medium\" style={{ color: c.done ? t.ink : t.subink }}>{c.label}</span>"
+    "snippet": "<span className=\"text-[13px] font-medium\" style={{ color: c.done ? t.ink : BLUE }}>{c.done ? c.label : c.pending}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21937,12 +22177,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<h2 className=\"text-[22px] font-semibold tracking-tight\" style={{ color: t.ink }}>Money out to the plant</h2>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<p className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>Nothing owed on this release.</p>"
+    "snippet": "<p className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>Nothing owed on this release</p>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -22137,7 +22372,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
-    "snippet": "<button type=\"button\" className=\"inline-flex items-center gap-1 text-[12.5px] font-medium\" style={{ color: t.subink }} data-testid=\"button-manage-shopify\">"
+    "snippet": "<span className=\"inline-flex items-center gap-1 text-[12.5px] font-medium\" style={{ color: t.subink }} data-testid=\"button-manage-shopify\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -22147,17 +22382,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-1 text-[12.5px] font-medium\" style={{ color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "className=\"inline-flex items-center text-[15px] font-bold tracking-tight\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
     "snippet": "<div className=\"text-[13.5px] font-semibold\" style={{ color: t.ink }}>Payout account</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ color: t.faint }}>Where your earnings land</div>"
+    "snippet": "<div className=\"text-[11.5px]\" style={{ color: t.faint }}>Powered by Stripe</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
-    "snippet": "<button type=\"button\" className=\"inline-flex items-center gap-1 text-[12.5px] font-medium\" style={{ color: t.subink }} data-testid=\"button-setup-payout\">"
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px] font-medium\" style={{ color: t.faint }} data-testid=\"payout-coming-soon\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -23750,6 +23995,11 @@
     "snippet": "if (rows.length === 0) return <p className=\"py-10 text-center text-[color:var(--apple-faint)] text-[13px]\">No plays in this window.</p>;"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/mrp/PressClientEstimateAcceptedMRP.tsx",
+    "snippet": "const BLUE = '#319ED8'; // the single filled BLUE action per screen (house rule)"
+  },
+  {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/pages/NonProfitDashboard.tsx",
     "snippet": "{it.href ? <Link href={it.href} className=\"block\">{body}</Link> : body}"
@@ -24632,6 +24882,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressComponentPricing.tsx",
+    "snippet": "<span className=\"text-[13.5px] truncate\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressComponentPricing.tsx",
     "snippet": "<span className=\"text-[13.5px] tabular-nums\" style={{ color: priceCents == null ? t.faint : t.ink }}>"
   },
   {
@@ -24662,7 +24917,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressComponentPricing.tsx",
-    "snippet": "className=\"inline-flex items-baseline gap-1.5 rounded-full px-4 h-8 text-[13px] font-semibold transition-colors\""
+    "snippet": "className=\"inline-flex h-8 items-center justify-center gap-1.5 rounded-full px-4 py-0 text-[13px] leading-none font-semibold transition-colors\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -24683,11 +24938,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressComponentPricing.tsx",
     "snippet": "<span className=\"text-[11px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-components/PressComponentPricing.tsx",
-    "snippet": "<span className=\"text-[13.5px] truncate\" style={{ color: t.ink }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -24722,6 +24972,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<span className=\"text-[10.5px] tabular-nums\" style={{ marginTop: 4, color: t.faint }} data-testid={`${testId}-typical`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
     "snippet": "<span className=\"flex-1 text-[11px] font-semibold uppercase tracking-wider\" style={{ color: t.faint }}>Batch</span>"
   },
   {
@@ -24747,17 +25002,22 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
-    "snippet": "<span className=\"text-[12px] tabular-nums flex-shrink-0 inline-flex items-center gap-1.5\" style={{ marginTop: 6, color: t.faint }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
     "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 10, color: t.subink }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<span className=\"text-[12px] tabular-nums flex-shrink-0 inline-flex items-center gap-1.5\" style={{ color: t.faint }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
     "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 14, maxWidth: 560, color: t.faint, lineHeight: 1.5 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressGoodDeedPricingComponent.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 12, maxWidth: 560, color: t.faint, lineHeight: 1.5 }} data-testid=\"printing-off-note\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -25492,7 +25752,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressVinylStyles.tsx",
-    "snippet": "<span className=\"text-[11.5px] font-semibold truncate\" style={{ color: t.ink, maxWidth: 84 }}>{sc.name}</span>"
+    "snippet": "<span className=\"text-[11.5px] font-semibold truncate\" style={{ color: t.ink, maxWidth: 84 }}>{displayPressColorName(sc.name) ?? '\\u00A0'}</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -25588,6 +25848,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressEstimatesIndex.tsx",
     "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px] font-semibold\" style={{ color: INK }} data-testid={`status-${status.toLowerCase()}`}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressEstimatesIndex.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2 h-5\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -26462,7 +26727,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<span className=\"text-[12px] font-medium\" style={{ color: '#b25e09', whiteSpace: 'nowrap' }} data-testid={`quote-line-pending-${l.id}`}>Pricing pending · custom quote</span>"
+    "snippet": "<span className=\"text-[12px] font-medium\" style={{ color: '#b25e09', whiteSpace: 'nowrap' }} data-testid={`quote-line-pending-${l.id}`}>Pricing pending · custom estimate</span>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -28858,6 +29123,111 @@
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/PressPortal.tsx",
     "snippet": "className=\"absolute right-4 top-4 w-8 h-8 rounded-full flex items-center justify-center transition-colors\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "const BLUE = \"#319ED8\";"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[10.5px] font-semibold uppercase tracking-wider\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[13.5px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[17px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 text-[12px] font-medium\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[13px] font-semibold flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[14.5px] font-semibold truncate\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[11.5px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[12px] truncate\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[11.5px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"flex items-center gap-5 flex-shrink-0 text-[12.5px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "<h1 className=\"text-[24px] font-semibold\">PQ sheet not found</h1>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "<p className=\"text-[13.5px] mt-2\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "<span className=\"text-[13px]\">Loading PQ sheet…</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[14px] font-semibold truncate\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[11.5px] truncate\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"inline-flex items-center gap-2 rounded-full text-[13px] font-semibold text-white flex-shrink-0 transition-transform hover:-translate-y-px\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[13.5px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"inline-flex items-start gap-2 text-[13px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"flex items-center gap-6 flex-wrap text-[13px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/PressPQSheet.tsx",
+    "snippet": "className=\"text-[12px]\""
   },
   {
     "rule": "brand-hex-literal",
