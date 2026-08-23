@@ -1489,7 +1489,9 @@ export function AdminAlbum({
               {/* Task #799 — TEMPORARY admin-only "SPIN Promo" indicator.
                   Lit when the operator flags a digital-only legacy release
                   (toggle lives in the Overview tab). No fan-facing effect. */}
-              {album.isSpinPromo && (
+              {album.isSpinPromo &&
+                adminRoleInfo?.role === "super_admin" &&
+                !!(album as any).legacyGogoodsId && (
                 <span
                   className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10.5px] font-semibold normal-case tracking-normal text-[color:var(--brand-purple)] bg-[color:var(--brand-purple)]/10"
                   title="SPIN Promo — digital-only legacy release (admin-only tag, no fan-facing effect)"
@@ -5111,11 +5113,18 @@ function OverviewPanel({ album }: { album: AlbumFull }) {
           legacy)" toggle. Self-contained block: when this flag is retired,
           delete this single component + its render here and the schema
           column. No fan-facing effect whatsoever. */}
-      <SpinPromoPanel
-        album={album}
-        disabled={disabled}
-        disabledReason={disabledReason}
-      />
+      {/* Visibility law (run-sheet, Aug 2026): SPIN Promo renders ONLY for
+          super-admins, and ONLY on pre-Nightbirde imports (albums carrying
+          a legacy gogoods id). Newer albums don't show the control at all —
+          absent, not toggled-off. Partners/artists never see it. */}
+      {overviewRole?.role === "super_admin" &&
+        !!(album as any).legacyGogoodsId && (
+          <SpinPromoPanel
+            album={album}
+            disabled={disabled}
+            disabledReason={disabledReason}
+          />
+        )}
       {/* Task #3120 — redemption-email branding: CTA color + hero graphics
           (default + per-format). Rides the standard album PUT gate, so
           partner saves divert to review when approval is required. */}
