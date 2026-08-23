@@ -584,3 +584,16 @@ gets tested.**
     shipments, SPIN legacy, email appearance, share link, lineup, campaign
     gallery, NPO split — stays functional in the meantime.)
     
+
+    ## Catalog list page: HOLD — Bill + Ruby working it (from Bill)
+
+    Super-admin → Catalog → Projects opens a page titled "Albums" — the
+    rail says Projects, the page says Albums, the button says "+ Add
+    Album". Naming has to agree with itself (and with the artist-side
+    Release → Draft → Project language). Bill and Ruby are redesigning
+    this page together along with the album Overview tab — **hold it for
+    the same reason** (organization + look-and-feel, not just dress).
+    Keep the good bones meanwhile: lifecycle filter chips with honest
+    counts (Prepping 12 / At press 1 / Staged 0 / Released 2 / Sunset 57 /
+    Needs attention 68), grid/list toggle, one filled "+ Add" action.
+    
