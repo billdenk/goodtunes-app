@@ -23,7 +23,7 @@ as buyers.
 Two distinct value layers. Pricing each separately keeps the model honest.
 
 1. **Delivery + experience.** The redemption itself: secure streaming
-   infrastructure, the player, GoodSync™ lyrics, the GoodDeed number,
+   infrastructure, the player, LiveLyrics™ lyrics, the GoodDeed number,
    refund handling, the redeem landing page.
 2. **Acquisition + LTV.** Every fan that comes through a label's
    Shopify store becomes a GoodTunes account we can monetize downstream

@@ -8,7 +8,7 @@ GoodTunes is a fan-first music platform that treats every song as a structured o
 
 ## For Fans
 
-- **Apple-Music-grade player** — animated equalizer, GoodSync™ scrolling lyrics, tap-any-line seek, full-screen lyric overlay
+- **Apple-Music-grade player** — animated equalizer, LiveLyrics™ scrolling lyrics, tap-any-line seek, full-screen lyric overlay
 - **Background audio + lock-screen controls** — music keeps playing when the phone locks; artwork, song, and artist all appear on the lock screen (native-grade, no app required)
 - **Buy direct** — in-player Stripe checkout for digital + vinyl + merch bundles; album unlocks the instant payment clears
 - **GoodDeed certificates** — every purchase mints a numbered, signed, QR-verified certificate; fans share it, gift it, or print it
@@ -19,7 +19,7 @@ GoodTunes is a fan-first music platform that treats every song as a structured o
 
 - **Stripe-grade dashboards** — KPI strips, revenue + plays charts, country heat maps, top-track tables, CSV export; label view covers the full roster
 - **SuperCredits™** — per-track credits down to "1973 Martin D-28" with tappable affiliate links; artists earn a share of every gear sale their credits drive
-- **GoodSync™ synced lyrics** — ElevenLabs transcribes and aligns word-by-word; a chorus finder snaps previews to the hook automatically
+- **LiveLyrics™ synced lyrics** — ElevenLabs transcribes and aligns word-by-word; a chorus finder snaps previews to the hook automatically
 - **Dropbox ingestion** — paste one folder link, pull masters + lyrics + bonus media in one pass
 - **Profit-aware pricing** — live "you earn $X.XX per unit" readout; fixed-run caps hold at checkout so artists are never on the hook for more prints than they committed to
 - **Break-even calculator** — artists and operators see exactly how many units to sell to cover manufacturing + platform costs before committing to a run

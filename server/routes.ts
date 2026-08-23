@@ -14785,7 +14785,7 @@ export async function registerRoutes(
     },
   );
 
-  // ─── Shared GoodSync™ transcription core (Task #2020) ─────────────
+  // ─── Shared LiveLyrics™ transcription core (Task #2020) ─────────────
   // Pulls a song's master to a tempfile (Object Storage path or external
   // HTTPS, SSRF-checked), transcodes to an alignment-grade copy when it's
   // too big / in an odd container, ships it to ElevenLabs Scribe, and
@@ -15214,7 +15214,7 @@ export async function registerRoutes(
     });
   });
 
-  // ─── Auto-GoodSync™ orchestrator (Task #2020) ─────────────────────
+  // ─── Auto-LiveLyrics™ orchestrator (Task #2020) ─────────────────────
   // Best-effort, idempotent, fill-blanks-only background pass that runs
   // after a freshly-uploaded master finishes Mux ingestion. Orchestrates
   // the EXISTING engines (no new ones): Scribe transcription + time-align
@@ -15435,7 +15435,7 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       console.error(`[auto-goodsync] manual rerun failed`, err?.message);
-      return res.status(500).json({ message: err?.message || "Re-run GoodSync failed" });
+      return res.status(500).json({ message: err?.message || "Re-run LiveLyrics™ failed" });
     }
   });
 

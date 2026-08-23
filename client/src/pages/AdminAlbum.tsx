@@ -5387,7 +5387,7 @@ function TracksPanel({
         return;
       }
       const parts: string[] = [];
-      if (r.synced > 0) parts.push(`${r.synced} GoodSync-ready`);
+      if (r.synced > 0) parts.push(`${r.synced} LiveLyrics™-ready`);
       if (r.plain > 0) parts.push(`${r.plain} plain from LRCLIB`);
       if (r.geniusMatched > 0) parts.push(`${r.geniusMatched} from Genius`);
       if (r.notFound > 0) parts.push(`${r.notFound} not found`);
@@ -5963,7 +5963,7 @@ function TracksPanel({
                 <Wand2 className="w-4 h-4 text-slate-500" />
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-slate-900">
-                    GoodSync™ your album
+                    Add LiveLyrics™ to your album
                   </div>
                   <div className="text-[11px] text-slate-500">
                     Auto-sync lyrics on every eligible track.
@@ -7276,7 +7276,7 @@ type SongCreditsLite = AlbumCreditsMap["bySongId"][string];
    readable for deuteranopic vision:
      · empty        — hollow grey ring (Circle)
      · done         — green disc + white check (CheckCircle2)
-     · synced       — brand-blue disc + custom WaveArrowGlyph (GoodSync™)
+     · synced       — brand-blue disc + custom WaveArrowGlyph (LiveLyrics™)
      · custom       — gold disc + ClipGlyph (admin hand-picked preview)
      · partial      — solid amber disc (credits: some but not all)
      · instrumental — grey disc + Ban glyph (lyrics: none by design)
@@ -8035,7 +8035,7 @@ function ImportLyricsFromDropboxDialog({
       };
     }
   >(null);
-  // GoodSync™ follow-up state — after a lyrics import lands, Bill wanted
+  // LiveLyrics™ follow-up state — after a lyrics import lands, Bill wanted
   // the dialog to stay up and offer "Now align them to audio in one
   // pass" instead of making him reopen each track and hit Sync. We run
   // /auto-sync-lyrics serially over `summary.matched` (one ElevenLabs
@@ -8054,8 +8054,8 @@ function ImportLyricsFromDropboxDialog({
       chorusByAi?: number;
     }
   >(null);
-  // "ask-chorus" appears between clicking GoodSync™ and the serial run,
-  // mirroring the standalone "GoodSync™ the whole album" wizard.
+  // "ask-chorus" appears between clicking LiveLyrics™ and the serial run,
+  // mirroring the standalone "LiveLyrics™ the whole album" wizard.
   const [chorusPhase, setChorusPhase] = useState<"idle" | "ask-chorus">("idle");
   const syncInFlightRef = useRef(false);
 
@@ -8137,9 +8137,9 @@ function ImportLyricsFromDropboxDialog({
     }
   };
 
-  // GoodSync™ follow-up: iterate the matched songs serially and POST
+  // LiveLyrics™ follow-up: iterate the matched songs serially and POST
   // /auto-sync-lyrics per track. Progress is exposed via syncProgress
-  // so the dialog can render "GoodSyncing™ 3 of 12 · Storms…" inline;
+  // so the dialog can render "Adding LiveLyrics™ 3 of 12 · Storms…" inline;
   // the final tally lands in syncDone for the result card. Failures
   // don't abort the run — we collect them and surface a per-track list
   // so Bill can re-run individual tracks afterward.
@@ -8181,7 +8181,7 @@ function ImportLyricsFromDropboxDialog({
         }
         synced++;
         // Chorus follow-up — reuses findChorusStartMs (same helper the
-        // standalone "GoodSync™ the whole album" wizard uses). When the
+        // standalone "LiveLyrics™ the whole album" wizard uses). When the
         // user opted in and the freshly-synced cues have a chorus line,
         // PUT a 30s preview window starting at the chorus. Failures here
         // are non-fatal; the lyrics sync still counts as successful.
@@ -8248,8 +8248,8 @@ function ImportLyricsFromDropboxDialog({
     toast({
       title:
         failed.length === 0
-          ? `GoodSync™ complete · ${synced} ${synced === 1 ? "track" : "tracks"}`
-          : `GoodSync™ done · ${synced} synced · ${failed.length} failed`,
+          ? `LiveLyrics™ complete · ${synced} ${synced === 1 ? "track" : "tracks"}`
+          : `LiveLyrics™ done · ${synced} synced · ${failed.length} failed`,
       description:
         failed.length === 0
           ? "Open any track to scroll-test the alignment."
@@ -8370,10 +8370,10 @@ function ImportLyricsFromDropboxDialog({
           </div>
         )}
 
-        {/* GoodSync™ follow-up — stays visible whenever we have matched
+        {/* LiveLyrics™ follow-up — stays visible whenever we have matched
             tracks and we haven't already finished a sync run. Disappears
             once syncDone is set (results card takes over below). The
-            chorus question slot mirrors the standalone "GoodSync™ the
+            chorus question slot mirrors the standalone "LiveLyrics™ the
             whole album" wizard so behavior matches between surfaces. */}
         {summary && summary.matched.length > 0 && !syncDone && (
           <div
@@ -8384,7 +8384,7 @@ function ImportLyricsFromDropboxDialog({
               <div className="flex items-center gap-2 text-[12.5px] text-slate-700">
                 <Spinner className="w-3.5 h-3.5 animate-spin text-[var(--brand-blue)] flex-shrink-0" />
                 <span className="tabular-nums">
-                  GoodSyncing™ {syncProgress.current} of {syncProgress.total}
+                  Adding LiveLyrics™ {syncProgress.current} of {syncProgress.total}
                 </span>
                 <span className="text-slate-400 truncate">· {syncProgress.currentTitle}</span>
               </div>
@@ -8431,7 +8431,7 @@ function ImportLyricsFromDropboxDialog({
             ) : (
               <>
                 <div className="text-[12.5px] text-slate-700">
-                  <span className="font-medium text-slate-900">Would you like to GoodSync™ these?</span>{" "}
+                  <span className="font-medium text-slate-900">Add LiveLyrics™ to these?</span>{" "}
                   <span className="text-slate-500">
                     Aligns each line to the audio using ElevenLabs (~5–15s per track).
                     You can close this dialog — I'll toast you when it's done.
@@ -8445,7 +8445,7 @@ function ImportLyricsFromDropboxDialog({
                     className="px-3 py-1 rounded-md text-[12.5px] font-semibold bg-[var(--brand-blue)] text-white hover:bg-[#2890c8] inline-flex items-center gap-1.5"
                   >
                     <Sparkles className="w-3.5 h-3.5" />
-                    GoodSync™ {summary.matched.length} {summary.matched.length === 1 ? "track" : "tracks"}
+                    Add LiveLyrics™ to {summary.matched.length} {summary.matched.length === 1 ? "track" : "tracks"}
                   </button>
                   <button
                     type="button"
@@ -8467,7 +8467,7 @@ function ImportLyricsFromDropboxDialog({
             data-testid="card-goodsync-result"
           >
             <div className="font-medium text-slate-900">
-              GoodSync™ results · {syncDone.synced} synced
+              LiveLyrics™ results · {syncDone.synced} synced
               {syncDone.failed.length > 0 ? ` · ${syncDone.failed.length} failed` : ""}
             </div>
             {syncDone.failed.length > 0 && (
@@ -8577,7 +8577,7 @@ function ImportLyricsFromDropboxDialog({
   );
 }
 
-/* ─── GoodSync™ the whole album ───────────────────────────────────────
+/* ─── LiveLyrics™ the whole album ───────────────────────────────────────
    Two-step Apple-style wizard that runs ElevenLabs auto-sync against
    every eligible track on the album.
      Step 1 (intro):  Friendly framing ("we love this — saves you
@@ -8775,7 +8775,7 @@ function GoodSyncAlbumDialog({
             <DialogHeader className="text-left space-y-1">
               <DialogTitle className="text-[17px] font-semibold text-slate-900 inline-flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-slate-700" />
-                GoodSync™ your Album?
+                Add LiveLyrics™ to your album?
               </DialogTitle>
               <DialogDescription className="text-[13px] font-normal text-slate-500">
                 Sit back — I'll line up the lyrics with the audio on
@@ -9148,7 +9148,7 @@ type DotState =
   | "instrumental";
 
 function dotHint(label: string, state: DotState): string {
-  if (state === "synced") return `${label} · GoodSync™ ready`;
+  if (state === "synced") return `${label} · LiveLyrics™ ready`;
   if (state === "custom") return `${label} — custom 30-sec clip picked`;
   if (state === "done") return `${label} complete`;
   if (state === "partial") return `${label} partial — keep going`;
@@ -9491,7 +9491,7 @@ function TrackStatusPill({
 
    - Credits  = creative credits (writers + performers): filled when both
                 sides are present, partial when only one, empty when neither.
-   - Lyrics   = plain or GoodSync™ synced lyrics present.
+   - Lyrics   = plain or LiveLyrics™ synced lyrics present.
    - Splits   = the publishing split ledger (publishing + mechanical basis
                 points). This is the single consolidation of the old
                 Performance / Writers / Mechanical pills — the detailed
@@ -9726,7 +9726,7 @@ function TrackRow({
     setMode("view");
     queueMicrotask(() => lyricsChipRef.current?.focus());
   };
-  // GoodSync™ is opened from the Lyrics tile, so collapsing it returns
+  // LiveLyrics™ is opened from the Lyrics tile, so collapsing it returns
   // focus there too.
   const closeSynced = () => {
     setMode("view");
@@ -10985,7 +10985,7 @@ function findChorusStartMs(
 type ChorusMethod = "marker" | "ai";
 
 // Two-tier chorus resolver shared by every "set the preview to the chorus"
-// surface (the inline GoodSync™ follow-up, the album-wide wizard, and the
+// surface (the inline LiveLyrics™ follow-up, the album-wide wizard, and the
 // per-track "Find the chorus" action). Tier 1 is the cheap, deterministic
 // `[Chorus]`-marker match (no AI cost). Only when that returns null do we
 // fall back to the server's AI chorus finder, which reads the time-aligned
@@ -11047,7 +11047,7 @@ function distributeLyrics(
 // so the fan player and the admin preview render the exact same
 // instrumental indicator.
 
-/* ─── GoodSync™ side-panel — lives inside LyricsEditor ──────────────────
+/* ─── LiveLyrics™ side-panel — lives inside LyricsEditor ──────────────────
    Companion column to the Words textarea. Heading-above-box matches
    the Words pane structure. Inside the box: an Apple-Music-style cue
    list whose active line bolds and scales as the master plays, with
@@ -11126,7 +11126,7 @@ function GoodSyncPanel({
       }),
     onSuccess: async () => {
       await onSaved?.();
-      toast({ title: "GoodSync™ cues saved" });
+      toast({ title: "LiveLyrics™ cues saved" });
       setEditing(false);
       setCueDraft([]);
     },
@@ -11156,10 +11156,10 @@ function GoodSyncPanel({
       toast({
         title:
           outcome === "instrumental"
-            ? "GoodSync™ — detected instrumental"
+            ? "LiveLyrics™ — detected instrumental"
             : outcome === "failed"
-              ? "GoodSync™ finished with errors"
-              : "GoodSync™ complete",
+              ? "LiveLyrics™ finished with errors"
+              : "LiveLyrics™ complete",
         description:
           outcome === "failed"
             ? res?.errorMessage || "Some steps didn't complete."
@@ -11170,7 +11170,7 @@ function GoodSyncPanel({
     },
     onError: (e: any) => {
       toast({
-        title: "Couldn't re-run GoodSync™",
+        title: "Couldn't re-run LiveLyrics™",
         description: e?.message || "Try again in a moment.",
         variant: "destructive",
       });
@@ -11318,13 +11318,13 @@ function GoodSyncPanel({
           <WaveArrowGlyph className="w-3 h-3" />
         </span>
         <h4 className="text-[13px] font-semibold text-slate-800 truncate">
-          GoodSync™
+          LiveLyrics™
         </h4>
         <Popover>
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label="What is GoodSync™?"
+              aria-label="What is LiveLyrics™?"
               className="w-5 h-5 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center flex-shrink-0"
               data-testid={`button-goodsync-info-${song.id}`}
             >
@@ -11341,7 +11341,7 @@ function GoodSyncPanel({
                 <WaveArrowGlyph className="w-3.5 h-3.5" />
               </span>
               <p className="font-semibold text-slate-900">
-                What is GoodSync™?
+                What is LiveLyrics™?
               </p>
             </div>
             <p className="text-slate-700">
@@ -11372,14 +11372,14 @@ function GoodSyncPanel({
             }
             title={
               autoStatus === "pending"
-                ? "Auto-GoodSync queued — waiting on audio to finish processing."
+                ? "Auto-LiveLyrics™ queued — waiting on audio to finish processing."
                 : autoStatus === "processing"
-                  ? "Auto-GoodSync is running in the background."
+                  ? "Auto-LiveLyrics™ is running in the background."
                   : autoStatus === "done"
-                    ? "Auto-GoodSync ran after upload."
+                    ? "Auto-LiveLyrics™ ran after upload."
                     : autoStatus === "instrumental"
-                      ? "Auto-GoodSync detected an instrumental track."
-                      : "Auto-GoodSync hit an error — try Re-run."
+                      ? "Auto-LiveLyrics™ detected an instrumental track."
+                      : "Auto-LiveLyrics™ hit an error — try Re-run."
             }
             data-testid={`badge-auto-goodsync-${song.id}`}
           >
@@ -11457,7 +11457,7 @@ function GoodSyncPanel({
                 onClick={handleSyncClick}
                 disabled={syncing}
                 aria-label="Re-sync with audio"
-                title="Re-sync with audio — replaces the existing GoodSync cues with a fresh alignment"
+                title="Re-sync with audio — replaces the existing LiveLyrics™ cues with a fresh alignment"
                 className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid={`button-sync-audio-${song.id}`}
               >
@@ -11510,8 +11510,8 @@ function GoodSyncPanel({
                 type="button"
                 onClick={() => setConfirmRerun(true)}
                 disabled={rerunGoodSync.isPending || autoBusy}
-                aria-label="Re-run GoodSync"
-                title="Re-run GoodSync — re-transcribes, re-aligns, and re-detects chorus / instrumental / explicit (overwrites)."
+                aria-label="Re-run LiveLyrics™"
+                title="Re-run LiveLyrics™ — re-transcribes, re-aligns, and re-detects chorus / instrumental / explicit (overwrites)."
                 className="w-6 h-6 rounded-full text-slate-400 hover:text-[var(--brand-blue)] hover:bg-[var(--apple-track)] inline-flex items-center justify-center disabled:opacity-40 disabled:cursor-not-allowed"
                 data-testid={`button-rerun-goodsync-${song.id}`}
               >
@@ -11548,7 +11548,7 @@ function GoodSyncPanel({
           </div>
         ) : !song.audioUrl ? (
           <div className="flex-1 flex items-center justify-center text-center text-[12px] text-slate-500 px-4 py-10">
-            Upload a master first — GoodSync™ needs audio to line the
+            Upload a master first — LiveLyrics™ needs audio to line the
             words up against.
           </div>
         ) : syncing ? (
@@ -11803,7 +11803,7 @@ function GoodSyncPanel({
     <AlertDialog open={confirmResync} onOpenChange={setConfirmResync}>
       <AlertDialogContent data-testid={`dialog-confirm-resync-${song.id}`}>
         <AlertDialogHeader>
-          <AlertDialogTitle>Re-sync GoodSync™ cues?</AlertDialogTitle>
+          <AlertDialogTitle>Re-sync LiveLyrics™ cues?</AlertDialogTitle>
           <AlertDialogDescription>
             This re-runs ElevenLabs speech-to-text against the master and
             replaces the existing cues. Whatever you've typed in the editor
@@ -11832,7 +11832,7 @@ function GoodSyncPanel({
     <AlertDialog open={confirmRerun} onOpenChange={setConfirmRerun}>
       <AlertDialogContent data-testid={`dialog-confirm-rerun-goodsync-${song.id}`}>
         <AlertDialogHeader>
-          <AlertDialogTitle>Re-run GoodSync™?</AlertDialogTitle>
+          <AlertDialogTitle>Re-run LiveLyrics™?</AlertDialogTitle>
           <AlertDialogDescription>
             This re-runs the full post-upload pass against the master:
             it re-transcribes and re-times the lyrics, finds the chorus to
@@ -11857,7 +11857,7 @@ function GoodSyncPanel({
             disabled={rerunGoodSync.isPending}
             data-testid={`button-confirm-rerun-goodsync-${song.id}`}
           >
-            {rerunGoodSync.isPending ? "Running…" : "Re-run GoodSync"}
+            {rerunGoodSync.isPending ? "Running…" : "Re-run LiveLyrics™"}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -11902,9 +11902,9 @@ function LyricsEditor({
   song: SongLite;
   onClose: () => void;
   onSaved: () => Promise<void>;
-  /** Switch the row out of "lyrics" mode and into the GoodSync™ editor
+  /** Switch the row out of "lyrics" mode and into the LiveLyrics™ editor
    *  (synced lyrics + upload .vtt/.lrc/.srt). Drives both the "Upgrade
-   *  to GoodSync™" CTA and the "Import" entry inside this editor. */
+   *  to LiveLyrics™" CTA and the "Import" entry inside this editor. */
   onUpgradeSync?: () => void;
 }) {
   const { toast } = useToast();
@@ -12141,11 +12141,11 @@ function LyricsEditor({
       toast({
         title: `Imported lyrics · ${data.charCount} chars`,
         description: data.filename
-          ? `From ${data.filename}. Existing GoodSync cues cleared.`
-          : "Existing GoodSync cues cleared.",
+          ? `From ${data.filename}. Existing LiveLyrics™ cues cleared.`
+          : "Existing LiveLyrics™ cues cleared.",
         action: canGoodSync ? (
           <ToastAction
-            altText="GoodSync these lyrics now"
+            altText="Add LiveLyrics™ now"
             onClick={() => {
               // Guard against double-tap — alignMut takes several seconds
               // (ElevenLabs forced alignment) and the toast stays
@@ -12153,7 +12153,7 @@ function LyricsEditor({
               if (!alignMut.isPending) alignMut.mutate();
             }}
           >
-            GoodSync now
+            Add LiveLyrics™ now
           </ToastAction>
         ) : undefined,
       });
@@ -12208,7 +12208,7 @@ function LyricsEditor({
       const fromGenius = data.source === "GENIUS";
       toast({
         title: data.hasSynced
-          ? `Lyrics fetched · GoodSync ready (${data.cueCount} lines)`
+          ? `Lyrics fetched · LiveLyrics™ ready (${data.cueCount} lines)`
           : `Lyrics fetched · ${data.charCount} chars`,
         description: data.hasSynced
           ? "Synced timestamps from LRCLIB — open the player to scroll-test."
@@ -12254,17 +12254,17 @@ function LyricsEditor({
       }}
     >
       <div className="rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-4 space-y-2.5">
-        {/* Two-column layout: typed Words on the left, GoodSync™ on
+        {/* Two-column layout: typed Words on the left, LiveLyrics™ on
             the right (Bill's spec). On narrow viewports they stack so
             admin-on-mobile still works. The outer ExpandedPanel header
             already announces "Lyrics" globally — we call the left pane
-            "Plain" inside so the two siblings ("Plain" / "GoodSync™")
+            "Plain" inside so the two siblings ("Plain" / "LiveLyrics™")
             each have a unique label and the section title doesn't
             duplicate itself. */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* LEFT — typed words (a.k.a. the master lyric text) */}
           <div className="flex flex-col gap-2 min-w-0">
-            {/* Header row is locked to h-7 so it matches the GoodSync™
+            {/* Header row is locked to h-7 so it matches the LiveLyrics™
                 header (which carries a taller "Sync with audio" pill).
                 Without this, the right box starts ~6px lower than the
                 left and the two panes don't visually align. */}
@@ -12311,7 +12311,7 @@ function LyricsEditor({
               {/* Collapsed into a single "Lyric options" dropdown so the
                   toolbar stays readable on narrow breakpoints. The
                   individual actions used to wrap and crowd the header
-                  against the GoodSync™ pane. */}
+                  against the LiveLyrics™ pane. */}
               {!song.instrumental && (
                 <DropdownMenu>
                   <DropdownMenuTrigger
@@ -12566,7 +12566,7 @@ function LyricsEditor({
             </div>
           </div>
 
-          {/* RIGHT — GoodSync™ live preview */}
+          {/* RIGHT — LiveLyrics™ live preview */}
           <GoodSyncPanel
             song={song}
             draftLyrics={draft}
@@ -13709,7 +13709,7 @@ function PreviewResetAction({
 }
 
 /* ─── Pinpoint Lyrics — jump-to-cue picker for the preview window ─────
-   Only shown when a track has GoodSync™ cues. Opens a popover with a
+   Only shown when a track has LiveLyrics™ cues. Opens a popover with a
    search field + scrollable cue list. Picking a line moves the preview
    window so it starts at that cue (and unlocks the window so the move
    takes effect visually). Apple-style "find the hook line" instead of
@@ -13776,7 +13776,7 @@ function PinpointLyricsButton({
           <div className="px-3 pt-3 pb-2 border-b border-slate-100">
             <div className="flex items-baseline gap-1.5 mb-1.5">
               <span className="text-[12.5px] font-semibold text-slate-900">
-                Search GoodSync<sup className="text-[8px] font-medium">™</sup>
+                Search LiveLyrics<sup className="text-[8px] font-medium">™</sup>
               </span>
             </div>
             <p className="text-[11.5px] text-slate-500 mb-2 leading-snug">
@@ -13855,7 +13855,7 @@ function PinpointLyricsButton({
    surfaces use: deterministic [Chorus] marker first, AI fallback for
    unlabeled lyrics. On a hit it moves + saves the preview window via
    the editor's `onFind`; on a miss it leaves the preview untouched and
-   says so honestly. Only mounts when the track has GoodSync™ cues. */
+   says so honestly. Only mounts when the track has LiveLyrics™ cues. */
 function FindChorusButton({
   songId,
   onFind,

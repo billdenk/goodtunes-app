@@ -8,7 +8,7 @@ export const WELCOME_BACK_WHATS_NEW: ReadonlyArray<{ title: string; body: string
     body: "Every record you already own on GoodTunes is right here — now with upgraded capabilities so it plays in-app on phone, tablet, and laptop.",
   },
   {
-    title: "GoodSync™ lyrics.",
+    title: "LiveLyrics™ lyrics.",
     body: "Line-by-line lyrics that scroll with the song, the way fans actually want to read along.",
   },
   {

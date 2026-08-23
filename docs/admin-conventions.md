@@ -227,7 +227,7 @@ Admin entry points are intentionally redundant so the operator never has to hunt
 - **Album → Tracks tab → expanded row → 4th tile** — the Splits tile sits next to Preview / Lyrics / Credits. The grid reflows from 3-up to 2×2 once a fourth tile is present.
 - **Person admin → Splits tab** — read-only rollup of every song that person earns on, deep-linked back to `/admin/albums/:id?tab=splits&track=:songId`. Splits are owned by the album editor; the Person rail is a viewport only.
 
-Fan side: `/api/songs/:id` returns `writers: string[]` derived from `trackPublishingSplits` (names only, never % or PRO). Player renders `Written by …` as the final line under GoodSync™ lyrics, inside the bottom scroll mask.
+Fan side: `/api/songs/:id` returns `writers: string[]` derived from `trackPublishingSplits` (names only, never % or PRO). Player renders `Written by …` as the final line under LiveLyrics™ lyrics, inside the bottom scroll mask.
 
 All write routes are gated through `partnerEditGate(req, res, "edit_metadata", scope, { albumIdForLock })` — splits respect the same post-sale lock as the rest of the album's fan-facing metadata; super-admin override + audit trail apply. The lock returns 403 (not a divert) — UI surfaces the lock state via the same `/api/admin/albums/:id/edit-access` probe other admin surfaces use.
 

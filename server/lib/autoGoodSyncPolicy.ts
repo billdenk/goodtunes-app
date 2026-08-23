@@ -1,4 +1,4 @@
-// Auto-GoodSync™ write-decision policy (Task #2020).
+// Auto-LiveLyrics™ write-decision policy (Task #2020).
 //
 // The orchestrator in server/routes.ts (runAutoGoodSync) transcribes a
 // freshly-uploaded master and then decides WHICH song fields it is allowed

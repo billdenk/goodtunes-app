@@ -105,7 +105,7 @@ the immutable cache header. This is the same trick Apple/Spotify use.
 
 ### 3b. Lyrics sync via ElevenLabs Forced Alignment
 - **What**: master audio + written lyrics → word-level timestamps.
-  Powers GoodSync™ karaoke lyrics on the player.
+  Powers LiveLyrics™ karaoke lyrics on the player.
 - **Unit cost**: **(est.)** $0.05–$0.15 per 4-min song. Verify on first
   real invoice.
 - **Per album** (17 tracks): **~$1–$2.50**.

@@ -710,7 +710,7 @@ All MOCK_ consts (album fields, service URLs) are dummy data to wire.
     Bill on the live dev build (GoodTunes Player audio + Vinyl audio tabs,
     Aug 23): after the structural row pass, track rows no longer expand.
     Gone with them: reorder / move tracks around, per-track audio info,
-    bonus content, GoodSync, lyrics, splits - all the row interactions
+    bonus content, LiveLyrics™, lyrics, splits - all the row interactions
     that existed before tonight.
 
     The rule: the canon pass changes how rows LOOK, never what they DO.
@@ -718,7 +718,7 @@ All MOCK_ consts (album fields, service URLs) are dummy data to wire.
     disclosure. Restore everything the rows could do before the pass:
 
     - Row expands (click/chevron) into the full per-track detail: audio
-    info, lyrics, splits, GoodSync, bonus content
+    info, lyrics, splits, LiveLyrics™, bonus content
     - Drag-to-reorder tracks
     - Add bonus content stays wired
     - Keep the new quiet row dressing - taller rows, meta stated once -

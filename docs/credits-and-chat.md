@@ -1,6 +1,6 @@
 # Credits, Chat, Lyrics & Library
 
-Player-side product rules: SuperCredits™, the in-app chat demo, GoodSync™ lyrics, playlist covers, favorites, and the song-row download model.
+Player-side product rules: SuperCredits™, the in-app chat demo, LiveLyrics™ lyrics, playlist covers, favorites, and the song-row download model.
 
 ## SuperCredits™ (active build)
 
@@ -87,7 +87,7 @@ On the web, vendor sites (Reverb, Sweetwater, Shar) all send `X-Frame-Options: d
 
 When this ports to native: swap `window.open(url)` for **`SFSafariViewController`** (iOS) / **Chrome Custom Tabs** (Android). Both are real in-app browsers that bypass `X-Frame-Options`. Preview-card UX stays unchanged; only the handoff target changes.
 
-## Synced lyrics — GoodSync™ (line-level shipped today)
+## Synced lyrics — LiveLyrics™ (line-level shipped today)
 
 The Lyrics overlay in `client/src/pages/Player.tsx` derives **float-second timestamps** from each song's `lyrics` string by weighted-distributing lines across `duration`. Weights: sung line = 1, blank line = 0.6 (so stanza breaks earn real time, instead of mashing the next verse up against the previous one), section header (`[Verse 1]`, `[Chorus]`, etc.) = 0 (rendered dimmed + uppercase, not timed, not seek-targets). Lead-in scales with duration (`max(1.5s, min(8s, duration × 4%))`) so longer songs allow for a longer instrumental intro; tail is `max(2s, duration × 2%)`. Auto-scrolls active line to ~28% from top of the viewport. Tap any non-header line to seek to its timestamp.
 
@@ -110,17 +110,17 @@ ElevenLabs' forced-alignment / Scribe endpoint enforces its own 150 MB hard cap 
 
 ### Auto-run after upload
 
-A freshly-uploaded master now GoodSyncs itself in the background — no operator click required. When a new song's master finishes Mux ingestion, an orchestrator runs the whole GoodSync pass automatically: transcribe + time-align lyrics (ElevenLabs Scribe), find the chorus to set `previewStartMs`, and auto-detect the `instrumental` and `isExplicit` flags. It reuses the existing engines (the same alignment + refinement + hallucination filter as the manual sync, the deterministic `[Chorus]`-marker → AI-fallback chorus finder, and a lyric profanity scan) — no new ML.
+A freshly-uploaded master now gets LiveLyrics™ automatically in the background — no operator click required. When a new song's master finishes Mux ingestion, an orchestrator runs the whole LiveLyrics™ pass automatically: transcribe + time-align lyrics (ElevenLabs Scribe), find the chorus to set `previewStartMs`, and auto-detect the `instrumental` and `isExplicit` flags. It reuses the existing engines (the same alignment + refinement + hallucination filter as the manual sync, the deterministic `[Chorus]`-marker → AI-fallback chorus finder, and a lyric profanity scan) — no new ML.
 
 Behavioural contract:
 
 - **Best-effort, never-throw.** Any failure leaves the song untouched and is logged + recorded as a `jobRuns` row (`jobType: "auto-goodsync"`); it never blocks the upload or surfaces an error to the operator.
 - **Fill-blanks-only by default.** The auto path only writes fields the operator hasn't set — it never overwrites typed lyrics, hand-tuned synced cues, a manually-set preview start, or operator-set instrumental/explicit flags. Plain lyrics are back-populated only when blank. Explicit is only ever *proposed on*.
-- **Idempotent + gated.** Fresh uploads stamp `songs.auto_goodsync_status = 'pending'`; the trigger that fires on every Mux "ready" transition (webhook, synchronous-ready, reconcile heal) only proceeds if it wins an atomic claim that flips `pending → processing`. So a song is auto-synced at most once, and **catalog-wide reconcile / backfill sweeps never auto-GoodSync the back catalog** — they re-ingest masters without stamping `pending`.
+- **Idempotent + gated.** Fresh uploads stamp `songs.auto_goodsync_status = 'pending'`; the trigger that fires on every Mux "ready" transition (webhook, synchronous-ready, reconcile heal) only proceeds if it wins an atomic claim that flips `pending → processing`. So a song is auto-synced at most once, and **catalog-wide reconcile / backfill sweeps never auto-run LiveLyrics™ on the back catalog** — they re-ingest masters without stamping `pending`.
 - **Auto-trigger only on new uploads.** The three fresh-upload callsites (song create, master-swap PUT, Dropbox import) pass `freshUpload: true`; sweep callsites never do.
-- **Status surfaced in the CMS.** `auto_goodsync_status` (`pending` → `processing` → `done` | `instrumental` | `failed`) shows as a badge in the per-track GoodSync panel.
+- **Status surfaced in the CMS.** `auto_goodsync_status` (`pending` → `processing` → `done` | `instrumental` | `failed`) shows as a badge in the per-track LiveLyrics™ panel.
 
-**Manual "Re-run GoodSync."** The GoodSync panel has a per-song re-run control (`POST /api/admin/songs/:id/rerun-goodsync`) that runs the same orchestrator synchronously in **`force` mode** — overwriting operator-set cues / preview / flags (typed Plain lyrics are kept). It's gated behind a confirm dialog. This is distinct from "Re-sync with audio," which only re-aligns the synced-lyric cues.
+**Manual "Re-run LiveLyrics™."** The LiveLyrics™ panel has a per-song re-run control (`POST /api/admin/songs/:id/rerun-goodsync`) that runs the same orchestrator synchronously in **`force` mode** — overwriting operator-set cues / preview / flags (typed Plain lyrics are kept). It's gated behind a confirm dialog. This is distinct from "Re-sync with audio," which only re-aligns the synced-lyric cues.
 
 ## Sell panel — physical good picker
 
