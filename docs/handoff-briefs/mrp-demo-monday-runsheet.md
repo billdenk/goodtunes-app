@@ -115,3 +115,22 @@ gets tested.**
     copy ("Quote + Path-to-press unlocks") — canon says "estimate", never
     "quote".
     
+
+    ## Stale "Pick the physical format" modal (from Bill, pre-Monday)
+
+    Same album page, next step: the "Pick the physical format" modal offers
+    five cards — Single LP / Double LP / 7" Vinyl / Cassette / CD. That's
+    the old flow. The current model is THREE formats:
+
+    - **Vinyl**
+    - **Cassette**
+    - **CD**
+
+    Size and disc count (12" vs 7", single vs double LP) are choices INSIDE
+    the vinyl builder — they're component options with their own pricing
+    rows, not top-level formats. Collapse the modal to the three format
+    cards and let the builder handle the rest.
+
+    Copy check here too: the modal subtitle says "Sell-tab quote flow" —
+    "estimate", never "quote".
+    
