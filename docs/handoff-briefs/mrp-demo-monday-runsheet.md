@@ -247,3 +247,32 @@ gets tested.**
     Also note the copy under it says "hover to slide…" — on touch that
     instruction is wrong; it should adapt (e.g. "tap to slide") or vanish.
     
+
+    ## iPad portrait: rail crushes the page (from Bill)
+
+    Rotating the iPad to portrait on the MRP Packages page makes everything
+    janky: the fixed left rail keeps its full width, so the content column
+    gets crushed — captions wrap one word per line ("Memphis / Record /
+    Pressing / house / artwork / by / default…"), section headings slide
+    under the rail and get clipped ("…a quantity." with the first word cut),
+    the sticker/insert grids squeeze, and the sleeve/record art overlaps the
+    rail edge.
+
+    Bill's direction — pick one of these (both are fine, first is simpler):
+
+    1. **Portrait hides the rail.** Below a width breakpoint (portrait iPad
+     and down), the rail collapses away and the content takes the full
+     width. A standard sidebar toggle icon at the top-left (the same
+     panel-collapse glyph Apple and everyone use — same icon family we
+     already use in the press shell) brings it back.
+    2. **Rail floats over content, Apple-style.** The rail becomes an
+     overlay layer with translucent blurred material (so you can see the
+     page behind it), collapsible via the same top-left toggle. Content
+     lays out at full width underneath.
+
+    Either way, the content column must never be narrower than its layout
+    can handle — if the rail is visible and space is tight, the rail gives
+    way, not the content. Apply the same rule to super-admin and the artist
+    portal rails; test portrait AND landscape on iPad since Bill demos on
+    one Monday.
+    
