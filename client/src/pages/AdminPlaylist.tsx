@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect } from "react";
 import { Link, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -44,7 +45,7 @@ function formatDuration(seconds: number): string {
 export function AdminPlaylist() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => document.body.classList.remove("gt-admin");
+    return () => releaseAdminBodyClass();
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/playlists/:id");

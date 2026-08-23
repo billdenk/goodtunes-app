@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -256,7 +257,7 @@ export function AdminVendor() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
     return () => {
-      document.body.classList.remove("gt-admin");
+      releaseAdminBodyClass();
     };
   }, []);
 

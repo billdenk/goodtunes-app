@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { getInitials } from "@/lib/initials";
 import { formatUsdCents } from "@shared/money";
@@ -788,7 +789,7 @@ export function AdminPerson() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
     return () => {
-      document.body.classList.remove("gt-admin");
+      releaseAdminBodyClass();
     };
   }, []);
 

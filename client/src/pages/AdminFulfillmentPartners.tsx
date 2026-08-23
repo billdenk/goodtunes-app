@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { SegmentedPillToggle } from "@/components/admin/SegmentedPillToggle";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
@@ -82,7 +83,7 @@ function getFulfillmentPageTab(): "dashboard" | "list" {
 export function AdminFulfillmentPartners() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => document.body.classList.remove("gt-admin");
+    return () => releaseAdminBodyClass();
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();

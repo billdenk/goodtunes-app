@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -89,7 +90,7 @@ function getMfrPageTab(): "dashboard" | "list" {
 export function AdminManufacturers() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => document.body.classList.remove("gt-admin");
+    return () => releaseAdminBodyClass();
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();

@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getInitials } from "@/lib/initials";
 import { Link, useLocation, useSearch } from "wouter";
@@ -115,7 +116,7 @@ function SignupValue({ c }: { c: CustomerRow }) {
 export function AdminCustomers() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => document.body.classList.remove("gt-admin");
+    return () => releaseAdminBodyClass();
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();

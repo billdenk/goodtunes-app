@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getInitials } from "@/lib/initials";
 import { useLocation, useSearch } from "wouter";
@@ -106,7 +107,7 @@ export function AdminPeople() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
     return () => {
-      document.body.classList.remove("gt-admin");
+      releaseAdminBodyClass();
     };
   }, []);
 

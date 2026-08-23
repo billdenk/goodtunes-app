@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useRef, useState } from "react";
 import { getInitials } from "@/lib/initials";
 import { Link, useLocation, useRoute } from "wouter";
@@ -182,7 +183,7 @@ export function AdminInstrument() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
     return () => {
-      document.body.classList.remove("gt-admin");
+      releaseAdminBodyClass();
     };
   }, []);
 

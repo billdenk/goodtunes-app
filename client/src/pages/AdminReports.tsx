@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { getInitials } from "@/lib/initials";
 import { useQuery } from "@tanstack/react-query";
@@ -137,7 +138,7 @@ export function AdminReports({ embedded = false }: { embedded?: boolean } = {}) 
     const had = body.classList.contains("gt-admin");
     body.classList.add("gt-admin");
     return () => {
-      if (!had) body.classList.remove("gt-admin");
+      if (!had) releaseAdminBodyClass();
     };
   }, []);
 

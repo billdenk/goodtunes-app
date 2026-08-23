@@ -7,6 +7,7 @@ import { setAuthToken } from "@/lib/queryClient";
 import { setPreviewPass } from "@/lib/previewPass";
 import { applyAdminAppearance, setAdminAppearance } from "@/lib/adminAppearance";
 import { isWhitelabelHost } from "@shared/whitelabelHost";
+import { isAdminSurfacePath } from "@/lib/bootSurface";
 
 // Task #1631 — Cross-host purchase handoff pickup. After a sale on the buy
 // funnel (get./store.goodtunes.music), the fan is redirected to
@@ -99,20 +100,12 @@ try {
   // #2524 — the same portal with one album opened embedded) and the
   // invite-accept page, so the body is light from the very first paint with
   // no dark flash.
-  const lightPortal =
-    p === "/artist" || p.indexOf("/artist/albums/") === 0 ||
-    p === "/label" || p === "/manager" ||
-    p === "/vendor" || p.indexOf("/vendor/albums/") === 0 ||
-    p === "/non-profit" || p === "/publisher" ||
-    p === "/invite" || p.indexOf("/invite/") === 0;
-  // /e/:token is the PUBLIC client-estimate page (dark-only, viewed by
-  // artists from an emailed private link). It's minted on whatever host the
-  // press user was on — often the admin host — so exempt it here or the
-  // page flashes/locks light.
-  const isPublicEstimate = p.indexOf("/e/") === 0;
-  const isAdmin =
-    !isPublicEstimate &&
-    (h === "admin.goodtunes.music" || p.indexOf("/admin") === 0 || lightPortal);
+  // Task #3322 — the exact-path portal matching, the /e/:token public-
+  // estimate exemption, and the admin-host rule now live in the shared
+  // classifier (client/src/lib/bootSurface.ts) so the pre-mount body class,
+  // the app-level loader, and the unmount-side class release can never
+  // drift apart.
+  const isAdmin = isAdminSurfacePath(h, p);
   if (isAdmin) {
     document.body.classList.add("gt-admin");
     // Optional ?gtappearance=light|dark|system deep-link (persists the

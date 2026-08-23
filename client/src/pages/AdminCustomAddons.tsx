@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Gift, Loader2, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
@@ -87,7 +88,7 @@ const ADDONS_KEY = ["/api/admin/custom-addons"] as const;
 export function AdminCustomAddons() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => document.body.classList.remove("gt-admin");
+    return () => releaseAdminBodyClass();
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   const [search, setSearch] = useState("");

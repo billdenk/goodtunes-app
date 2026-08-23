@@ -2,6 +2,8 @@ import { Disc3 } from "lucide-react";
 import { useLocation } from "wouter";
 import { BRAND_BG } from "@/components/ui/AlbumDesktopSidebar";
 import { GoodTunesLogo } from "@/components/GoodTunesLogo";
+import { classifyBootSurface, isAdminSurfacePath } from "@/lib/bootSurface";
+import { useAdminDark } from "@/lib/adminAppearance";
 
 /**
  * Shared loading + empty-state surfaces for the fan-facing Album page.
@@ -79,6 +81,29 @@ export function AlbumDetailDesktopSkeleton() {
  * reads as a quiet load. Brand navy underlay prevents a white flash.
  */
 export function FanAppLoader() {
+  // Task #3322 — the app-level loader must match the DESTINATION surface,
+  // not always paint fan navy. Between the pre-React boot splash (charcoal /
+  // light grey, see index.html) and the first admin/partner screen this
+  // loader is what renders, so on admin surfaces it holds the same resolved
+  // admin theme (charcoal in dark, light grey in light — the boot-splash
+  // colors) and on white-label hosts it is completely brand-free (no
+  // GoodTunes logo, no navy — GoodTunes branding must never appear there).
+  // Fan surfaces keep the original navy + dimmed-watermark treatment.
+  const surface = classifyBootSurface();
+  const adminDark = useAdminDark();
+  if (surface !== "fan") {
+    // White-label fan-facing pages (e.g. /e/:token estimates) boot on the
+    // dark charcoal splash; admin/partner paths follow the resolved
+    // Light/Dark appearance (main.tsx applies gt-admin-dark pre-mount).
+    const light = isAdminSurfacePath() && !adminDark;
+    return (
+      <main
+        className="min-h-screen w-full overflow-hidden"
+        style={{ background: light ? "#f5f5f7" : "#161618" }}
+        data-testid="loading-app-neutral"
+      />
+    );
+  }
   return (
     <main
       className="min-h-screen w-full flex items-center justify-center overflow-hidden text-white"

@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { getInitials } from "@/lib/initials";
 import { normalizeAudioUrl } from "@shared/audioUrl";
@@ -767,7 +768,7 @@ export function AdminAlbum({
   useEffect(() => {
     document.body.classList.add("gt-admin");
     return () => {
-      document.body.classList.remove("gt-admin");
+      releaseAdminBodyClass();
     };
   }, []);
 

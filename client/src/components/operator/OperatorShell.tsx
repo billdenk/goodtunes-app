@@ -23,6 +23,7 @@
 // tool. The default stays `"tabs"` so the artist/press/vendor/printer
 // shells that already use OperatorShell are byte-for-byte unchanged.
 
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
@@ -162,7 +163,7 @@ export function OperatorShell<TabId extends string>({
     const had = body.classList.contains("gt-admin");
     body.classList.add("gt-admin");
     return () => {
-      if (!had) body.classList.remove("gt-admin");
+      if (!had) releaseAdminBodyClass();
     };
   }, []);
 

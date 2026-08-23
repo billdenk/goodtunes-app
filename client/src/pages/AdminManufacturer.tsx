@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatUsdCents } from "@shared/money";
 import { Link, useLocation, useRoute } from "wouter";
@@ -225,7 +226,7 @@ function PressAutoTriggerConsentPanel({ m }: { m: Manufacturer }) {
 export function AdminManufacturer() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => document.body.classList.remove("gt-admin");
+    return () => releaseAdminBodyClass();
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   // Task #533 — Gate #1 toggle is super-admin only. Role lives server-side

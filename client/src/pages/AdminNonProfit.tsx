@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
@@ -34,7 +35,7 @@ type NonProfit = {
 export default function AdminNonProfit() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => document.body.classList.remove("gt-admin");
+    return () => releaseAdminBodyClass();
   }, []);
   const { id } = useParams<{ id: string }>();
   const npoQ = useQuery<NonProfit>({ queryKey: [`/api/non-profits/${id}`] });

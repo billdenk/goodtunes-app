@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { SegmentedPillToggle } from "@/components/admin/SegmentedPillToggle";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -180,7 +181,7 @@ export function AdminLabels() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
     return () => {
-      document.body.classList.remove("gt-admin");
+      releaseAdminBodyClass();
     };
   }, []);
 

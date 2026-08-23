@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -29,7 +30,7 @@ import type { FulfillmentPartner } from "@shared/schema";
 export function AdminFulfillmentPartner() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => document.body.classList.remove("gt-admin");
+    return () => releaseAdminBodyClass();
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   const [, params] = useRoute<{ id: string }>("/admin/fulfillment-partners/:id");

@@ -21,6 +21,7 @@
 // (existing snapshots + `IStorage.upsertPayoutSettings`); the page no
 // longer edits it. Source of truth for "what does a cert cost?" is the
 // Wholesale Ladder.
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useMemo, useState } from "react";
 import { formatUsdCents } from "@shared/money";
 import { Link } from "wouter";
@@ -87,7 +88,7 @@ function timeAgo(iso: string | null): string {
 export function AdminPlatformPricing() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => document.body.classList.remove("gt-admin");
+    return () => releaseAdminBodyClass();
   }, []);
   const { user, isLoading: authLoading } = useAuth();
 

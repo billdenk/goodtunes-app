@@ -1,3 +1,4 @@
+import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { Link, useRoute, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -148,7 +149,7 @@ function formatPaymentMethod(o: {
 export function AdminCustomerDetail() {
   useEffect(() => {
     document.body.classList.add("gt-admin");
-    return () => document.body.classList.remove("gt-admin");
+    return () => releaseAdminBodyClass();
   }, []);
   const { user, isLoading: authLoading } = useAuth();
   const { toast } = useToast();
