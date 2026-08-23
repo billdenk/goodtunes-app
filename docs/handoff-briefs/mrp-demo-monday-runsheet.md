@@ -657,3 +657,16 @@ gets tested.**
     - Artists themselves, MRP/press users, and every other role never see
     it anywhere, on any album.
     
+
+    ## GoodDeed typical-range numbers: use the existing printer ladder (from Bill)
+
+    Bill's answer on the GoodDeed range hints you've been waiting on:
+    **seed the typical ranges from the ladder we already had for a
+    printer** — the current per-tier numbers you already have in the
+    system (Bill: "Otis should know"). No new numbers coming; wire the
+    ghost hints to that existing ladder. All the earlier rules stand:
+    reference only, never prefilled, disappear on entry, artists never
+    see them, and Bill/Andrew can adjust the values later.
+    If it's ambiguous WHICH ladder that is, ask Bill before wiring —
+    don't guess between candidates.
+    
