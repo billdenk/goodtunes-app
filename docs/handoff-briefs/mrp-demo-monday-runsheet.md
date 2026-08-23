@@ -703,3 +703,29 @@ Must work (everything else is decorative chrome):
 - Theme: light + dark THEMES both ship; the floating View light/dark pill is mock-only chrome - drop it
 
 All MOCK_ consts (album fields, service URLs) are dummy data to wire.
+
+
+    ## REGRESSION: track rows lost their expand + interactions (Assets audio tabs)
+
+    Bill on the live dev build (GoodTunes Player audio + Vinyl audio tabs,
+    Aug 23): after the structural row pass, track rows no longer expand.
+    Gone with them: reorder / move tracks around, per-track audio info,
+    bonus content, GoodSync, lyrics, splits - all the row interactions
+    that existed before tonight.
+
+    The rule: the canon pass changes how rows LOOK, never what they DO.
+    "Repeated meta said once above the list" means the meta line, not the
+    disclosure. Restore everything the rows could do before the pass:
+
+    - Row expands (click/chevron) into the full per-track detail: audio
+    info, lyrics, splits, GoodSync, bonus content
+    - Drag-to-reorder tracks
+    - Add bonus content stays wired
+    - Keep the new quiet row dressing - taller rows, meta stated once -
+    but the disclosure and every interaction come back exactly as they
+    functioned before
+
+    Acceptance: side-by-side against the pre-pass build - every
+    interaction that worked then works now, on both audio tabs (Player +
+    Vinyl), both themes.
+    
