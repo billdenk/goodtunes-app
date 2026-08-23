@@ -33406,6 +33406,18 @@ export async function registerRoutes(
     const album = ((a as any).rows ?? [])[0];
     if (!album) return res.status(404).json({ message: "Album not found" });
 
+    // requireAdmin admits ALL partner accounts — scope the read: operators
+    // see everything; a partner must hold a membership in one of THIS
+    // album's owning scopes (label OR primary artist, dual-scope rule).
+    // Fail-closed: out-of-scope partners get a 403, never the split.
+    const info = await getUserRole(req.session.userId!);
+    const isOperator = info?.role === "super_admin" || info?.role === "admin";
+    if (!isOperator) {
+      const { findAlbumScopeMembership } = await import("./auth/partnerPermissions");
+      const m = await findAlbumScopeMembership(req.session.userId!, id, null);
+      if (!m) return res.status(403).json({ message: "Out of scope" });
+    }
+
     const rows = await db.execute<any>(sql`
       SELECT b.id, b.organization_id, b.per_unit_cents, o.name, o.logo_url
       FROM album_npo_beneficiaries b

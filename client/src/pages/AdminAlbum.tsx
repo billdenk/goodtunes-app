@@ -4764,21 +4764,29 @@ function AlbumOverviewBody({ album, disabled, disabledReason, isPartnerViewer, o
     press: { name: string | null } | null;
     effectivePress?: { name: string } | null;
     effectivePressSource?: string | null;
-  }>({ queryKey: ["/api/admin/albums", album.id, "invited-press"] });
+  }>({
+    queryKey: ["/api/admin/albums", album.id, "invited-press"],
+    enabled: !isPartnerViewer,
+  });
   const { data: overviewLabels = [] } = useQuery<LabelLite[]>({
     queryKey: ["/api/labels"],
+    enabled: !isPartnerViewer,
   });
   const { data: validations = [] } = useQuery<UploadValidationResult[]>({
     queryKey: ["/api/admin/albums", album.id, "upload-validations"],
+    enabled: !isPartnerViewer,
   });
   const { data: lineup = [] } = useQuery<LineupRow[]>({
     queryKey: ["/api/admin/albums", album.id, "lineup"],
+    enabled: !isPartnerViewer,
   });
   const { data: gallery = [] } = useQuery<CampaignGalleryItem[]>({
     queryKey: ["/api/albums", album.id, "gallery"],
+    enabled: !isPartnerViewer,
   });
   const { data: npoSplit } = useQuery<OverviewSplitResponse>({
     queryKey: ["/api/admin/albums", album.id, "npo-beneficiaries"],
+    enabled: !isPartnerViewer,
   });
 
   if (isPartnerViewer) {
