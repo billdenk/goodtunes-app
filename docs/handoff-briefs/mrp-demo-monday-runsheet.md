@@ -96,3 +96,22 @@ gets tested.**
     This one matters for Monday: the flash happens exactly while Bill is
     navigating in front of the room.
     
+
+    ## Stale "GoodTunes Shopify+" option (from Bill, pre-Monday)
+
+    The live admin album page (admin.goodtunes.music) still shows a
+    "How is this album being sold?" modal with THREE options:
+    GoodTunes Direct / Shopify store / **GoodTunes Shopify+**.
+
+    GoodTunes Shopify+ was retired — the approved model is TWO options only:
+
+    - **GoodTunes Direct** — we press, sell, fulfill.
+    - **Shopify store** — label/artist fulfills.
+
+    Remove the GoodTunes Shopify+ card from this modal and anywhere else it
+    still appears (onboarding, Sell tab, any switcher). Also check copy in
+    the remaining two cards against the current approved wording — this
+    modal looks like the older flow generation, and "Quote" appears in its
+    copy ("Quote + Path-to-press unlocks") — canon says "estimate", never
+    "quote".
+    
