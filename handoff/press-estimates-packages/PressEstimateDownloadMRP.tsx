@@ -585,9 +585,11 @@ const PRESALE_CTAS: Record<PresaleCta, string> = {
 function PresaleCallout({ cta }: { cta: PresaleCta }) {
   return (
     <div style={{ marginTop: 10, padding: '11px 16px', border: `1px solid ${GOLD_RULE}`, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16 }} data-testid="doc-presale-callout">
+      {/* Promo rule (Bill, Aug 22 2026): never explain the mechanism on
+          promos — "fans preorder first…" gives it away. The question IS the
+          hook; the answer lives behind the CTA. */}
       <div style={{ lineHeight: 1.55 }}>
-        <span style={{ fontSize: 12, fontWeight: 700 }}>Want this run with $0 out of pocket — and no financing? </span>
-        <span style={{ fontSize: 11.5, color: SUBINK }}>Fans preorder first; the presale covers the press bill before anything ships.</span>
+        <span style={{ fontSize: 12, fontWeight: 700 }}>Want this run with $0 out of pocket — and no financing?</span>
       </div>
       <div style={{ fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', color: '#8a7a1f' }}>{PRESALE_CTAS[cta]} →</div>
     </div>
