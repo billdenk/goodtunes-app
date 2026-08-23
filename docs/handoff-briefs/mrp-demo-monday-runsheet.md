@@ -3,9 +3,8 @@
 **This is the point of everything shipped this week.** Bill demos LIVE to
 Memphis Record Pressing on Monday, on memphis.makesvinyl.com + the press
 portal. Three flows, in order. Per STATUS.md most of this is already live —
-this sheet is the gap list, in priority order. If a gap can't land by
-Monday, say so by Sunday so Bill can stage that step from the Playground
-mocks instead of hitting a dead end mid-pitch.
+this sheet is the gap list, in priority order. Bill's direction: this goes OPERATIONAL ASAP — start now, work the gap
+list top-down, and flag anything at risk the moment you know, not later.
 
 ## Flow 1 — MRP creates a Package
 Press portal: Components -> (vinyl builder, live) -> Packages -> package
@@ -51,6 +50,7 @@ artist receives the branded invite and starts on their own.
 - Client-only work needs a prod publish to show on the live domain —
   publish before Monday, not Monday morning.
 
-**Report back into this file (or STATUS.md) by Sunday evening: LIVE / TEST
-MODE / NOT READY per line above, so Bill knows exactly what he's walking
-in with.**
+**Update this file (or STATUS.md) as each line lands: LIVE / TEST MODE /
+NOT READY. Bill and Andrew are testing the full loop with their own
+emails as pieces come online — the sooner a line flips, the sooner it
+gets tested.**
