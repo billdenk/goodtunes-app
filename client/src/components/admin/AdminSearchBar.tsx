@@ -90,7 +90,7 @@ type ServerPayload = {
 // import; the cost is one place to update when a new tab ships.
 const NAV_PAGES: SearchResult[] = [
   { kind: "page", id: "dashboard", title: "Dashboard", badge: "Page", href: "/admin/dashboard" },
-  { kind: "page", id: "albums", title: "Albums", badge: "Page", href: "/admin/albums" },
+  { kind: "page", id: "albums", title: "Releases", badge: "Page", href: "/admin/albums" },
   { kind: "page", id: "people", title: "People", badge: "Page", href: "/admin/people" },
   { kind: "page", id: "labels", title: "Labels", badge: "Page", href: "/admin/labels" },
   { kind: "page", id: "nonprofits", title: "NPOs", badge: "Page", href: "/admin/non-profits" },
@@ -192,7 +192,7 @@ const GROUP_ORDER: Array<{ key: keyof ServerPayload | "pages"; label: string }> 
   { key: "vendors", label: "Makers & Resellers" },
   { key: "labels", label: "Labels" },
   { key: "nonprofits", label: "NPOs" },
-  { key: "albums", label: "Albums" },
+  { key: "albums", label: "Releases" },
   { key: "gear", label: "Gear" },
   { key: "customers", label: "Customers" },
   { key: "teamAccounts", label: "Team accounts" },

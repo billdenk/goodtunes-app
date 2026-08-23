@@ -1,0 +1,19 @@
+One complete message, everything folded in:
+
+—
+
+Big update, all in one place.
+
+**1. The album Overview hold is lifted.** I approved Ruby's redesign tonight — it's in the repo: `handoff/AdminAlbumOverview.tsx` (commit c149578) plus six service-logo SVGs in `handoff/assets/`, with the full section and Must-work list appended to the run-sheet (f86b186). Handoff law applies: delete the current Overview tab UI first, copy the presentational code verbatim, wire data only, both themes, screenshot diff at 1440/1024/768.
+
+The shape: at-a-glance strip on top (Status / Release date / Press / Share link / Needs attention — that last one has its own header and expands its blockers panel in place), then four groups: The record, Where fans find it, Marketing, GoodDeed® and giving. Split shipments is gone from Overview — it lives on Physical → Fulfillment, which you already built. Legacy settings (SPIN) does not render on this album — new artist; the disclosure only exists on pre-Nightbirde imports, per the law you landed.
+
+The Must-work list is in the run-sheet: the needs-attention expander, hover pencils on section cards, the Release/Pre-save segmented chip, link-tile Open/Copy, clickable service tiles (linked ones show their URL with Open/Copy/Remove; unlinked show the paste field with a Save that only goes blue on a valid link), and Preview email. Everything not on that list is decorative. All MOCK_ consts are dummy data. Service logos are accurate brand marks on white carrier circles — never recolored or inverted.
+
+**2. Naming decision — the admin catalog is "Releases."** Rail item "Releases", page title "Releases", "+ Add release". "Project" stays reserved for in-production efforts (Release → Draft → Project). The rename is decided now; don't rebuild the list page yet — Ruby's mock for it is still with me, and that half of the hold stays until it lands.
+
+**3. GoodDeed range numbers — stop waiting on me.** Seed the typical-range hints from the ladder we already had for the printer — you have those per-tier numbers in the system. Same rules as before: ghost reference only, never prefilled, gone once a number is typed, artists never see them, and Andrew and I can adjust the values later. If you're unsure which ladder I mean, ask before wiring it. (Also logged to the run-sheet, 4d895ae.)
+
+I know all of tonight's work is dev-only until I Publish — I'll do that plus the invite dry-run once the Overview lands.
+
+— Bill

@@ -9263,7 +9263,7 @@ export function Admin() {
               [
                 {
                   key: "albums",
-                  label: "Albums",
+                  label: "Releases",
                   // Sidebar count mirrors the curated list shown in the
                   // Albums pane — only true GoodTunes Releases, not the
                   // larger pool of streaming-only album rows we ingest
@@ -9324,7 +9324,7 @@ export function Admin() {
                     entity keys stay as-is so schema/storage names don't
                     need to change. */}
                 {entity === "instruments" ? "Gear"
-                  : entity === "albums" ? "Albums"
+                  : entity === "albums" ? "Releases"
                   : entity === "people" ? "People"
                   : entity === "vendors" ? "Makers & Resellers"
                   : "Labels"}
@@ -9372,11 +9372,13 @@ export function Admin() {
                     createLabel.isPending
                   }
                   className={`w-8 h-8 inline-flex items-center justify-center rounded ${entity === "vendors" ? "text-slate-300 cursor-not-allowed" : "text-[var(--brand-blue)] hover:bg-slate-50"}`}
-                  aria-label={`New ${entity.slice(0, -1)}`}
+                  aria-label={entity === "albums" ? "Add release" : `New ${entity.slice(0, -1)}`}
                   title={
                     entity === "vendors"
                       ? "Makers & resellers are added via a gear item's scraper"
-                      : `New ${entity.slice(0, -1)}`
+                      : entity === "albums"
+                        ? "Add release"
+                        : `New ${entity.slice(0, -1)}`
                   }
                   data-testid={`button-new-${entity.slice(0, -1)}`}
                 >

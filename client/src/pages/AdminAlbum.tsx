@@ -3,6 +3,13 @@ import { getInitials } from "@/lib/initials";
 import { normalizeAudioUrl } from "@shared/audioUrl";
 import { normalizeShareSlug, validateShareSlug, shareUrlForSlugs, SHARE_LINK_HOST } from "@shared/shareSlug";
 import type { AlbumPhysicalFormat } from "@shared/schema";
+import type { UploadValidationResult } from "@shared/uploadValidation";
+import logoAppleMusic from "@/assets/logo-applemusic.svg";
+import logoSpotify from "@/assets/logo-spotify.svg";
+import logoTidal from "@/assets/logo-tidal.svg";
+import logoDeezer from "@/assets/logo-deezer.svg";
+import logoPandora from "@/assets/logo-pandora.svg";
+import logoQobuz from "@/assets/logo-qobuz.svg";
 import { createPortal } from "react-dom";
 import { Card } from "@/components/ui/card";
 import { AlbumCover } from "@/components/ui/AlbumCover";
@@ -65,6 +72,9 @@ import {
   AlertTriangle,
   Rocket,
   Eye,
+  Factory,
+  HeartHandshake,
+  CircleDashed,
 } from "lucide-react";
 import { Spinner } from "@/components/ui/Spinner";
 import { LyricsGapDots } from "@/components/LyricsGapDots";
@@ -1371,7 +1381,7 @@ export function AdminAlbum({
               className="hover:text-slate-700"
               data-testid="link-breadcrumb-albums"
             >
-              {embedded ? "Catalog" : "Albums"}
+              {embedded ? "Catalog" : "Releases"}
             </Link>
           )}
           <ChevronRight className="w-3 h-3" />

@@ -682,7 +682,7 @@ export function AdminFrame({
                   />
                   <SidebarLink
                     icon={Disc3}
-                    label="Albums"
+                    label="Releases"
                     count={albumCount}
                     active={active === "albums"}
                     onClick={() => navigate("/admin/albums")}
