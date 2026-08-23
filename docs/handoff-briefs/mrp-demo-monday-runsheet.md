@@ -479,3 +479,36 @@ gets tested.**
     sleeve-PDF placeholder, "Download all artwork" as the one filled
     action top right.
     
+
+    ## Physical → Fulfillment + Audio (Side Breaks): same canon pass (from Bill)
+
+    Same album, two more Physical sub-pages for the same cleanup:
+
+    **Sub-tab treatment (Bill's direction, applies to all Physical pages):**
+    the Audio / Art / Fulfillment row should be a **segmented control — one
+    fully-rounded rect containing the three segments** (same pattern as the
+    artist Assets Master / GoodTunes® Player / Vinyl pill), not three loose
+    icon+label links. Active segment filled, inactive quiet. Drop the little
+    icons in front of each label. Same goes for the colored-dot main tab
+    row noted in the previous section.
+
+    **Fulfillment tab:**
+    - ALL-CAPS micro headers ("FULFILLMENT DESTINATION", "CONTACT",
+    "CUSTOMERS SEE") → canon sentence-case section titles.
+    - The yellow/red "Split shipments are configured on the Overview tab…"
+    strip → canon quiet callout (icon + text), not an alarm-colored bar;
+    it's information, not an error.
+    - Raw `<select>` dropdown and bare input get the canon field dress.
+    - Substance is fine (destination, contact w/ edit pencil, customers-see
+    default) — keep it.
+
+    **Audio → Side Breaks:**
+    - Already flagged as the PQ-sheet companion sweep — this screenshot
+    confirms it's still the old dress. Same grammar as the PQ sheet:
+    canon type, no "✓ PASS" chip (word + icon, sentence case — e.g.
+    "Within limits ✓"), quiet side headers.
+    - The row grammar (drag handles, #, title, duration, side caps
+    17:59 / 22:00 max) is right — dress only.
+    - Buttons top right (PQ sheet / View Masters / Download all masters):
+    ONE filled action max; the rest hairline.
+    
