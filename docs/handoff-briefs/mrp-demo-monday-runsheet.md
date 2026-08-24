@@ -867,3 +867,21 @@ Two regressions vs the handoff package builder mock (PressPackageBuilder):
 
     **Must work:** superadmin and view-as-press show the identical heading; no other surface says "style".
     
+
+    ## Artist rail — Aug 16 nav canon was never shipped (applies to ALL portals, GoodTunes and white-label)
+
+    The signed-in artist rail across every portal (GoodTunes-branded AND every white-label instance — MRP, etc.) must follow the ratified artist nav canon. Structure and features always flow from GoodTunes to the white-label portals; only branding (logo, accent, fonts) stays per-press.
+
+    **Canon rail, top group in this order:** Dashboard, Releases, Audience, Acquisition, Orders, Buyers, Referrals, Shopify, Reports.
+    **Pinned at the very bottom of the rail:** Team.
+
+    Deltas from what's live:
+    - "Projects" → **"Releases"** (rename; Releases is top-level — there is no Catalog group).
+    - "People" → **"Team"**, and it moves from the top group to pinned at the rail bottom. Invite copy stays verbatim: "Invite your manager, bandmates, or anyone who helps run your releases. They'll get their own sign-in, and you stay in control."
+    - **"Overview" is removed entirely** from the rail.
+    - Breadcrumbs that reference the rail section follow the rename (e.g. "PROJECTS › …" → "RELEASES › …"). Body copy about a pressing project keeps the word "project".
+
+    **Why this order:** create first, fans second, commerce third, analysis fourth, admin last.
+
+    **Must work:** rail identical in structure on GoodTunes portal and every white-label portal; Releases and Team labels everywhere; no Overview anywhere; Team invite carries a role field (Admin/View).
+    
