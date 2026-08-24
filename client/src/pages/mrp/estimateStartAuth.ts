@@ -24,6 +24,14 @@ export function startsDirectly(authedCustomer: boolean): boolean {
   return authedCustomer;
 }
 
+/** Prefill for the start modal's email fields (sign-in AND create): the
+ * address the estimate was sent to. Re-typed addresses were locking real
+ * recipients out via typos (Task #3361). Editable — this is only a seed. */
+export function prefilledEstimateEmail(clientEmail: string | null | undefined): string {
+  const e = (clientEmail ?? '').trim();
+  return e.includes('@') ? e : '';
+}
+
 /** After a failed start request, which step should the modal show?
  * ACCOUNT_EXISTS pivots to the sign-in form (email kept, password cleared);
  * anything else stays put and shows the error inline. */

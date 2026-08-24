@@ -9,6 +9,7 @@ import {
   stepAfterConfirm,
   startsDirectly,
   stepAfterStartError,
+  prefilledEstimateEmail,
   acceptedNextStepCopy,
 } from "./estimateStartAuth";
 
@@ -30,6 +31,15 @@ test("other errors (wrong password, generic) stay on the current step with inlin
   assert.equal(stepAfterStartError("INVALID_CREDENTIALS", "signin"), "signin");
   assert.equal(stepAfterStartError(undefined, "account"), "account");
   assert.equal(stepAfterStartError(null, "signin"), "signin");
+});
+
+test("email prefill (Task #3361): the address the estimate was sent to seeds the forms", () => {
+  assert.equal(prefilledEstimateEmail("andrew+rockstar@goodtunes.music"), "andrew+rockstar@goodtunes.music");
+  assert.equal(prefilledEstimateEmail("  padded@example.com  "), "padded@example.com");
+  // No deliverable address on the estimate → empty seed, never junk.
+  assert.equal(prefilledEstimateEmail(null), "");
+  assert.equal(prefilledEstimateEmail(undefined), "");
+  assert.equal(prefilledEstimateEmail("not-an-email"), "");
 });
 
 test("accepted page: signed-in viewer gets the continue variant, no second login form", () => {

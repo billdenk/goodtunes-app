@@ -12,12 +12,12 @@
 //   creation begins only there (link-not-login rule).
 // Dark-only (canon: this is what the client gets).
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { setAuthToken, getAuthToken } from '@/lib/queryClient';
 import { useAuth } from '@/hooks/useAuth';
-import { stepAfterStartError, type StartStep } from '@/pages/mrp/estimateStartAuth';
+import { stepAfterStartError, prefilledEstimateEmail, type StartStep } from '@/pages/mrp/estimateStartAuth';
 import PressClientEstimateMRP from '@/pages/mrp/PressClientEstimateMRP';
 import californialandCover from './press-create/assets/californialand-cover.jpg';
 import rubyVinylPhoto from './press-create/assets/mrp-ruby-translucent.png';
@@ -34,6 +34,9 @@ type LinkEstimate = {
   sentAt: string | null;
   pressName: string;
   clientName: string | null;
+  // Task #3361 — the address the estimate was sent to; prefills the start
+  // modal's email fields (editable).
+  clientEmail?: string | null;
   preparedBy: string | null;
   build: string | null; // spec summary string from the builder
   size: string | null;
@@ -305,12 +308,17 @@ export default function PressClientEstimate() {
   const { user: authUser } = useAuth();
   const authedCustomer = !!authUser && authUser.kind !== 'admin';
 
+  // Prefill the recipient's email once the estimate loads (Task #3361) —
+  // editable, and only seeded while the field is still untouched.
+  const emailSeed = prefilledEstimateEmail(data?.clientEmail);
+  useEffect(() => { setAcctEmail((prev) => prev || emailSeed); }, [emailSeed]);
+
   const shareEarned = /.+@.+\..+/.test(shareEmail.trim());
   const closeShare = () => { setShareOpen(false); setShareSent(false); setShareName(''); setShareEmail(''); };
   const closeAsk = () => { setAskOpen(false); setAskSent(false); setAskMsg(''); };
   const closeStart = () => {
     setStartOpen(false); setStartStep('confirm');
-    setAcctName(clientFull); setAcctEmail(''); setAcctPassword(''); setActionError(null);
+    setAcctName(clientFull); setAcctEmail(emailSeed); setAcctPassword(''); setActionError(null);
   };
 
   // Real start call — mirrors the MRP skin. Sends the stored bearer alongside
