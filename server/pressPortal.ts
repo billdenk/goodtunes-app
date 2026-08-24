@@ -3059,6 +3059,34 @@ export function registerPressPortalRoutes(
     res.json({ ok: true, id: row.id });
   });
 
+  // Task #3359 — resolve the artwork source for an estimate's email mockup.
+  // Precedence: the choice persisted on the payload at first send
+  // (`mockupArtUrl`, which may be explicitly null = house jacket) → a stored
+  // artwork URL on the payload → the associated artist's album artwork when
+  // UNAMBIGUOUS (exactly one distinct non-placeholder artwork across their
+  // albums) → null (house-jacket fallback). Legacy sent rows (no persisted
+  // key) resolve live with the same rules.
+  const resolveEstimateMockupArt = async (payload: Record<string, any>): Promise<string | null> => {
+    if ("mockupArtUrl" in payload) {
+      const v = payload.mockupArtUrl;
+      return typeof v === "string" && v.trim() ? v.trim() : null;
+    }
+    const stored = payload.artworkUrl;
+    if (typeof stored === "string" && stored.trim()) return stored.trim();
+    const pid = typeof payload.artistPersonId === "string" ? payload.artistPersonId.trim() : "";
+    if (pid) {
+      const r = await db.execute<any>(sql`
+        SELECT DISTINCT artwork FROM albums
+        WHERE primary_artist_id = ${pid} AND deleted_at IS NULL
+          AND artwork IS NOT NULL AND artwork <> '' AND artwork NOT LIKE '/album-placeholder%'
+        LIMIT 2
+      `);
+      const rows = ((r as any).rows ?? []) as Array<{ artwork: string }>;
+      if (rows.length === 1) return String(rows[0].artwork);
+    }
+    return null;
+  };
+
   // Public, no-auth read of a sent estimate by its private share token
   // (Ruby handoff, Aug 19 2026). Returns a sanitized view — enough to render
   // the client estimate page, nothing operator-internal. First open flips
@@ -3123,6 +3151,45 @@ export function registerPressPortalRoutes(
         locationLine: [row.press_location, String(row.press_website_url ?? "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim()].filter(Boolean).join(" · ") || null,
       },
     });
+  });
+
+  // Task #3359 — public mockup PNG for the estimate email: the album jacket
+  // with the quoted vinyl color peeking out, composited server-side
+  // (server/estimateMockup.ts). Email clients fetch images unauthenticated,
+  // so like the estimate page itself this is keyed only to the private share
+  // token. Cached in-memory per token; ~15 min TTL.
+  app.get("/api/estimate-link/:token/mockup.png", async (req, res) => {
+    const token = String(req.params.token ?? "").trim();
+    if (token.length < 24 || token.length > 128) return res.status(404).json({ message: "Not found" });
+    const found = await db.execute<any>(sql`
+      SELECT e.payload, m.name AS press_name, m.logo_url AS press_logo_url
+      FROM press_estimates e
+      JOIN manufacturers m ON m.id = e.press_id
+      WHERE e.kind = 'estimate' AND e.payload->>'shareToken' = ${token}
+      LIMIT 1
+    `);
+    const row = ((found as any).rows ?? [])[0];
+    if (!row) return res.status(404).json({ message: "Not found" });
+    try {
+      const payload = (row.payload ?? {}) as Record<string, any>;
+      const artUrl = await resolveEstimateMockupArt(payload);
+      const colorName = typeof payload.builderState?.colorName === "string" ? payload.builderState.colorName : null;
+      const { getEstimateMockupPng } = await import("./estimateMockup");
+      const buf = await getEstimateMockupPng(token, {
+        artUrl,
+        pressName: String(row.press_name ?? ""),
+        pressLogoUrl: row.press_logo_url ?? null,
+        colorName,
+      });
+      res.setHeader("Content-Type", "image/png");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.send(buf);
+    } catch (err) {
+      // Render failure = 404, never a broken half-image. The send path only
+      // embeds the URL after a successful warm render, so this is rare.
+      console.error("[estimate-mockup] render failed:", err);
+      res.status(404).json({ message: "Not found" });
+    }
   });
 
   // ── PQ / cutting-master sheet (Ruby handoff handoff/pq-sheet) ──────────
@@ -3876,12 +3943,36 @@ export function registerPressPortalRoutes(
     // the stored builder state + the press's CURRENT pricing rows (same
     // source the /send gate trusts). Null (legacy/unverifiable state) omits
     // the totals card rather than rendering wrong or partial numbers.
+    // Task #3359 — warm the mockup render and return its public URL, or null
+    // when nothing can be produced (the email then renders exactly as before
+    // — never a broken image). The render itself always has a drawn fallback
+    // (house jacket + neutral disc), so null only happens on a hard failure
+    // (e.g. canvas unavailable).
+    const mockupUrlFor = async (base: string, tok: string, freshPayload: Record<string, any>): Promise<string | null> => {
+      try {
+        const artUrl = await resolveEstimateMockupArt(freshPayload);
+        const colorName = typeof freshPayload.builderState?.colorName === "string" ? freshPayload.builderState.colorName : null;
+        const { getEstimateMockupPng } = await import("./estimateMockup");
+        await getEstimateMockupPng(tok, {
+          artUrl,
+          pressName: press.name,
+          pressLogoUrl: press.logoUrl ?? null,
+          colorName,
+        });
+        return `${base}/api/estimate-link/${tok}/mockup.png`;
+      } catch (err) {
+        console.error("[estimate-mockup] send-path warm render failed:", err);
+        return null;
+      }
+    };
+
     const composeEstimateEmail = async (
       freshRow: typeof row,
       freshPayload: Record<string, any>,
       linkUrl: string,
       recipient: { name: string; email: string },
       preparedByName: string | null,
+      mockupUrl: string | null,
     ) => {
       const { loadPressComponents } = await import("./pressComponents");
       const configs = await loadPressComponents(pressId);
@@ -3906,6 +3997,7 @@ export function registerPressPortalRoutes(
         skin: press.emailBranding ? ("light" as const) : ("dark" as const),
         pressLocationLine,
         pressLogoUrl,
+        mockupUrl,
         replyToEmail,
         fromDisplayName: `${(preparedBy || press.name).trim()} · via GoodTunes®`,
       };
@@ -3924,9 +4016,10 @@ export function registerPressPortalRoutes(
       const host0 = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
       const base0 = whitelabelOriginForPress(press) ?? `${proto0}://${host0}`;
       const linkUrl0 = `${base0}/e/${existingToken}`;
+      const mockupUrl0 = await mockupUrlFor(base0, existingToken, freshPayload);
       const recipients0 = body.data.recipients.map((r) => ({ name: r.name, email: r.email }));
       const results0 = await Promise.all(
-        recipients0.map(async (r) => sendPressClientEstimateEmail(r.email, await composeEstimateEmail(freshRow, freshPayload, linkUrl0, r, null))),
+        recipients0.map(async (r) => sendPressClientEstimateEmail(r.email, await composeEstimateEmail(freshRow, freshPayload, linkUrl0, r, null, mockupUrl0))),
       );
       const sentCount0 = results0.filter((r) => r.ok).length;
       return res.json({ row: freshRow, shareToken: existingToken, linkUrl: linkUrl0, sentCount: sentCount0, attempted: recipients0.length, resend: true });
@@ -3960,8 +4053,16 @@ export function registerPressPortalRoutes(
       ? payload.shareToken
       : crypto.randomBytes(24).toString("base64url");
     const sentTo = body.data.recipients.map((r) => ({ name: r.name, email: r.email }));
+    // Task #3359 — resolve + persist the mockup artwork choice at first send
+    // (string URL or explicit null = house jacket) so resends and the public
+    // mockup route stay consistent even if the artist's catalog changes.
+    const mockupArtUrl = await resolveEstimateMockupArt({
+      ...payload,
+      ...(body.data.artistPersonId ? { artistPersonId: body.data.artistPersonId } : {}),
+    });
     const nextPayload: Record<string, any> = {
       ...payload,
+      mockupArtUrl,
       shareToken,
       sentTo,
       sentAt: new Date().toISOString(),
@@ -4003,8 +4104,9 @@ export function registerPressPortalRoutes(
 
     // Best-effort mail — a transport failure must not lose the Sent state,
     // but the caller needs to know (mail.ts records failures for ops).
+    const mockupUrl = await mockupUrlFor(whitelabelOriginForPress(press) ?? `${proto}://${host}`, shareToken, nextPayload);
     const results = await Promise.all(
-      sentTo.map(async (r) => sendPressClientEstimateEmail(r.email, await composeEstimateEmail(updated, nextPayload, linkUrl, r, senderName || null))),
+      sentTo.map(async (r) => sendPressClientEstimateEmail(r.email, await composeEstimateEmail(updated, nextPayload, linkUrl, r, senderName || null, mockupUrl))),
     );
     const sentCount = results.filter((r) => r.ok).length;
     res.json({ row: updated, shareToken, linkUrl, sentCount, attempted: sentTo.length });
