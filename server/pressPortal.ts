@@ -3409,6 +3409,16 @@ export function registerPressPortalRoutes(
     const accent = resolvePressEstimateAccent(row.email_branding ?? null);
     const pressDomain = String(row.press_website_url ?? "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim();
     const token = String(req.params.token).trim();
+    // Same sender behavior as /send: From displays the PRESS's name; Reply-To
+    // prefers the preparing contact's real email (resolved off preparedBy,
+    // like /ask), falling back to the press contact email.
+    let shareReplyTo: string | null = null;
+    const sharePreparedBy = typeof payload.preparedBy === "string" ? payload.preparedBy.trim() : "";
+    if (sharePreparedBy) {
+      const u = await db.execute<any>(sql`SELECT email FROM users WHERE display_name = ${sharePreparedBy} AND email LIKE '%@%' LIMIT 1`);
+      shareReplyTo = ((u as any).rows ?? [])[0]?.email ?? null;
+    }
+    if (!shareReplyTo && typeof row.press_contact_email === "string" && row.press_contact_email.includes("@")) shareReplyTo = row.press_contact_email;
     const result = await sendPressClientEstimateEmail(body.data.email, {
       clientName: body.data.name || body.data.email,
       clientEmail: body.data.email,
@@ -3424,7 +3434,8 @@ export function registerPressPortalRoutes(
       skin: row.email_branding ? ("light" as const) : ("dark" as const),
       pressLocationLine: [row.press_location, pressDomain].filter(Boolean).join(" · ") || null,
       pressLogoUrl: row.press_logo_url && /^https:\/\//i.test(row.press_logo_url) ? row.press_logo_url : null,
-      replyToEmail: typeof row.press_contact_email === "string" && row.press_contact_email.includes("@") ? row.press_contact_email : null,
+      replyToEmail: shareReplyTo,
+      fromDisplayName: String(row.press_name ?? "").trim() || null,
     } as any);
     if (!result.ok) return res.status(502).json({ message: "We couldn't send that share email — please try again." });
     res.json({ ok: true });
@@ -4032,7 +4043,7 @@ export function registerPressPortalRoutes(
 
     // The preparing contact — resolved up-front so BOTH the first send and
     // a resend can address the email honestly. From stays a GoodTunes
-    // address with "<contact> · via GoodTunes®" as the display name;
+    // address with the PRESS's name as the display name;
     // Reply-To carries the contact's real email so "Just reply" reaches
     // them (falls back to the press contact email, then the platform
     // default). True per-press sending domains are flagged later work.
@@ -4112,7 +4123,10 @@ export function registerPressPortalRoutes(
         pressLogoUrl,
         mockupUrl,
         replyToEmail,
-        fromDisplayName: `${(preparedBy || press.name).trim()} · via GoodTunes®`,
+        // Recipients should recognize the PRESS as the sender (task: estimate
+        // emails come from the press's name, no "· via GoodTunes®" suffix).
+        // Reply-To (above) still carries the preparing contact's real email.
+        fromDisplayName: String(press.name ?? "").trim() || null,
       };
     };
 

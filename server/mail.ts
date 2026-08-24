@@ -1074,9 +1074,9 @@ export async function sendPressClientQuestionEmail(
 }
 
 // Send wrapper — From stays a GoodTunes address (per-press sending domains
-// are flagged later work) with the preparing contact's display name
-// ("<contact> · via GoodTunes®"); Reply-To carries the contact so "Just
-// reply" reaches the human who prepared the estimate.
+// are flagged later work) with the PRESS's name as the display name so the
+// recipient recognizes who the estimate is from; Reply-To carries the
+// preparing contact so "Just reply" reaches the human who prepared it.
 // TEMP review override (Bill, Aug 21 2026): while the MRP client-portal
 // rollout is under review, every press-client estimate email delivers to
 // Bill instead of the real recipient so he can see exactly what clients
@@ -1098,10 +1098,14 @@ export function resolvePressEstimateDelivery(
     : { deliverTo: toEmail, subject };
 }
 
+export const __testEstimateDeliveries: Array<{ to: string; replyTo: string | null; fromDisplayName: string | null }> = [];
 export async function sendPressClientEstimateEmail(
   toEmail: string,
   opts: PressEstimateEmailOpts & { replyToEmail?: string | null; fromDisplayName?: string | null },
 ): Promise<SendResult> {
+  if (process.env.GT_TEST) {
+    __testEstimateDeliveries.push({ to: toEmail, replyTo: opts.replyToEmail ?? null, fromDisplayName: opts.fromDisplayName ?? null });
+  }
   const { subject, html, text } = buildPressClientEstimateEmail(opts);
   const delivery = resolvePressEstimateDelivery(toEmail, subject);
   return sendViaResend("press-estimate-send", delivery.deliverTo, delivery.subject, html, text, opts.replyToEmail ?? null, opts.fromDisplayName ?? null);
@@ -2501,4 +2505,3 @@ function brandFooterHtml(brand: PressEmailBrand | null | undefined): string {
   lines.push(`<p style="font-size: 11px; color: #aaa; letter-spacing: 0.4px; text-transform: uppercase; margin: 8px 0 0;">Powered by GoodTunes&reg;</p>`);
   return `<div style="margin-top: 28px; padding-top: 16px; border-top: 1px solid #ececf0;">${lines.join("")}</div>`;
 }
-
