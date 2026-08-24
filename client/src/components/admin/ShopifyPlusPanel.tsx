@@ -605,7 +605,7 @@ function EarmarkChip({
   return null;
 }
 
-function ManufacturingLedger({
+export function ManufacturingLedger({
   albumId,
   canEdit,
   canPay,
