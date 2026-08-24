@@ -3171,17 +3171,9 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
     (picked('sticker') && stickerShapeId !== 'none' ? pricingTable.stickerPrice[stickerShapeId] : 0) +
     (vinylDone ? DEFAULT_ASSEMBLY_PRICE + DEFAULT_SHRINK_PRICE : 0);
   const perUnit = baseUnit * unitFactor;
-  // Fixed setup costs (same MRP numbers as the client estimate) — one-time,
-  // quantity-independent, now part of the quote math (Bill, Aug 16 2026).
-  const QB_SETUP_LINES = [
-    { id: 'cutting', name: 'Lacquer cutting', amount: 650 },
-    { id: 'plating', name: 'Lacquer plating', amount: 375 },
-    { id: 'test', name: 'Test pressing', amount: 175, note: 'Includes 2-day domestic shipping' },
-    { id: 'stampers', name: 'Stampers', amount: 0 },
-    { id: 'colorfee', name: 'Color setup fee', amount: 95 },
-  ];
-  const QB_SETUP_TOTAL = QB_SETUP_LINES.reduce((acc, l) => acc + l.amount, 0);
-  const total = picked('qty') ? perUnit * qty + QB_SETUP_TOTAL : 0;
+  // Setup costs / run totals deliberately absent (gogoods, Aug 24 2026):
+  // packages carry no quantity or run math — that lives in the estimate
+  // builder (PressQuoteBuilder). Only the per-unit anchor survives here.
 
   const perUnitAt = (q: number) => baseUnit * tierFactor(q);
   // Honest per-unit for ANY quantity (custom qtys included). The defined
@@ -3288,11 +3280,10 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
   const anchorIsCustom = customQtys.includes(anchorQty);
   const anchorUnitFactor = scaleAt(anchorQty) / 0.70;
   const anchorPerUnit = baseUnit * (anchorIsCustom ? anchorUnitFactor : tierFactor(anchorQty));
-  const anchorTotal = anchorPerUnit * anchorQty + QB_SETUP_TOTAL;
-  // Aliases kept for the estimate breakdown rows below.
+  // Aliases kept for the per-record breakdown rows below (run totals gone —
+  // packages carry no quantity math).
   const minUnitFactor = anchorIsCustom ? anchorUnitFactor : tierFactor(anchorQty);
   const minPerUnit = anchorPerUnit;
-  const minTotal = anchorTotal;
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
   const sizeLabel = VINYL_SIZES.find((s) => s.id === sizeId)?.label ?? '';

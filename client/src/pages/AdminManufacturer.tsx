@@ -499,7 +499,9 @@ export function AdminManufacturer() {
         </div>
       );
     }
-    const active = tab === entry.id;
+    // railTab, not tab: the package BUILDER lights Create → Packages, the
+    // saved-builds index lights the Product Specs leaf.
+    const active = railTab === entry.id;
     return (
       <button
         key={entry.id}
