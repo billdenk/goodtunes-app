@@ -7,7 +7,7 @@
 // per-format status, its channel, and a money flag when there's something
 // to do.
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { useLocation } from 'wouter';
 import { Disc3, FileImage, MoreHorizontal, ImagePlus, LayoutTemplate, Upload, Plus } from 'lucide-react';
@@ -196,6 +196,23 @@ function NewReleaseModal({ t, artistName, personId, onClose, onCreated }: {
   const [name, setName] = useState('');
   const [format, setFormat] = useState<string>('single_lp');
   const { toast } = useToast();
+  // Focus containment — remember the trigger, trap Tab inside the sheet,
+  // close on Escape, and hand focus back on unmount.
+  const sheetRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const trigger = document.activeElement as HTMLElement | null;
+    return () => trigger?.focus?.();
+  }, []);
+  const onSheetKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
+    if (e.key !== 'Tab' || !sheetRef.current) return;
+    const focusables = sheetRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), input');
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
   const create = useMutation({
     mutationFn: async () => {
       const res = await apiRequest('POST', '/api/admin/albums', {
@@ -235,9 +252,11 @@ function NewReleaseModal({ t, artistName, personId, onClose, onCreated }: {
       onClick={onClose}
     >
       <div
+        ref={sheetRef}
         className="rounded-2xl"
         style={{ width: 440, maxWidth: '100%', background: t.card, border: `1px solid ${t.hairline}`, padding: 24, boxShadow: '0 24px 60px rgba(0,0,0,0.35)' }}
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={onSheetKeyDown}
         data-testid="sheet-new-release"
       >
         <h2 className="text-[17px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.02em' }}>New release.</h2>
@@ -323,8 +342,8 @@ export function ArtistReleasesWall({ qs, onOpenAlbum, artistName, personId }: {
 
   return (
     <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: '32px 40px 96px' }}>
-      <div className="flex items-end justify-between gap-4">
-        <h1 className="font-semibold" style={{ fontSize: 30, lineHeight: 1.12, letterSpacing: '-0.03em' }}>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <h1 className="font-semibold min-w-0" style={{ fontSize: 30, lineHeight: 1.12, letterSpacing: '-0.03em' }}>
           <span style={{ color: t.ink }}>Releases. </span>
           <span style={{ color: t.subink }}>Every record you&rsquo;ve made.</span>
         </h1>
