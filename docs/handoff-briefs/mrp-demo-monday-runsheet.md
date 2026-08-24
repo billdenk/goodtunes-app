@@ -835,3 +835,21 @@ All MOCK_ consts (album fields, service URLs) are dummy data to wire.
 - Empty catalog state still offers the same path (never a dead end).
 
 **Acceptance:** screenshot diff of the heading row vs handoff at 1440px, both themes; a test customer can create a release end to end.
+
+---
+
+## Package builder — quantity ··· menu missing + old save footer shipped (Aug 24)
+
+Two regressions vs the handoff package builder mock (PressPackageBuilder):
+
+**1. Quantity cards lost their ··· menu.** Canon: every quantity card in "Pick a quantity" has a quiet ··· button (24px, transparent, top-right of the card) opening a small menu whose first item is Hide — presses hide quantities they don't want to offer for this package. Hidden quantities disappear from the artist-facing ladder, and the pricing anchor is always the smallest quantity still visible. Live has no ··· at all, so a press cannot hide a quantity.
+
+**2. The save section is the OLD design.** Live shows: ALL-CAPS "THE BUILD" eyebrow, a separate "MINIMUM RUN" segmented picker (100/300/500/1,000) with helper text, and Save changes floating top-right. All of that was removed (Aug 22 canon):
+- No eyebrows — section identity is the two-tone sentence-case heading: "The build. Everything you picked." with the build summary line and the anchor note under it ("Priced at N units — the smallest quantity still shown to artists, and the most they'd pay. Bigger runs only get cheaper.").
+- NO minimum-run row/picker anywhere — the anchor is derived from the smallest visible quantity card (this is why fix #1 matters: hiding cards is how a press raises its floor).
+- Package stage (jacket + tucked sleeve + record, hover slides them out) left; the math box right: Per record (expands to full component breakdown), Run, Setup (expands, "One-time · same at any run size"), then the Full run total band with the blue gradient and the 34px total.
+- Save sits BELOW the math box, right-aligned, note ABOVE the button ("Packages skip quantity and price — artists pick their quantity later."), one filled action: "Save to catalog" / "Save changes"; after saving it flips to the quiet green check line "…saved to Product Specs › MRP Packages".
+
+**Must-work checklist:** ··· menu on every quantity card; Hide removes the card from the artist ladder and re-anchors pricing to the new smallest visible quantity; no MINIMUM RUN picker anywhere; Per record and Setup rows expand/collapse; save button below the math box, flips to the saved confirmation.
+
+**Acceptance:** screenshot diff vs handoff PressPackageBuilder at 1440px, both themes.
