@@ -1,7 +1,7 @@
 import { releaseAdminBodyClass } from "@/lib/bootSurface";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { formatUsdCents } from "@shared/money";
-import { Link, useLocation, useRoute } from "wouter";
+import { Link, useLocation, useRoute, useSearch } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -287,6 +287,12 @@ export function AdminManufacturer() {
     },
   });
   const { tab, handleTabChange } = nav;
+  // Create→Packages rail row (gogoods, Aug 24 2026): the package BUILDER
+  // (?tab=packages&view=builder) highlights the Create group's "Packages"
+  // row; the plain saved-builds index keeps the Product Specs leaf. Mirrors
+  // PressPortal's railTab so god view matches what the press sees.
+  const railSearch = useSearch();
+  const railTab = tab === "packages" && new URLSearchParams(railSearch).get("view") === "builder" ? "packageBuilder" : tab;
 
   // Same scoped read the press portal itself uses (requirePressScope admits
   // operators — the god view at /vendor?scopeId= rides the same route).
@@ -327,7 +333,7 @@ export function AdminManufacturer() {
     }
   }
   const activeGroup = rail.find(
-    (e): e is Extract<RailEntry, { kind: "group" }> => e.kind === "group" && e.children.some((c) => c.id === tab),
+    (e): e is Extract<RailEntry, { kind: "group" }> => e.kind === "group" && e.children.some((c) => c.id === railTab),
   );
   // One group open at a time; the group containing the active tab opens on
   // arrival (and follows the active tab as it moves between groups).
@@ -605,7 +611,7 @@ export function AdminManufacturer() {
         {rail.map((e) => {
           if (e.kind === "group") {
             const expanded = openSection === e.section;
-            const containsActive = e.children.some((c) => c.id === tab);
+            const containsActive = e.children.some((c) => c.id === railTab);
             return (
               <div key={`section-${e.section}`}>
                 <button
@@ -662,7 +668,7 @@ export function AdminManufacturer() {
           <ChevronRight className="w-3 h-3 flex-shrink-0" />
           <span className="truncate">
             {activeGroup
-              ? `${activeGroup.label} · ${activeGroup.children.find((c) => c.id === tab)?.label ?? tab}`
+              ? `${activeGroup.label} · ${activeGroup.children.find((c) => c.id === railTab)?.label ?? tab}`
               : (rail.find((e) => e.kind === "tab" && e.id === tab) as any)?.label
                 ?? (tab === "overview" ? "Overview" : tab === "contacts" ? "Contacts" : tab === "analytics" ? "Analytics" : tab === "catalog" ? "Legacy packages" : settingsEntry && tab === settingsEntry.id ? settingsEntry.label : tab)}
           </span>

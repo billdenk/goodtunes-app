@@ -307,6 +307,10 @@ export function usePressPortalNav(opts?: {
     // The Customers tab was folded into People (People is now the single
     // directory). Old ?tab=customers deep-links degrade to People.
     if (t === "customers") return "people";
+    // Create→Packages rail row (gogoods, Aug 24 2026): the registry row's id
+    // is "packageBuilder"; it lands on the packages tab with the builder
+    // view open (the effect below writes ?tab=packages&view=builder).
+    if (t === "packageBuilder") return "packages";
     // Format-first rail (Ruby handoff, Aug 19 2026): legacy per-component
     // deep links canonicalize to the Vinyl format page with the matching
     // segment (?comp=) so the rail highlight + breadcrumb read "Vinyl".
@@ -353,6 +357,16 @@ export function usePressPortalNav(opts?: {
       sp.set("settings", "whitelabel");
       history.replaceState(null, "", `${window.location.pathname}?${sp}`);
     }
+    // Create→Packages rail row / search shortcut: ?tab=packageBuilder is an
+    // alias for the package BUILDER. navigate (not replaceState) so wouter
+    // re-reads the search string and `createView` becomes "builder".
+    if (tabFromUrl === "packageBuilder") {
+      const sp = new URLSearchParams(window.location.search);
+      sp.set("tab", "packages");
+      sp.set("view", "builder");
+      sp.delete("person");
+      navigate(`${window.location.pathname}?${sp}`, { replace: true });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabFromUrl, settingsSubFromUrl]);
   useEffect(() => {
@@ -363,6 +377,21 @@ export function usePressPortalNav(opts?: {
   // window.location.href captured by FeedbackLauncher carries the real sub-page.
   // Switching tabs always closes any open person detail.
   const handleTabChange = (newTab: string) => {
+    // Create→Packages rail row (gogoods, Aug 24 2026): the "packageBuilder"
+    // id opens the package BUILDER (?tab=packages&view=builder), distinct
+    // from the Product Specs saved-builds index (plain ?tab=packages).
+    if (newTab === "packageBuilder") {
+      setOpenPersonId(null);
+      const sp = new URLSearchParams(window.location.search);
+      sp.set("tab", "packages");
+      sp.set("view", "builder");
+      sp.delete("person");
+      sp.delete("estimate");
+      sp.delete("package");
+      setTab("packages");
+      navigate(`${window.location.pathname}?${sp}`, { replace: true });
+      return;
+    }
     setTab(newTab);
     setOpenPersonId(null);
     const sp = new URLSearchParams(window.location.search);
@@ -483,6 +512,10 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
     ) as ReadonlyArray<{ id: TabId; label: string; soon?: boolean }>;
   // Deep links (?tab=estimates) degrade to the dashboard when locked.
   const effectiveTab = tab === "estimates" && !showEstimates ? "dashboard" : tab;
+  // Rail highlight: the package BUILDER lights the Create→Packages row
+  // ("packageBuilder"); the saved-builds index keeps lighting the Product
+  // Specs "«Press» Packages" leaf (plain "packages").
+  const railTab = effectiveTab === "packages" && createView === "builder" ? "packageBuilder" : effectiveTab;
   const effectiveNav = effectiveTab === tab ? nav : { ...nav, tab: effectiveTab };
 
   return (
@@ -526,7 +559,7 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
       }
       fallbackIcon={Factory}
       tabs={tabs}
-      activeTab={albumViewId ? "albums" : effectiveTab}
+      activeTab={albumViewId ? "albums" : railTab}
       onTabChange={albumViewId ? (newTab) => navigate(pressPortalHref(newTab)) : handleTabChange}
     >
       {albumViewId ? (

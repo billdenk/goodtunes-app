@@ -26427,12 +26427,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 1, color: '#a1a1a6' }}>This exact build, at {anchorQty.toLocaleString()} units</div>"
+    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 1, color: '#a1a1a6' }}>This exact build — bigger runs only get cheaper</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<span className=\"text-[14px] font-semibold\" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid=\"quote-per-record\">{fmt(minPerUnit)}</span>"
+    "snippet": "<span className=\"text-[14px] font-semibold\" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid=\"quote-per-record\">From {fmt(minPerUnit)} <span style={{ color: '#a1a1a6', fontSize: "
   },
   {
     "rule": "hardcoded-font-size",
@@ -26452,57 +26452,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-medium\" style={{ color: INK }}>Run</div>"
+    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: BLUE }}>Artists pay from</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 1, color: '#a1a1a6' }}>{discs > 1 ? `${discs} LP per record, pressed and packed` : 'Pressed and packed'}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<span className=\"text-[14px] font-semibold\" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid=\"quote-run\">{anchorQty.toLocaleString()} units · {fmt(anchorPerUnit * anchorQty)}</sp"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<span className=\"text-[13.5px] font-medium\" style={{ color: INK }}>Setup</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 1, color: '#a1a1a6' }}>One-time · same at any run size</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<span className=\"text-[14px] font-semibold\" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid=\"quote-setup\">{fmt(QB_SETUP_TOTAL)}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[12px]\" style={{ color: SUBINK }}>{l.name}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "{l.note && <div className=\"text-[11px]\" style={{ color: '#a1a1a6', marginTop: 1, opacity: 0.8 }}>{l.note}</div>}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<span className=\"text-[12px]\" style={{ color: l.amount === 0 ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums' }}>{l.amount === 0 ? 'Included' : fmt(l.amount)}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: BLUE }}>Full run total</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 3, color: SUBINK }}>At {anchorQty.toLocaleString()} units — the most an artist would pay</div>"
+    "snippet": "<div className=\"text-[11.5px]\" style={{ marginTop: 3, color: SUBINK }}>Per record at {anchorQty.toLocaleString()} units — the most they&rsquo;d pay</div>"
   },
   {
     "rule": "hardcoded-font-size",

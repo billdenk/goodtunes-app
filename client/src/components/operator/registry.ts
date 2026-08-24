@@ -229,9 +229,13 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // 2026): the press's estimate + package builders, between Clients and
   // Projects per the handoff PRESS_NAV order.
   { id: "estimates",  label: "Estimates",        icon: FileText,         section: "create", roles: ["press"] },
-  // Saved-builds transition (Task #3233): the Create→Packages entry collapsed
-  // into the Product Specs "«Press» Packages" leaf below — one Packages
-  // destination. Old ?tab=packages deep links keep resolving (same tab id).
+  // Create→Packages (gogoods, Aug 24 2026 — supersedes the Task #3233
+  // collapse): Create carries BOTH builders. This row opens the package
+  // BUILDER (?tab=packages&view=builder — PressPortal maps the
+  // "packageBuilder" id); the Product Specs "«Press» Packages" leaf below
+  // stays the saved-builds index. Create = where you build; Product Specs =
+  // where saved builds live.
+  { id: "packageBuilder", label: "Packages",     icon: Package,          section: "create", roles: ["press"] },
   { id: "albums",     label: "Projects",         icon: Disc3,            roles: ["press"] },
   // Acquisition removed from press portals (gogoods, Aug 19 2026): the buying
   // funnel is fan-level marketing data for an artist's release — that belongs

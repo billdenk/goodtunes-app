@@ -2967,7 +2967,6 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
   // Edit-mode header facts, captured from the opened row at hydrate.
   const [openedRow, setOpenedRow] = useState<{ title: string; status: string; updatedAt?: string } | null>(null);
   const [qbDetailsOpen, setQbDetailsOpen] = useState(false);
-  const [qbSetupOpen, setQbSetupOpen] = useState(false);
 
   // Collapse: the type grid folds to a summary row once a color is picked.
   const [typeOpen, setTypeOpen] = useState(true);
@@ -3433,12 +3432,15 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
             </>
           )}
         </div>
+        {/* Packages never show a run total (gogoods, Aug 24 2026): the strip
+            carries the same "From $X.XX /unit at {min}" anchor as the build
+            card — artists pick their quantity later. */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <span className="text-[12.5px]" style={{ color: SUBINK }}>
-            Est. <span className="font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }}>{fmt(anchorPerUnit)}</span> / unit
+            at {anchorQty.toLocaleString()} units
           </span>
           <span className="text-[13px] font-semibold rounded-full" style={{ padding: '4px 14px', background: `${PRESS_ACCENT}1f`, color: 'var(--q-accent-ink)', fontVariantNumeric: 'tabular-nums' }}>
-            {fmt(anchorTotal)}
+            From {fmt(anchorPerUnit)} /unit
           </span>
         </div>
       </div>
@@ -4626,9 +4628,9 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                         <span className="text-[13.5px] font-medium" style={{ color: INK }}>Per record</span>
                         <ChevronDown className="w-3.5 h-3.5 transition-transform" style={{ color: '#a1a1a6', transform: qbDetailsOpen ? 'rotate(180deg)' : 'none' }} />
                       </div>
-                      <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>This exact build, at {anchorQty.toLocaleString()} units</div>
+                      <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>This exact build — bigger runs only get cheaper</div>
                     </div>
-                    <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-per-record">{fmt(minPerUnit)}</span>
+                    <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-per-record">From {fmt(minPerUnit)} <span style={{ color: '#a1a1a6', fontSize: 11, fontWeight: 500 }}>/unit at {anchorQty.toLocaleString()}</span></span>
                   </button>
                   {qbDetailsOpen && (
                     <div style={{ background: 'var(--q-canvas, #fafafa)' }}>
@@ -4652,51 +4654,18 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                       ))}
                     </div>
                   )}
-                  <div aria-hidden style={{ height: 1, background: HAIRLINE, margin: qbDetailsOpen ? 0 : '0 20px' }} />
-                  <div className="flex items-center justify-between" style={{ padding: '14px 20px' }}>
-                    <div>
-                      <div className="text-[13.5px] font-medium" style={{ color: INK }}>Run</div>
-                      <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>{discs > 1 ? `${discs} LP per record, pressed and packed` : 'Pressed and packed'}</div>
-                    </div>
-                    <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-run">{anchorQty.toLocaleString()} units · {fmt(anchorPerUnit * anchorQty)}</span>
-                  </div>
-                  <div aria-hidden style={{ height: 1, background: HAIRLINE, margin: '0 20px' }} />
-                  <button
-                    type="button"
-                    onClick={() => setQbSetupOpen((v) => !v)}
-                    aria-expanded={qbSetupOpen}
-                    className="w-full flex items-center justify-between text-left"
-                    style={{ padding: '14px 20px', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                    data-testid="quote-setup-toggle"
-                  >
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[13.5px] font-medium" style={{ color: INK }}>Setup</span>
-                        <ChevronDown className="w-3.5 h-3.5 transition-transform" style={{ color: '#a1a1a6', transform: qbSetupOpen ? 'rotate(180deg)' : 'none' }} />
-                      </div>
-                      <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>One-time · same at any run size</div>
-                    </div>
-                    <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-setup">{fmt(QB_SETUP_TOTAL)}</span>
-                  </button>
-                  {qbSetupOpen && (
-                    <div style={{ background: 'var(--q-canvas, #fafafa)' }}>
-                      {QB_SETUP_LINES.map((l) => (
-                        <div key={l.id} className="flex items-center justify-between gap-4" style={{ padding: '8px 20px 8px 34px', borderTop: `1px solid ${HAIRLINE}` }}>
-                          <div>
-                            <div className="text-[12px]" style={{ color: SUBINK }}>{l.name}</div>
-                            {l.note && <div className="text-[11px]" style={{ color: '#a1a1a6', marginTop: 1, opacity: 0.8 }}>{l.note}</div>}
-                          </div>
-                          <span className="text-[12px]" style={{ color: l.amount === 0 ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums' }}>{l.amount === 0 ? 'Included' : fmt(l.amount)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* Packages stop at the per-record roll-up (gogoods, Aug 24
+                      2026): no Run row, no Setup, no Full run total — those
+                      are estimate math. Artists pick their quantity later;
+                      the only price anchor is "From $X.XX /unit at {min}"
+                      above. The blue band restates the anchor, never a
+                      run total. */}
                   <div className="flex items-end justify-between gap-4" style={{ padding: '16px 20px 18px', borderTop: `1px solid ${HAIRLINE}`, background: 'linear-gradient(180deg, rgba(49,158,216,0.10) 0%, rgba(49,158,216,0.02) 100%)' }}>
                     <div>
-                      <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BLUE }}>Full run total</div>
-                      <div className="text-[11.5px]" style={{ marginTop: 3, color: SUBINK }}>At {anchorQty.toLocaleString()} units — the most an artist would pay</div>
+                      <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BLUE }}>Artists pay from</div>
+                      <div className="text-[11.5px]" style={{ marginTop: 3, color: SUBINK }}>Per record at {anchorQty.toLocaleString()} units — the most they&rsquo;d pay</div>
                     </div>
-                    <span className="font-semibold tracking-tight" style={{ fontSize: 34, lineHeight: 1, color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-total-hero">{fmt(minTotal)}</span>
+                    <span className="font-semibold tracking-tight" style={{ fontSize: 34, lineHeight: 1, color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="package-from-hero">{fmt(minPerUnit)}<span style={{ fontSize: 15, color: '#a1a1a6', fontWeight: 500 }}> /unit</span></span>
                   </div>
                 </div>
               </div>
