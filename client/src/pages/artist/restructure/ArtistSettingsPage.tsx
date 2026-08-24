@@ -22,7 +22,7 @@ function TeamInviteDialog({ t, onClose }: { t: Theme; onClose: () => void }) {
   const [email, setEmail] = useState('');
   const [level, setLevel] = useState<'admin' | 'view'>('admin');
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState<{ acceptUrl: string | null; emailDelivered: boolean } | null>(null);
+  const [sent, setSent] = useState<{ acceptUrl: string | null; emailDelivered: boolean; added: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
 
   const send = useMutation({
@@ -32,10 +32,12 @@ function TeamInviteDialog({ t, onClose }: { t: Theme; onClose: () => void }) {
         email: email.trim(),
         inviteRole: level === 'admin' ? 'team' : 'team_view',
       });
-      return (await r.json()) as { acceptUrl: string | null; emailDelivered?: boolean };
+      return (await r.json()) as { acceptUrl?: string | null; emailDelivered?: boolean; added?: boolean };
     },
     onSuccess: (body) => {
-      setSent({ acceptUrl: body.acceptUrl ?? null, emailDelivered: !!body.emailDelivered });
+      // `added: true` = the email already had an account, so the hat was
+      // attached directly — no invite link, nothing held for review.
+      setSent({ acceptUrl: body.acceptUrl ?? null, emailDelivered: !!body.emailDelivered, added: !!body.added });
       qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] ?? '').startsWith('/api/artist/team') });
     },
     onError: (e: any) => setError(e?.message?.replace(/^\d+:\s*/, '') || 'Something went wrong — try again.'),
@@ -58,7 +60,11 @@ function TeamInviteDialog({ t, onClose }: { t: Theme; onClose: () => void }) {
         </p>
         {sent ? (
           <div style={{ marginTop: 16 }}>
-            {sent.emailDelivered ? (
+            {sent.added ? (
+              <p className="text-[13px] font-medium inline-flex items-center gap-1.5" style={{ color: t.ready }} data-testid="team-invite-added">
+                <Check className="w-4 h-4" strokeWidth={3} /> {email.trim()} already had an account — they&rsquo;re on your team now.
+              </p>
+            ) : sent.emailDelivered ? (
               <p className="text-[13px] font-medium inline-flex items-center gap-1.5" style={{ color: t.ready }} data-testid="team-invite-emailed">
                 <Check className="w-4 h-4" strokeWidth={3} /> Invite emailed to {email.trim()}
               </p>

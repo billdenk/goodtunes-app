@@ -22402,6 +22402,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<p className=\"text-[13px] font-medium inline-flex items-center gap-1.5\" style={{ color: t.ready }} data-testid=\"team-invite-added\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
     "snippet": "<p className=\"text-[13px] font-medium inline-flex items-center gap-1.5\" style={{ color: t.ready }} data-testid=\"team-invite-emailed\">"
   },
   {

@@ -25812,6 +25812,13 @@ export async function registerRoutes(
       : ir;
     if (opts.isNewAccount) {
       await setUserRole(userId, invite.role as any, effectiveRoleScopeId);
+      // setUserRole creates the membership with sub_role=NULL — which reads
+      // as the scope OWNER (implicit self-serve verbs). A teammate tier
+      // (team/team_view/manager/press_staff…) must land on the fresh
+      // membership too, or a brand-new "View" invitee gets owner rights.
+      if (subRole) {
+        await addMembership(userId, invite.role as any, effectiveRoleScopeId, subRole);
+      }
     } else {
       await addMembership(userId, invite.role as any, effectiveRoleScopeId, subRole ?? null);
     }

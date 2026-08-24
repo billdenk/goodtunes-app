@@ -672,7 +672,7 @@ export function AdminPerson() {
   const { toast } = useToast();
   // Task #590 — Dashboard is default; `?tab=` deep links keep working.
   const ALL_TAB_KEYS: readonly Tab[] = [
-    "dashboard", "catalog", "orders", "reports", "referrals", "shopify", "settings",
+    "dashboard", "catalog", "audience", "acquisition", "orders", "buyers", "reports", "referrals", "shopify", "settings",
     "overview", "cover", "members", "releases", "streaming", "gear", "splits", "payouts", "permissions",
   ];
   const [tab, setTabState] = useState<Tab>(() => {
@@ -1151,8 +1151,7 @@ export function AdminPerson() {
         {/* Mirror — the artist portal's own module bodies, one body two
             chromes. God view rides ?personId= / the qs threaded here. */}
         {mirrorMode &&
-          (["dashboard", "catalog", "orders", "reports", "referrals", "shopify", "settings"] as const)
-            .includes(tab as ArtistPortalTab) && (
+          ARTIST_PORTAL_TABS.some((m) => m.id === (tab as ArtistPortalTab)) && (
           <ArtistTabBody
             tab={tab as ArtistPortalTab}
             qs={artistRange.qs}

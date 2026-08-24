@@ -208,8 +208,14 @@ export function ArtistDashboard() {
     const t = spSync.get("tab");
     const rtabSync = spSync.get("rtab");
     if (t === "overview" || t === "people") setTab("dashboard"); // merged — Task #2893
-    // Nav canon — stale hub sub-tab links resolve to the top-level tab.
-    else if (t === "reports" && (rtabSync === "audience" || rtabSync === "acquisition" || rtabSync === "buyers")) setTab(rtabSync);
+    // Nav canon — stale hub sub-tab links resolve to the top-level tab
+    // (and rewrite the URL so copies/bookmarks pick up the canon shape).
+    else if (t === "reports" && (rtabSync === "audience" || rtabSync === "acquisition" || rtabSync === "buyers")) {
+      spSync.set("tab", rtabSync);
+      spSync.delete("rtab");
+      window.history.replaceState(null, "", `${window.location.pathname}?${spSync.toString()}`);
+      setTab(rtabSync);
+    }
     else if (t === "dashboard" || t === "catalog" || t === "audience" || t === "acquisition" || t === "orders" || t === "buyers" || t === "referrals" || t === "shopify" || t === "reports" || t === "settings") {
       setTab(t);
     }
