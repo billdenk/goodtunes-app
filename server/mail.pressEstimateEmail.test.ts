@@ -191,6 +191,41 @@ test("computeQuoteEmailBreakdown mirrors the builder's curve and lines", () => {
   assert.equal(computeQuoteEmailBreakdown(null, rows), null);
 });
 
+test("computeQuoteEmailBreakdown: mixed manual/ladder surcharge scales only the manual portion", () => {
+  // Operator-entered Opaque base ($2.00 cell) + imported Splatter ladder adder
+  // ($0.55 @500). At a non-1K quantity the run-size factor must apply to the
+  // manual $2.00 but never the ladder $0.55.
+  const rows = [
+    { key: "type:opaque", kind: "type", label: "Opaque", pricesBySize: { '12"': 200 } },
+    { key: "type:splatter", kind: "type", label: "Splatter", surchargeOver: "type:opaque", rungsBySize: { '12"': [{ qty: 500, unitCents: 55 }] } },
+    { key: "labels:color", kind: "labels", label: "Full Color", priceCents: 25 },
+    { key: "jackets:single", kind: "jackets", label: "Single Jacket", priceCents: 81 },
+    { key: "sleeves:unprinted", kind: "sleeves", label: "Unprinted", priceCents: 81 },
+    { key: "service:assembly", kind: "service", label: "Assembly", priceCents: 36 },
+    { key: "service:shrink", kind: "service", label: "Shrinkwrap", priceCents: 17 },
+    { key: "service:cutting", kind: "service", label: "Lacquer cutting", priceCents: 65000 },
+    { key: "service:plating", kind: "service", label: "Lacquer plating", priceCents: 37500 },
+    { key: "service:test", kind: "service", label: "Test pressing", priceCents: 17500 },
+    { key: "service:stampers", kind: "service", label: "Stampers", priceCents: 0 },
+    { key: "service:colorfee", kind: "service", label: "Color setup fee", priceCents: 9500 },
+  ] as any[];
+  const bs = {
+    sizeId: "12", discs: 1, qty: 500, weightId: "140",
+    colorName: "Cosmic", colorTierName: "Splatter",
+    jacketId: "single", sleeveId: "unprinted", labelId: "color",
+    done: ["size", "discs", "weight", "ctype", "color", "jacket", "sleeve", "label", "sticker", "qty"],
+  };
+  const b = computeQuoteEmailBreakdown(bs as any, rows);
+  assert.ok(b, "fully-priced mixed build must produce a breakdown");
+  // Derive the run-size factor from a purely manual control line.
+  const label = b!.unitLines.find((l) => l.id === "label")!;
+  const factor = label.unitDollars / 0.25;
+  assert.ok(factor > 1, "500-unit run must scale manual prices up");
+  const vinyl = b!.unitLines.find((l) => l.id === "vinyl")!;
+  assert.ok(Math.abs(vinyl.unitDollars - (2.0 * factor + 0.55)) < 1e-9,
+    `manual base scales, ladder adder doesn't (got ${vinyl.unitDollars}, factor ${factor})`);
+});
+
 // ── #3295 review gate — delivery recipient selection ─────────────────────
 test("estimate email delivers to the real recipient when no review override is set", () => {
   const d = resolvePressEstimateDelivery("client@example.test", "Your estimate", null);

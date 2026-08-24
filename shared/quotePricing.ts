@@ -49,7 +49,24 @@ export type ResolvedUnit = {
   /** true = came from an imported quantity ladder already priced AT the run
    * size — the builder's synthetic run-size curve must NOT rescale it. */
   laddered: boolean;
+  /** Present on surcharge compositions that mix provenances: `manualV` is the
+   * operator-entered portion (dollars, MUST still ride the run-size factor)
+   * and `ladderV` the imported-ladder portion (already at the run size).
+   * v === manualV + ladderV. */
+  parts?: { manualV: number; ladderV: number };
 };
+
+/** Scale a resolved line's per-unit dollars by the synthetic run-size factor,
+ * applying it ONLY to operator-entered portions — ladder portions are already
+ * priced at the run size. Single source of truth for builder + email. */
+export function scaledUnitDollars(
+  l: { v: number | null; laddered?: boolean; parts?: { manualV: number; ladderV: number } },
+  factor: number,
+): number {
+  if (l.v == null) return 0;
+  if (l.parts) return l.parts.manualV * factor + l.parts.ladderV;
+  return l.v * (l.laddered ? 1 : factor);
+}
 
 /** Resolve a row's price with operator-edits-win semantics:
  * operator per-size cell → imported ladder rung at qty → legacy priceCents.
@@ -147,12 +164,25 @@ export function makeQuotePricer(rows: PricingRow[] | undefined | null): QuotePri
       if (base == null) return null;
       // Operator cell on a surcharge row overrides the ADDER, not the total.
       const sz = SIZE_TO_VINYL[size];
-      const opCell = (typeRow.pricesBySize ?? {})[sz as keyof typeof typeRow.pricesBySize];
-      const adderCents =
-        typeof opCell === "number" ? opCell : snapLadderCents((typeRow.rungsBySize ?? {})[sz], qty);
+      const cells = (typeRow.pricesBySize ?? {}) as Record<string, number | null | undefined>;
+      const opCell = sz ? cells[sz] : undefined;
+      const adderManual = typeof opCell === "number";
+      const adderCents = adderManual
+        ? (opCell as number)
+        : snapLadderCents(((typeRow.rungsBySize ?? {}) as Record<string, PricingRung[] | undefined>)[sz ?? ""], qty);
       if (adderCents == null) return null;
-      // Sum in cents — float dollar addition drifts (2.30 + 0.55 ≠ 2.85).
-      return { v: (Math.round(base.v * 100) + adderCents) / 100, laddered: true };
+      // Track provenance per portion — operator-entered (manual) dollars must
+      // still ride the run-size factor; ladder dollars are already at the run
+      // size. Sum in cents (float dollar addition drifts: 2.30+0.55 ≠ 2.85).
+      const baseManualC = Math.round((base.parts ? base.parts.manualV : base.laddered ? 0 : base.v) * 100);
+      const baseLadderC = Math.round((base.parts ? base.parts.ladderV : base.laddered ? base.v : 0) * 100);
+      const manualC = baseManualC + (adderManual ? adderCents : 0);
+      const ladderC = baseLadderC + (adderManual ? 0 : adderCents);
+      return {
+        v: (manualC + ladderC) / 100,
+        laddered: manualC === 0,
+        parts: { manualV: manualC / 100, ladderV: ladderC / 100 },
+      };
     }
     return resolveRowUnit(typeRow, size, qty, heavy);
   };
@@ -214,6 +244,9 @@ export type QuoteLine = {
   /** true = priced from an imported quantity ladder at the run size — the
    * synthetic run-size curve must not rescale it (Task #3325). */
   laddered?: boolean;
+  /** Mixed-provenance split (surcharge compositions): manual portion scales
+   * with the run-size factor, ladder portion does not. */
+  parts?: { manualV: number; ladderV: number };
 };
 
 /** Sum only the lines with real prices — pending lines never fabricate. */
@@ -417,7 +450,7 @@ export function computeQuoteEmailBreakdown(
 
   // Ladder-priced lines are already AT the run size — only legacy flat prices
   // ride the synthetic run-size curve (Task #3325).
-  const raw: Array<{ id: string; name: string; note?: string; v: number | null; laddered?: boolean }> = [];
+  const raw: Array<{ id: string; name: string; note?: string; v: number | null; laddered?: boolean; parts?: { manualV: number; ladderV: number } }> = [];
   const vinylBase = pricer.vinylEx(String(state.colorName), String(state.colorTierName ?? ""), sizeId, String(state.weightId ?? ""), qty);
   raw.push({
     id: "vinyl",
@@ -425,6 +458,9 @@ export function computeQuoteEmailBreakdown(
     note: discs > 1 ? `${discs} LP per record` : "Vinyl",
     v: vinylBase == null ? null : vinylBase.v * discs,
     laddered: vinylBase?.laddered,
+    parts: vinylBase?.parts
+      ? { manualV: vinylBase.parts.manualV * discs, ladderV: vinylBase.parts.ladderV * discs }
+      : undefined,
   });
   const labelId = String(state.labelId);
   const labelV = pricer.flatEx(`labels:${labelId}`, sizeId, qty);
@@ -477,7 +513,7 @@ export function computeQuoteEmailBreakdown(
   // Pending gate above guarantees no nulls, but stay fail-closed anyway.
   if (raw.some((l) => l.v == null)) return null;
   const unitLines: QuoteEmailLine[] = raw.map((l) => ({
-    id: l.id, name: l.name, ...(l.note ? { note: l.note } : {}), unitDollars: (l.v as number) * (l.laddered ? 1 : unitFactor),
+    id: l.id, name: l.name, ...(l.note ? { note: l.note } : {}), unitDollars: scaledUnitDollars(l, unitFactor),
   }));
 
   const setupDefs: Array<{ id: string; name: string; note?: string; key: string }> = [

@@ -14455,16 +14455,6 @@
     "snippet": "className=\"text-[11px] leading-relaxed\""
   },
   {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/ui/AlbumDetailSkeleton.tsx",
-    "snippet": "className=\"text-white/20 mb-6\""
-  },
-  {
-    "rule": "fan-text-tone",
-    "file": "client/src/components/ui/AlbumDetailSkeleton.tsx",
-    "snippet": "<p className=\"mt-2 text-base text-white/55 leading-snug\">"
-  },
-  {
     "rule": "player-touch-target-too-small",
     "file": "client/src/components/ui/BonusVideoPlayer.tsx",
     "snippet": "<div className=\"w-9 h-9 rounded-full bg-black/55 flex items-center justify-center\">"
@@ -25587,6 +25577,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressVinylStyles.tsx",
+    "snippet": "className=\"rounded-full text-[12.5px] font-semibold\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-components/PressVinylStyles.tsx",
     "snippet": "<span className=\"text-[12px] font-medium\" style={{ color: t.subink }}>{label}</span>"
   },
   {
@@ -25598,11 +25593,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressVinylStyles.tsx",
     "snippet": "<span className=\"text-[13px] font-medium flex-1\" style={{ color: t.ink }}>{s.name}</span>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-components/PressVinylStyles.tsx",
-    "snippet": "className=\"rounded-full text-[12.5px] font-semibold\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -25737,17 +25727,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressVinylStyles.tsx",
-    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: t.faint, marginTop: 24 }}>"
+    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressVinylStyles.tsx",
     "snippet": "<p key={h} className=\"text-[11.5px]\" style={{ color: t.faint, marginTop: 10, lineHeight: 1.5 }}>{h}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-components/PressVinylStyles.tsx",
-    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -26732,7 +26717,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<span className=\"text-[12.5px]\" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(l.v * unitFactor)} <span style={{ color: '#a1a1a6', fontSize: 11 }}>/unit</span></"
+    "snippet": "<span className=\"text-[12.5px]\" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(scaledUnitDollars(l, unitFactor))} <span style={{ color: '#a1a1a6', fontSize: 11 }"
   },
   {
     "rule": "hardcoded-font-size",
@@ -27675,16 +27660,6 @@
     "snippet": "<span className=\"w-2 h-2 rounded-full flex-shrink-0\" style={{ backgroundColor: on ? zoneColor(p) : t.faint }} />"
   },
   {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
-    "snippet": "BLUE: \"#319ED8\","
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: FAINT }}>"
-  },
-  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
     "snippet": "<span className=\"text-[15px] font-semibold tracking-tight truncate\" style={{ color: INK }}>"
@@ -27762,22 +27737,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1 rounded-full text-[10px] font-bold uppercase tracking-wider px-2 h-5\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
     "snippet": "<p className=\"text-[12.5px]\" style={{ color: SUBINK, marginTop: 5, lineHeight: 1.45, maxWidth: 460 }}>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
     "snippet": "<div className=\"text-[12px]\" style={{ color: FAINT, marginTop: 8 }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: FAINT, marginBottom: 8 }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -27887,16 +27852,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
-    "snippet": "<p className=\"text-[15px]\" style={{ color: SUBINK, marginTop: 12, maxWidth: 560, lineHeight: 1.5 }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
-    "snippet": "<span className=\"text-[12.5px]\" style={{ color: dirty ? SUBINK : FAINT }} data-testid=\"save-state\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
     "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6 }}>"
   },
   {
@@ -27927,11 +27882,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[13.5px] font-medium leading-tight\" style={{ color: INK }}>Custom quote needed</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
     "snippet": "<div className=\"text-[11.5px]\" style={{ color: FAINT, marginTop: 2, lineHeight: 1.4 }}>"
   },
   {
@@ -27943,11 +27893,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
     "snippet": "<div className=\"tabular-nums flex-shrink-0 text-[14px] font-medium\" style={{ color: READY }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/PressAlbumPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: BLUE }}>"
   },
   {
     "rule": "hardcoded-font-size",

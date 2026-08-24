@@ -1,7 +1,7 @@
 // Honest component-quote pricing (Task #3243): no demo defaults, ever.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { makeQuotePricer, rowDollars, pricedSum, pendingLines, computeQuotePendingIds, QUOTE_SETUP_SERVICE_KEYS, type QuoteLine } from "./quotePricing";
+import { makeQuotePricer, rowDollars, pricedSum, pendingLines, scaledUnitDollars, computeQuotePendingIds, QUOTE_SETUP_SERVICE_KEYS, type QuoteLine } from "./quotePricing";
 import type { PricingRow } from "@shared/pressComponents";
 
 const row = (partial: Partial<PricingRow>): PricingRow => ({
@@ -142,6 +142,41 @@ test("splatter = surcharge over the base style, laddered", () => {
   assert.equal(pricer.vinyl("Cosmic", "Splatter", "12", "140", 1000), 2.85);
   // at 300: 2.35 + 0.75
   assert.equal(pricer.vinyl("Cosmic", "Splatter", "12", "140", 300), 3.1);
+});
+
+test("surcharge provenance split: operator-entered portions still ride the run-size factor", () => {
+  // Operator overrides the BASE style with a flat cell (manual): the splatter
+  // total must split into manual base + laddered adder, and only the manual
+  // portion scales with the synthetic run-size factor.
+  const manualBase = LADDER_ROWS.map((r) =>
+    r.key === "type:opaque" ? { ...r, pricesBySize: { '12"': 200 } } : r,
+  );
+  let p = makeQuotePricer(manualBase).vinylEx("Cosmic", "Splatter", "12", "140", 1000)!;
+  assert.equal(p.v, 2.55); // 2.00 manual + 0.55 laddered adder
+  assert.equal(p.laddered, false);
+  assert.deepEqual(p.parts, { manualV: 2, ladderV: 0.55 });
+  // At a non-reference factor (e.g. 1.2), only the manual $2.00 scales.
+  assert.equal(scaledUnitDollars(p, 1.2), 2.95);
+
+  // Operator overrides the ADDER instead: base stays laddered, adder manual.
+  const manualAdder = LADDER_ROWS.map((r) =>
+    r.key === "type:splatter" ? { ...r, pricesBySize: { '12"': 100 } } : r,
+  );
+  p = makeQuotePricer(manualAdder).vinylEx("Cosmic", "Splatter", "12", "140", 1000)!;
+  assert.equal(p.v, 3.3); // 2.30 laddered base + 1.00 manual adder
+  assert.deepEqual(p.parts, { manualV: 1, ladderV: 2.3 });
+  assert.equal(scaledUnitDollars(p, 1.5), 2.3 + 1.5);
+
+  // Fully imported composition stays laddered (factor never applies).
+  p = makeQuotePricer(LADDER_ROWS).vinylEx("Cosmic", "Splatter", "12", "140", 1000)!;
+  assert.equal(p.laddered, true);
+  assert.equal(scaledUnitDollars(p, 1.7), 2.85);
+});
+
+test("scaledUnitDollars: manual lines scale, laddered lines don't, pending = 0", () => {
+  assert.equal(scaledUnitDollars({ v: 2, laddered: false }, 1.3), 2.6);
+  assert.equal(scaledUnitDollars({ v: 2, laddered: true }, 1.3), 2);
+  assert.equal(scaledUnitDollars({ v: null }, 1.3), 0);
 });
 
 test("operator per-color override beats the inherited ladder", () => {

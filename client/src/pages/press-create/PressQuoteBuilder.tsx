@@ -29,7 +29,7 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useAdminDark } from '@/lib/adminAppearance';
 import { PRESS_MARK_ON_DARK, PRESS_MARK_ON_LIGHT } from '@/lib/pressMark';
 import type { PressComponentsPayload } from '@shared/pressComponents';
-import { makeQuotePricer, pendingLines, type QuoteLine } from './quotePricing';
+import { makeQuotePricer, pendingLines, scaledUnitDollars, type QuoteLine } from './quotePricing';
 import { PressLogoImg, usePressBrand, usePressCatalogSwatches } from './PressPackageBuilder';
 import californialandCover from './assets/californialand-cover.jpg';
 import californialandInnerSleeve from './assets/californialand-inner-sleeve.png';
@@ -2752,8 +2752,8 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   // the total, and blocks send-to-artist (Task #3243).
   // Imported quantity-ladder prices (Task #3325) resolve AT the run size and
   // carry laddered=true so the synthetic run-size curve never rescales them.
-  const linesAt = (q: number): QuoteLine[] => [
-    vinylDone ? (() => { const p = pricer.vinylEx(color.name, color.kindNote, sizeId, weightId, q); return { id: 'vinyl', name: `${VINYL_SIZES.find((s) => s.id === sizeId)?.label ?? ''} · ${weightId}g ${color.name}`, note: discs > 1 ? `${discs} LP per record` : 'Vinyl', v: p == null ? null : p.v * discs, laddered: p?.laddered }; })() : null,
+  const linesAt = (q: number): QuoteLine[] => ([
+    vinylDone ? (() => { const p = pricer.vinylEx(color.name, color.kindNote, sizeId, weightId, q); return { id: 'vinyl', name: `${VINYL_SIZES.find((s) => s.id === sizeId)?.label ?? ''} · ${weightId}g ${color.name}`, note: discs > 1 ? `${discs} LP per record` : 'Vinyl', v: p == null ? null : p.v * discs, laddered: p?.laddered, parts: p?.parts ? { manualV: p.parts.manualV * discs, ladderV: p.parts.ladderV * discs } : undefined }; })() : null,
     picked('label') ? (() => { const p = pricer.flatEx(`labels:${labelId}`, sizeId, q); return { id: 'label', name: `${labelStyle.name} label`, note: discs > 1 ? 'Both discs' : undefined, v: p == null ? null : p.v * discs, laddered: p?.laddered }; })() : null,
     picked('jacket') ? (() => { const p = pricer.flatEx(`jackets:${jacketType.id}`, sizeId, q); return { id: 'jacket', name: `${jacketType.name} jacket`, v: p?.v ?? null, laddered: p?.laddered }; })() : null,
     picked('sleeve') ? (() => { const p = pricer.flatEx(`sleeves:${sleeveType.id}`, sizeId, q); return { id: 'sleeve', name: `${sleeveType.name} sleeve`, v: p?.v ?? null, laddered: p?.laddered }; })() : null,
@@ -2761,12 +2761,12 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
     picked('sticker') && stickerShapeId !== 'none' ? (() => { const p = pricer.flatEx(`stickers:${stickerShapeId}`, sizeId, q); return { id: 'sticker', name: `${stickerShape?.name ?? 'Sticker'} sticker`, v: p?.v ?? null, laddered: p?.laddered }; })() : null,
     vinylDone ? (() => { const p = pricer.flatEx('service:assembly', sizeId, q); return { id: 'assembly', name: 'Assembly', note: 'Insert placed on top before shrink', v: p?.v ?? null, laddered: p?.laddered }; })() : null,
     vinylDone ? (() => { const p = pricer.flatEx('service:shrink', sizeId, q); return { id: 'shrink', name: 'Shrinkwrap', note: 'Retail-ready seal', v: p?.v ?? null, laddered: p?.laddered }; })() : null,
-  ].filter((x): x is QuoteLine => x !== null);
+  ] as Array<QuoteLine | null>).filter((x): x is QuoteLine => x !== null);
   const quoteLines = linesAt(effQty);
-  // Sum with the run-size factor applied ONLY to non-laddered (legacy flat)
-  // prices; laddered lines are already at the run size.
+  // Sum with the run-size factor applied ONLY to operator-entered (manual)
+  // prices; ladder-derived portions are already at the run size.
   const unitAt = (lines: QuoteLine[], factor: number) =>
-    lines.reduce((acc, l) => acc + (l.v == null ? 0 : l.v * (l.laddered ? 1 : factor)), 0);
+    lines.reduce((acc, l) => acc + scaledUnitDollars(l, factor), 0);
   const perUnit = unitAt(quoteLines, unitFactor);
   // One-time setup costs — also real-price-only now: each line resolves from
   // a `service:<id>` pricing row (0 renders "Included"); missing = pending.
@@ -3723,7 +3723,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                           {l.v == null ? (
                             <span className="text-[12px] font-medium" style={{ color: '#b25e09', whiteSpace: 'nowrap' }} data-testid={`quote-line-pending-${l.id}`}>Pricing pending · custom estimate</span>
                           ) : (
-                            <span className="text-[12.5px]" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(l.v * (l.laddered ? 1 : unitFactor))} <span style={{ color: '#a1a1a6', fontSize: 11 }}>/unit</span></span>
+                            <span className="text-[12.5px]" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(scaledUnitDollars(l, unitFactor))} <span style={{ color: '#a1a1a6', fontSize: 11 }}>/unit</span></span>
                           )}
                         </div>
                       ))}
