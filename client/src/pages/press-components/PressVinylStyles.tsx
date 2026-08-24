@@ -5547,6 +5547,24 @@ export function PressVinylStylesComponent({
   };
   const toggleQuantityOffered = makePerSizeToggle('quantities', VINYL_QUANTITIES, selectedQuantityId, setSelectedQuantityId);
   const toggleWeightOffered = makePerSizeToggle('weights', weights, selectedWeightId, setSelectedWeightId);
+  // Switching size re-checks the selected quantity/weight against THAT
+  // size's offered subsets and hops to the first offered sibling if the
+  // current pick is dark there (offers vary per size now). If a size has
+  // no offered rungs at all, the selection stays put — the cards read
+  // "Not offered" and nothing pretends to be pickable.
+  const selectSize = (sizeId: string) => {
+    setSelectedSizeId(sizeId);
+    const offeredQ = config.quantitiesBySize?.[sizeId] ?? config.quantities;
+    if (!offeredQ.some((o) => o.id === selectedQuantityId)) {
+      const hop = VINYL_QUANTITIES.find((o) => offeredQ.some((x) => x.id === o.id));
+      if (hop) setSelectedQuantityId(hop.id);
+    }
+    const offeredW = config.weightsBySize?.[sizeId] ?? config.weights;
+    if (!offeredW.some((o) => o.id === selectedWeightId)) {
+      const hop = weights.find((o) => offeredW.some((x) => x.id === o.id));
+      if (hop) setSelectedWeightId(hop.id);
+    }
+  };
   const addWeight = (grams: string, note: string) => {
     const id = grams;
     if (weights.some((w) => w.id === id)) return; // already in the ladder
@@ -5864,7 +5882,7 @@ export function PressVinylStylesComponent({
               <OfferableOptionCards
                 options={VINYL_SIZE_OPTIONS}
                 selectedId={selectedSizeId}
-                onSelect={setSelectedSizeId}
+                onSelect={selectSize}
                 offered={offeredSizes}
                 onToggleOffered={toggleSizeOffered}
                 menuOpenId={offerMenuOpenId}
