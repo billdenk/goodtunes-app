@@ -193,6 +193,17 @@ function RailRow({ name, active }: { name: string; active: boolean }) {
 const MRP_NAV = ['Home', 'About MRP', 'Products', 'Resources', 'MRP TV', 'MRP University', 'News', 'Shop', 'Contact'];
 
 export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean; firstName?: string }) {
+  // Signed in, the marketing nav drops away (Andrew, Aug 24 2026) — the
+  // account chip stays and opens a small menu with Sign out.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const signOut = async () => {
+    setAuthToken(null);
+    await fetch('/api/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    await queryClient.invalidateQueries();
+    navigate('/next-steps');
+  };
   return (
     <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
       {/* Utility bar */}
@@ -262,8 +273,9 @@ export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean;
             was the top bar's rule). Hover goes near-black on their site. */}
         <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 30, fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
           {/* "Sign in" rides last and wears the site's active treatment —
-              near-black with the gold rule under it (Bill, Aug 21 2026). */}
-          {[...MRP_NAV, 'Sign in'].map((l) => {
+              near-black with the gold rule under it (Bill, Aug 21 2026).
+              Signed in, the marketing links drop away entirely. */}
+          {(signedIn ? [] : [...MRP_NAV, 'Sign in']).map((l) => {
             const active = l === 'Sign in';
             return (
               <a
@@ -290,11 +302,30 @@ export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean;
           </span>
         )}
         {signedIn && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: SUBINK }}>
-            <span style={{ width: 28, height: 28, borderRadius: '50%', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: INK }}>
+          <span style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: SUBINK }}>
+            <button
+              type="button"
+              aria-label="Account menu"
+              aria-expanded={menuOpen}
+              onClick={() => setMenuOpen((v) => !v)}
+              data-testid="button-account-menu"
+              style={{ width: 28, height: 28, borderRadius: '50%', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: INK, cursor: 'pointer', padding: 0 }}
+            >
               {(firstName || '?').slice(0, 1).toUpperCase()}
-            </span>
+            </button>
             {firstName}
+            {menuOpen && (
+              <div data-testid="menu-account" style={{ position: 'absolute', top: 38, right: 0, minWidth: 150, background: '#ffffff', border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.10)', padding: '6px 0', zIndex: 40 }}>
+                <button
+                  type="button"
+                  data-testid="button-sign-out"
+                  onClick={signOut}
+                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: 13, color: INK, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
           </span>
         )}
       </div>
