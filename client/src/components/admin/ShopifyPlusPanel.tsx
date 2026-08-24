@@ -561,9 +561,11 @@ function TransferInstructionsModal({
 function EarmarkChip({
   earmark,
   stepId,
+  isOperatorView,
 }: {
   earmark: { id: string; status: string } | null | undefined;
   stepId: string;
+  isOperatorView: boolean;
 }) {
   if (!earmark) return null;
   if (earmark.status === "released") {
@@ -578,6 +580,19 @@ function EarmarkChip({
     );
   }
   if (earmark.status === "held") {
+    // The release queue is an operator surface — partners get the status
+    // without the admin link.
+    if (!isOperatorView) {
+      return (
+        <span
+          className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+          data-testid="chip-earmark-held"
+        >
+          <Clock className="w-3 h-3" />
+          Held — release pending
+        </span>
+      );
+    }
     return (
       <a
         href={`/admin/payouts-release?sourceRef=${encodeURIComponent(stepId)}`}
@@ -1257,7 +1272,11 @@ export function ManufacturingLedger({
                           {/* Task #2785 — earmark status chip for paid steps. */}
                           {step.status === "paid" && step.earmark && (
                             <div className="mt-1">
-                              <EarmarkChip earmark={step.earmark} stepId={step.id} />
+                              <EarmarkChip
+                                earmark={step.earmark}
+                                stepId={step.id}
+                                isOperatorView={isOperatorView}
+                              />
                             </div>
                           )}
                           {/* Task #2785 — operator can change funding source while
@@ -1389,7 +1408,9 @@ export function ManufacturingLedger({
                               instructions (same virtual account also accepts a
                               follow-up transfer on a partial payment). */}
                           {step.status === "awaiting_transfer" &&
-                            step.fundingInstructions && (
+                            step.fundingInstructions &&
+                            (isOperatorView ||
+                              step.fundingSource === "artist_direct") && (
                               <button
                                 onClick={() => setInstructionsFor(step.id)}
                                 className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-2.5 text-xs font-semibold text-sky-700 hover:bg-sky-100"

@@ -1149,6 +1149,11 @@ function ReleasePayments({ portal, t }: { portal: PortalPayload; t: Theme }) {
     retry: false,
   });
   const hasLedgerSteps = (ledgerQ.data?.steps?.length ?? 0) > 0;
+  const ledgerSettled = !ledgerQ.isLoading;
+  // A 403 just means no payment access (treated as no ledger); any other
+  // failure must not masquerade as "Nothing owed".
+  const ledgerErrored =
+    ledgerQ.isError && !/^403/.test(String((ledgerQ.error as any)?.message ?? ""));
   return (
     <>
       <PageHeader
@@ -1168,10 +1173,21 @@ function ReleasePayments({ portal, t }: { portal: PortalPayload; t: Theme }) {
         </div>
       )}
       {portal.payments.length === 0 && !hasLedgerSteps ? (
+        !ledgerSettled ? (
+          <div className="rounded-2xl flex items-center justify-center" style={{ padding: '48px 24px', border: `1px solid ${t.hairline}`, background: t.card }}>
+            <p className="text-[12.5px]" style={{ color: t.subink }}>Loading payments…</p>
+          </div>
+        ) : ledgerErrored ? (
+          <div className="rounded-2xl flex flex-col items-center justify-center text-center" style={{ padding: '48px 24px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="note-ledger-load-failed">
+            <p className="text-[14px] font-semibold" style={{ color: t.ink }}>Couldn't load manufacturing payments</p>
+            <p className="text-[12.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>Refresh to try again. If this keeps happening, contact GoodTunes.</p>
+          </div>
+        ) : (
         <div className="rounded-2xl flex flex-col items-center justify-center text-center" style={{ padding: '48px 24px', border: `1px solid ${t.hairline}`, background: t.card }}>
           <p className="text-[14px] font-semibold" style={{ color: t.ink }}>Nothing owed on this release</p>
           <p className="text-[12.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>Payment schedules appear here once a pressing project starts.</p>
         </div>
+        )
       ) : (
         <div className="space-y-3">
           {portal.payments.map((p) => (
