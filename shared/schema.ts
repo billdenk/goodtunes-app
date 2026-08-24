@@ -5106,6 +5106,19 @@ export const manufacturers = pgTable("manufacturers", {
   // public branding lookup falls back to it (current slugs always win). A
   // press claiming a slug clears any other press's alias on that slug.
   previousWhiteLabelSlug: text("previous_white_label_slug"),
+  // Task #3339 — press bring-your-own custom domain (subdomain of THEIR
+  // domain, e.g. vinyl.memphisrecordpressing.com, CNAMEd at makesvinyl.com).
+  // Validated at the write boundary (shared/whitelabelHost.ts
+  // validateCustomWhitelabelDomain) with a case-insensitive unique index
+  // (post-merge.sh). Status ladder: 'pending_dns' (saved, DNS not yet
+  // verified) → 'pending_activation' (DNS verified, waiting on an operator
+  // to link the hostname in Replit Deployments → Domains — manual, one TLS
+  // cert per host) → 'active' (operator confirmed; host now serves the
+  // press's white-label skin and outbound links prefer it over the
+  // makesvinyl slug). Fail-closed: anything but 'active' renders neutral.
+  customDomain: text("custom_domain"),
+  customDomainStatus: text("custom_domain_status").$type<"pending_dns" | "pending_activation" | "active">(),
+  customDomainVerifiedAt: timestamp("custom_domain_verified_at"),
   // handoff/cd-cassette-catalog — per-press CD and cassette catalogs. CD and
   // cassette have a FIXED product structure (CD: case → print → booklet →
   // run pricing; cassette: case → shell → imprint → run pricing), so unlike

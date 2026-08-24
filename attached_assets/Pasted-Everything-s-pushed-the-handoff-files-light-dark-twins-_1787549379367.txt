@@ -1,0 +1,21 @@
+Everything's pushed — the handoff files (light + dark twins, verbatim from today's mocks) and the run-sheet section (614c3c0). Here's the whole message, ready to send:
+
+—
+
+The MRP artist dashboard on memphis.makesvinyl.com is a re-derivation, not the mock — this is exactly what the handoff law exists to prevent. Delete what's there and copy the handoff files verbatim, wire data only. The three big breaks, all detailed in the run-sheet (614c3c0):
+
+1. **The left rail is dead and not sticky.** In the mock it's a full-height sticky rail — working nav rows, search with the ⌘K badge, Settings pinned at the bottom, POWERED BY GoodTunes under it. Live, the rows do nothing and the rail scrolls away with the page, leaving a blank column.
+
+2. **The next-steps strip doesn't collapse.** The mock is one strip: cover thumbnail, "Next steps — [job]." with the "N of 6 done · Up next:" summary, Collapse/Expand chevron, the up-next row alone raised, and one filled action on the whole page (Upload audio & artwork, which flips to the quiet "Files received" line on click). Live is a static list with none of that.
+
+3. **The page structure is missing.** Greeting h1, range pills, View orders outline, the stats row with honest zeros, chart and top projects — all gone, replaced by a centered "Welcome" hero. And the signed-in dashboard is rendered inside the marketing site's chrome (top nav, contact bar, footer) — it's the app shell from the mock, not a page of the marketing site.
+
+One more thing before you diff: this morning we set a new signed-in header canon for every artist-facing screen, all presses. Once logged in, the marketing chrome disappears entirely — artist photo + name on the left, a quiet Feedback button and the 32px account avatar on the right, nothing else (no bell, no press mark in the header). The avatar opens the account dropdown: name and email, Edit profile, Invite teammate, Appearance (Light/Dark/System), Sign out. The handoff files have been re-pushed with this header — pull the latest before running the diff, or you'll be matching yesterday's header:
+
+- `handoff/ArtistDashboardNextStepsMRP.tsx` (6c089fe) — light
+- `handoff/ArtistDashboardNextStepsMRPDark.tsx` (b176fd7) — dark
+- new files in `handoff/assets/`: californialand-cover.jpg, goodtunes-logo.png, niina-soleil.webp
+
+Acceptance is unchanged: full-page screenshot diff against the handoff files at 1440px, both themes — any difference other than data values is a failure. Every rail row navigates, the strip collapses, the avatar dropdown opens and closes.
+
+— Bill & Andrew

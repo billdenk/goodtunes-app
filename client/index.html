@@ -144,6 +144,21 @@
         var bootWhiteLabel =
           bootHost === "makesvinyl.com" || bootHost.endsWith(".makesvinyl.com") ||
           bootHost === "pressesvinyl.com" || bootHost.endsWith(".pressesvinyl.com");
+        /* Task #3339 — a press's own custom domain (CNAMEd at us) boots as
+           white-label too. Mirror of isCustomWhitelabelCandidateHost in
+           shared/whitelabelHost.ts: any host OUTSIDE every family we know
+           statically. Unknown hosts just get the quiet neutral splash. */
+        if (!bootWhiteLabel) {
+          var bootOwn = ["goodtunes.music", "goodtunes.app", "replit.app", "replit.dev", "repl.co", "replit.local"];
+          var bootIsOwn = bootOwn.some(function (s) { return bootHost === s || bootHost.slice(-s.length - 1) === "." + s; });
+          var bootTld = bootHost.split(".").pop() || "";
+          bootWhiteLabel =
+            !bootIsOwn &&
+            bootHost.indexOf(".") !== -1 &&
+            bootHost !== "localhost" && bootHost.slice(-10) !== ".localhost" && bootHost.slice(-6) !== ".local" &&
+            !/^\d+\.\d+\.\d+\.\d+$/.test(bootHost) && bootHost.indexOf(":") === -1 &&
+            /^[a-z]{2,}$/.test(bootTld);
+        }
         /* Keep this rule in lock-step with isAdminSurfacePath in
            client/src/lib/bootSurface.ts (parity-tested by
            client/src/lib/bootSurface.test.ts). /e/:token is the PUBLIC

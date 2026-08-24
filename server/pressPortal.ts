@@ -47,6 +47,10 @@ import {
   whitelabelHostForSlug,
   parseWhitelabelHost,
   WHITELABEL_APEX_DOMAINS,
+  validateCustomWhitelabelDomain,
+  isCustomWhitelabelCandidateHost,
+  CUSTOM_DOMAIN_CNAME_TARGET,
+  WHITELABEL_PRIMARY_APEX,
 } from "@shared/whitelabelHost";
 
 // SSRF-safe fetch helpers (mirrors the same logic in routes.ts registerRoutes).
@@ -671,9 +675,21 @@ async function lockedQuoteForAlbum(albumId: string, pressId: string): Promise<{ 
 // slug saved, else null (caller falls back to the request host). Production
 // only: in dev / *.replit.dev the branded host isn't routable, and a minted
 // link must open in the environment that minted it.
-export function whitelabelOriginForPress(press: { whiteLabelSlug?: string | null } | null | undefined): string | null {
-  const slug = (press as any)?.whiteLabelSlug;
+export function whitelabelOriginForPress(press: { whiteLabelSlug?: string | null; customDomain?: string | null; customDomainStatus?: string | null } | null | undefined): string | null {
   if (process.env.NODE_ENV !== "production") return null;
+  // Task #3339 — an ACTIVE bring-your-own custom domain wins over the
+  // makesvinyl slug (fallback chain: custom → slug → request host). Only
+  // 'active' counts: before the operator links the host in Replit Domains
+  // there's no TLS, so a minted link there would be broken.
+  const cd = (press as any)?.customDomain;
+  if (
+    typeof cd === "string" &&
+    (press as any)?.customDomainStatus === "active" &&
+    validateCustomWhitelabelDomain(cd).ok
+  ) {
+    return `https://${cd.toLowerCase()}`;
+  }
+  const slug = (press as any)?.whiteLabelSlug;
   if (typeof slug !== "string" || !isValidWhitelabelSlug(slug)) return null;
   return whitelabelOriginForSlug(slug);
 }
@@ -1071,6 +1087,12 @@ export function registerPressPortalRoutes(
       // Task #3280 — previous-slug alias (still skins already-sent links).
       previousWhiteLabelSlug: (press as any).previousWhiteLabelSlug ?? null,
       whitelabelApexDomains: [...WHITELABEL_APEX_DOMAINS],
+      // Task #3339 — bring-your-own custom domain record + the exact CNAME
+      // target the tab's setup instructions render.
+      customDomain: (press as any).customDomain ?? null,
+      customDomainStatus: (press as any).customDomain ? ((press as any).customDomainStatus ?? "pending_dns") : null,
+      customDomainVerifiedAt: (press as any).customDomainVerifiedAt ?? null,
+      customDomainCnameTarget: CUSTOM_DOMAIN_CNAME_TARGET,
       canEdit,
     });
   });
@@ -1083,6 +1105,9 @@ export function registerPressPortalRoutes(
     // write; format + reserved-word validated below; uniqueness enforced
     // with an explicit case-insensitive check (friendly 409 beats 23505).
     whiteLabelSlug: z.string().trim().toLowerCase().max(40).nullable().optional(),
+    // Task #3339 — bring-your-own custom domain (subdomain of the press's
+    // own domain). Validated below via validateCustomWhitelabelDomain.
+    customDomain: z.string().trim().toLowerCase().max(253).nullable().optional(),
   });
   app.put("/api/press/:id/branding", requireAdmin, requirePressScope, requireUnveiled, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
@@ -1137,6 +1162,36 @@ export function registerPressPortalRoutes(
         }
       }
     }
+    // Task #3339 — bring-your-own custom domain. Null clears the record
+    // (clean fallback to the makesvinyl slug); a value is validated (400),
+    // uniqueness-checked across presses (409), and any CHANGE resets the
+    // status ladder to pending_dns (fail-closed until re-verified +
+    // operator-relinked).
+    if (body.data.customDomain !== undefined) {
+      const rawCd = body.data.customDomain ? body.data.customDomain : null;
+      if (rawCd === null) {
+        set.customDomain = null;
+        set.customDomainStatus = null;
+        set.customDomainVerifiedAt = null;
+      } else {
+        const v = validateCustomWhitelabelDomain(rawCd);
+        if (!v.ok) return res.status(400).json({ message: v.message });
+        const clash = await db.execute<any>(sql`
+          SELECT id FROM manufacturers
+          WHERE lower(custom_domain) = ${v.host} AND id <> ${pressId}
+          LIMIT 1
+        `);
+        if (((clash as any).rows ?? []).length > 0) {
+          return res.status(409).json({ message: "That domain is already claimed by another press." });
+        }
+        const oldCd = ((existing as any).customDomain ?? "").toLowerCase() || null;
+        set.customDomain = v.host;
+        if (oldCd !== v.host) {
+          set.customDomainStatus = "pending_dns";
+          set.customDomainVerifiedAt = null;
+        }
+      }
+    }
     if (Object.keys(set).length === 0) return res.status(400).json({ message: "Nothing to save" });
     const [row] = await db
       .update(manufacturers)
@@ -1148,9 +1203,133 @@ export function registerPressPortalRoutes(
         contactLine: manufacturers.brandContactLine,
         whiteLabelSlug: manufacturers.whiteLabelSlug,
         previousWhiteLabelSlug: manufacturers.previousWhiteLabelSlug,
+        customDomain: manufacturers.customDomain,
+        customDomainStatus: manufacturers.customDomainStatus,
+        customDomainVerifiedAt: manufacturers.customDomainVerifiedAt,
       });
     if (!row) return res.status(404).json({ message: "Press not found" });
     res.json(row);
+  });
+
+  // ── Task #3339 — custom-domain verify / activate / operator queue ───────
+  // "Verify domain" does a REAL DNS check: the press's hostname must resolve
+  // to us (CNAME to makesvinyl.com / pressesvinyl.com or the same A records
+  // as the primary apex). Passing advances pending_dns → pending_activation;
+  // ACTIVATION is a separate explicit operator action (the hostname must be
+  // linked in Replit Deployments → Domains by hand — one TLS cert per host —
+  // so flipping active before that would mint broken https links).
+  const checkCustomDomainDns = async (
+    host: string,
+  ): Promise<{ ok: boolean; detail: string }> => {
+    const dns = await import("node:dns/promises");
+    // CNAME chain first — the instructed setup.
+    try {
+      const cnames = await dns.resolveCname(host);
+      const hit = cnames.find((c) => {
+        const t = c.toLowerCase().replace(/\.$/, "");
+        return (
+          WHITELABEL_APEX_DOMAINS.some((apex) => t === apex || t.endsWith(`.${apex}`)) ||
+          t.endsWith(".replit.app") || t.endsWith(".repl.co")
+        );
+      });
+      if (hit) return { ok: true, detail: `CNAME → ${hit}` };
+      if (cnames.length > 0) {
+        return { ok: false, detail: `Found a CNAME to ${cnames[0]}, which isn't us — point it at ${CUSTOM_DOMAIN_CNAME_TARGET}.` };
+      }
+    } catch { /* no CNAME — fall through to A-record comparison */ }
+    // A-record fallback: some providers flatten CNAMEs.
+    try {
+      const [theirs, ours] = await Promise.all([
+        dns.resolve4(host),
+        dns.resolve4(WHITELABEL_PRIMARY_APEX),
+      ]);
+      if (theirs.some((ip) => ours.includes(ip))) {
+        return { ok: true, detail: "A records match our deployment." };
+      }
+      return { ok: false, detail: `The hostname resolves to ${theirs[0] ?? "another address"}, not our deployment — add a CNAME to ${CUSTOM_DOMAIN_CNAME_TARGET}.` };
+    } catch {
+      return { ok: false, detail: `We couldn't find a DNS record for that hostname yet — add a CNAME to ${CUSTOM_DOMAIN_CNAME_TARGET} and allow time for DNS to propagate.` };
+    }
+  };
+
+  app.post("/api/press/:id/custom-domain/verify", requireAdmin, requirePressScope, requireUnveiled, async (req, res) => {
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Press not found" });
+    const host = ((press as any).customDomain ?? "").toLowerCase();
+    if (!host) return res.status(400).json({ message: "Save a custom domain first." });
+    const status = (press as any).customDomainStatus ?? "pending_dns";
+    const dnsResult = await checkCustomDomainDns(host);
+    if (dnsResult.ok && status === "pending_dns") {
+      await db.execute(sql`
+        UPDATE manufacturers
+        SET custom_domain_status = 'pending_activation', custom_domain_verified_at = now()
+        WHERE id = ${pressId} AND lower(custom_domain) = ${host}
+      `);
+      return res.json({ verified: true, status: "pending_activation", detail: dnsResult.detail });
+    }
+    if (dnsResult.ok) {
+      return res.json({ verified: true, status, detail: dnsResult.detail });
+    }
+    return res.json({ verified: false, status, detail: dnsResult.detail });
+  });
+
+  // Operator-only activation flip. requireAdmin admits ALL partner accounts,
+  // so this re-checks the raw platform-staff role explicitly — a press can
+  // never self-activate (TLS isn't real until the Replit Domains link).
+  app.post("/api/press/:id/custom-domain/activate", requireAdmin, requirePressScope, async (req, res) => {
+    if (!(await callerIsPlatformStaff(req))) {
+      return res.status(403).json({ message: "Only platform operators can activate a custom domain (the hostname must be linked in Replit Domains first)." });
+    }
+    const pressId = String(req.params.id);
+    const press = await storage.getManufacturerById(pressId);
+    if (!press) return res.status(404).json({ message: "Press not found" });
+    if (!(press as any).customDomain) return res.status(400).json({ message: "This press has no custom domain saved." });
+    const active = req.body?.active !== false;
+    // State machine is one-way-honest: activation requires the DNS check to
+    // have PASSED (pending_activation + verified_at stamped). An operator
+    // can't shortcut pending_dns straight to active — the hostname wouldn't
+    // even be provably pointed at us yet.
+    const curStatus = (press as any).customDomainStatus ?? "pending_dns";
+    const verifiedAt = (press as any).customDomainVerifiedAt ?? null;
+    if (active && (curStatus !== "pending_activation" || !verifiedAt)) {
+      return res.status(409).json({ message: "DNS hasn't been verified for this domain yet — have the press hit Verify domain (or run it from their White Label tab) first." });
+    }
+    // Deactivate is only meaningful for a domain that already reached
+    // active (or is sitting verified at pending_activation — a no-op there).
+    // It must NEVER touch pending_dns or synthesize a verification stamp:
+    // verified_at is written by the DNS check alone.
+    if (!active && curStatus === "pending_dns") {
+      return res.status(409).json({ message: "This domain hasn't been verified yet — there's nothing to deactivate." });
+    }
+    await db.execute(sql`
+      UPDATE manufacturers
+      SET custom_domain_status = ${active ? "active" : "pending_activation"}
+      WHERE id = ${pressId}
+    `);
+    return res.json({ status: active ? "active" : "pending_activation" });
+  });
+
+  // Operator god-view queue: every press with a custom-domain request, so
+  // operators know which hostnames still need linking in Replit Domains.
+  app.get("/api/admin/custom-domain-requests", requireAdmin, async (req, res) => {
+    if (!(await callerIsPlatformStaff(req))) {
+      return res.status(403).json({ message: "Operators only." });
+    }
+    const r = await db.execute<any>(sql`
+      SELECT id, name, custom_domain, custom_domain_status, custom_domain_verified_at, white_label_slug
+      FROM manufacturers
+      WHERE custom_domain IS NOT NULL
+      ORDER BY (custom_domain_status = 'pending_activation') DESC, name ASC
+    `);
+    return res.json(((r as any).rows ?? []).map((m: any) => ({
+      pressId: m.id,
+      pressName: m.name,
+      customDomain: m.custom_domain,
+      status: m.custom_domain_status ?? "pending_dns",
+      verifiedAt: m.custom_domain_verified_at ?? null,
+      whiteLabelSlug: m.white_label_slug ?? null,
+    })));
   });
 
   // ── Task #3258 — public white-label host branding ───────────────────────
@@ -1171,10 +1350,21 @@ export function registerPressPortalRoutes(
       const qs = String(req.query.slug ?? "").trim().toLowerCase();
       if (qs && isValidWhitelabelSlug(qs)) slug = qs;
     }
-    // Not a white-label host at all → the client shouldn't be asking, but
-    // answer honestly instead of erroring.
-    if (!parsed && !slug) return res.json({ whitelabel: false, known: false });
-    if (!slug) return res.json({ whitelabel: true, known: false });
+    // Task #3339 — a host OUTSIDE the makesvinyl family may be a press's
+    // own custom domain. Fail-closed: only an ACTIVE (operator-linked)
+    // record serves the skin; unknown/pending custom hosts stay neutral.
+    let customWhere: ReturnType<typeof sql> | null = null;
+    if (!parsed && !slug) {
+      const candidate = rawHost.toLowerCase().split(":")[0];
+      if (isCustomWhitelabelCandidateHost(candidate)) {
+        customWhere = sql`lower(custom_domain) = ${candidate} AND custom_domain_status = 'active'`;
+      }
+      // Not a white-label host at all (and no custom-domain match possible)
+      // → the client shouldn't be asking, but answer honestly, not an error.
+      if (!customWhere) return res.json({ whitelabel: false, known: false });
+    } else if (!slug) {
+      return res.json({ whitelabel: true, known: false });
+    }
     // Task #3280 — current slugs win; a press's parked previous slug (see
     // previous_white_label_slug, written on rename) still resolves branding
     // so links sent before a rename keep their skin instead of dropping to
@@ -1183,17 +1373,16 @@ export function registerPressPortalRoutes(
       SELECT id, name, logo_url, light_logo_url, nav_logo_url, light_nav_logo_url,
              square_logo_url, light_square_logo_url,
              brand_accent_color, brand_corner_style, brand_contact_line,
-             email_branding,
-             (lower(white_label_slug) = ${slug}) AS current_match
+             email_branding
       FROM manufacturers
-      WHERE lower(white_label_slug) = ${slug}
-         OR lower(previous_white_label_slug) = ${slug}
-      ORDER BY (lower(white_label_slug) = ${slug}) DESC
+      WHERE ${customWhere ?? sql`lower(white_label_slug) = ${slug} OR lower(previous_white_label_slug) = ${slug}`}
+      ORDER BY ${customWhere ? sql`1` : sql`(lower(white_label_slug) = ${slug}) DESC`}
       LIMIT 1
     `);
     const m = ((found as any).rows ?? [])[0];
-    // Unknown subdomain → neutral page, never an error.
-    if (!m) return res.json({ whitelabel: true, known: false });
+    // Unknown subdomain → neutral page, never an error. An unknown/pending
+    // CUSTOM host answers whitelabel:false so the client renders neutral too.
+    if (!m) return res.json({ whitelabel: !customWhere, known: false });
     res.json({
       whitelabel: true,
       known: true,
@@ -2864,6 +3053,9 @@ export function registerPressPortalRoutes(
     brandContactLine: string | null;
     whiteLabelSlug: string | null;
     previousWhiteLabelSlug: string | null;
+    customDomain: string | null;
+    customDomainStatus: string | null;
+    customDomainVerifiedAt: Date | null;
   } | null> {
     // Task #3257 — also carry the white-label brand fields so the send
     // paths can skin customer-facing emails without a second lookup.
@@ -2885,6 +3077,11 @@ export function registerPressPortalRoutes(
         // Task #3280 — carried so the branding PUT can park the outgoing
         // slug as the previous-slug alias on rename.
         previousWhiteLabelSlug: manufacturers.previousWhiteLabelSlug,
+        // Task #3339 — an ACTIVE custom domain must win over the slug in
+        // every send/resend-minted link (whitelabelOriginForPress reads it).
+        customDomain: manufacturers.customDomain,
+        customDomainStatus: manufacturers.customDomainStatus,
+        customDomainVerifiedAt: manufacturers.customDomainVerifiedAt,
       })
       .from(manufacturers)
       .where(eq(manufacturers.id, pressId))
@@ -3267,7 +3464,8 @@ export function registerPressPortalRoutes(
       SELECT e.*, m.id AS press_id, m.name AS press_name, m.contact_email AS press_contact_email,
              m.email_branding AS email_branding, m.logo_url AS press_logo_url,
              m.location AS press_location, m.website_url AS press_website_url,
-             m.white_label_slug AS white_label_slug
+             m.white_label_slug AS white_label_slug,
+             m.custom_domain AS custom_domain, m.custom_domain_status AS custom_domain_status
       FROM press_estimates e
       JOIN manufacturers m ON m.id = e.press_id
       WHERE e.kind = 'estimate' AND e.payload->>'shareToken' = ${token}
@@ -3278,7 +3476,13 @@ export function registerPressPortalRoutes(
   const estimateLinkUrl = (req: Request, row: any, token: string) => {
     const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https";
     const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
-    const branded = whitelabelOriginForPress({ whiteLabelSlug: row.white_label_slug } as any);
+    // Task #3339 — an ACTIVE custom domain wins over the makesvinyl slug for
+    // freshly minted ask/share email links too (same chain as /send).
+    const branded = whitelabelOriginForPress({
+      whiteLabelSlug: row.white_label_slug,
+      customDomain: row.custom_domain,
+      customDomainStatus: row.custom_domain_status,
+    } as any);
     return `${branded ?? `${proto}://${host}`}/e/${token}`;
   };
 
@@ -3599,7 +3803,21 @@ export function registerPressPortalRoutes(
       const q = String(req.query.wl ?? "").trim().toLowerCase();
       if (q) slug = q;
     }
-    if (!slug) return null;
+    if (!slug) {
+      // Task #3339 — an ACTIVE press custom domain scopes the portal the
+      // same way its makesvinyl subdomain does. Fail-closed on status.
+      const host = rawHost.toLowerCase().split(":")[0];
+      if (isCustomWhitelabelCandidateHost(host)) {
+        const cr = await db.execute<any>(sql`
+          SELECT id FROM manufacturers
+          WHERE lower(custom_domain) = ${host} AND custom_domain_status = 'active'
+          LIMIT 1
+        `);
+        const crow = ((cr as any).rows ?? [])[0];
+        if (crow) return { id: String(crow.id) };
+      }
+      return null;
+    }
     const r = await db.execute<any>(sql`
       SELECT id FROM manufacturers
       WHERE lower(white_label_slug) = ${slug} OR lower(previous_white_label_slug) = ${slug}

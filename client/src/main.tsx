@@ -6,7 +6,7 @@ import { armBootWatchdog } from "@/lib/bootHeal";
 import { setAuthToken } from "@/lib/queryClient";
 import { setPreviewPass } from "@/lib/previewPass";
 import { applyAdminAppearance, setAdminAppearance } from "@/lib/adminAppearance";
-import { isWhitelabelHost } from "@shared/whitelabelHost";
+import { isWhitelabelHost, isCustomWhitelabelCandidateHost } from "@shared/whitelabelHost";
 import { isAdminSurfacePath } from "@/lib/bootSurface";
 
 // Task #1631 — Cross-host purchase handoff pickup. After a sale on the buy
@@ -128,7 +128,8 @@ try {
   // Keep the pre-React interstitial host classification tied to the shared
   // parser used by the server and route surfaces. The tiny inline detector in
   // index.html handles the literal first paint; this is its canonical backstop.
-  document.documentElement.classList.toggle("boot-whitelabel", isWhitelabelHost(h));
+  // Task #3339 — press custom domains (candidate hosts) boot white-label too.
+  document.documentElement.classList.toggle("boot-whitelabel", isWhitelabelHost(h) || isCustomWhitelabelCandidateHost(h));
 } catch {}
 
 installGlobalErrorReporter();

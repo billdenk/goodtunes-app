@@ -751,6 +751,8 @@ export function AdminManufacturer() {
 
             {isSuperAdmin && <PressUnveilCard m={m} onSave={(patch) => save.mutate(patch)} saving={save.isPending} />}
 
+            {isSuperAdmin && <PressCustomDomainCard m={m} />}
+
             {isSuperAdmin && <PressAutoTriggerConsentPanel m={m} />}
 
             <NotificationsCard partnerKind="manufacturer" partnerId={m.id} partnerName={m.name} />
@@ -931,6 +933,75 @@ function PressUnveilCard({
           data-testid="switch-estimates-whitelabel-unveiled"
         />
       </div>
+    </div>
+  );
+}
+
+// Task #3339 — operator god-view for a press's bring-your-own custom domain.
+// Activation is DELIBERATELY manual: each hostname must be linked by hand in
+// Replit Deployments → Domains (one TLS cert per host — can't be automated).
+// This card is the "mark linked/active" click after that runbook step
+// (docs/whitelabel-custom-domain-runbook.md).
+function PressCustomDomainCard({ m }: { m: Manufacturer }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const domain = (m as any).customDomain as string | null;
+  const status = ((m as any).customDomainStatus as string | null) ?? (domain ? "pending_dns" : null);
+  const activate = useMutation({
+    mutationFn: async (active: boolean) => {
+      const r = await apiRequest("POST", `/api/press/${m.id}/custom-domain/activate`, { active });
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [`/api/manufacturers/${m.id}`] });
+      qc.invalidateQueries({ queryKey: ["/api/manufacturers"] });
+    },
+    onError: (e: any) => toast({ title: "Couldn't update the domain status", description: String(e?.message ?? ""), variant: "destructive" }),
+  });
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="card-press-custom-domain">
+      <div className="text-sm font-semibold text-slate-900">White-label custom domain</div>
+      {!domain ? (
+        <p className="mt-1 text-sm text-slate-500">
+          None requested — this press uses its makesvinyl.com subdomain.
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-slate-500 max-w-xl">
+            <span className="font-medium text-slate-700" data-testid="text-custom-domain-host">{domain}</span>
+            {" · "}
+            <span data-testid="text-custom-domain-status">
+              {status === "active" ? "Active" : status === "pending_activation" ? "DNS verified — waiting on Replit Domains link" : "Pending DNS (press hasn't verified yet)"}
+            </span>
+          </p>
+          <p className="mt-2 text-sm text-slate-500 max-w-xl">
+            To activate: link <span className="font-medium">{domain}</span> in Replit
+            Deployments → Domains (issues the TLS cert), then mark it active here.
+          </p>
+          <div className="mt-3 flex gap-2">
+            {status !== "active" ? (
+              <Button
+                size="sm"
+                disabled={activate.isPending}
+                onClick={() => activate.mutate(true)}
+                data-testid="button-custom-domain-activate"
+              >
+                Mark linked &amp; active
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={activate.isPending}
+                onClick={() => activate.mutate(false)}
+                data-testid="button-custom-domain-deactivate"
+              >
+                Deactivate
+              </Button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -45,6 +45,11 @@ type BrandingConfig = {
   // already-sent estimate/invite links keep their branding.
   previousWhiteLabelSlug?: string | null;
   whitelabelApexDomains?: string[];
+  // Task #3339 — bring-your-own custom domain record.
+  customDomain?: string | null;
+  customDomainStatus?: "pending_dns" | "pending_activation" | "active" | null;
+  customDomainVerifiedAt?: string | null;
+  customDomainCnameTarget?: string;
   canEdit?: boolean;
 };
 
@@ -134,6 +139,12 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
       setCornerStyle(branding.cornerStyle === "square" ? "square" : "rounded");
       setContactLine(branding.contactLine ?? "");
       setWlSlug(branding.whiteLabelSlug ?? "");
+      // Task #3339 — seed the custom-domain field from the SAVED record
+      // (the website-derived suggestion only fills a never-saved field).
+      if (branding.customDomain) {
+        setCustomDomain(branding.customDomain);
+        setCustomTouched(true);
+      }
       setSeeded(true);
     }
   }, [branding, seeded]);
@@ -146,6 +157,13 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
         cornerStyle,
         contactLine: contactLine.trim(),
         whiteLabelSlug: wlSlug.trim() ? wlSlug.trim().toLowerCase() : null,
+        // Task #3339 — custom domain persists through the same PUT; empty
+        // clears the record (clean fallback to the makesvinyl subdomain).
+        // Only sent once the press has touched the field or a record exists,
+        // so the website-derived SUGGESTION never saves itself.
+        ...(customTouched || branding?.customDomain
+          ? { customDomain: customValue.trim() ? customValue.trim().toLowerCase() : null }
+          : {}),
       });
       return r.json();
     },
@@ -157,6 +175,17 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
       // Surface subdomain validation/uniqueness errors inline (400/409).
       const msg = String(e?.message ?? "");
       setSlugError(msg.replace(/^\d+:\s*/, "") || "Couldn't save — try again.");
+    },
+  });
+
+  // Task #3339 — real DNS verification for the saved custom domain.
+  const verifyMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/press/${pressId}/custom-domain/verify`, {});
+      return (await r.json()) as { verified: boolean; status: string; detail: string };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: brandingKey });
     },
   });
 
@@ -183,11 +212,19 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
   // surface the kept alias after a rename.
   const aliasSlug = branding?.previousWhiteLabelSlug ?? "";
   const isRenaming = Boolean(savedSlug) && wlSlug.trim().toLowerCase() !== savedSlug;
+  // Task #3339 — saved custom-domain record + status ladder.
+  const savedCustom = (branding?.customDomain ?? "").toLowerCase();
+  const customStatus = branding?.customDomainStatus ?? null;
+  const cnameTarget = branding?.customDomainCnameTarget ?? "makesvinyl.com";
+  const customDirty =
+    (customTouched || Boolean(savedCustom)) &&
+    customValue.trim().toLowerCase() !== savedCustom;
   const dirty =
     accent.trim().toUpperCase() !== savedAccent.toUpperCase() ||
     cornerStyle !== savedCorner ||
     contactLine.trim() !== savedContact ||
-    wlSlug.trim().toLowerCase() !== savedSlug;
+    wlSlug.trim().toLowerCase() !== savedSlug ||
+    customDirty;
 
   const accentValid = /^#[0-9a-fA-F]{6}$/.test(accent);
   const accentLive = accentValid ? accent : DEFAULT_ACCENT;
@@ -318,7 +355,16 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
                     <Globe className="w-4 h-4 flex-shrink-0" style={{ color: "#a1a1a6" }} />
                     <div className="text-[14px] font-semibold" style={{ color: INK }}>Your own domain</div>
                   </div>
-                  <WordIcon icon={AlertCircle}>Needs DNS verification</WordIcon>
+                  {/* Word + icon status (never color-only) — Task #3339 ladder. */}
+                  {!savedCustom ? (
+                    <WordIcon icon={AlertCircle}>Not set up</WordIcon>
+                  ) : customStatus === "active" ? (
+                    <WordIcon icon={Check}>Active</WordIcon>
+                  ) : customStatus === "pending_activation" ? (
+                    <WordIcon icon={AlertCircle}>Pending activation</WordIcon>
+                  ) : (
+                    <WordIcon icon={AlertCircle}>Pending DNS</WordIcon>
+                  )}
                 </div>
                 <div className="flex items-center gap-2.5 flex-wrap" style={{ marginTop: 12 }}>
                   <input
@@ -330,17 +376,54 @@ export default function PressWhiteLabelSubTab({ pressId }: { pressId: string }) 
                     style={{ height: 36, borderRadius: 10, padding: "0 12px", fontSize: 13, background: CANVAS, border: `1px solid ${HAIRLINE}`, color: INK }}
                     data-testid="input-custom-domain"
                   />
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(e) => e.stopPropagation()}
-                    className="rounded-full inline-flex items-center flex-shrink-0"
-                    style={{ padding: "8px 16px", fontSize: 12.5, fontWeight: 500, border: "1px solid #6e6e73", color: INK, cursor: "pointer" }}
-                    data-testid="button-verify-domain"
-                  >
-                    Verify domain
-                  </span>
+                  {savedCustom && !customDirty && customStatus !== "active" && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      onClick={(e) => { e.stopPropagation(); if (!verifyMutation.isPending) verifyMutation.mutate(); }}
+                      className="rounded-full inline-flex items-center flex-shrink-0"
+                      style={{ padding: "8px 16px", fontSize: 12.5, fontWeight: 500, border: "1px solid #6e6e73", color: INK, cursor: "pointer" }}
+                      data-testid="button-verify-domain"
+                    >
+                      {verifyMutation.isPending ? "Checking DNS…" : "Verify domain"}
+                    </span>
+                  )}
                 </div>
+                {customDirty && (
+                  <p className="text-[12px]" style={{ color: "#a1a1a6", marginTop: 8 }} data-testid="text-custom-domain-save-note">
+                    Use a subdomain of your own domain (like estimates.yourpress.com) — we
+                    can't take over your main site. Save changes to {customValue.trim() ? "record it" : "remove your custom domain and fall back to your makesvinyl.com subdomain"}.
+                  </p>
+                )}
+                {savedCustom && !customDirty && (
+                  <div style={{ marginTop: 10, display: "grid", gap: 6 }} data-testid="text-custom-domain-setup">
+                    {customStatus === "active" ? (
+                      <p className="text-[12px]" style={{ color: "#a1a1a6" }}>
+                        {savedCustom} is live — new estimate links, invites, and email links
+                        use it. Your {savedSlug ? `${savedSlug}.makesvinyl.com` : "makesvinyl.com"} links keep working.
+                      </p>
+                    ) : (
+                      <>
+                        <p className="text-[12px]" style={{ color: SUBINK }}>
+                          Add this record at your DNS provider, then hit Verify domain:
+                        </p>
+                        <code className="text-[12px] rounded-lg" style={{ padding: "8px 10px", background: CANVAS, border: `1px solid ${HAIRLINE}`, color: INK }} data-testid="text-custom-domain-cname">
+                          CNAME&nbsp;&nbsp;{savedCustom}&nbsp;&nbsp;→&nbsp;&nbsp;{cnameTarget}
+                        </code>
+                        <p className="text-[12px]" style={{ color: "#a1a1a6" }}>
+                          {customStatus === "pending_activation"
+                            ? "DNS looks good. Our team is finishing activation (a security certificate is issued for your hostname) — we'll flip it live shortly."
+                            : "After DNS verifies, our team completes activation on our side — your domain goes live once that's done."}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+                {verifyMutation.data && !verifyMutation.data.verified && (
+                  <div style={{ marginTop: 8 }} data-testid="text-custom-domain-verify-result">
+                    <WordIcon icon={AlertCircle}>{verifyMutation.data.detail}</WordIcon>
+                  </div>
+                )}
               </button>
             </div>
             <p className="text-[12px]" style={{ color: "#a1a1a6", marginTop: 8 }}>

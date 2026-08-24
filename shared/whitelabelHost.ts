@@ -72,3 +72,90 @@ export function whitelabelOriginForSlug(slug: string): string {
 export function whitelabelHostForSlug(slug: string): string {
   return `${slug.toLowerCase()}.${WHITELABEL_PRIMARY_APEX}`;
 }
+
+// ── Task #3339 — press bring-your-own custom domain ─────────────────────────
+//
+// A press can point a subdomain of THEIR domain (vinyl.memphisrecordpressing
+// .com) at our deployment via CNAME; once verified + operator-linked in
+// Replit Domains it serves the same white-label skin as <slug>.makesvinyl.com.
+// The static parser here can't know DB state — these helpers only decide
+// (a) whether a typed hostname is an acceptable custom domain, and
+// (b) whether a request host COULD be a custom domain (candidate), so the
+// client/boot layers know to ask the DB-backed branding endpoint.
+
+// The record a press adds at their DNS provider. Both apexes serve; we
+// instruct the primary for consistency with minted links.
+export const CUSTOM_DOMAIN_CNAME_TARGET = WHITELABEL_PRIMARY_APEX;
+
+export type CustomDomainStatus = "pending_dns" | "pending_activation" | "active";
+
+// Domain families a press may never claim as "their" custom domain: our own
+// product hosts, the white-label family itself, and Replit infrastructure.
+const PLATFORM_DOMAIN_SUFFIXES = [
+  "goodtunes.music",
+  "goodtunes.app",
+  ...WHITELABEL_APEX_DOMAINS,
+  "replit.app",
+  "replit.dev",
+  "repl.co",
+  "replit.local",
+] as const;
+
+function hostIsUnderSuffix(host: string, suffix: string): boolean {
+  return host === suffix || host.endsWith(`.${suffix}`);
+}
+
+export function isPlatformOwnedHost(rawHost: string | undefined | null): boolean {
+  const host = (rawHost || "").toLowerCase().split(":")[0];
+  return PLATFORM_DOMAIN_SUFFIXES.some((s) => hostIsUnderSuffix(host, s));
+}
+
+const HOST_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+export type CustomDomainValidation =
+  | { ok: true; host: string }
+  | { ok: false; message: string };
+
+// Validates a press-entered custom hostname. Accepts a bare hostname (also
+// tolerates a pasted https:// URL — we keep only the hostname). Subdomain
+// form is REQUIRED: we never take over a bare apex (that's their marketing
+// site) and `www.` counts as the apex site too.
+export function validateCustomWhitelabelDomain(raw: string): CustomDomainValidation {
+  let input = (raw || "").trim().toLowerCase();
+  input = input.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+  if (!input) return { ok: false, message: "Enter a hostname like vinyl.yourpress.com." };
+  if (input.length > 253) return { ok: false, message: "That hostname is too long." };
+  const labels = input.split(".");
+  if (labels.some((l) => !HOST_LABEL_RE.test(l))) {
+    return { ok: false, message: "That doesn't look like a valid hostname — letters, numbers, and hyphens only." };
+  }
+  // TLD must be alphabetic — also rejects raw IPv4 literals.
+  if (!/^[a-z]{2,}$/.test(labels[labels.length - 1])) {
+    return { ok: false, message: "That doesn't look like a valid domain name." };
+  }
+  if (labels.length < 3) {
+    return { ok: false, message: "Use a subdomain of your domain (vinyl.yourpress.com) — we can't take over your main domain." };
+  }
+  if (labels[0] === "www") {
+    return { ok: false, message: "www is your main site — pick a dedicated subdomain like vinyl.yourpress.com." };
+  }
+  if (isPlatformOwnedHost(input)) {
+    return { ok: false, message: "That domain is operated by the platform — use a subdomain of your own domain." };
+  }
+  return { ok: true, host: input };
+}
+
+// True when a request host is OUTSIDE every family we know statically —
+// i.e. it can only be serving us because someone CNAMEd it here. The client
+// treats candidates as white-label-flavored and asks /api/whitelabel/branding
+// (which fail-closes: unknown/unverified hosts get the neutral page).
+// Dev/preview/localhost hosts are never candidates.
+export function isCustomWhitelabelCandidateHost(rawHost: string | undefined | null): boolean {
+  const host = (rawHost || "").toLowerCase().split(":")[0];
+  if (!host || !host.includes(".")) return false;
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return false;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.startsWith("[") || host.includes(":")) return false;
+  if (isPlatformOwnedHost(host)) return false;
+  if (!/^[a-z]{2,}$/.test(host.split(".").pop() || "")) return false;
+  return true;
+}

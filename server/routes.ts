@@ -1345,7 +1345,22 @@ export async function registerRoutes(
         const qs = String((req.query as any)?.wl ?? "").trim().toLowerCase();
         if (qs && isValidWhitelabelSlug(qs)) wlSlug = qs;
       }
-      if (!wlSlug) return null;
+      // Task #3339 — an ACTIVE press custom domain counts as that press's
+      // white-label host too (same landing rule as its makesvinyl slug).
+      let wlCustomPressId: string | null = null;
+      if (!wlSlug) {
+        const { isCustomWhitelabelCandidateHost } = await import("@shared/whitelabelHost");
+        const h = rawHost.toLowerCase().split(":")[0];
+        if (isCustomWhitelabelCandidateHost(h)) {
+          const cr = await db.execute<{ id: string }>(sql`
+            SELECT id FROM manufacturers
+            WHERE lower(custom_domain) = ${h} AND custom_domain_status = 'active'
+            LIMIT 1
+          `);
+          wlCustomPressId = (((cr as any).rows ?? [])[0]?.id as string | undefined) ?? null;
+        }
+      }
+      if (!wlSlug && !wlCustomPressId) return null;
       let role = opts?.role ?? null;
       if (!role && userId) {
         const { getUserRole } = await import("./auth/roles");
@@ -1368,7 +1383,9 @@ export async function registerRoutes(
         SELECT (email_branding IS NOT NULL) AS skinned
         FROM manufacturers
         WHERE id = ${pressId}
-          AND (lower(white_label_slug) = ${wlSlug} OR lower(previous_white_label_slug) = ${wlSlug})
+          AND ${wlCustomPressId
+            ? sql`id = ${wlCustomPressId}`
+            : sql`(lower(white_label_slug) = ${wlSlug} OR lower(previous_white_label_slug) = ${wlSlug})`}
         LIMIT 1
       `);
       const m = ((r as any).rows ?? [])[0];

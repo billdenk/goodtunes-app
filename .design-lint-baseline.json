@@ -26882,6 +26882,26 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ color: \"#a1a1a6\", marginTop: 8 }} data-testid=\"text-custom-domain-save-note\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ color: \"#a1a1a6\" }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ color: SUBINK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
+    "snippet": "<code className=\"text-[12px] rounded-lg\" style={{ padding: \"8px 10px\", background: CANVAS, border: `1px solid ${HAIRLINE}`, color: INK }} data-testid=\"text-custom-domain-cname\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-settings/PressWhiteLabelSubTab.tsx",
     "snippet": "<p className=\"text-[13px]\" style={{ color: SUBINK, marginTop: 8, maxWidth: 480, lineHeight: 1.6 }}>"
   },
   {

@@ -13182,3 +13182,28 @@ mirror_external_completed_art() {
 }
 mirror_external_completed_art dev  "${DATABASE_URL:-}"
 mirror_external_completed_art prod "${PROD_DATABASE_URL:-}"
+
+# Task #3339 — press bring-your-own custom domain (idempotent, dev + prod):
+# manufacturers.custom_domain (+status/verified_at) with a case-insensitive
+# unique index so two presses can never claim the same hostname.
+custom_domain_columns_task_3339() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping custom-domain columns on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" >/dev/null 2>&1 <<'SQL'
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS custom_domain text;
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS custom_domain_status text;
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS custom_domain_verified_at timestamp;
+CREATE UNIQUE INDEX IF NOT EXISTS manufacturers_custom_domain_lower_uniq
+  ON manufacturers (lower(custom_domain)) WHERE custom_domain IS NOT NULL;
+SQL
+  then
+    echo "post-merge: custom-domain columns ok on $label"
+  else
+    echo "post-merge: WARNING — custom-domain columns failed on $label (continuing)"
+  fi
+}
+custom_domain_columns_task_3339 dev  "${DATABASE_URL:-}"
+custom_domain_columns_task_3339 prod "${PROD_DATABASE_URL:-}"

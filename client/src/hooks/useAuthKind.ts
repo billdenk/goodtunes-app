@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { isWhitelabelHost } from "@shared/whitelabelHost";
+import { isWhitelabelHost, isCustomWhitelabelCandidateHost } from "@shared/whitelabelHost";
 
 export type AuthKind = "admin" | "customer";
 
@@ -38,6 +38,11 @@ export function onWhitelabelHost(host?: string): boolean {
     .toLowerCase()
     .split(":")[0];
   if (isWhitelabelHost(h)) return true;
+  // Task #3339 — a press's own custom domain (CNAMEd at us) is white-label
+  // too. Candidate = outside every family we know statically; the branding
+  // fetch fail-closes (unknown/unverified custom hosts render the neutral
+  // page — never GoodTunes chrome, never a redirect loop).
+  if (isCustomWhitelabelCandidateHost(h)) return true;
   // Dev fallback mirroring the server's ?slug= branding override: *.replit.dev
   // can't carry a white-label subdomain, so `?gtwl=<slug>` lets the branded
   // surfaces be exercised in development. Never active in production builds.
