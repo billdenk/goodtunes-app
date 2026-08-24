@@ -24,7 +24,10 @@
 // Self-contained per handoff rules. Numbers from the MRP PDF at 1,000 units;
 // other tiers scale with the standard qty curve.
 
-import { setAuthToken } from "@/lib/queryClient";
+import { setAuthToken, getAuthToken } from "@/lib/queryClient";
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
+import { stepAfterStartError, type StartStep } from './estimateStartAuth';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
@@ -284,7 +287,7 @@ export default function PressClientEstimateMRP() {
   const [startOpen, setStartOpen] = useState(false);
   // The link-not-login rule flips HERE (Bill, Aug 19 2026): viewing was
   // login-free; starting the project is where the account begins.
-  const [startStep, setStartStep] = useState<'confirm' | 'account' | 'done'>('confirm');
+  const [startStep, setStartStep] = useState<StartStep>('confirm');
   const [acctName, setAcctName] = useState('');
   const [acctEmail, setAcctEmail] = useState('');
   const [acctPassword, setAcctPassword] = useState('');
@@ -292,6 +295,11 @@ export default function PressClientEstimateMRP() {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const spin = useSpin();
+  const queryClient = useQueryClient();
+  // Existing customers skip the account form — the start request carries
+  // their session cookie + stored bearer and starts under their account.
+  const { user: authUser } = useAuth();
+  const authedCustomer = !!authUser && authUser.kind !== 'admin';
 
   const shareEarned = /.+@.+\..+/.test(shareEmail.trim());
   const closeShare = () => { setShareOpen(false); setShareSent(false); setShareName(''); setShareEmail(''); setActionError(null); };
@@ -303,17 +311,20 @@ export default function PressClientEstimateMRP() {
   const firstName = (preparedBy || 'the press').split(' ')[0];
 
   // Real actions — every sheet posts against the private link token.
-  const postAction = async (path: string, body: Record<string, any>): Promise<{ ok: boolean; message?: string; token?: string | null }> => {
+  const postAction = async (path: string, body: Record<string, any>): Promise<{ ok: boolean; message?: string; code?: string; token?: string | null }> => {
     setBusy(true); setActionError(null);
     try {
+      // Send the stored bearer alongside the host-scoped cookie — on
+      // white-label hosts the cookie often isn't there but the token is.
+      const bearer = getAuthToken();
       const res = await fetch(`/api/estimate-link/${token}/${path}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
         credentials: 'include',
         body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => ({}));
-      if (!res.ok) { setActionError(json?.message || 'Something went wrong — please try again.'); return { ok: false, message: json?.message }; }
+      if (!res.ok) { setActionError(json?.message || 'Something went wrong — please try again.'); return { ok: false, message: json?.message, code: json?.code }; }
       return { ok: true, token: json?.token ?? null };
     } catch {
       setActionError('Something went wrong — please try again.');
@@ -330,16 +341,34 @@ export default function PressClientEstimateMRP() {
     const r = await postAction('ask', { message: askMsg.trim() });
     if (r.ok) setAskSent(true);
   };
+  const finishStart = (freshToken?: string | null) => {
+    if (freshToken) setAuthToken(freshToken);
+    // Fresh auth state — the accepted page checks /api/me to swap its
+    // sign-in step for a direct "continue" action.
+    queryClient.invalidateQueries({ queryKey: ['/api/me'] });
+    setStartStep('done');
+    // The accepted confirmation page IS part of the acceptance journey
+    // (review gate) — hand off to it once the project + account exist.
+    navigate(`/e/${token}/accepted`);
+  };
+  // Already signed in — no account form; the request itself authenticates.
+  const startAsExistingCustomer = async () => {
+    if (busy) return;
+    const r = await postAction('start', {});
+    if (r.ok) finishStart(r.token);
+  };
   const startProject = async () => {
     if (acctPassword.trim() === '' || busy) return;
-    const r = await postAction('start', { name: acctName.trim(), email: acctEmail.trim(), password: acctPassword });
-    if (r.ok) {
-      if (r.token) setAuthToken(r.token);
-      setStartStep('done');
-      // The accepted confirmation page IS part of the acceptance journey
-      // (review gate) — hand off to it once the project + account exist.
-      navigate(`/e/${token}/accepted`);
-    }
+    const r = await postAction('start', { name: acctName.trim(), email: acctEmail.trim(), password: acctPassword, mode: 'create' });
+    if (r.ok) { finishStart(r.token); return; }
+    // Existing account → pivot to sign-in (email kept, password cleared).
+    const next = stepAfterStartError(r.code, 'account');
+    if (next === 'signin') { setAcctPassword(''); setStartStep('signin'); }
+  };
+  const signInAndStart = async () => {
+    if (acctPassword === '' || busy) return;
+    const r = await postAction('start', { email: acctEmail.trim(), password: acctPassword, mode: 'signin' });
+    if (r.ok) finishStart(r.token);
   };
 
   const unitCost = useMemo(() => unitCostAt(qty), [unitCostAt, qty]);
@@ -763,7 +792,7 @@ export default function PressClientEstimateMRP() {
           {startStep === 'done' ? (
             <div style={{ textAlign: 'center', padding: '6px 0' }}>
               <div style={{ fontSize: 15.5, fontWeight: 600 }}>Project created — {firstName} will be in touch.</div>
-              <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 6 }}>Welcome, {acctName.trim().split(' ')[0]} — your account is ready.</div>
+              <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 6 }}>Welcome, {(acctName.trim() || clientFull || 'back').split(' ')[0]} — your account is ready.</div>
               {/* The flow continues — done state hands off to the MRP-branded
                   next-steps page (Bill, Aug 21 2026). */}
               <button
@@ -803,9 +832,50 @@ export default function PressClientEstimateMRP() {
                   {busy ? 'Creating…' : <>Create account &amp; start project</>}
                 </button>
                 {actionError && <div style={{ marginTop: 10, fontSize: 12, color: '#b3261e' }}>{actionError}</div>}
+                <button
+                  type="button"
+                  data-testid="button-switch-signin"
+                  onClick={() => { setAcctPassword(''); setActionError(null); setStartStep('signin'); }}
+                  style={{ marginTop: 12, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: SUBINK, textDecoration: 'underline' }}
+                >
+                  Already have an account? Sign in
+                </button>
                 <div style={{ marginTop: 10, textAlign: 'center', fontSize: 11.5, color: SUBINK }}>
                   {firstName} will be notified the moment your project is live.
                 </div>
+              </div>
+            </>
+          ) : startStep === 'signin' ? (
+            <>
+              <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.4, lineHeight: 1.25, paddingRight: 30 }}>
+                Sign in to start your project.
+              </div>
+              <p style={{ fontSize: 13.5, color: SUBINK, margin: '10px 0 0', lineHeight: 1.65 }}>
+                Welcome back — sign in with your existing account and the project starts under it.
+              </p>
+              <div style={{ marginTop: 18, display: 'grid', gap: 10 }}>
+                <input style={fieldStyle} placeholder="Email" type="email" value={acctEmail} onChange={(e) => setAcctEmail(e.target.value)} data-testid="input-signin-email" />
+                <input style={fieldStyle} placeholder="Password" type="password" value={acctPassword} onChange={(e) => setAcctPassword(e.target.value)} data-testid="input-signin-password" />
+              </div>
+              <div style={{ marginTop: 20 }}>
+                <button
+                  type="button"
+                  disabled={acctPassword === ''}
+                  style={{ ...confirmBtn(acctPassword !== ''), width: '100%' }}
+                  onClick={signInAndStart}
+                  data-testid="button-signin-start"
+                >
+                  {busy ? 'Signing in…' : <>Sign in &amp; start project</>}
+                </button>
+                {actionError && <div style={{ marginTop: 10, fontSize: 12, color: '#b3261e' }} data-testid="signin-error">{actionError}</div>}
+                <button
+                  type="button"
+                  data-testid="button-switch-create"
+                  onClick={() => { setAcctPassword(''); setActionError(null); setStartStep('account'); }}
+                  style={{ marginTop: 12, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: SUBINK, textDecoration: 'underline' }}
+                >
+                  Need an account? Create one
+                </button>
               </div>
             </>
           ) : (
@@ -821,11 +891,18 @@ export default function PressClientEstimateMRP() {
               </p>
               <div style={{ marginTop: 22, display: 'flex', justifyContent: 'flex-end' }}>
                 {/* Earned blue — the user opened the confirm deliberately.
-                    Advances to account creation, not straight to done. */}
-                <button type="button" style={confirmBtn(true)} onClick={() => setStartStep('account')} data-testid="button-start-confirm">
-                  Start project
+                    Signed-in customers start directly (no account form);
+                    everyone else advances to account creation. */}
+                <button
+                  type="button"
+                  style={confirmBtn(true)}
+                  onClick={() => { if (authedCustomer) { startAsExistingCustomer(); } else { setStartStep('account'); } }}
+                  data-testid="button-start-confirm"
+                >
+                  {busy ? 'Starting…' : 'Start project'}
                 </button>
               </div>
+              {actionError && <div style={{ marginTop: 10, fontSize: 12, color: '#b3261e', textAlign: 'right' }}>{actionError}</div>}
             </>
           )}
         </Sheet>

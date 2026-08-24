@@ -23,6 +23,8 @@ import { useEffect, useState } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import { apiRequest } from '@/lib/queryClient';
+import { useAuth } from '@/hooks/useAuth';
+import { acceptedNextStepCopy } from './estimateStartAuth';
 import californialandCover from './assets/californialand-cover.jpg';
 import mrpLogoAsset from './assets/mrp-logo.svg';
 import brandonPhoto from './assets/brandon-seavers.png';
@@ -375,6 +377,12 @@ export default function PressClientEstimateAcceptedMRP() {
   // Optimistic "paid" once pay-status confirms, so the pill hides even before
   // the estimate query refetches paidAt.
   const [justPaid, setJustPaid] = useState(false);
+  // Auth-aware next step: right after a fresh start the customer IS signed
+  // in (session + bearer) — recognize them and offer a direct "continue"
+  // instead of a second login form. A later signed-out visit (fresh tab
+  // from the confirmation email) keeps the sign-in CTA.
+  const { user: authUser } = useAuth();
+  const authedCustomer = !!authUser && authUser.kind !== 'admin';
 
   // On return from Checkout (?paid=1&session_id=…), confirm fail-closed.
   useEffect(() => {
@@ -548,10 +556,11 @@ export default function PressClientEstimateAcceptedMRP() {
             <div style={{ padding: '15px 18px', display: 'flex', gap: 12, alignItems: 'flex-start', background: CARD_RAISED }}>
               <span style={{ paddingTop: 2 }}><NextIcon /></span>
               <div>
-                <div style={{ fontSize: 13.5, fontWeight: 600 }}>Up next — sign in and upload audio &amp; artwork</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }} data-testid="accepted-next-step-title">
+                  {acceptedNextStepCopy(authedCustomer, portalHost, depositLabel).title}
+                </div>
                 <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 3, lineHeight: 1.6 }}>
-                  Your project home is {portalHost}. Files come first; the 50% deposit ({depositLabel})
-                  is only asked for once your test pressing is approved and the run is scheduled.
+                  {acceptedNextStepCopy(authedCustomer, portalHost, depositLabel).body}
                 </div>
               </div>
             </div>
@@ -572,9 +581,9 @@ export default function PressClientEstimateAcceptedMRP() {
                 type="button"
                 onClick={() => navigate('/next-steps')}
                 data-testid="accepted-sign-in"
-                style={{ padding: '11px 25px', borderRadius: 0, border: `1px solid ${HAIRLINE}`, cursor: 'pointer', background: 'transparent', color: INK, fontSize: 14.5, fontWeight: 600 }}
+                style={{ padding: '11px 25px', borderRadius: 0, border: `1px solid ${HAIRLINE}`, cursor: 'pointer', background: authedCustomer ? BLUE : 'transparent', color: INK, fontSize: 14.5, fontWeight: 600 }}
               >
-                Sign in at {portalHost}
+                {acceptedNextStepCopy(authedCustomer, portalHost, depositLabel).ctaLabel}
               </button>
               <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 10, textAlign: 'center', fontSize: 11.5, color: 'rgba(0,0,0,0.38)', whiteSpace: 'nowrap' }}>
                 {clientEmail}
