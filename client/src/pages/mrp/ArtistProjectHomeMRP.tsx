@@ -120,18 +120,24 @@ function RailIcon({ name, active }: { name: string; active: boolean }) {
   }
 }
 
+// Rows with a real page navigate; the rest stay inert until their screens
+// are built (Aug 24 2026, Andrew's Memphis demo).
+const RAIL_LINKS: Record<string, string> = { Dashboard: '/dashboard', Releases: '/projects' };
+
 function RailRow({ name, active }: { name: string; active: boolean }) {
+  const [, navigate] = useLocation();
+  const to = RAIL_LINKS[name];
   return (
     <a
-      href="#"
-      onClick={(e) => e.preventDefault()}
+      href={to ?? '#'}
+      onClick={(e) => { e.preventDefault(); if (to) navigate(to); }}
       data-testid={`rail-${name.toLowerCase()}`}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 0,
         fontSize: 13, fontWeight: active ? 600 : 500, color: active ? INK : SUBINK,
         background: active ? CARD_RAISED : 'transparent',
         border: active ? `1px solid ${HAIRLINE}` : '1px solid transparent',
-        textDecoration: 'none',
+        textDecoration: 'none', cursor: to ? 'pointer' : 'default',
       }}
     >
       <RailIcon name={name} active={active} />
