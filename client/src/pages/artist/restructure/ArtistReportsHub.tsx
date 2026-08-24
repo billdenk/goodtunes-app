@@ -3,20 +3,20 @@
 // Copied VERBATIM from handoff/artist-portal-restructure/
 // ArtistPortalRestructureFlow.tsx (Ruby, Aug 16 2026): tab bar, never-netted
 // note, LedgerCard grammar. MOCK_LEDGERS swapped for GET /api/artist/ledgers.
-// Audience / Acquisition / Buyers tabs mount the REAL existing analytics
-// components (standing rule: partner surfaces reuse the shared components).
+// Aug 24 2026: slimmed to Payments/Earnings only — Audience / Acquisition /
+// Buyers moved to their own top-level rail items (Aug 16 nav canon).
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useLocation, useSearch } from 'wouter';
 import { ArrowRight, Check, Lock } from 'lucide-react';
-import { AcquisitionTab } from '@/components/operator/AcquisitionTab';
 import { BLUE, useRestructureTheme, fmtDollars, type Theme } from './shared';
 
+// Aug 16 nav canon (shipped Aug 24 2026): Audience / Acquisition / Buyers
+// moved OUT to their own top-level rail items — one home per thing. The
+// hub keeps only the money ledgers. (A later rename may fold this into
+// "Payments"; not now.)
 const REPORTS_TABS = [
-  { id: 'audience', label: 'Audience' },
-  { id: 'acquisition', label: 'Acquisition' },
-  { id: 'buyers', label: 'Buyers' },
   { id: 'payments', label: 'Payments' },
   { id: 'earnings', label: 'Earnings' },
 ];
@@ -78,7 +78,11 @@ export function ArtistReportsHub({ qs, personId, rangeControl }: {
   const search = useSearch();
   // Sub-tab lives on ?rtab= so it doesn't fight the portal shell's ?tab=
   // (embedded-AdminReports precedent).
-  const tab = new URLSearchParams(search).get('rtab') ?? 'payments';
+  const rtabRaw = new URLSearchParams(search).get('rtab') ?? 'payments';
+  // Only the ledger sub-tabs live here now; any stale rtab (audience/
+  // acquisition/buyers deep links are canonicalized to top-level tabs by
+  // ArtistDashboard before this mounts) falls back to Payments.
+  const tab = rtabRaw === 'earnings' ? 'earnings' : 'payments';
   const setTab = (next: string) => {
     const params = new URLSearchParams(search);
     if (next === 'payments') params.delete('rtab'); else params.set('rtab', next);
@@ -91,7 +95,6 @@ export function ArtistReportsHub({ qs, personId, rangeControl }: {
     enabled: tab === 'payments' || tab === 'earnings',
   });
   const ledgers = ledgersQ.data;
-  const moneyTab = tab === 'payments' || tab === 'earnings';
   const neverNetted = useMemo(() => {
     if (!ledgers) return null;
     const nettedCents = Math.abs(ledgers.owed.totalCents - ledgers.earned.totalCents);
@@ -119,8 +122,7 @@ export function ArtistReportsHub({ qs, personId, rangeControl }: {
         {rangeControl && <div className="ml-auto flex-shrink-0 pl-3" style={{ paddingBottom: 6 }}>{rangeControl}</div>}
       </div>
 
-      {moneyTab ? (
-        <>
+      <>
           {neverNetted && (
             <div className="flex items-center gap-2.5 rounded-xl flex-wrap" style={{ marginTop: 20, padding: '10px 16px', background: t.soft }} data-testid="never-netted-note">
               <Lock className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} />
@@ -139,39 +141,6 @@ export function ArtistReportsHub({ qs, personId, rangeControl }: {
             </div>
           )}
         </>
-      ) : (
-        <div style={{ marginTop: 20 }}>
-          {tab === 'audience' && <ArtistAudiencePane qs={qs} />}
-          {tab === 'acquisition' && (
-            <AcquisitionTab
-              kind="artist"
-              scopeId={new URLSearchParams(window.location.search).get('personId')}
-              rangeQs={qs}
-            />
-          )}
-          {tab === 'buyers' && <ArtistBuyersPane qs={qs} personId={personId} />}
-        </div>
-      )}
     </div>
   );
-}
-
-// Audience + Buyers reuse the ArtistDashboard tab components; imported lazily
-// via wrapper components defined in ArtistDashboard.tsx (they stay private
-// there). To avoid a circular import, ArtistDashboard passes them in through
-// module registration below.
-let AudiencePaneImpl: ((props: { qs: string }) => JSX.Element | null) | null = null;
-let BuyersPaneImpl: ((props: { qs: string; personId: string | null }) => JSX.Element | null) | null = null;
-export function registerReportPanes(panes: {
-  audience: (props: { qs: string }) => JSX.Element | null;
-  buyers: (props: { qs: string; personId: string | null }) => JSX.Element | null;
-}) {
-  AudiencePaneImpl = panes.audience;
-  BuyersPaneImpl = panes.buyers;
-}
-function ArtistAudiencePane({ qs }: { qs: string }) {
-  return AudiencePaneImpl ? <AudiencePaneImpl qs={qs} /> : null;
-}
-function ArtistBuyersPane({ qs, personId }: { qs: string; personId: string | null }) {
-  return BuyersPaneImpl ? <BuyersPaneImpl qs={qs} personId={personId} /> : null;
 }

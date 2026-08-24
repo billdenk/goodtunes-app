@@ -437,7 +437,7 @@ export default function ArtistProjectHomeMRP() {
             {/* Breadcrumb — uppercase 11px, configurator style */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: SUBINK }}>
               <a href="/projects" onClick={(e) => { e.preventDefault(); navigate('/projects'); }} style={{ color: SUBINK, textDecoration: 'none' }}>
-                Projects
+                Releases
               </a>
               <span aria-hidden style={{ color: 'rgba(0,0,0,0.25)' }}>&rsaquo;</span>
               <span style={{ color: INK }}>{projectTitle}</span>

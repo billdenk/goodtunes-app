@@ -129,19 +129,26 @@ export const OPERATOR_MODULES: readonly OperatorModuleDef[] = [
   // super-admin. The "catalog" module renders the releases list — its id
   // stays "catalog" (ArtistDashboard keys the embedded album view on it)
   // but its LABEL is "Albums".
-  // Artist portal restructure (Ruby handoff, Aug 2026): the wall of
-  // releases IS the catalog; Audience/Acquisition/Buyers moved inside the
-  // Reports hub; People dropped from the artist rail; Settings added.
+  // Artist rail — Aug 16 nav canon (ratified; Bill & Andrew, Aug 24 2026,
+  // run-sheet 3363c35). Top group order: Dashboard, Releases, Audience,
+  // Acquisition, Orders, Buyers, Referrals, Shopify, Reports — create
+  // first, fans second, commerce third, analysis fourth, admin last.
+  // One home per thing: Audience/Acquisition/Buyers are TOP-LEVEL rail
+  // items (moved out of the Reports hub, which slims to Payments/Earnings).
+  // Structure flows from GoodTunes to every white-label portal; only
+  // branding stays per-press.
   { id: "dashboard",   label: "Dashboard",   icon: LayoutDashboard, roles: ["artist"] },
   { id: "catalog",     label: "Releases",    icon: Disc3,     roles: ["artist"] },
+  { id: "audience",    label: "Audience",    icon: Users,     roles: ["artist"] },
+  { id: "acquisition", label: "Acquisition", icon: Megaphone, roles: ["artist"] },
   { id: "orders",      label: "Orders",      icon: ShoppingBag, roles: ["artist"] },
-  // Reports hub — Audience / Acquisition / Buyers / Payments / Earnings.
-  { id: "reports",     label: "Reports",     icon: BarChart3, roles: ["artist"] },
+  { id: "buyers",      label: "Buyers",      icon: UserCheck, roles: ["artist"] },
+  { id: "referrals",   label: "Referrals",   icon: UserPlus,  roles: ["artist"] },
   // Task #2914 — artists connect their own Shopify store from the portal
   // (pre-vetted, no approval gate). Same connect card as /admin/shopify.
-  // Rail standard (Ruby nav-restructure handoff, Aug 19 2026): Shopify
-  // sits directly after Reports, before Referrals.
-  { id: "referrals",   label: "Referrals",   icon: UserPlus,  roles: ["artist"] },
+  { id: "shopify",     label: "Shopify",     icon: Store,     roles: ["artist"] },
+  // Reports hub — Payments / Earnings ledgers only (canon Aug 24 2026).
+  { id: "reports",     label: "Reports",     icon: BarChart3, roles: ["artist"] },
   // Settings renders PINNED to the rail bottom (cross-vendor rail
   // standard, Bill Aug 16 2026) — OperatorShell hoists any `settings`
   // module out of the scrollable nav into the rail foot.

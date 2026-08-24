@@ -6,9 +6,9 @@
 // Pressing's white-label skin. This is the lockstep MRP twin of
 // ArtistDashboard.tsx: same information architecture and content — top bar
 // (artist brand left, Feedback / notifications / avatar right, the press's
-// mark quietly beside them), the artist rail (Dashboard / People / Projects
-// / Overview / Audience / Acquisition / Orders / Buyers / Referrals /
-// Shopify / Reports) with POWERED BY GoodTunes at the bottom, greeting +
+// mark quietly beside them), the artist rail (Dashboard / Releases /
+// Audience / Acquisition / Orders / Buyers / Referrals / Shopify /
+// Reports, Team pinned) with POWERED BY GoodTunes at the bottom, greeting +
 // range switcher, the COLLAPSIBLE next-steps lifecycle strip (treatment
 // reused from ArtistDashboardNextStepsMRP), KPI strip, trend + activity,
 // top projects + channels + giving — re-skinned per the MRP canon:
@@ -238,12 +238,14 @@ function buildDashSteps(
   ];
 }
 
-// ─── Rail — the artist portal's nav, verbatim order ──────────────────
+// ─── Rail — artist nav canon (Bill & Andrew, Aug 24 2026) ────────────
+// Dashboard, Releases, Audience, Acquisition, Orders, Buyers, Referrals,
+// Shopify, Reports — structurally identical to the GoodTunes artist rail.
+// No People, no Overview, no Catalog group; Team pinned at the bottom
+// (MRP skin has no Settings page, so Team gets the pinned slot).
 const ARTIST_NAV: { label: string; icon: typeof LayoutDashboard; active?: boolean }[] = [
   { label: 'Dashboard', icon: LayoutDashboard, active: true },
-  { label: 'People', icon: User },
-  { label: 'Projects', icon: Disc3 },
-  { label: 'Overview', icon: Activity },
+  { label: 'Releases', icon: Disc3 },
   { label: 'Audience', icon: Users },
   { label: 'Acquisition', icon: Megaphone },
   { label: 'Orders', icon: ShoppingBag },
@@ -255,7 +257,7 @@ const ARTIST_NAV: { label: string; icon: typeof LayoutDashboard; active?: boolea
 
 // Rows with a real page navigate; the rest stay inert until their screens
 // are built (Aug 24 2026, Andrew's Memphis demo).
-const RAIL_LINKS: Record<string, string> = { Dashboard: '/dashboard', Projects: '/projects' };
+const RAIL_LINKS: Record<string, string> = { Dashboard: '/dashboard', Releases: '/projects' };
 
 function NavRow({ label, icon: Icon, active }: { label: string; icon: typeof LayoutDashboard; active?: boolean }) {
   const [, navigate] = useLocation();
@@ -688,6 +690,9 @@ export default function ArtistDashboardMRP() {
           </div>
           {ARTIST_NAV.map((item) => <NavRow key={item.label} {...item} />)}
           <div style={{ flex: 1 }} />
+          {/* Team pinned at the rail bottom (canon: portals without a
+              Settings page pin Team here; ProjectHome does the same). */}
+          <NavRow label="Team" icon={User} />
           {/* Platform attribution — GoodTunes recedes to a "powered by" mark. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '12px 12px 4px', borderTop: `1px solid ${HAIRLINE}`, marginTop: 8 }}>
             <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: 1, color: SUBINK }}>POWERED BY</span>

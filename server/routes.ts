@@ -28245,7 +28245,7 @@ export async function registerRoutes(
     // an optional album draft to attach so the landing page deep-links
     // into the album editor instead of an empty dashboard.
     const inviteRoleRaw = req.body?.inviteRole ? String(req.body.inviteRole) : null;
-    const inviteRole = (inviteRoleRaw === "identity" || inviteRoleRaw === "manager" || inviteRoleRaw === "team" || inviteRoleRaw === "label")
+    const inviteRole = (inviteRoleRaw === "identity" || inviteRoleRaw === "manager" || inviteRoleRaw === "team" || inviteRoleRaw === "team_view" || inviteRoleRaw === "label")
       ? inviteRoleRaw : null;
     const targetPersonId = req.body?.targetPersonId ? String(req.body.targetPersonId) : null;
     const preFlightedAlbumId = req.body?.preFlightedAlbumId ? String(req.body.preFlightedAlbumId) : null;
@@ -28767,8 +28767,11 @@ export async function registerRoutes(
       return res.status(403).json({ message: "Only artist partners can use this endpoint" });
     }
     const inviteRole = String(req.body?.inviteRole || "");
-    if (!["identity", "manager", "team"].includes(inviteRole)) {
-      return res.status(400).json({ message: "inviteRole must be identity, manager, or team" });
+    // "team_view" = view-only teammate tier (Settings › Team invite dialog,
+    // Aug 24 2026). Flows through the shared handler like "team" and lands
+    // on the membership as sub_role="team_view" at accept.
+    if (!["identity", "manager", "team", "team_view"].includes(inviteRole)) {
+      return res.status(400).json({ message: "inviteRole must be identity, manager, team, or team_view" });
     }
     // Stash + forward — write the request body in the shape /api/admin/invites expects.
     (req as any).body = {

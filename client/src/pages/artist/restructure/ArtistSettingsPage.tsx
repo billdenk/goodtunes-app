@@ -6,10 +6,131 @@
 // Connections rows. MOCK_TEAM swapped for GET /api/artist/team; Shopify state
 // from GET /api/artist/shopify/overview.
 
-import { type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, type ReactNode } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronRight, UserPlus, X } from 'lucide-react';
-import { useRestructureTheme, cn, shopifyLogo, type Theme } from './shared';
+import { apiRequest } from '@/lib/queryClient';
+import { useRestructureTheme, cn, shopifyLogo, BLUE, type Theme } from './shared';
+
+// ─── Team invite dialog (Bill's brief, Aug 24 2026) ──────────────────
+// Verbatim copy from the brief; role picker maps Admin → inviteRole
+// "team" (regular teammate) and View → "team_view" (view-only tier;
+// server whitelists it and stamps it as the membership sub_role).
+function TeamInviteDialog({ t, onClose }: { t: Theme; onClose: () => void }) {
+  const qc = useQueryClient();
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [level, setLevel] = useState<'admin' | 'view'>('admin');
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<{ acceptUrl: string | null; emailDelivered: boolean } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const send = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest('POST', '/api/artist/invites', {
+        name: name.trim(),
+        email: email.trim(),
+        inviteRole: level === 'admin' ? 'team' : 'team_view',
+      });
+      return (await r.json()) as { acceptUrl: string | null; emailDelivered?: boolean };
+    },
+    onSuccess: (body) => {
+      setSent({ acceptUrl: body.acceptUrl ?? null, emailDelivered: !!body.emailDelivered });
+      qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0] ?? '').startsWith('/api/artist/team') });
+    },
+    onError: (e: any) => setError(e?.message?.replace(/^\d+:\s*/, '') || 'Something went wrong — try again.'),
+  });
+
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const inputStyle = { width: '100%', height: 38, padding: '0 12px', fontSize: 13.5, borderRadius: 10, border: `1px solid ${t.hairline}`, background: t.card, color: t.ink, outline: 'none' } as const;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }} onClick={onClose} data-testid="team-invite-dialog">
+      <div className="rounded-2xl w-full" style={{ maxWidth: 440, background: t.card, border: `1px solid ${t.hairline}`, padding: 24, margin: 16 }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4">
+          <h2 className="text-[17px] font-semibold" style={{ color: t.ink }}>Invite someone</h2>
+          <button type="button" aria-label="Close" onClick={onClose} className="inline-flex items-center justify-center rounded-full" style={{ width: 28, height: 28, background: t.soft }} data-testid="team-invite-close">
+            <X className="w-4 h-4" style={{ color: t.subink }} />
+          </button>
+        </div>
+        <p className="text-[13px]" style={{ marginTop: 6, color: t.subink }}>
+          Invite your manager, bandmates, or anyone who helps run your releases. They&rsquo;ll get their own sign-in, and you stay in control.
+        </p>
+        {sent ? (
+          <div style={{ marginTop: 16 }}>
+            {sent.emailDelivered ? (
+              <p className="text-[13px] font-medium inline-flex items-center gap-1.5" style={{ color: t.ready }} data-testid="team-invite-emailed">
+                <Check className="w-4 h-4" strokeWidth={3} /> Invite emailed to {email.trim()}
+              </p>
+            ) : sent.acceptUrl ? (
+              <>
+                <p className="text-[13px]" style={{ color: t.subink }} data-testid="team-invite-copylink-note">The email didn&rsquo;t go out — share this link instead:</p>
+                <div className="flex items-center gap-2" style={{ marginTop: 8 }}>
+                  <input readOnly value={sent.acceptUrl} style={{ ...inputStyle, fontSize: 12 }} data-testid="team-invite-link" onFocus={(e) => e.currentTarget.select()} />
+                  <button
+                    type="button"
+                    className="rounded-full font-semibold text-[12.5px] flex-shrink-0"
+                    style={{ padding: '8px 14px', background: BLUE, color: '#fff' }}
+                    onClick={() => { navigator.clipboard?.writeText(sent.acceptUrl!); setCopied(true); }}
+                    data-testid="team-invite-copy"
+                  >
+                    {copied ? 'Copied' : 'Copy link'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="text-[13px]" style={{ color: t.subink }} data-testid="team-invite-held">Sent for review — an operator will approve it before the invite goes out.</p>
+            )}
+            <button type="button" className="text-[13px] font-medium" style={{ marginTop: 16, color: t.subink }} onClick={onClose} data-testid="team-invite-done">Done</button>
+          </div>
+        ) : (
+          <form
+            onSubmit={(e) => { e.preventDefault(); setError(null); send.mutate(); }}
+            style={{ marginTop: 16 }}
+          >
+            <label className="block text-[12px] font-semibold" style={{ color: t.subink }}>
+              Name
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Their name" style={{ ...inputStyle, marginTop: 5 }} data-testid="team-invite-name" />
+            </label>
+            <label className="block text-[12px] font-semibold" style={{ marginTop: 12, color: t.subink }}>
+              Email
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" style={{ ...inputStyle, marginTop: 5 }} data-testid="team-invite-email" />
+            </label>
+            <fieldset style={{ marginTop: 12 }}>
+              <legend className="text-[12px] font-semibold" style={{ color: t.subink }}>Role</legend>
+              <div className="grid grid-cols-2 gap-2" style={{ marginTop: 5 }}>
+                {([['admin', 'Admin', 'Can edit releases and settings'], ['view', 'View', 'Can look, not change']] as const).map(([id, label, sub]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setLevel(id)}
+                    className="rounded-xl text-left"
+                    style={{ padding: '10px 12px', border: `1.5px solid ${level === id ? BLUE : t.hairline}`, background: level === id ? `${BLUE}0F` : t.card }}
+                    data-testid={`team-invite-role-${id}`}
+                    aria-pressed={level === id}
+                  >
+                    <span className="block text-[13px] font-semibold" style={{ color: t.ink }}>{label}</span>
+                    <span className="block text-[11.5px]" style={{ marginTop: 2, color: t.faint }}>{sub}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+            {error && <p className="text-[12.5px]" style={{ marginTop: 10, color: '#B42318' }} data-testid="team-invite-error">{error}</p>}
+            <button
+              type="submit"
+              disabled={!emailOk || send.isPending}
+              className="w-full rounded-full font-semibold text-[13.5px]"
+              style={{ marginTop: 16, height: 40, background: BLUE, color: '#fff', opacity: !emailOk || send.isPending ? 0.5 : 1 }}
+              data-testid="team-invite-send"
+            >
+              {send.isPending ? 'Sending…' : 'Send invite'}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
 
 type TeamMember = { id: string; name: string; email: string | null; role: string };
 type TeamPayload = { team: TeamMember[]; payout: { status: 'enabled' | 'pending' | 'not_set_up' } };
@@ -71,6 +192,7 @@ export function ArtistSettingsPage({ personId: personIdProp }: { personId?: stri
   const shopifyQ = useQuery<ShopifyOverview>({ queryKey: [`/api/artist/shopify/overview${personId ? `?personId=${personId}` : ''}`], retry: false });
 
   const members = teamQ.data?.team ?? [];
+  const [inviteOpen, setInviteOpen] = useState(false);
   const shopifyConnected = Boolean(shopifyQ.data?.configured && (shopifyQ.data?.stores?.length ?? 0) > 0);
   const payoutReady = teamQ.data?.payout?.status === 'enabled';
   const openShopify = () => {
@@ -114,6 +236,7 @@ export function ArtistSettingsPage({ personId: personIdProp }: { personId?: stri
             ))}
             <button
               type="button"
+              onClick={() => setInviteOpen(true)}
               className={cn('w-full flex items-center gap-3 text-left transition-colors', t.hoverCard)}
               style={{ padding: '14px 18px', borderTop: members.length === 0 ? undefined : `1px solid ${t.hairline}` }}
               data-testid="team-invite-row"
@@ -123,6 +246,7 @@ export function ArtistSettingsPage({ personId: personIdProp }: { personId?: stri
               </span>
               <span className="text-[13.5px] font-medium" style={{ color: t.subink }}>Invite someone</span>
             </button>
+            {inviteOpen && <TeamInviteDialog t={t} onClose={() => setInviteOpen(false)} />}
           </>
         )}
       </SettingsSection>

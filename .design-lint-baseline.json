@@ -22392,6 +22392,76 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<h2 className=\"text-[17px] font-semibold\" style={{ color: t.ink }}>Invite someone</h2>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ marginTop: 6, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<p className=\"text-[13px] font-medium inline-flex items-center gap-1.5\" style={{ color: t.ready }} data-testid=\"team-invite-emailed\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ color: t.subink }} data-testid=\"team-invite-copylink-note\">The email didn&rsquo;t go out — share this link instead:</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "className=\"rounded-full font-semibold text-[12.5px] flex-shrink-0\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ color: t.subink }} data-testid=\"team-invite-held\">Sent for review — an operator will approve it before the invite goes out.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<button type=\"button\" className=\"text-[13px] font-medium\" style={{ marginTop: 16, color: t.subink }} onClick={onClose} data-testid=\"team-invite-done\">Done</button>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<label className=\"block text-[12px] font-semibold\" style={{ color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<label className=\"block text-[12px] font-semibold\" style={{ marginTop: 12, color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<legend className=\"text-[12px] font-semibold\" style={{ color: t.subink }}>Role</legend>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<span className=\"block text-[13px] font-semibold\" style={{ color: t.ink }}>{label}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<span className=\"block text-[11.5px]\" style={{ marginTop: 2, color: t.faint }}>{sub}</span>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "{error && <p className=\"text-[12.5px]\" style={{ marginTop: 10, color: '#B42318' }} data-testid=\"team-invite-error\">{error}</p>}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "className=\"w-full rounded-full font-semibold text-[13.5px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
     "snippet": "<h2 className=\"text-[16px] font-semibold\" style={{ color: t.ink }}>{title}</h2>"
   },
   {
@@ -22478,6 +22548,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
     "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12.5px] font-medium\" style={{ color: t.faint }} data-testid=\"payout-coming-soon\">"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/artist/restructure/ArtistSettingsPage.tsx",
+    "snippet": "<button type=\"button\" aria-label=\"Close\" onClick={onClose} className=\"inline-flex items-center justify-center rounded-full\" style={{ width: 28, height: 28, background: t.soft }} data-testid=\"team-invi"
   },
   {
     "rule": "brand-hex-literal",

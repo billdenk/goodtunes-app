@@ -42,7 +42,8 @@ import { modulesForRole } from "@/components/operator/registry";
 import { ArtistReleasesWall } from "@/pages/artist/restructure/ArtistReleasesWall";
 import { ArtistRelease } from "@/pages/artist/restructure/ArtistRelease";
 import { ArtistTemplateTest } from "@/pages/artist/ArtistTemplateTest";
-import { ArtistReportsHub, registerReportPanes } from "@/pages/artist/restructure/ArtistReportsHub";
+import { ArtistReportsHub } from "@/pages/artist/restructure/ArtistReportsHub";
+import { AcquisitionTab } from "@/components/operator/AcquisitionTab";
 import { ArtistSettingsPage } from "@/pages/artist/restructure/ArtistSettingsPage";
 import { BuyerReport } from "@/components/partner/BuyerReport";
 import { BRAND, CHART_TOOLTIP_STYLE } from "@/lib/brand-tokens";
@@ -177,24 +178,24 @@ function rangeFor(preset: PresetId): Range {
 
 export function ArtistDashboard() {
   const [preset, setPreset] = useState<PresetId>(() => presetFromSearch(window.location.search) ?? "30d");
-  const [tab, setTab] = useState<"dashboard" | "catalog" | "orders" | "reports" | "referrals" | "shopify" | "settings">(() => {
-    const t = new URLSearchParams(window.location.search).get("tab");
+  const [tab, setTab] = useState<ArtistPortalTab>(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get("tab");
     // Task #2893 — Overview merged into Dashboard. Stale ?tab=overview deep
     // links (bookmarks, old KPI tiles) land on the merged Dashboard; their
     // ?range= param still applies via presetFromSearch below.
     if (t === "overview" || t === "people") return "dashboard";
-    // Restructure — Audience/Acquisition/Buyers live inside the Reports hub
-    // now; stale deep links land on the matching hub sub-tab.
-    if (t === "audience" || t === "acquisition" || t === "buyers") {
-      const sp = new URLSearchParams(window.location.search);
-      if (!sp.get("rtab")) {
-        sp.set("tab", "reports");
-        sp.set("rtab", t);
-        window.history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
-      }
-      return "reports";
+    // Aug 16 nav canon (shipped Aug 24 2026) — Audience/Acquisition/Buyers
+    // are TOP-LEVEL rail items again. Stale hub deep links
+    // (?tab=reports&rtab=audience…) canonicalize to the top-level tab.
+    const rtab = sp.get("rtab");
+    if (t === "reports" && (rtab === "audience" || rtab === "acquisition" || rtab === "buyers")) {
+      sp.set("tab", rtab);
+      sp.delete("rtab");
+      window.history.replaceState(null, "", `${window.location.pathname}?${sp.toString()}`);
+      return rtab;
     }
-    if (t === "dashboard" || t === "catalog" || t === "orders" || t === "referrals" || t === "shopify" || t === "reports" || t === "settings") return t;
+    if (t === "dashboard" || t === "catalog" || t === "audience" || t === "acquisition" || t === "orders" || t === "buyers" || t === "referrals" || t === "shopify" || t === "reports" || t === "settings") return t;
     return "dashboard";
   });
   // Task #2486 — Dashboard-tab KPI tiles deep-link via `?tab=…` (wouter
@@ -203,10 +204,13 @@ export function ArtistDashboard() {
   // lands here too as an idempotent no-op.
   const search = useSearch();
   useEffect(() => {
-    const t = new URLSearchParams(search).get("tab");
+    const spSync = new URLSearchParams(search);
+    const t = spSync.get("tab");
+    const rtabSync = spSync.get("rtab");
     if (t === "overview" || t === "people") setTab("dashboard"); // merged — Task #2893
-    else if (t === "audience" || t === "acquisition" || t === "buyers") setTab("reports"); // restructure — hub sub-tabs
-    else if (t === "dashboard" || t === "catalog" || t === "orders" || t === "referrals" || t === "shopify" || t === "reports" || t === "settings") {
+    // Nav canon — stale hub sub-tab links resolve to the top-level tab.
+    else if (t === "reports" && (rtabSync === "audience" || rtabSync === "acquisition" || rtabSync === "buyers")) setTab(rtabSync);
+    else if (t === "dashboard" || t === "catalog" || t === "audience" || t === "acquisition" || t === "orders" || t === "buyers" || t === "referrals" || t === "shopify" || t === "reports" || t === "settings") {
       setTab(t);
     }
     const p = presetFromSearch(search);
@@ -412,7 +416,7 @@ export function ArtistDashboard() {
 }
 
 const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
-  id: "dashboard" | "catalog" | "orders" | "reports" | "referrals" | "shopify" | "settings";
+  id: "dashboard" | "catalog" | "audience" | "acquisition" | "orders" | "buyers" | "reports" | "referrals" | "shopify" | "settings";
   label: string;
 }>;
 
@@ -421,7 +425,7 @@ const ARTIST_TABS = modulesForRole("artist") as ReadonlyArray<{
 // SAME portal modules as top tabs. One body, two chromes: never fork these
 // mounts.
 export type ArtistPortalTab =
-  | "dashboard" | "catalog" | "orders" | "reports" | "referrals" | "shopify" | "settings";
+  | "dashboard" | "catalog" | "audience" | "acquisition" | "orders" | "buyers" | "reports" | "referrals" | "shopify" | "settings";
 export const ARTIST_PORTAL_TABS = ARTIST_TABS;
 
 /** Range/preset + query-string state for the artist modules, with an explicit
@@ -474,7 +478,40 @@ export function ArtistTabBody({
       )}
       {/* Restructure: the wall of releases IS the catalog. */}
       {tab === "catalog" && <ArtistReleasesWall qs={qs} onOpenAlbum={onOpenAlbum} artistName={artistName} personId={personId} />}
+      {/* Aug 16 nav canon — Audience / Acquisition / Buyers are top-level
+          rail items (one home per thing; the Reports hub slims to the
+          Payments/Earnings ledgers). Metrics screens carry their own
+          in-content range switcher, mirroring the Reports hub treatment. */}
+      {tab === "audience" && (
+        <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }}>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <TabPageHeading lead="Audience." quiet="Who's listening." testid="audience-page-heading" />
+            <RangeSwitcher value={preset} onChange={onPresetChange} />
+          </div>
+          <div style={{ marginTop: 20 }}><AudienceTab qs={qs} /></div>
+        </div>
+      )}
+      {tab === "acquisition" && (
+        <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }}>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <TabPageHeading lead="Acquisition." quiet="How fans find you." testid="acquisition-page-heading" />
+            <RangeSwitcher value={preset} onChange={onPresetChange} />
+          </div>
+          <div style={{ marginTop: 20 }}>
+            <AcquisitionTab kind="artist" scopeId={personId} rangeQs={`?${qs}`} />
+          </div>
+        </div>
+      )}
       {tab === "orders" && <OrdersTab qs={qs} />}
+      {tab === "buyers" && (
+        <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: "32px 40px 96px" }}>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <TabPageHeading lead="Buyers." quiet="Who's bought." testid="buyers-page-heading" />
+            <RangeSwitcher value={preset} onChange={onPresetChange} />
+          </div>
+          <div style={{ marginTop: 20 }}><BuyersTab qs={qs} personId={personId} /></div>
+        </div>
+      )}
       {tab === "referrals" && (
         <>
           <TabPageHeading lead="Referrals." quiet="Invites and earnings." testid="referrals-page-heading" />
@@ -2108,9 +2145,6 @@ function ReferralsTab({ personId, hideInvitePanel }: { personId?: string | null;
   );
 }
 
-// Restructure — hand the local Audience/Buyers panes to the Reports hub
-// (module registration avoids a circular import; hub qs arrives as "?...").
-registerReportPanes({
-  audience: ({ qs }) => <AudienceTab qs={qs.replace(/^\?/, "")} />,
-  buyers: ({ qs, personId }) => <BuyersTab qs={qs.replace(/^\?/, "")} personId={personId} />,
-});
+// Nav canon (Aug 24 2026) — Audience/Buyers render as top-level tabs via
+// ArtistTabBody above; the Reports hub slimmed to Payments/Earnings, so the
+// old registerReportPanes hand-off is gone.
