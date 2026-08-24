@@ -522,6 +522,12 @@ function SectionDot({
 // Content-Disposition; failures come back with a reason-specific message
 // (no master / external-only link / file missing from storage) that the
 // caller surfaces in a toast.
+// Task #3345 — TEMPORARY HIDE: the per-track hover download button in the
+// Digital tab's track list is hidden for ALL users (operators and partners)
+// for a few weeks per Bill. Flip this to `true` to bring it back — the
+// button's render code below is untouched, just gated on this flag.
+const SHOW_TRACK_ROW_DOWNLOAD_BUTTON = false;
+
 async function downloadMasterViaApi(
   albumId: string,
   song: { id: string; title: string; trackNumber: number | null; audioUrl?: string | null; audioSourceUrl?: string | null },
@@ -10089,7 +10095,7 @@ function TrackRow({
                 </span>
               );
             })()}
-            {(() => {
+            {SHOW_TRACK_ROW_DOWNLOAD_BUTTON && (() => {
               // Task #3256 — download via the authed route (bare /objects/
               // anchors saved 0-byte files). Extension mirrors the server's
               // source preference (original upload first).
