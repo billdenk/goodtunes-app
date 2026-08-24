@@ -4,11 +4,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   SIZE_CHIPS,
+  colorEffectiveCents,
   defaultSizeChip,
+  effectiveTypeCentsForSize,
   groupPricingRows,
+  ladderCentsForSize,
   priceForSize,
   pricedCountForSize,
   rowInSize,
+  styleRowsForSize,
   visibleRowsForSize,
 } from "./pricingView";
 import type { PricingRow } from "@shared/pressComponents";
@@ -59,14 +63,61 @@ test("priceForSize: a price typed under 7\" does not appear under 12\"", () => {
   assert.equal(priceForSize(rows[0], '12"'), null);
 });
 
-test("pricedCountForSize counts only the selected size's visible priced cells", () => {
-  // 7": black(100) + legacy-nosizes(5) priced of 3 visible
-  assert.equal(visibleRowsForSize(rows, '7"').length, 3);
+test("pricedCountForSize is style-first: colors excluded from the denominator (Task #3325)", () => {
+  // 7": styles = black + legacy-nosizes (classic color excluded)
+  assert.equal(styleRowsForSize(rows, '7"').length, 2);
   assert.equal(pricedCountForSize(rows, '7"'), 2);
-  // 12": splatter(250) + legacy-nosizes(5) of 5 visible
+  // 12": styles = black, splatter, legacy; priced = splatter(250) + legacy(5)
+  assert.equal(styleRowsForSize(rows, '12"').length, 3);
   assert.equal(pricedCountForSize(rows, '12"'), 2);
   // 10": nothing priced under 10"
   assert.equal(pricedCountForSize(rows, '10"'), 0);
+});
+
+// ── Imported quantity ladders + style inheritance (Task #3325) ────────────
+const laddered: PricingRow[] = [
+  row({
+    key: "type:opaque",
+    kind: "type",
+    sizes: ['12"'],
+    rungsBySize: { '12"': [{ qty: 300, unitCents: 235 }, { qty: 1000, unitCents: 230 }, { qty: 25000, unitCents: 230 }] },
+  }),
+  row({ key: "color:opaque:ruby", kind: "color", sizes: ['12"'] }),
+  row({ key: "color:opaque:jade", kind: "color", sizes: ['12"'], pricesBySize: { '12"': 999 } }),
+  row({
+    key: "type:splatter",
+    kind: "type",
+    sizes: ['12"'],
+    surchargeOver: "type:opaque",
+    rungsBySize: { '12"': [{ qty: 300, unitCents: 75 }, { qty: 1000, unitCents: 55 }] },
+  }),
+  row({ key: "color:splatter:cosmic", kind: "color", sizes: ['12"'] }),
+];
+
+test("ladderCentsForSize reads the 1,000-unit reference rung", () => {
+  assert.equal(ladderCentsForSize(laddered[0], '12"'), 230);
+  assert.equal(ladderCentsForSize(laddered[0], '7"'), null);
+});
+
+test("effectiveTypeCentsForSize: operator cell wins over the imported ladder", () => {
+  assert.equal(effectiveTypeCentsForSize(laddered[0], '12"'), 230);
+  const overridden = { ...laddered[0], pricesBySize: { '12"': 300 } };
+  assert.equal(effectiveTypeCentsForSize(overridden, '12"'), 300);
+});
+
+test("colorEffectiveCents: colors inherit the style price; overrides win; surcharge adds on base", () => {
+  // plain inheritance
+  assert.deepEqual(colorEffectiveCents(laddered[1], laddered, '12"'), { cents: 230, inherited: true });
+  // per-color operator override
+  assert.deepEqual(colorEffectiveCents(laddered[2], laddered, '12"'), { cents: 999, inherited: false });
+  // splatter color = base opaque (230) + adder (55)
+  assert.deepEqual(colorEffectiveCents(laddered[4], laddered, '12"'), { cents: 285, inherited: true });
+});
+
+test("pricedCountForSize counts ladder-priced styles as priced", () => {
+  // styles: opaque (laddered) + splatter (laddered adder) = 2 of 2
+  assert.equal(styleRowsForSize(laddered, '12"').length, 2);
+  assert.equal(pricedCountForSize(laddered, '12"'), 2);
 });
 
 test("defaultSizeChip picks the first chip with rows; 12\" fallback when empty", () => {

@@ -13137,3 +13137,25 @@ mirror_external_song_audio() {
 }
 mirror_external_song_audio dev  "${DATABASE_URL:-}"
 mirror_external_song_audio prod "${PROD_DATABASE_URL:-}"
+
+# Task #3325 — MRP Tier 3 → component pricing ladders (style-first vinyl
+# pricing, splatter surcharge-over-opaque, flat component + setup ladders).
+# Marker-guarded inside the script (mrp_tier3_component_pricing_v1);
+# operator-typed prices are never touched (ladders live in separate fields).
+load_mrp_tier3_component_pricing() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping MRP tier3 component pricing on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/load-mrp-tier3-component-pricing.ts 2>&1); then
+    echo "post-merge: MRP tier3 component pricing ok on $label"
+    echo "$out" | tail -5
+  else
+    echo "post-merge: WARNING — MRP tier3 component pricing failed on $label (no marker stamped; next merge retries)"
+    echo "$out" | tail -8
+  fi
+}
+load_mrp_tier3_component_pricing dev  "${DATABASE_URL:-}"
+load_mrp_tier3_component_pricing prod "${PROD_DATABASE_URL:-}"

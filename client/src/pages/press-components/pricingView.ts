@@ -58,8 +58,68 @@ export function visibleRowsForSize(rows: PricingRow[], size: VinylSizeId): Prici
   return rows.filter((r) => rowInSize(r, size));
 }
 
+// ── Imported ladders + style inheritance (Task #3325) ────────────────────
+// Reference display rung: the 1,000-unit break (the builders' anchor qty).
+const REF_QTY = 1000;
+
+/** The imported-ladder price for a size at the reference qty (cents). */
+export function ladderCentsForSize(r: PricingRow, s: VinylSizeId): number | null {
+  const ladder = r.rungsBySize?.[s];
+  if (!Array.isArray(ladder) || ladder.length === 0) return null;
+  const sorted = [...ladder].sort((a, b) => a.qty - b.qty);
+  for (const rung of sorted) {
+    if (REF_QTY <= rung.qty) return rung.unitCents;
+  }
+  return sorted[sorted.length - 1]?.unitCents ?? null;
+}
+
+/** A style (type) row's effective cents for the size: operator cell wins,
+ * else the imported ladder's reference rung. Surcharge rows (Splatter)
+ * return the ADDER, not a standalone price. */
+export function effectiveTypeCentsForSize(r: PricingRow, s: VinylSizeId): number | null {
+  const op = r.pricesBySize?.[s];
+  if (op != null) return op;
+  return ladderCentsForSize(r, s);
+}
+
+/** What a color row effectively costs: its own operator override, else its
+ * parent style's price (surcharge styles add their adder on top of the base
+ * style referenced by surchargeOver). Returns cents + whether it's inherited. */
+export function colorEffectiveCents(
+  color: PricingRow,
+  rows: PricingRow[],
+  s: VinylSizeId,
+): { cents: number | null; inherited: boolean } {
+  const own = color.pricesBySize?.[s];
+  if (own != null) return { cents: own, inherited: false };
+  const catId = color.key.startsWith("color:") ? color.key.split(":")[1] : null;
+  const type = catId ? rows.find((r) => r.key === `type:${catId}`) : undefined;
+  if (!type) return { cents: null, inherited: false };
+  if (type.surchargeOver) {
+    const base = rows.find((r) => r.key === type.surchargeOver);
+    const baseCents = base ? effectiveTypeCentsForSize(base, s) : null;
+    const adder = effectiveTypeCentsForSize(type, s);
+    if (baseCents == null || adder == null) return { cents: null, inherited: false };
+    return { cents: baseCents + adder, inherited: true };
+  }
+  const cents = effectiveTypeCentsForSize(type, s);
+  return { cents, inherited: cents != null };
+}
+
+/** Style-first priced counter (Task #3325): color rows inherit their style's
+ * price, so the counter counts STYLES (type rows) and flat/orphan rows — a
+ * style counts as priced from an operator cell OR an imported ladder. */
 export function pricedCountForSize(rows: PricingRow[], size: VinylSizeId): number {
-  return visibleRowsForSize(rows, size).filter((r) => priceForSize(r, size) != null).length;
+  return styleRowsForSize(rows, size).filter((r) => {
+    if (r.kind === "type") return effectiveTypeCentsForSize(r, size) != null;
+    return priceForSize(r, size) != null || ladderCentsForSize(r, size) != null;
+  }).length;
+}
+
+/** The counter's denominator: every visible row EXCEPT color rows (colors
+ * inherit; they're never individually counted). */
+export function styleRowsForSize(rows: PricingRow[], size: VinylSizeId): PricingRow[] {
+  return visibleRowsForSize(rows, size).filter((r) => r.kind !== "color");
 }
 
 /** Default chip: the first size that has any rows, so a 12"-only press opens

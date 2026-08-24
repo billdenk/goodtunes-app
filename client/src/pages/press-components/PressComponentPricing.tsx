@@ -19,10 +19,14 @@ import type { PricingComponentConfig, PricingRow, VinylSizeId, VinylSwatch } fro
 // + pure size-filter/group/count helpers (unit-tested in pricingView.test.ts).
 import {
   SIZE_CHIPS,
+  colorEffectiveCents,
   defaultSizeChip,
+  effectiveTypeCentsForSize,
   groupPricingRows,
+  ladderCentsForSize,
   priceForSize,
   pricedCountForSize,
+  styleRowsForSize,
   visibleRowsForSize,
 } from "./pricingView";
 
@@ -111,12 +115,19 @@ function ColorRowLabel({ row, swatch, t }: { row: PricingRow; swatch: VinylSwatc
 function PriceCell({
   rowKey,
   priceCents,
+  inheritedCents,
+  surcharge,
   canEdit,
   t,
   onCommit,
 }: {
   rowKey: string;
   priceCents: number | null;
+  /** Style-inherited (or imported-ladder) cents shown faint when no operator
+   * price is set — an override stays optional (Task #3325). */
+  inheritedCents?: number | null;
+  /** Render as a "+$x.xx" adder (Splatter surcharge-over-style). */
+  surcharge?: boolean;
   canEdit: boolean;
   t: Theme;
   onCommit: (cents: number | null) => void;
@@ -130,10 +141,13 @@ function PriceCell({
     if (!dirty.current) setVal(centsToInput(priceCents));
   }, [priceCents]);
 
+  const fmtCents = (c: number) => `${surcharge ? "+" : ""}$${(c / 100).toFixed(2)}`;
+
   if (!canEdit) {
+    const shown = priceCents ?? inheritedCents ?? null;
     return (
       <span className="text-[13.5px] tabular-nums" style={{ color: priceCents == null ? t.faint : t.ink }}>
-        {priceCents == null ? "—" : `$${(priceCents / 100).toFixed(2)}`}
+        {shown == null ? "—" : fmtCents(shown)}
       </span>
     );
   }
@@ -152,7 +166,7 @@ function PriceCell({
   return (
     <div className="flex items-center gap-1.5 justify-end">
       <span className="text-[13px]" style={{ color: t.faint }}>
-        $
+        {surcharge ? "+$" : "$"}
       </span>
       <input
         value={val}
@@ -165,7 +179,8 @@ function PriceCell({
         onKeyDown={(e) => {
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         }}
-        placeholder="—"
+        placeholder={inheritedCents != null ? (inheritedCents / 100).toFixed(2) : "—"}
+        title={inheritedCents != null && priceCents == null ? "Inherited from the style price — type a number to override" : undefined}
         inputMode="decimal"
         aria-invalid={invalid || undefined}
         data-testid={`price-input-${rowKey}`}
@@ -244,8 +259,10 @@ export function PressComponentPricing({
     save({ rows: next } satisfies PricingComponentConfig);
   };
 
-  // Counter reflects the selected size's view: visible cells with a price.
+  // Counter reflects the selected size's view — style-first (Task #3325):
+  // colors inherit their style price, so only styles + flat rows count.
   const visibleRows = useMemo(() => visibleRowsForSize(rows, size), [rows, size]);
+  const styleRows = useMemo(() => styleRowsForSize(rows, size), [rows, size]);
   const pricedCount = pricedCountForSize(rows, size);
 
   return (
@@ -274,7 +291,7 @@ export function PressComponentPricing({
           ) : (
             <span className="inline-flex items-center gap-1.5">
               <Check className="w-3.5 h-3.5" style={{ color: t.blue }} />
-              {pricedCount} of {visibleRows.length} priced
+              {pricedCount} of {styleRows.length} styles priced
             </span>
           )}
         </div>
@@ -339,9 +356,17 @@ export function PressComponentPricing({
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.faint }}>
-                  Type upcharge · per unit
+                  {g.type.surchargeOver ? "Surcharge · per unit" : "Style price · per unit"}
                 </span>
-                <PriceCell rowKey={g.type.key} priceCents={priceFor(g.type)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(g.type.key, c)} />
+                <PriceCell
+                  rowKey={g.type.key}
+                  priceCents={priceFor(g.type)}
+                  inheritedCents={g.type.pricesBySize?.[size] == null ? ladderCentsForSize(g.type, size) : null}
+                  surcharge={Boolean(g.type.surchargeOver)}
+                  canEdit={canEdit}
+                  t={t}
+                  onCommit={(c) => commitRow(g.type.key, c)}
+                />
               </div>
             </div>
             {/* Color rows */}
@@ -352,7 +377,14 @@ export function PressComponentPricing({
                 style={{ borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }}
               >
                 <ColorRowLabel row={r} swatch={swatchByRowKey.get(r.key) ?? null} t={t} />
-                <PriceCell rowKey={r.key} priceCents={priceFor(r)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
+                <PriceCell
+                  rowKey={r.key}
+                  priceCents={priceFor(r)}
+                  inheritedCents={colorEffectiveCents(r, rows, size).inherited ? colorEffectiveCents(r, rows, size).cents : null}
+                  canEdit={canEdit}
+                  t={t}
+                  onCommit={(c) => commitRow(r.key, c)}
+                />
               </div>
             ))}
           </section>
@@ -379,7 +411,14 @@ export function PressComponentPricing({
                     </span>
                   )}
                 </div>
-                <PriceCell rowKey={r.key} priceCents={priceFor(r)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
+                <PriceCell
+                  rowKey={r.key}
+                  priceCents={priceFor(r)}
+                  inheritedCents={priceFor(r) == null ? ladderCentsForSize(r, size) : null}
+                  canEdit={canEdit}
+                  t={t}
+                  onCommit={(c) => commitRow(r.key, c)}
+                />
               </div>
             ))}
           </section>

@@ -284,7 +284,24 @@ export function seedQuoteFlatRows(labels: LabelsComponentConfig): PricingRow[] {
 }
 export function rowHasAnyPrice(r: PricingRow): boolean {
   if (r.priceCents != null) return true;
-  return Object.values(r.pricesBySize ?? {}).some((v) => v != null);
+  if (Object.values(r.pricesBySize ?? {}).some((v) => v != null)) return true;
+  // Imported quantity ladders count as real pricing — an orphan row whose
+  // only prices came from a sheet import must survive re-merges.
+  if (r.rungsBySize && Object.values(r.rungsBySize).some((l) => (l ?? []).length > 0)) return true;
+  if (r.rungsBySizeHeavy && Object.values(r.rungsBySizeHeavy).some((l) => (l ?? []).length > 0)) return true;
+  return false;
+}
+
+/** Carry imported-ladder fields from a stored row onto its freshly-seeded
+ * replacement — seeding only knows structure, never prices (Task #3325). */
+function carryImportedPricing(prev: PricingRow, next: PricingRow): PricingRow {
+  const out = { ...next };
+  if (prev.rungsBySize) out.rungsBySize = prev.rungsBySize;
+  if (prev.rungsBySizeHeavy) out.rungsBySizeHeavy = prev.rungsBySizeHeavy;
+  if (prev.oneTime != null) out.oneTime = prev.oneTime;
+  if (prev.surchargeOver != null) out.surchargeOver = prev.surchargeOver;
+  if (prev.pricingSource != null) out.pricingSource = prev.pricingSource;
+  return out;
 }
 
 /**
@@ -310,7 +327,7 @@ export function mergePricingRows(existing: PricingRow[], seeded: PricingRow[]): 
   const out: PricingRow[] = seeded.map((s) => {
     const prev = byKey.get(s.key);
     if (!prev) return s;
-    return { ...s, priceCents: null, pricesBySize: migrate(prev, s.sizes) };
+    return carryImportedPricing(prev, { ...s, priceCents: null, pricesBySize: migrate(prev, s.sizes) });
   });
   const seededKeys = new Set(seeded.map((s) => s.key));
   for (const r of existing) {

@@ -98,6 +98,69 @@ test("computeQuotePendingIds: an unpriced gatefold jacket blocks; swapping the r
   assert.deepEqual(computeQuotePendingIds(bs, priced), []);
 });
 
+// ── Imported quantity ladders + style inheritance (Task #3325) ────────────
+const LADDER_ROWS: PricingRow[] = [
+  row({
+    key: "type:opaque",
+    label: "Opaque",
+    rungsBySize: { '12"': [{ qty: 300, unitCents: 235 }, { qty: 1000, unitCents: 230 }, { qty: 25000, unitCents: 225 }] },
+    rungsBySizeHeavy: { '12"': [{ qty: 300, unitCents: 310 }, { qty: 25000, unitCents: 305 }] },
+  }),
+  row({ key: "color:opaque:ruby", kind: "color", label: "Ruby", detail: "Opaque" }),
+  row({
+    key: "type:splatter",
+    label: "Splatter",
+    surchargeOver: "type:opaque",
+    rungsBySize: { '12"': [{ qty: 300, unitCents: 75 }, { qty: 1000, unitCents: 55 }] },
+  }),
+  row({ key: "color:splatter:cosmic", kind: "color", label: "Cosmic", detail: "Splatter" }),
+  row({
+    key: "service:stampers", kind: "service", label: "Stampers", sizes: [], oneTime: true,
+    rungsBySize: { '12"': [{ qty: 1000, unitCents: 0 }, { qty: 2000, unitCents: 14000 }] },
+  }),
+  row({
+    key: "jackets:gatefold", kind: "jackets", label: "Gatefold", sizes: [],
+    rungsBySize: { '12"': [{ qty: 1000, unitCents: 231 }, { qty: 2000, unitCents: 146 }] },
+  }),
+];
+
+test("vinyl ladders: color inherits the style rung at qty; snap UP between rungs; 180g uses the heavy ladder", () => {
+  const pricer = makeQuotePricer(LADDER_ROWS);
+  assert.equal(pricer.vinyl("Ruby", "Opaque", "12", "140", 1000), 2.3);
+  // 600 snaps UP to the 1,000 rung
+  assert.equal(pricer.vinyl("Ruby", "Opaque", "12", "140", 600), 2.3);
+  assert.equal(pricer.vinyl("Ruby", "Opaque", "12", "140", 25000), 2.25);
+  // 180g resolves ONLY the heavy ladder
+  assert.equal(pricer.vinyl("Ruby", "Opaque", "12", "180", 300), 3.1);
+  // no 7" ladder → pending
+  assert.equal(pricer.vinyl("Ruby", "Opaque", "7", "140", 1000), null);
+});
+
+test("splatter = surcharge over the base style, laddered", () => {
+  const pricer = makeQuotePricer(LADDER_ROWS);
+  // base opaque 2.30 + adder 0.55 at 1,000
+  assert.equal(pricer.vinyl("Cosmic", "Splatter", "12", "140", 1000), 2.85);
+  // at 300: 2.35 + 0.75
+  assert.equal(pricer.vinyl("Cosmic", "Splatter", "12", "140", 300), 3.1);
+});
+
+test("operator per-color override beats the inherited ladder", () => {
+  const rows = LADDER_ROWS.map((r) =>
+    r.key === "color:opaque:ruby" ? { ...r, pricesBySize: { '12"': 999 } } : r,
+  );
+  assert.equal(makeQuotePricer(rows).vinyl("Ruby", "Opaque", "12", "140", 1000), 9.99);
+});
+
+test("flatEx: ladders carry laddered=true; oneTime rows resolve totals at qty", () => {
+  const pricer = makeQuotePricer(LADDER_ROWS);
+  assert.deepEqual(pricer.flatEx("jackets:gatefold", "12", 2000), { v: 1.46, laddered: true, oneTime: false });
+  // stampers one-time total: $0 at 1,000 (genuine "Included"), $140 at 2,000
+  assert.deepEqual(pricer.flatEx("service:stampers", "12", 1000), { v: 0, laddered: true, oneTime: true });
+  assert.equal(pricer.flat("service:stampers", "12", 2000), 140);
+  // beyond the top rung → pending, never extrapolated
+  assert.equal(pricer.flat("jackets:gatefold", "12", 5000), null);
+});
+
 test("computeQuotePendingIds fails CLOSED: pre-name drafts, missing service rows, empty state", () => {
   // old draft without persisted color names → vinyl pending
   const noNames = { ...FULL_STATE, colorName: undefined, colorTierName: undefined };
