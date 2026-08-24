@@ -104,6 +104,10 @@ function urlExt(url: string | null | undefined): string | null {
 // untouched 24-bit WAV) when it's a live /objects/ file, falling back to
 // the served playback copy. Used for the expected download extension and
 // the per-row "original / playback copy" indicator.
+// Task #3341 — the Masters-on-file dialog's File column (original/served tag +
+// per-row download link) is hidden while the underlying downloads are broken.
+// Flip this back to true to restore the column once downloads work.
+const SHOW_MASTERS_FILE_COLUMN = false;
 function isObjectPtr(u: string | null | undefined): boolean {
   return !!u && u.trim().startsWith("/objects/");
 }
@@ -1424,7 +1428,7 @@ export function PressPanel({
                     <th className="px-3 py-2 text-left">Duration</th>
                     <th className="px-3 py-2 text-left">Size</th>
                     <th className="px-3 py-2 text-left">Preflight</th>
-                    <th className="px-3 py-2 text-right">File</th>
+                    {SHOW_MASTERS_FILE_COLUMN && <th className="px-3 py-2 text-right">File</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -1487,6 +1491,7 @@ export function PressPanel({
                             <span className="text-slate-400">—</span>
                           )}
                         </td>
+                        {SHOW_MASTERS_FILE_COLUMN && (
                         <td className="px-3 py-2 text-right">
                           {storageMissing ? (
                             <span
@@ -1524,12 +1529,13 @@ export function PressPanel({
                             <span className="text-slate-400">—</span>
                           )}
                         </td>
+                        )}
                       </tr>
                     );
                   })}
                   {sorted.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="px-3 py-6 text-center text-slate-500 italic">
+                      <td colSpan={SHOW_MASTERS_FILE_COLUMN ? 8 : 7} className="px-3 py-6 text-center text-slate-500 italic">
                         No tracks on this album yet.
                       </td>
                     </tr>
