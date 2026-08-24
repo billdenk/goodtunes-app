@@ -91,6 +91,12 @@ export const vinylComponentConfigSchema = z.object({
   weights: z.array(offerOptionSchema).max(12),
   sizeOptions: z.array(offerOptionSchema).max(8),
   quantities: z.array(offerOptionSchema).max(12),
+  // Per-size offered subsets, keyed by size id ("7"/"10"/"12"). Optional —
+  // legacy blobs carry only the flat arrays above, which then apply to every
+  // size. Once a press edits a specific size, the maps take over (gogoods'
+  // Aug 24 2026 bug: toggling LP-count/weight bled across all sizes).
+  weightsBySize: z.record(z.string(), z.array(offerOptionSchema).max(12)).optional(),
+  quantitiesBySize: z.record(z.string(), z.array(offerOptionSchema).max(12)).optional(),
 });
 export type VinylComponentConfig = z.infer<typeof vinylComponentConfigSchema>;
 

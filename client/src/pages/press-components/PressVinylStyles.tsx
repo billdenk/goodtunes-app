@@ -5452,13 +5452,39 @@ export function PressVinylStylesComponent({
   const offeredOf = (master: { id: string }[], offered: OfferOption[]) =>
     Object.fromEntries(master.map((o) => [o.id, offered.some((x) => x.id === o.id)]));
   const offeredSizes = useMemo(() => offeredOf(VINYL_SIZE_OPTIONS, config.sizeOptions), [config.sizeOptions]);
-  const offeredQuantities = useMemo(() => offeredOf(VINYL_QUANTITIES, config.quantities), [config.quantities]);
-  // Weight ladder = master rungs ∪ press-added customs, sorted by grams.
+  // Quantities and weights are offered PER SIZE (gogoods' Aug 24 2026 bug:
+  // one shared list made a 7" toggle change 10" and 12" too). Legacy blobs
+  // have only the flat arrays — those apply to every size until the press
+  // edits a specific size, which seeds the per-size maps.
+  const offeredQuantities = useMemo(
+    () => offeredOf(VINYL_QUANTITIES, config.quantitiesBySize?.[selectedSizeId] ?? config.quantities),
+    [config.quantitiesBySize, config.quantities, selectedSizeId],
+  );
+  // Weight ladder = master rungs ∪ press-added customs (from the flat list
+  // AND every size's offered subset), sorted by grams.
   const weights = useMemo(() => {
-    const extra = config.weights.filter((w) => !VINYL_WEIGHTS.some((m) => m.id === w.id));
+    const all = [...config.weights, ...Object.values(config.weightsBySize ?? {}).flat()];
+    const extra = all.filter(
+      (w, i) => !VINYL_WEIGHTS.some((m) => m.id === w.id) && all.findIndex((x) => x.id === w.id) === i,
+    );
     return [...VINYL_WEIGHTS, ...extra].sort((a, b) => Number(a.id) - Number(b.id));
-  }, [config.weights]);
-  const offeredWeights = useMemo(() => offeredOf(weights, config.weights), [weights, config.weights]);
+  }, [config.weights, config.weightsBySize]);
+  const offeredWeights = useMemo(
+    () => offeredOf(weights, config.weightsBySize?.[selectedSizeId] ?? config.weights),
+    [weights, config.weightsBySize, config.weights, selectedSizeId],
+  );
+  // Seed a full per-size map from whatever each size currently resolves to,
+  // so the first per-size edit freezes the other sizes' current state.
+  const seedBySize = (
+    prev: VinylComponentConfig,
+    field: 'quantities' | 'weights',
+  ): Record<string, OfferOption[]> => {
+    const key = field === 'quantities' ? 'quantitiesBySize' : 'weightsBySize';
+    const existing = prev[key];
+    return Object.fromEntries(
+      VINYL_SIZE_OPTIONS.map((s) => [s.id, existing?.[s.id] ?? prev[field]]),
+    );
+  };
   const [offerMenuOpenId, setOfferMenuOpenId] = useState<string | null>(null);
   // Shared toggle: flip an option's offered state in the config and, if the
   // current selection just went dark, hop to the first still-offered sibling.
@@ -5487,17 +5513,54 @@ export function PressVinylStylesComponent({
     setOfferMenuOpenId(null);
   };
   const toggleSizeOffered = makeToggle('sizeOptions', VINYL_SIZE_OPTIONS, selectedSizeId, setSelectedSizeId);
-  const toggleQuantityOffered = makeToggle('quantities', VINYL_QUANTITIES, selectedQuantityId, setSelectedQuantityId);
-  const toggleWeightOffered = makeToggle('weights', weights, selectedWeightId, setSelectedWeightId);
+  // Per-size toggle: flips the option ONLY for the currently selected size.
+  const makePerSizeToggle = (
+    field: 'quantities' | 'weights',
+    options: OfferOption[],
+    selected: string,
+    setSelected: (id: string) => void,
+  ) => (id: string) => {
+    commit((prev) => {
+      const key = field === 'quantities' ? 'quantitiesBySize' : 'weightsBySize';
+      const map = seedBySize(prev, field);
+      const arr = map[selectedSizeId] ?? prev[field];
+      const offeredNow = arr.some((o) => o.id === id);
+      let nextArr: OfferOption[];
+      if (offeredNow) {
+        nextArr = arr.filter((o) => o.id !== id);
+        if (selected === id) {
+          const fallback = options.find((o) => o.id !== id && nextArr.some((x) => x.id === o.id));
+          if (fallback) setSelected(fallback.id);
+        }
+      } else {
+        const opt = options.find((o) => o.id === id);
+        if (!opt) return prev;
+        nextArr = [...arr, { id: opt.id, label: opt.label, note: opt.note ?? '' }];
+      }
+      return { ...prev, [key]: { ...map, [selectedSizeId]: nextArr } };
+    });
+    setOfferMenuOpenId(null);
+  };
+  const toggleQuantityOffered = makePerSizeToggle('quantities', VINYL_QUANTITIES, selectedQuantityId, setSelectedQuantityId);
+  const toggleWeightOffered = makePerSizeToggle('weights', weights, selectedWeightId, setSelectedWeightId);
   const addWeight = (grams: string, note: string) => {
     const id = grams;
     if (weights.some((w) => w.id === id)) return; // already in the ladder
-    commit((prev) => ({
-      ...prev,
-      weights: [...prev.weights, { id, label: `${grams}g`, note: note || 'Custom' }].sort(
-        (a, b) => Number(a.id) - Number(b.id),
-      ),
-    }));
+    // New custom rung joins the ladder for everyone but is OFFERED only on
+    // the size it was added under — other sizes keep their current state.
+    const rung = { id, label: `${grams}g`, note: note || 'Custom' };
+    const byGrams = (a: OfferOption, b: OfferOption) => Number(a.id) - Number(b.id);
+    commit((prev) => {
+      const map = seedBySize(prev, 'weights');
+      return {
+        ...prev,
+        weights: [...prev.weights, rung].sort(byGrams),
+        weightsBySize: {
+          ...map,
+          [selectedSizeId]: [...(map[selectedSizeId] ?? prev.weights), rung].sort(byGrams),
+        },
+      };
+    });
   };
   const [categoryId, setCategoryId] = useState<CategoryId>(() => categories[0]?.id ?? 'black');
   const [selectedSwatchId, setSelectedSwatchId] = useState<string>(() => categories[0]?.swatches[0]?.id ?? 'BK1');
