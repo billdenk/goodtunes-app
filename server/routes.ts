@@ -34875,7 +34875,18 @@ export async function registerRoutes(
   // this is a read (no CSRF concern), and operators who signed in via a
   // session cookie only (OAuth / dev-login, no localStorage token) were
   // 401'd by the bearer-only guard → "Couldn't download …" on every track.
-  app.get("/api/admin/albums/:id/masters/:songId/download", requireAdmin, async (req, res) => {
+  // Task #3335 — prod per-track downloads failed while the zip worked. The
+  // zip's PROVEN delivery is: mint a short-lived signed link (authed POST),
+  // then let a plain anchor navigation stream the response via the
+  // browser's own download manager. The per-track flow instead fetch()'d
+  // the whole (often multi-hundred-MB) WAV into a JS Blob through the edge
+  // proxy, which aborted large single streams in prod (dev, no edge proxy,
+  // always worked). Per-track now mirrors the zip handoff exactly: this GET
+  // accepts the same stateless HMAC ?dt= token (albumId + songId + userId +
+  // expiry), and stream errors before headers ship return reason-coded
+  // JSON, never an empty body (empty body + HTTP/2's empty statusText was
+  // the bare "Download failed." toast).
+  async function streamMasterTrack(req: Request, res: Response) {
     if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
     const song = await storage.getSongById(req.params.songId);
     if (!song || song.albumId !== req.params.id) return res.status(404).json({ message: "Song not found on this album." });
@@ -34919,12 +34930,74 @@ export async function registerRoutes(
       res.setHeader("X-Master-Source", resolved.source);
       resolved.file.createReadStream().on("error", (e: any) => {
         console.error("[masters-download] stream error", e);
-        if (!res.headersSent) res.status(500).end();
-        else res.end();
+        // A pre-headers failure must carry a JSON body — an empty 500 body
+        // + HTTP/2's empty statusText rendered a bare "Download failed."
+        // toast (Task #3335). Mid-stream we can only abort so the client
+        // sees a failed (not silently-truncated) download.
+        if (!res.headersSent) {
+          res.status(500).json({ code: "stream_error", message: "Couldn't stream that master from storage — try again." });
+        } else {
+          res.destroy(e);
+        }
       }).pipe(res);
     } catch (e) {
       console.error("[masters-download] failed", e);
-      return res.status(500).json({ message: "Couldn't stream that master — try again." });
+      if (!res.headersSent) return res.status(500).json({ code: "stream_error", message: "Couldn't stream that master — try again." });
+      res.destroy(e as any);
+    }
+  }
+
+  app.get("/api/admin/albums/:id/masters/:songId/download", (req, res) => {
+    const dt = typeof req.query.dt === "string" ? req.query.dt : null;
+    if (dt) {
+      // Signed-link path (plain anchor navigation → browser streams to
+      // disk). Identity comes from the verified token; the operator/press
+      // gate re-runs inside streamMasterTrack.
+      const uid = verifyMasterTrackToken(dt, req.params.id, req.params.songId);
+      if (!uid) return res.status(401).json({ message: "Download link expired — click download again." });
+      (req as any).session = (req as any).session ?? {};
+      (req as any).session.userId = uid;
+      return void streamMasterTrack(req, res);
+    }
+    // Direct call: same session-OR-bearer guard as before (Task #3256).
+    return void requireAdmin(req, res, () => void streamMasterTrack(req, res));
+  });
+
+  // Task #3335 — mint the short-lived per-track download link. Reason-coded
+  // failures (no_master / external / missing_object) surface HERE, at authed
+  // fetch time, so the anchor navigation itself almost never fails.
+  app.post("/api/admin/albums/:id/masters/:songId/download-link", requireAdmin, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const song = await storage.getSongById(req.params.songId);
+    if (!song || song.albumId !== req.params.id) return res.status(404).json({ message: "Song not found on this album." });
+    try {
+      const all = masterCandidates(song);
+      if (all.length === 0) {
+        return res.status(404).json({ code: "no_master", message: MASTER_FAILURE_MESSAGES.no_master });
+      }
+      const candidates = all.filter((c) => c.cls === "object");
+      if (candidates.length === 0) {
+        return res.status(422).json({ code: "external", message: MASTER_FAILURE_MESSAGES.external });
+      }
+      let found = false;
+      for (const c of candidates) {
+        try {
+          await objectStorage.getObjectEntityFile(c.url);
+          found = true;
+          break;
+        } catch (e) {
+          if (e instanceof ObjectNotFoundError) continue;
+          throw e;
+        }
+      }
+      if (!found) {
+        return res.status(404).json({ code: "missing_object", message: MASTER_FAILURE_MESSAGES.missing_object });
+      }
+      const token = signMasterTrackToken(req.params.id, req.params.songId, req.session.userId!);
+      res.json({ url: `/api/admin/albums/${req.params.id}/masters/${req.params.songId}/download?dt=${encodeURIComponent(token)}` });
+    } catch (e) {
+      console.error("[masters-download-link] failed", e);
+      return res.status(500).json({ message: "Couldn't prepare that download — try again." });
     }
   });
 
@@ -34968,6 +35041,32 @@ export async function registerRoutes(
     try {
       const j = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
       if (j.a !== albumId) return null;
+      if (typeof j.e !== "number" || Date.now() > j.e) return null;
+      return typeof j.u === "string" && j.u ? j.u : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Task #3335 — per-TRACK variant of the same stateless HMAC token:
+  // albumId + songId + userId + expiry, download-only, ~2-minute TTL.
+  function signMasterTrackToken(albumId: string, songId: string, userId: string): string {
+    const exp = Date.now() + MASTERS_ZIP_LINK_TTL_MS;
+    const payload = Buffer.from(JSON.stringify({ a: albumId, s: songId, u: userId, e: exp })).toString("base64url");
+    return `${payload}.${mastersZipHmac(payload)}`;
+  }
+  function verifyMasterTrackToken(token: string, albumId: string, songId: string): string | null {
+    const dot = token.lastIndexOf(".");
+    if (dot <= 0) return null;
+    const payload = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const expect = mastersZipHmac(payload);
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expect);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+    try {
+      const j = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+      if (j.a !== albumId || j.s !== songId) return null;
       if (typeof j.e !== "number" || Date.now() > j.e) return null;
       return typeof j.u === "string" && j.u ? j.u : null;
     } catch {

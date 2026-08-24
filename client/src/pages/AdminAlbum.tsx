@@ -120,8 +120,8 @@ import { SplitsImportSheet, TrackSplitsEditor } from "@/components/admin/SplitsP
 import { pushRecentPerson } from "@/hooks/usePersonCreditRecents";
 import { anchorScrollToElement } from "@/lib/anchorScroll";
 import { CreditsImportSheet } from "@/components/admin/CreditsImportSheet";
-import { apiRequest, getAuthToken, apiErrorStatus, fetchBlob } from "@/lib/queryClient";
-import { masterDownloadErrorMessage } from "@/lib/masterDownload";
+import { apiRequest, getAuthToken, apiErrorStatus } from "@/lib/queryClient";
+import { masterDownloadErrorMessage, downloadMasterTrack } from "@/lib/masterDownload";
 import { enqueueAudioBatch, enqueueVideoBatch } from "@/context/UploadManagerContext";
 import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
@@ -513,32 +513,20 @@ function SectionDot({
 
 // Task #3256 — masters are PRIVATE objects: a bare <a href> straight at the
 // /objects/... path carries no auth, 404s at the edge, and saves a 0-byte
-// file. Every admin download control must fetch through the authed
-// download route into a blob (same pattern as PressPanel). The route
+// file. Task #3335 — and a fetch()-into-Blob buffered whole WAVs in JS
+// memory and was aborted by the prod edge proxy. So per-track downloads now
+// use the zip's proven handoff (authed link mint → anchor navigation →
+// browser streams to disk), shared in @/lib/masterDownload. The server
 // streams the artist's ORIGINAL upload (audioSourceUrl) when one is on
-// file, falling back to the served master; failures come back with a
-// reason-specific message (no master / external-only link / file missing
-// from storage) that the caller surfaces in a toast.
+// file, falling back to the served master, and names the file via
+// Content-Disposition; failures come back with a reason-specific message
+// (no master / external-only link / file missing from storage) that the
+// caller surfaces in a toast.
 async function downloadMasterViaApi(
   albumId: string,
   song: { id: string; title: string; trackNumber: number | null; audioUrl?: string | null; audioSourceUrl?: string | null },
 ) {
-  const preferred =
-    (song.audioSourceUrl ?? "").trim().startsWith("/objects/")
-      ? song.audioSourceUrl!.trim()
-      : (song.audioUrl ?? "").trim().startsWith("/objects/")
-        ? song.audioUrl!.trim()
-        : (song.audioSourceUrl ?? song.audioUrl ?? "");
-  const ext = preferred.match(/\.(\w+)(?:\?|$)/)?.[0] ?? ".mp3";
-  const blob = await fetchBlob(`/api/admin/albums/${albumId}/masters/${song.id}/download`);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${String(song.trackNumber ?? 0).padStart(2, "0")} ${song.title}${ext}`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  await downloadMasterTrack(albumId, song.id);
 }
 
 // Toast copy for a failed master download lives in @/lib/masterDownload

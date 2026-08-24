@@ -21,8 +21,8 @@ import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
 import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Check, X, Circle, Truck } from "lucide-react";
-import { apiRequest, queryClient, fetchBlob } from "@/lib/queryClient";
-import { masterDownloadErrorMessage } from "@/lib/masterDownload";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { masterDownloadErrorMessage, downloadMasterTrack } from "@/lib/masterDownload";
 import { useToast } from "@/hooks/use-toast";
 import { VENDOR_SPECS, HIDDEN_PREFLIGHT_VENDORS, resolveVendorIdForPress, isGenericVendor, defaultPreflightVendor, type VendorId } from "@shared/vendorSpecs";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -695,19 +695,12 @@ export function PressPanel({
   // /objects/... path carried no auth, 404'd, and saved 0-byte files
   // (Andrew's FLACs). Fetch through the authed download route into a blob.
   async function downloadOne(s: { id: string; title: string; trackNumber: number | null; audioUrl?: string | null; audioSourceUrl?: string | null }) {
-    // Task #3197 — the route streams the ORIGINAL upload (audioSourceUrl)
-    // when it exists, so the expected filename extension mirrors the same
-    // source preference (server/mastersHealth.ts).
-    const ext = urlExt(preferredMasterUrl(s) ?? s.audioUrl) ?? ".mp3";
-    const blob = await fetchBlob(`/api/admin/albums/${albumId}/masters/${s.id}/download`);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${String(s.trackNumber ?? 0).padStart(2, "0")} ${s.title}${ext}`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    // Task #3335 — same handoff as Download-all: mint a short-lived signed
+    // link, then anchor-navigate so the browser's download manager streams
+    // the (possibly multi-hundred-MB) master straight to disk. The server
+    // prefers the ORIGINAL upload (audioSourceUrl) and names the file via
+    // Content-Disposition; reason-coded failures throw at mint time.
+    await downloadMasterTrack(albumId, s.id);
   }
 
   async function downloadAll() {
