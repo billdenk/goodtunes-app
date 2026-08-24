@@ -355,12 +355,23 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   // full-bleed render genuinely can't be produced we say so honestly.
   const [art, setArt] = useState<ViewerArt>(null);
   const [artUnavailable, setArtUnavailable] = useState<string | null>(null);
+  // Task #3351 — true when `art` is the server-generated full-artboard
+  // raster fallback (still genuinely full bleed), not the live pdf.js render.
+  const [artIsServerRaster, setArtIsServerRaster] = useState(false);
   const assetUrl = component?.assetUrl ?? null;
   const artFileName = component?.fileName ?? null;
+  // Task #3351 — server-persisted FULL-ARTBOARD raster (uncropped, bleed
+  // included — NOT the trim-cropped previewUrl) + measured artboard mm, so
+  // very large masters that defeat the in-browser pdf.js render still get a
+  // genuinely full-bleed, correctly seated preview.
+  const fullPreviewUrl = component?.fullPreviewUrl ?? null;
+  const fullPreviewWMm = component?.fullPreviewWMm ?? null;
+  const fullPreviewHMm = component?.fullPreviewHMm ?? null;
   useEffect(() => {
     let cancelled = false;
     setArt(null);
     setArtUnavailable(null);
+    setArtIsServerRaster(false);
     if (!albumId || !componentId || !assetUrl) return;
     void (async () => {
       try {
@@ -370,6 +381,16 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
         if (!cancelled) setArt({ name: artFileName ?? 'Art', img, wMm, hMm });
       } catch (e: any) {
         if (cancelled) return;
+        // Task #3351 — the in-browser render failed (typically a 350–530MB
+        // master on a low-memory device). Fall back to the server-generated
+        // FULL-ARTBOARD raster when one was persisted at check time — it is
+        // genuinely full bleed (never the trim crop) and carries its own
+        // measured artboard mm so it seats identically.
+        if (fullPreviewUrl && fullPreviewWMm && fullPreviewHMm) {
+          setArt({ name: artFileName ?? 'Art', img: fullPreviewUrl, wMm: fullPreviewWMm, hMm: fullPreviewHMm });
+          setArtIsServerRaster(true);
+          return;
+        }
         // apiRequest throws "NNN: <message>" (ApiError also carries .body) —
         // surface the server's honest message when there is one.
         const server =
@@ -384,7 +405,7 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
       }
     })();
     return () => { cancelled = true; };
-  }, [albumId, componentId, assetUrl, artFileName]);
+  }, [albumId, componentId, assetUrl, artFileName, fullPreviewUrl, fullPreviewWMm, fullPreviewHMm]);
 
   // MOCK_ART equivalent — breadcrumb label, art image, alt. `image` is the
   // full-artboard pdf.js raster only — never the cropped previewUrl.
@@ -743,6 +764,13 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
         {artUnavailable && (
           <p className="text-[13px]" style={{ marginTop: 20, color: t.subink }} data-testid="art-preview-unavailable">
             {artUnavailable}
+          </p>
+        )}
+        {/* Task #3351 — fallback in play: still genuinely full bleed, just a
+            server-generated raster instead of the live in-browser render. */}
+        {artIsServerRaster && (
+          <p className="text-sm" style={{ marginTop: 20, color: t.faint }} data-testid="art-preview-server-raster">
+            Showing a server-generated full-artboard preview — this file is too large to render live in this browser.
           </p>
         )}
         {tpl ? (

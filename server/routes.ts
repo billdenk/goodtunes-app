@@ -92,6 +92,7 @@ import { getUserRole, getUserMemberships, pickPrimaryMembership } from "./auth/r
 import { resolveInviterBranding, resolvePressInviteBrand } from "./inviteBranding";
 import {
   parsePdfBoxes,
+  rasterArtboardMm,
   resolveFinishedRectPx,
   frontPanelRect,
   clampCrop,
@@ -34551,7 +34552,11 @@ export async function registerRoutes(
   // Only ever runs against our own objects (never a pasted external URL —
   // those get the client's generic PDF tile). Returns null on any failure;
   // the check itself never fails because a preview couldn't be produced.
-  const PREVIEW_MAX_SOURCE_BYTES = 300 * 1024 * 1024;
+  // Task #3351 — raised from 300MB so 350–530MB print-ready masters still
+  // get server previews (pdftoppm works off disk; only /tmp space matters),
+  // giving the artist Test page a full-artboard fallback when the browser
+  // pdf.js render can't cope on low-memory devices.
+  const PREVIEW_MAX_SOURCE_BYTES = 600 * 1024 * 1024;
 
   // Task #3020 — geometry for trim-area previews lives in
   // server/completedArtPreview.ts (pure + unit-tested). The only IO here
@@ -34576,17 +34581,34 @@ export async function registerRoutes(
   // labels also rasterize page 2 (Side B) → `previewUrl2`. Only ever runs
   // against our own objects. Returns nulls on any failure; the check itself
   // never fails because a preview couldn't be produced.
+  // Task #3351 — also returns a FULL-ARTBOARD raster (`fullPreviewUrl`,
+  // uncropped, bleed/flaps included) plus the page-1 artboard size in mm,
+  // so the artist Test page has a lightweight seatable fallback when the
+  // client-side pdf.js render fails on very large masters. When no crop was
+  // applied the trim preview IS the full page and the same object is reused.
   async function generateCompletedPreview(
     objectPath: string,
     spec?: FinishedComponentSpec | null,
-  ): Promise<{ previewUrl: string | null; previewUrl2: string | null }> {
+  ): Promise<{
+    previewUrl: string | null;
+    previewUrl2: string | null;
+    fullPreviewUrl: string | null;
+    fullPreviewWMm: number | null;
+    fullPreviewHMm: number | null;
+  }> {
     const fsp = await import("node:fs/promises");
     const os = await import("node:os");
     const path = await import("node:path");
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
     const run = promisify(execFile);
-    const none = { previewUrl: null, previewUrl2: null };
+    const none = {
+      previewUrl: null,
+      previewUrl2: null,
+      fullPreviewUrl: null,
+      fullPreviewWMm: null,
+      fullPreviewHMm: null,
+    };
     let tmpDir: string | null = null;
     try {
       const file = await objectStorage.getObjectEntityFile(objectPath);
@@ -34628,7 +34650,7 @@ export async function registerRoutes(
         return finalPath;
       };
 
-      const renderPage = async (page: number): Promise<string | null> => {
+      const renderPage = async (page: number): Promise<{ url: string | null }> => {
         const outBase = path.join(tmpDir!, `page${page}`);
         try {
           await run(
@@ -34637,11 +34659,11 @@ export async function registerRoutes(
             { timeout: 60_000 },
           );
         } catch {
-          return null; // e.g. the page doesn't exist
+          return { url: null }; // e.g. the page doesn't exist
         }
         const files = await fsp.readdir(tmpDir!);
         const pageFile = files.find((f) => f.startsWith(`page${page}-`) && f.endsWith(".png"));
-        if (!pageFile) return null;
+        if (!pageFile) return { url: null };
 
         const pagePng = path.join(tmpDir!, pageFile);
         let pipeline = sharp(pagePng);
@@ -34699,15 +34721,71 @@ export async function registerRoutes(
           .resize(1000, 1000, { fit: "inside", withoutEnlargement: true })
           .png()
           .toBuffer();
-        return storePng(png);
+        const url = await storePng(png);
+        return { url };
       };
 
-      const previewUrl = await renderPage(1);
+      // Task #3351 — FULL-ARTBOARD raster in the SAME frame pdf.js renders:
+      // pdf.js draws the page viewport = CropBox (MediaBox when absent) with
+      // the page's own /Rotate applied, so the raster runs its OWN pdftoppm
+      // pass with `-cropbox` (poppler falls back to the MediaBox when the
+      // page has no CropBox, and emits the ROTATED raster — the same
+      // semantics). The persisted mm are derived from the rendered raster's
+      // pixel dimensions at the known DPI (rasterArtboardMm), so the image
+      // and its real-world size describe the same rectangle BY CONSTRUCTION
+      // — rotation/framing can never disagree. The trim-preview raster
+      // above deliberately stays MediaBox-framed (its crop math in
+      // resolveFinishedRectPx maps boxes against that frame). Best-effort:
+      // any failure returns nulls.
+      const FULL_RASTER_DPI = 96;
+      const renderFullArtboard = async (): Promise<{
+        url: string | null;
+        wMm: number | null;
+        hMm: number | null;
+      }> => {
+        const noneFull = { url: null, wMm: null, hMm: null };
+        try {
+          const outBase = path.join(tmpDir!, "fullart1");
+          await run(
+            "pdftoppm",
+            ["-f", "1", "-l", "1", "-png", "-r", String(FULL_RASTER_DPI), "-cropbox", pdfPath, outBase],
+            { timeout: 60_000 },
+          );
+          const files = await fsp.readdir(tmpDir!);
+          const pageFile = files.find((f) => f.startsWith("fullart1-") && f.endsWith(".png"));
+          if (!pageFile) return noneFull;
+          const fullPagePath = path.join(tmpDir!, pageFile);
+          // mm of the SAME rendered raster — the client only seats the
+          // fallback when both the image and its real-world size are known.
+          const meta2 = await sharp(fullPagePath).metadata();
+          const mm = rasterArtboardMm(meta2.width, meta2.height, FULL_RASTER_DPI);
+          if (!mm) return noneFull;
+          const fullPng = await sharp(fullPagePath)
+            .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+            .png()
+            .toBuffer();
+          const url = await storePng(fullPng);
+          if (!url) return noneFull;
+          return { url, wMm: mm.wMm, hMm: mm.hMm };
+        } catch (e) {
+          console.warn(`[completed-art] full-artboard raster failed for ${objectPath}`, e);
+          return noneFull;
+        }
+      };
+
+      const page1 = await renderPage(1);
       // Center labels: also render Side B (page 2) so the preview dialog
       // can show both faces.
       const previewUrl2 =
-        previewUrl && componentId === "labels" ? await renderPage(2) : null;
-      return { previewUrl, previewUrl2 };
+        page1.url && componentId === "labels" ? (await renderPage(2)).url : null;
+      const full = await renderFullArtboard();
+      return {
+        previewUrl: page1.url,
+        previewUrl2,
+        fullPreviewUrl: full.url,
+        fullPreviewWMm: full.wMm,
+        fullPreviewHMm: full.hMm,
+      };
     } catch (e) {
       console.warn(`[completed-art] preview generation failed for ${objectPath}`, e);
       return none;
@@ -35513,17 +35591,25 @@ export async function registerRoutes(
       const spec = required.find((r) => r.id === componentId) ?? null;
       let previewUrl = component.previewUrl ?? null;
       let previewUrl2 = component.previewUrl2 ?? null;
-      if (spec && !previewUrl) {
+      let fullPreviewUrl = component.fullPreviewUrl ?? null;
+      let fullPreviewWMm = component.fullPreviewWMm ?? null;
+      let fullPreviewHMm = component.fullPreviewHMm ?? null;
+      if (spec && (!previewUrl || !fullPreviewUrl)) {
         try {
           const previews = await generateCompletedPreview(mirrored.objectPath, spec);
           previewUrl = previews.previewUrl ?? previewUrl;
           previewUrl2 = previews.previewUrl2 ?? previewUrl2;
+          fullPreviewUrl = previews.fullPreviewUrl ?? fullPreviewUrl;
+          fullPreviewWMm = previews.fullPreviewWMm ?? fullPreviewWMm;
+          fullPreviewHMm = previews.fullPreviewHMm ?? fullPreviewHMm;
         } catch {
           /* previews stay as-is — the full-bleed serve below is the point */
         }
       }
       const healed = ((ctx.row?.components ?? []) as CompletedTemplateComponent[]).map((c) =>
-        c.componentId === componentId ? { ...c, assetUrl: mirrored.objectPath, previewUrl, previewUrl2 } : c,
+        c.componentId === componentId
+          ? { ...c, assetUrl: mirrored.objectPath, previewUrl, previewUrl2, fullPreviewUrl, fullPreviewWMm, fullPreviewHMm }
+          : c,
       );
       const { components, status } = retagCompleted(healed, required.map((r) => r.id));
       await storage.saveCompletedTemplateCheck({
@@ -35600,6 +35686,9 @@ export async function registerRoutes(
     let fileName: string | null;
     let previewUrl: string | null = null;
     let previewUrl2: string | null = null;
+    let fullPreviewUrl: string | null = null;
+    let fullPreviewWMm: number | null = null;
+    let fullPreviewHMm: number | null = null;
     let isOwnObject = /^\/objects\/uploads\/[a-zA-Z0-9._-]+$/.test(body.data.url);
     if (isOwnObject) {
       try {
@@ -35619,6 +35708,9 @@ export async function registerRoutes(
       const previews = await generateCompletedPreview(body.data.url, spec);
       previewUrl = previews.previewUrl;
       previewUrl2 = previews.previewUrl2;
+      fullPreviewUrl = previews.fullPreviewUrl;
+      fullPreviewWMm = previews.fullPreviewWMm;
+      fullPreviewHMm = previews.fullPreviewHMm;
     } else {
       // Task #3184 — pasted external links are MIRRORED into our object
       // storage at check time (standing rule: external file links never
@@ -35637,6 +35729,9 @@ export async function registerRoutes(
         const previews = await generateCompletedPreview(mirrored.objectPath, spec);
         previewUrl = previews.previewUrl;
         previewUrl2 = previews.previewUrl2;
+        fullPreviewUrl = previews.fullPreviewUrl;
+        fullPreviewWMm = previews.fullPreviewWMm;
+        fullPreviewHMm = previews.fullPreviewHMm;
       } else {
         const fetched = await fetchAndScanPdf(body.data.url);
         if (!fetched.ok) return res.status(400).json({ message: fetched.error });
@@ -35706,6 +35801,9 @@ export async function registerRoutes(
       fileName,
       previewUrl,
       previewUrl2,
+      fullPreviewUrl,
+      fullPreviewWMm,
+      fullPreviewHMm,
       checks,
       status: rollupStatus(checks),
       override: null,
