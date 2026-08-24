@@ -253,11 +253,17 @@ const ARTIST_NAV: { label: string; icon: typeof LayoutDashboard; active?: boolea
   { label: 'Reports', icon: BarChart3 },
 ];
 
+// Rows with a real page navigate; the rest stay inert until their screens
+// are built (Aug 24 2026, Andrew's Memphis demo).
+const RAIL_LINKS: Record<string, string> = { Dashboard: '/dashboard', Projects: '/projects' };
+
 function NavRow({ label, icon: Icon, active }: { label: string; icon: typeof LayoutDashboard; active?: boolean }) {
+  const [, navigate] = useLocation();
+  const to = RAIL_LINKS[label];
   return (
     <a
-      href="#"
-      onClick={(e) => e.preventDefault()}
+      href={to ?? '#'}
+      onClick={(e) => { e.preventDefault(); if (to) navigate(to); }}
       data-testid={`rail-${label.toLowerCase()}`}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 0,
