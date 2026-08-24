@@ -14702,11 +14702,6 @@
   {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/AcceptInvite.tsx",
-    "snippet": "className=\"mt-6 text-sm font-semibold text-[#319ED8] hover:underline\""
-  },
-  {
-    "rule": "brand-hex-literal",
-    "file": "client/src/pages/AcceptInvite.tsx",
     "snippet": "className={`w-full bg-[#319ED8] hover:bg-[#2789bd] disabled:bg-slate-300 text-white font-semibold ${cornerClass} py-2.5 transition-colors`}"
   },
   {
@@ -21932,7 +21927,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
-    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[12px] font-medium\" style={{ marginTop: 'auto', color: t.subink }}>"
+    "snippet": "<span className=\"inline-flex items-center justify-between gap-1.5 text-[12px] font-medium\" style={{ marginTop: 'auto', color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1 text-[12px] font-medium transition-opacity hover:opacity-80 flex-shrink-0\""
   },
   {
     "rule": "hardcoded-font-size",

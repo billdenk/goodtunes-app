@@ -372,7 +372,8 @@ type VinylArtBlock = {
   imageUrl: string | null;
 };
 
-function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: Theme }) {
+// Exported for the client component test (artistReleaseBlockCard.test.ts).
+export function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: Theme }) {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -403,6 +404,12 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
     : block.status === 'album'
       ? { label: 'Using album art', icon: <Link2 className="w-3.5 h-3.5" aria-hidden /> }
       : { label: 'Waiting for art', icon: <Circle className="w-3.5 h-3.5" aria-hidden /> };
+  // A tile that already shows art (custom upload OR album-art inheritance with
+  // an image) opens the piece's TEST VIEW on tap — the page copy promises "Tap
+  // any piece to open its test view." Only an empty tile opens the file
+  // picker; replacing art on a filled tile goes through the explicit Replace
+  // control in the footer (or drag-and-drop, which works in both states).
+  const hasArt = !!block.imageUrl;
   return (
     <div
       className={cn('gt-tile w-full h-full rounded-2xl overflow-hidden flex flex-col text-left transition-colors cursor-pointer', t.hoverCard)}
@@ -411,7 +418,7 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
     >
       <button
         type="button"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => { if (hasArt) navigate(href); else inputRef.current?.click(); }}
         onDragOver={(event) => event.preventDefault()}
         onDrop={(event) => {
           event.preventDefault();
@@ -420,7 +427,7 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
         className="relative block w-full flex-shrink-0 overflow-hidden"
         style={{ height: 240, backgroundColor: t.dropEmpty, borderBottom: `1px solid ${t.hairline}` }}
         data-testid={`upload-target-${block.id}`}
-        aria-label={`Upload ${block.title} art`}
+        aria-label={hasArt ? `Open ${block.title} test view` : `Upload ${block.title} art`}
       >
         {block.imageUrl ? (
           <img
@@ -446,8 +453,22 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
 
       <div className="w-full flex flex-col" style={{ height: 78, padding: '14px 18px 16px' }}>
         <button type="button" onClick={() => navigate(href)} className="text-left text-[15px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{block.title}</button>
-        <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ marginTop: 'auto', color: t.subink }}>
-          {status.icon} {status.label}
+        <span className="inline-flex items-center justify-between gap-1.5 text-[12px] font-medium" style={{ marginTop: 'auto', color: t.subink }}>
+          <span className="inline-flex items-center gap-1.5 min-w-0">
+            {status.icon} <span className="truncate">{status.label}</span>
+          </span>
+          {hasArt && (
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              className="inline-flex items-center gap-1 text-[12px] font-medium transition-opacity hover:opacity-80 flex-shrink-0"
+              style={{ color: t.subink }}
+              data-testid={`button-replace-${block.id}`}
+              aria-label={`Replace ${block.title} art`}
+            >
+              <UploadCloud className="w-3.5 h-3.5" aria-hidden /> Replace
+            </button>
+          )}
         </span>
       </div>
     </div>
