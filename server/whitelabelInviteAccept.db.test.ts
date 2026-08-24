@@ -136,6 +136,71 @@ test("password invite-accept on a white-label host mints a working admin identit
   assert.equal(me2.status, 200, "returning-partner bearer must authorize on the branded host");
 });
 
+test("existing-email invite: new-credentials submit is rejected, sign-in-to-accept works", async () => {
+  // Task #3329 — the invited email already holds a users account. The old
+  // behavior granted the hat, IGNORED the typed password, and returned no
+  // token/session — the invitee then bounced to the press-client sign-in
+  // and was locked out. Now: a new-credentials submit is refused (409,
+  // invite NOT consumed), a wrong sign-in password is 401 (invite NOT
+  // consumed), and signin+correct password grants + consumes + signs in.
+  const tag = randomUUID().slice(0, 8);
+  const email = `t3329_wl_${tag}@example.test`;
+
+  // Seed the pre-existing account via a first invite accept.
+  const first = await seedInvite(email);
+  const firstRes = await fetch(`${baseUrl}/api/invites/${first.token}/accept`, {
+    method: "POST",
+    headers: { host: WL_HOST, "content-type": "application/json", "x-forwarded-proto": "https" },
+    body: JSON.stringify({ username: `t3329u_${tag}`, displayName: "T3329 Existing", password: "Password123!" }),
+  });
+  assert.equal(firstRes.status, 200);
+  const ur = rows(await exec(sql`SELECT id, role_scope_id FROM users WHERE email = ${email} LIMIT 1`));
+  created.users.add(ur[0].id);
+  if (ur[0].role_scope_id) created.people.add(ur[0].role_scope_id);
+
+  // Second invite to the same email.
+  const second = await seedInvite(email);
+  const read = await safeJson(await fetch(`${baseUrl}/api/invites/${second.token}`, {
+    headers: { host: WL_HOST, "x-forwarded-proto": "https" },
+  }) as any);
+  assert.equal(read?.existingAccount, true, "lookup must flag the existing account");
+
+  const post = (body: any) => fetch(`${baseUrl}/api/invites/${second.token}/accept`, {
+    method: "POST",
+    headers: { host: WL_HOST, "content-type": "application/json", "x-forwarded-proto": "https" },
+    body: JSON.stringify(body),
+  });
+
+  // New-credentials submit → 409, nothing consumed.
+  const rej = await post({ username: "whatever", displayName: "X", password: "BrandNew999!" });
+  assert.equal(rej.status, 409, "new-credentials submit must be refused, never silently ignored");
+  assert.equal((await safeJson(rej))?.code, "EXISTING_ACCOUNT");
+
+  // Wrong password → 401, nothing consumed.
+  const bad = await post({ signin: true, password: "wrong-password" });
+  assert.equal(bad.status, 401);
+  const still = await fetch(`${baseUrl}/api/invites/${second.token}`, { headers: { host: WL_HOST, "x-forwarded-proto": "https" } });
+  assert.equal(still.status, 200, "invite must remain unconsumed after failed attempts");
+
+  // Correct password → grant + consume + signed in (bearer works on host).
+  const ok = await post({ signin: true, password: "Password123!" });
+  const okJson = await safeJson(ok);
+  assert.equal(ok.status, 200, `sign-in-to-accept returned ${ok.status}: ${JSON.stringify(okJson)}`);
+  assert.ok(okJson?.token, "sign-in-to-accept must return a bearer token");
+  assert.ok(okJson?.landingPath, "sign-in-to-accept must return a landing path");
+  const me = await fetch(`${baseUrl}/api/me`, {
+    headers: { host: WL_HOST, authorization: `Bearer ${okJson.token}`, "x-forwarded-proto": "https" },
+  });
+  assert.equal(me.status, 200, "minted bearer must authorize on the branded host");
+
+  // Spent invite lookup carries routing hints for the unavailable page.
+  const spent = await safeJson(await fetch(`${baseUrl}/api/invites/${second.token}`, {
+    headers: { host: WL_HOST, "x-forwarded-proto": "https" },
+  }) as any);
+  assert.equal(spent?.used, true);
+  assert.equal(spent?.accountExists, true);
+});
+
 test("OAuth start with an invite token on a white-label host signs an admin-kind state bag", async () => {
   // The Google start route redirects to the provider; the redirect_uri it
   // builds proves which kind the state bag carries. In non-production

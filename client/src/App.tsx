@@ -156,9 +156,16 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   // not the dark customer one.
   const isAdminPath =
     typeof window !== "undefined" && window.location.pathname.startsWith("/admin");
+  // Task #3329 — /welcome-invitee is a PARTNER (admin-kind account) page.
+  // Losing auth there must land on the partner sign-in, not the customer
+  // one: on an MRP white-label host /login immediately forwards to the
+  // press-client portal login (customer_users), which a freshly invited
+  // partner's password can never satisfy — the exact lockout Memphis hit.
+  const isPartnerPath =
+    typeof window !== "undefined" && window.location.pathname.startsWith("/welcome-invitee");
 
   if (!user) {
-    return <Redirect to={isAdminPath ? "/admin/login" : "/login"} />;
+    return <Redirect to={isAdminPath || isPartnerPath ? "/admin/login" : "/login"} />;
   }
 
   // Task #424 — Wrap every admin-protected page in a top-level shell

@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuthKind } from "@/hooks/useAuthKind";
-import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
-import { GoodTunesLogo } from "@/components/GoodTunesLogo";
+import { AuthPageLogo } from "@/components/AuthPageLogo";
 import { ADMIN_CHROME } from "./authChrome";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -46,7 +45,7 @@ export default function ForgotPassword() {
     return (
       <main className={s.page}>
         <div className={s.card} data-testid="page-forgot-password">
-          <img src={gtLogo} alt="GoodTunes" className="h-10 w-auto mb-6" />
+          <AuthPageLogo chrome="light" />
           {sent ? (
             <>
               <h1 className="text-2xl font-bold text-slate-900 mb-2">Check your email</h1>
@@ -110,7 +109,7 @@ export default function ForgotPassword() {
   return (
     <main className="min-h-screen w-full flex flex-col items-center justify-center gap-10 py-10 px-4">
       <div className="relative w-full max-w-[390px] px-6" data-testid="page-forgot-password">
-        <div className="flex flex-col items-center mb-6"><GoodTunesLogo size="lg" variant="white" /></div>
+        <div className="flex flex-col items-center mb-6"><AuthPageLogo chrome="dark" /></div>
         {sent ? (
           <>
             <h1 className="text-2xl font-bold text-white text-center mb-2">Check your email</h1>

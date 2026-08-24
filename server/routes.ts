@@ -29616,12 +29616,112 @@ export async function registerRoutes(
   // PUBLIC — fetch an invite by token so the accept page can render
   // the recipient's email + role before they submit. Never returns
   // role_scope_id or createdByUserId to keep the surface tight.
+  // Task #3257/#3329 — sanitized white-label brand for press-referred
+  // invites, shared by the valid-invite payload AND the spent/expired
+  // error payloads so the invite-unavailable page keeps the press skin.
+  // Display-only fields — never the press id or anything operator-internal.
+  async function inviteePressBrand(defaultPressId: string | null): Promise<{
+    pressName: string;
+    logoUrl: string | null;
+    lightLogoUrl: string | null;
+    accentColor: string | null;
+    cornerStyle: string | null;
+  } | null> {
+    if (!defaultPressId) return null;
+    const r = await db.execute<any>(sql`
+      SELECT name, logo_url, light_logo_url, brand_accent_color, brand_corner_style
+      FROM manufacturers WHERE id = ${defaultPressId} LIMIT 1
+    `);
+    const p = ((r as any).rows ?? [])[0];
+    if (!p) return null;
+    return {
+      pressName: p.name,
+      logoUrl: p.logo_url ?? null,
+      lightLogoUrl: p.light_logo_url ?? null,
+      accentColor: p.brand_accent_color ?? null,
+      cornerStyle: p.brand_corner_style ?? null,
+    };
+  }
+
+  // Task #351/#3329 — Landing path priority (shared by the new-account
+  // accept path AND the existing-account sign-in-to-accept path):
+  //   1. Identity/Manager invites with a pre-flighted album → editor.
+  //      Team invites IGNORE preflight (they can't drive the release).
+  //   2. Any team-invite role → most-recently-touched in-flight or
+  //      released album for the inviting artist (so they land in
+  //      something real if there is one).
+  //   3. Otherwise the legacy role-based landing (Identity/Manager
+  //      with no work waiting falls through to /welcome-invitee, then
+  //      the role landing).
+  async function computeInviteLandingPath(invite: any): Promise<string> {
+    const ir = invite.inviteRole as string | null;
+    const preFlightId = invite.preFlightedAlbumId as string | null;
+    if ((ir === "identity" || ir === "manager") && preFlightId) {
+      return `/admin/albums/${preFlightId}`;
+    }
+    if ((ir === "team" || ir === "manager" || ir === "identity") && invite.roleScopeId) {
+      // Existing-album fallback — pick the most recent album owned by
+      // the target artist (label scopes don't apply here since team
+      // invites are person-scoped).
+      // albums has no created_at/updated_at; approximate "most recently
+      // touched" with the latest real lifecycle timestamp (GREATEST ignores
+      // NULLs), id as a deterministic tiebreaker. Skip soft-deleted albums.
+      const a = await db.execute<{ id: string }>(sql`
+        SELECT id FROM albums
+        WHERE primary_artist_id = ${invite.roleScopeId} AND deleted_at IS NULL
+        ORDER BY GREATEST(sell_quote_locked_at, masters_triggered_at, first_sold_at) DESC NULLS LAST, id DESC
+        LIMIT 1
+      `);
+      const existing = ((a as any).rows ?? [])[0]?.id ?? null;
+      return existing ? `/admin/albums/${existing}` : "/welcome-invitee";
+    }
+    if (ir === "npo_ambassador" || ir === "npo_staff") {
+      // Task #545 — NPO ambassadors and staff land on the NPO
+      // dashboard, where the "Invite an artist" CTA is exposed for them.
+      return "/non-profit";
+    }
+    return invite.role === "non_profit" ? "/non-profit"
+      : invite.role === "artist" ? "/artist"
+      : invite.role === "label" ? "/label"
+      : invite.role === "manager" ? "/manager"
+      : invite.role === "publisher" ? "/publisher"
+      : "/admin/albums";
+  }
+
   app.get("/api/invites/:token", async (req, res) => {
     const invite = await storage.getAdminInviteByToken(String(req.params.token));
     if (!invite) return res.status(404).json({ message: "Invite not found" });
-    if (invite.usedAt) return res.status(410).json({ message: "Invite already used" });
+    if (invite.usedAt) {
+      // Task #3329 — a spent invite must not dead-end. Tell the page enough
+      // to route the person to the RIGHT sign-in (invites always mint/attach
+      // admin-kind `users` accounts → /admin/login, never the press-client
+      // customer login) and whether the account holding this email was
+      // created by this very invite (so the copy can say "sign in with the
+      // password you chose") vs. pre-existed it (sign in with the existing
+      // password / reset it). Token possession already reveals the email
+      // via this endpoint pre-use, so none of this leaks anything new.
+      const usedBy = (invite as any).acceptedUserId
+        ? await storage.getUser((invite as any).acceptedUserId)
+        : undefined;
+      const acct = usedBy ?? (await storage.getUserByEmail(invite.email));
+      const createdByThisInvite = !!(
+        acct?.createdAt && invite.usedAt &&
+        Math.abs(new Date(acct.createdAt).getTime() - new Date(invite.usedAt).getTime()) < 5 * 60 * 1000
+      );
+      return res.status(410).json({
+        message: "Invite already used",
+        used: true,
+        accountExists: !!acct,
+        createdByThisInvite,
+        pressBrand: await inviteePressBrand((invite as any).defaultPressId ?? null),
+      });
+    }
     if (invite.expiresAt && invite.expiresAt < new Date()) {
-      return res.status(410).json({ message: "Invite expired" });
+      return res.status(410).json({
+        message: "Invite expired",
+        expired: true,
+        pressBrand: await inviteePressBrand((invite as any).defaultPressId ?? null),
+      });
     }
     // Task #351 — Security: the review gate must hold here too, not
     // just at create. Pending_review → 423 Locked so the accept page
@@ -29654,34 +29754,12 @@ export async function registerRoutes(
       label: "Label",
     };
     const ir = (invite as any).inviteRole as string | null;
-    // Task #3257 — sanitized white-label brand for press-referred invites so
-    // the accept/create-login screen can carry the press's look. Display-only
-    // fields (name/logos/accent/corner) — never the press id or anything
-    // operator-internal. Null when the invite carries no press.
-    let pressBrand: {
-      pressName: string;
-      logoUrl: string | null;
-      lightLogoUrl: string | null;
-      accentColor: string | null;
-      cornerStyle: string | null;
-    } | null = null;
-    const dpid = (invite as any).defaultPressId as string | null | undefined;
-    if (dpid) {
-      const r = await db.execute<any>(sql`
-        SELECT name, logo_url, light_logo_url, brand_accent_color, brand_corner_style
-        FROM manufacturers WHERE id = ${dpid} LIMIT 1
-      `);
-      const p = ((r as any).rows ?? [])[0];
-      if (p) {
-        pressBrand = {
-          pressName: p.name,
-          logoUrl: p.logo_url ?? null,
-          lightLogoUrl: p.light_logo_url ?? null,
-          accentColor: p.brand_accent_color ?? null,
-          cornerStyle: p.brand_corner_style ?? null,
-        };
-      }
-    }
+    const pressBrand = await inviteePressBrand((invite as any).defaultPressId ?? null);
+    // Task #3329 — the invited email may already have a GoodTunes login.
+    // Surfacing that here lets the claim page switch to a "sign in to
+    // accept" presentation instead of showing display-name/username/
+    // password fields whose values the accept endpoint would ignore.
+    const existingAccount = !!(await storage.getUserByEmail(invite.email));
     res.json({
       email: invite.email,
       role: invite.role,
@@ -29692,6 +29770,7 @@ export async function registerRoutes(
       preFlightedAlbumId: (invite as any).preFlightedAlbumId ?? null,
       preFlightedAlbumTitle,
       pressBrand,
+      existingAccount,
     });
   });
 
@@ -29778,6 +29857,41 @@ export async function registerRoutes(
     // (referral, press provenance, default press, per-user overrides,
     // press teammate tier) exactly as the new-account path does.
     if (byEmail) {
+      const { signin } = req.body || {};
+      // Task #3329 — never silently ignore a typed password. The old
+      // behavior granted the hat and returned a message while the
+      // password the invitee just chose went nowhere; on a white-label
+      // host they then bounced to the press-client sign-in and were
+      // locked out. Now:
+      //   • signin:true + password → verify against the EXISTING account
+      //     and, on success, grant + consume the invite + sign them in
+      //     (session + bearer) exactly like the new-account path. The
+      //     invite link arrived at this email, so link possession +
+      //     the account password together match the email-OTP bar the
+      //     normal admin login enforces.
+      //   • a password WITHOUT signin (old client / new-credentials
+      //     intent) → 409 EXISTING_ACCOUNT, nothing granted, nothing
+      //     consumed — the page switches to sign-in-to-accept.
+      if (!signin) {
+        return res.status(409).json({
+          code: "EXISTING_ACCOUNT",
+          existingAccount: true,
+          message: "This email already has a GoodTunes account. Sign in with its existing password to accept this invitation — the password typed here was not saved.",
+        });
+      }
+      if (!password) {
+        return res.status(400).json({ message: "Enter the password for your existing account." });
+      }
+      const credentialOk = await adminLoginPasswordOk(byEmail, String(password), comparePasswords);
+      if (!credentialOk) {
+        const hasPassword = !!byEmail.password;
+        return res.status(401).json({
+          code: "BAD_PASSWORD",
+          message: hasPassword
+            ? "That password doesn't match this account. Try again, or reset it below."
+            : "This account signs in with Google or Apple — use those buttons below.",
+        });
+      }
       await applyAdminInviteGrant(byEmail.id, invite as any, { isNewAccount: false });
       try {
         await storage.markAdminInviteUsed(invite.id, byEmail.id);
@@ -29787,9 +29901,47 @@ export async function registerRoutes(
         }
         throw e;
       }
+      // Second-factor policy — IDENTICAL to /api/login's admin leg. An
+      // invite link is forwardable, so link possession + password must
+      // NOT bypass an existing account's enrolled second factor. Grant +
+      // consume happened above (same as the OAuth invite-accept path);
+      // the session/bearer is only minted here on the same bypasses the
+      // normal login honors (dev, trusted device, reviewer accounts).
+      // Otherwise we park pendingTotpUserId and the client resumes at
+      // /admin/login's factor phase, whose verify endpoints mint the
+      // session/token after the factor succeeds.
+      const fullSignin = async () => {
+        req.session.userId = byEmail.id;
+        req.session.kind = "admin";
+        const tok = generateToken();
+        await storage.createAuthToken(tok, byEmail.id, "admin");
+        return res.json({
+          id: byEmail.id,
+          username: byEmail.username,
+          email: byEmail.email,
+          displayName: byEmail.displayName,
+          isAdmin: true,
+          kind: "admin",
+          role: invite.role,
+          existingAccount: true,
+          token: tok,
+          landingPath: await computeInviteLandingPath(invite),
+        });
+      };
+      if (!_forceProductionAuth && process.env.NODE_ENV !== "production") return fullSignin();
+      if (await trustedDeviceBypassAllowed(req, byEmail.id)) return fullSignin();
+      if (byEmail.skipSecondFactor) return fullSignin();
+      req.session.pendingTotpUserId = byEmail.id;
+      const totpRow = await storage.getAdminTotp(byEmail.id);
+      // Email-pref admins get their code minted by the login page's
+      // /api/auth/email-otp/start (the single mint site — see the OAuth
+      // invite-accept branch's matching note about double-issue/429).
+      const next = byEmail.factorPref === "totp" ? (totpRow ? "totp" : "enroll") : "emailOtp";
       return res.json({
         existingAccount: true,
-        message: "This email already has a GoodTunes login — the new access was added to it. Sign in with your existing password to use it.",
+        requiresSecondFactor: true,
+        next,
+        kind: "admin",
       });
     }
 
@@ -29841,51 +29993,10 @@ export async function registerRoutes(
     const token = generateToken();
     await storage.createAuthToken(token, user.id, "admin");
 
-    // Invite role drives the landing path below (the grant helper already
-    // applied the matching per-user permission overrides + press tier).
-    const ir = (invite as any).inviteRole as string | null;
-
-    // Task #351 — Landing path priority:
-    //   1. Identity/Manager invites with a pre-flighted album → editor.
-    //      Team invites IGNORE preflight (they can't drive the release).
-    //   2. Any team-invite role → most-recently-touched in-flight or
-    //      released album for the inviting artist (so they land in
-    //      something real if there is one).
-    //   3. Otherwise the legacy role-based landing (Identity/Manager
-    //      with no work waiting falls through to /welcome-invitee, then
-    //      the role landing).
-    const preFlightId = (invite as any).preFlightedAlbumId as string | null;
-    let landingPath: string;
-    if ((ir === "identity" || ir === "manager") && preFlightId) {
-      landingPath = `/admin/albums/${preFlightId}`;
-    } else if ((ir === "team" || ir === "manager" || ir === "identity") && invite.roleScopeId) {
-      // Existing-album fallback — pick the most recent album owned by
-      // the target artist (label scopes don't apply here since team
-      // invites are person-scoped).
-      // albums has no created_at/updated_at; approximate "most recently
-      // touched" with the latest real lifecycle timestamp (GREATEST ignores
-      // NULLs), id as a deterministic tiebreaker. Skip soft-deleted albums.
-      const a = await db.execute<{ id: string }>(sql`
-        SELECT id FROM albums
-        WHERE primary_artist_id = ${invite.roleScopeId} AND deleted_at IS NULL
-        ORDER BY GREATEST(sell_quote_locked_at, masters_triggered_at, first_sold_at) DESC NULLS LAST, id DESC
-        LIMIT 1
-      `);
-      const existing = ((a as any).rows ?? [])[0]?.id ?? null;
-      landingPath = existing ? `/admin/albums/${existing}` : "/welcome-invitee";
-    } else if (ir === "npo_ambassador" || ir === "npo_staff") {
-      // Task #545 — NPO ambassadors and staff land on the NPO
-      // dashboard, where the "Invite an artist" CTA is exposed for them.
-      landingPath = "/non-profit";
-    } else {
-      landingPath =
-        invite.role === "non_profit" ? "/non-profit"
-        : invite.role === "artist" ? "/artist"
-        : invite.role === "label" ? "/label"
-        : invite.role === "manager" ? "/manager"
-        : invite.role === "publisher" ? "/publisher"
-        : "/admin/albums";
-    }
+    // Invite role drives the landing path (the grant helper already
+    // applied the matching per-user permission overrides + press tier);
+    // logic shared with the existing-account branch above.
+    const landingPath = await computeInviteLandingPath(invite);
 
     res.json({
       id: user.id,

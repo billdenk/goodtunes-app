@@ -2,8 +2,7 @@ import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthKind } from "@/hooks/useAuthKind";
-import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
-import { GoodTunesLogo } from "@/components/GoodTunesLogo";
+import { AuthPageLogo } from "@/components/AuthPageLogo";
 import { ADMIN_CHROME } from "./authChrome";
 
 const isValidPassword = (v: string) => v.length >= 8 && /[a-zA-Z]/.test(v) && /\d/.test(v);
@@ -81,7 +80,7 @@ export default function ResetPassword() {
       return (
         <main className={s.page}>
           <div className={`${s.card} text-center`} data-testid="reset-invalid">
-            <img src={gtLogo} alt="GoodTunes" className="h-10 w-auto mx-auto mb-6" />
+            <AuthPageLogo chrome="light" center />
             <h1 className="text-xl font-semibold text-slate-900 mb-2">Reset link unavailable</h1>
             <p className="text-sm text-slate-600">{(error as Error)?.message || "This reset link is invalid or has expired."}</p>
             <button
@@ -100,7 +99,7 @@ export default function ResetPassword() {
       return (
         <main className={s.page}>
           <div className={`${s.card} text-center`} data-testid="reset-done">
-            <img src={gtLogo} alt="GoodTunes" className="h-10 w-auto mx-auto mb-6" />
+            <AuthPageLogo chrome="light" center />
             <h1 className="text-xl font-semibold text-slate-900 mb-2">Password updated</h1>
             <p className="text-sm text-slate-600 mb-6">
               Sign in with your new password — you'll still need your authenticator (or email code) to finish.
@@ -132,7 +131,7 @@ export default function ResetPassword() {
           className={s.card}
           data-testid="form-reset-password"
         >
-          <img src={gtLogo} alt="GoodTunes" className="h-10 w-auto mb-6" />
+          <AuthPageLogo chrome="light" />
           <h1 className="text-2xl font-bold text-slate-900 mb-2">Choose a new password</h1>
           <p className="text-sm text-slate-600 mb-6">
             Pick something at least 8 characters long with a letter and a number.
@@ -194,7 +193,7 @@ export default function ResetPassword() {
     return (
       <main className="min-h-screen w-full flex flex-col items-center justify-center gap-10 py-10 px-4">
         <div className="relative w-full max-w-[390px] px-6 text-center" data-testid="reset-invalid">
-          <div className="flex flex-col items-center mb-6"><GoodTunesLogo size="lg" variant="white" /></div>
+          <div className="flex flex-col items-center mb-6"><AuthPageLogo chrome="dark" /></div>
           <h1 className="text-xl font-semibold text-white mb-2">Reset link unavailable</h1>
           <p className="text-sm text-white/55">{(error as Error)?.message || "This reset link is invalid or has expired."}</p>
           <button
@@ -213,7 +212,7 @@ export default function ResetPassword() {
     return (
       <main className="min-h-screen w-full flex flex-col items-center justify-center gap-10 py-10 px-4">
         <div className="relative w-full max-w-[390px] px-6 text-center" data-testid="reset-done">
-          <div className="flex flex-col items-center mb-6"><GoodTunesLogo size="lg" variant="white" /></div>
+          <div className="flex flex-col items-center mb-6"><AuthPageLogo chrome="dark" /></div>
           <h1 className="text-xl font-semibold text-white mb-2">Password updated</h1>
           <p className="text-sm text-white/55 mb-6">
             Sign in with your new password and you're back in.
@@ -234,7 +233,7 @@ export default function ResetPassword() {
   return (
     <main className="min-h-screen w-full flex flex-col items-center justify-center gap-10 py-10 px-4">
       <form onSubmit={handleSubmit} className="relative w-full max-w-[390px] px-6" data-testid="form-reset-password">
-        <div className="flex flex-col items-center mb-6"><GoodTunesLogo size="lg" variant="white" /></div>
+        <div className="flex flex-col items-center mb-6"><AuthPageLogo chrome="dark" /></div>
         <h1 className="text-2xl font-bold text-white text-center mb-2">Choose a new password</h1>
         <p className="text-white/55 text-sm text-center mb-6">
           Pick something at least 8 characters long with a letter and a number.
