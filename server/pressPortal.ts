@@ -3441,48 +3441,102 @@ export function registerPressPortalRoutes(
       .object({
         name: z.string().trim().max(200).optional().default(""),
         email: z.string().trim().email().max(200).optional(),
-        password: z.string().min(8).max(200).optional(),
+        // Length is validated per-mode below: create requires ≥8 (new
+        // password), signin accepts whatever the existing account uses.
+        password: z.string().min(1).max(200).optional(),
+        mode: z.enum(["create", "signin"]).optional().default("create"),
       })
       .safeParse(req.body);
     if (!body.success) return res.status(400).json({ message: "Check the account details — password must be at least 8 characters" });
     const payload = (row.payload ?? {}) as Record<string, any>;
 
-    // Resolve or create the customer account.
-    let customerId: string | null = null;
-    let token: string | null = null;
-    const auth = req.session?.userId && req.session?.kind === "customer" ? { userId: req.session.userId } : null;
-    if (auth) {
-      customerId = auth.userId;
-    } else if (body.data.email && body.data.password) {
-      const emailNorm = body.data.email.toLowerCase();
-      const existing = await storage.getCustomerByEmail(emailNorm);
-      if (existing) {
-        return res.status(409).json({ message: "An account with that email already exists — sign in instead.", code: "ACCOUNT_EXISTS" });
-      }
-      const { scrypt, randomBytes } = await import("crypto");
+    // Same scrypt `hex.salt` format the customer create paths write.
+    const passwordMatches = async (supplied: string, stored: string | null | undefined): Promise<boolean> => {
+      if (!stored || !stored.includes(".")) return false;
+      const { scrypt, timingSafeEqual } = await import("crypto");
       const { promisify } = await import("util");
       const scryptAsync = promisify(scrypt);
-      const salt = randomBytes(16).toString("hex");
-      const buf = (await scryptAsync(body.data.password, salt, 64)) as Buffer;
-      const hashed = `${buf.toString("hex")}.${salt}`;
-      // Username from the email local part, uniquified — mirrors the
-      // restricted-insert customer create paths.
-      const base = emailNorm.split("@")[0].replace(/[^a-z0-9_]/g, "").slice(0, 24) || "client";
-      let username = base;
-      for (let i = 0; i < 5; i++) {
-        if (!(await storage.getCustomerByUsername(username))) break;
-        username = `${base}${crypto.randomBytes(2).toString("hex")}`;
+      const [hashedHex, salt] = stored.split(".");
+      const hashedBuf = Buffer.from(hashedHex, "hex");
+      const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
+      return hashedBuf.length === suppliedBuf.length && timingSafeEqual(hashedBuf, suppliedBuf);
+    };
+
+    // Resolve (session OR stored bearer), sign in, or create the customer
+    // account. Bearer matters on white-label hosts where the session cookie
+    // is host-scoped — a returning customer often arrives with only their
+    // stored token (same session-or-bearer rule as resolvePortalClient).
+    let customerId: string | null = null;
+    let token: string | null = null;
+    let sessionTouched = false;
+    if (req.session?.userId && req.session?.kind === "customer") {
+      customerId = req.session.userId;
+    } else {
+      const authHeader = String(req.headers.authorization ?? "");
+      const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+      if (bearer) {
+        const t = await storage.getAuthBy(bearer).catch(() => undefined);
+        if (t && t.kind === "customer") customerId = t.userId;
       }
-      const displayName = body.data.name || String(payload.clientName ?? "").trim() || emailNorm;
-      const c = await storage.createCustomer({ username, email: emailNorm, displayName, realName: body.data.name || null, password: hashed });
-      // Account was created from a real estimate email link — mark signup
-      // complete (name + deliverable email collected up-front).
-      await storage.updateCustomer(c.id, { handle: username, signupCompletedAt: new Date() } as any).catch(() => {});
-      customerId = c.id;
-      req.session.userId = c.id;
-      req.session.kind = "customer";
-      token = crypto.randomBytes(32).toString("hex");
-      await storage.createAuthToken(token, c.id, "customer");
+    }
+    if (!customerId && body.data.email && body.data.password) {
+      const emailNorm = body.data.email.toLowerCase();
+      const existing = await storage.getCustomerByEmail(emailNorm);
+      if (body.data.mode === "signin") {
+        // Sign-in variant: an existing customer proves the password and the
+        // project starts under their account. Wrong password is an honest
+        // 401 — deliberately distinct from ACCOUNT_EXISTS.
+        if (!existing || !(await passwordMatches(body.data.password, (existing as any).password))) {
+          return res.status(401).json({ message: "That email and password don't match — try again.", code: "INVALID_CREDENTIALS" });
+        }
+        customerId = existing.id;
+        token = crypto.randomBytes(32).toString("hex");
+        await storage.createAuthToken(token, existing.id, "customer");
+        if (req.session) {
+          req.session.userId = existing.id;
+          req.session.kind = "customer";
+          sessionTouched = true;
+        }
+      } else {
+        if (existing) {
+          return res.status(409).json({ message: "An account with that email already exists — sign in instead.", code: "ACCOUNT_EXISTS" });
+        }
+        if (body.data.password.length < 8) {
+          return res.status(400).json({ message: "Check the account details — password must be at least 8 characters" });
+        }
+        const { scrypt, randomBytes } = await import("crypto");
+        const { promisify } = await import("util");
+        const scryptAsync = promisify(scrypt);
+        const salt = randomBytes(16).toString("hex");
+        const buf = (await scryptAsync(body.data.password, salt, 64)) as Buffer;
+        const hashed = `${buf.toString("hex")}.${salt}`;
+        // Username from the email local part, uniquified — mirrors the
+        // restricted-insert customer create paths.
+        const base = emailNorm.split("@")[0].replace(/[^a-z0-9_]/g, "").slice(0, 24) || "client";
+        let username = base;
+        for (let i = 0; i < 5; i++) {
+          if (!(await storage.getCustomerByUsername(username))) break;
+          username = `${base}${crypto.randomBytes(2).toString("hex")}`;
+        }
+        const displayName = body.data.name || String(payload.clientName ?? "").trim() || emailNorm;
+        const c = await storage.createCustomer({ username, email: emailNorm, displayName, realName: body.data.name || null, password: hashed });
+        // Account was created from a real estimate email link — mark signup
+        // complete (name + deliverable email collected up-front).
+        await storage.updateCustomer(c.id, { handle: username, signupCompletedAt: new Date() } as any).catch(() => {});
+        customerId = c.id;
+        if (req.session) {
+          req.session.userId = c.id;
+          req.session.kind = "customer";
+          sessionTouched = true;
+        }
+        token = crypto.randomBytes(32).toString("hex");
+        await storage.createAuthToken(token, c.id, "customer");
+      }
+    }
+    // Await the session write before responding — the accepted page's
+    // immediate auth check must not race a half-saved session.
+    if (sessionTouched && typeof (req.session as any)?.save === "function") {
+      await new Promise<void>((resolve) => (req.session as any).save(() => resolve()));
     }
 
     // One-way claim: only a live (Sent/Viewed) estimate can convert; a

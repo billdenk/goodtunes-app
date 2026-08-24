@@ -15,6 +15,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useParams } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
+import { setAuthToken, getAuthToken } from '@/lib/queryClient';
+import { useAuth } from '@/hooks/useAuth';
+import { stepAfterStartError, type StartStep } from '@/pages/mrp/estimateStartAuth';
 import PressClientEstimateMRP from '@/pages/mrp/PressClientEstimateMRP';
 import californialandCover from './press-create/assets/californialand-cover.jpg';
 import rubyVinylPhoto from './press-create/assets/mrp-ruby-translucent.png';
@@ -289,19 +292,62 @@ export default function PressClientEstimate() {
   const [startOpen, setStartOpen] = useState(false);
   // The link-not-login rule flips HERE (Bill, Aug 19 2026): viewing was
   // login-free; starting the project is where the account begins.
-  const [startStep, setStartStep] = useState<'confirm' | 'account' | 'done'>('confirm');
+  const [startStep, setStartStep] = useState<StartStep>('confirm');
   const [acctName, setAcctName] = useState('');
   const [acctEmail, setAcctEmail] = useState('');
   const [acctPassword, setAcctPassword] = useState('');
   const [hookOpen, setHookOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const spin = useSpin();
+  // Existing customers skip the account form — the start request carries
+  // their session cookie + stored bearer and starts under their account.
+  const { user: authUser } = useAuth();
+  const authedCustomer = !!authUser && authUser.kind !== 'admin';
 
   const shareEarned = /.+@.+\..+/.test(shareEmail.trim());
   const closeShare = () => { setShareOpen(false); setShareSent(false); setShareName(''); setShareEmail(''); };
   const closeAsk = () => { setAskOpen(false); setAskSent(false); setAskMsg(''); };
   const closeStart = () => {
     setStartOpen(false); setStartStep('confirm');
-    setAcctName(clientFull); setAcctEmail(''); setAcctPassword('');
+    setAcctName(clientFull); setAcctEmail(''); setAcctPassword(''); setActionError(null);
+  };
+
+  // Real start call — mirrors the MRP skin. Sends the stored bearer alongside
+  // the host-scoped cookie so a returning customer is recognized.
+  const postStart = async (body: Record<string, any>): Promise<{ ok: boolean; code?: string; token?: string | null }> => {
+    setBusy(true); setActionError(null);
+    try {
+      const bearer = getAuthToken();
+      const res = await fetch(`/api/estimate-link/${token}/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}) },
+        credentials: 'include',
+        body: JSON.stringify(body),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) { setActionError(json?.message || 'Something went wrong — please try again.'); return { ok: false, code: json?.code }; }
+      return { ok: true, token: json?.token ?? null };
+    } catch {
+      setActionError('Something went wrong — please try again.');
+      return { ok: false };
+    } finally { setBusy(false); }
+  };
+  const startAsExistingCustomer = async () => {
+    if (busy) return;
+    const r = await postStart({});
+    if (r.ok) setStartStep('done');
+  };
+  const startProject = async () => {
+    if (acctPassword.trim() === '' || busy) return;
+    const r = await postStart({ name: acctName.trim(), email: acctEmail.trim(), password: acctPassword, mode: 'create' });
+    if (r.ok) { if (r.token) setAuthToken(r.token); setStartStep('done'); return; }
+    if (stepAfterStartError(r.code, 'account') === 'signin') { setAcctPassword(''); setStartStep('signin'); }
+  };
+  const signInAndStart = async () => {
+    if (acctPassword === '' || busy) return;
+    const r = await postStart({ email: acctEmail.trim(), password: acctPassword, mode: 'signin' });
+    if (r.ok) { if (r.token) setAuthToken(r.token); setStartStep('done'); }
   };
 
   const unitCost = useMemo(() => unitCostAt(activeQty), [unitCostAt, activeQty]);
@@ -729,7 +775,7 @@ export default function PressClientEstimate() {
           {startStep === 'done' ? (
             <div style={{ textAlign: 'center', padding: '6px 0' }}>
               <div style={{ fontSize: 15.5, fontWeight: 600 }}>Project created — {firstName} will be in touch.</div>
-              <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 6 }}>Welcome, {acctName.trim().split(' ')[0]} — your account is ready.</div>
+              <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 6 }}>Welcome, {(acctName.trim() || clientFull || 'back').split(' ')[0]} — your account is ready.</div>
             </div>
           ) : startStep === 'account' ? (
             <>
@@ -749,14 +795,56 @@ export default function PressClientEstimate() {
                   type="button"
                   disabled={acctPassword.trim() === ''}
                   style={{ ...confirmBtn(acctPassword.trim() !== '', ACCENT, PILL), width: '100%' }}
-                  onClick={() => { if (acctPassword.trim() !== '') setStartStep('done'); }}
+                  onClick={startProject}
                   data-testid="button-create-account"
                 >
-                  Create account &amp; start project
+                  {busy ? 'Creating…' : <>Create account &amp; start project</>}
+                </button>
+                {actionError && <div style={{ marginTop: 10, fontSize: 12, color: '#ff6b6b' }}>{actionError}</div>}
+                <button
+                  type="button"
+                  data-testid="button-switch-signin"
+                  onClick={() => { setAcctPassword(''); setActionError(null); setStartStep('signin'); }}
+                  style={{ marginTop: 12, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: SUBINK, textDecoration: 'underline' }}
+                >
+                  Already have an account? Sign in
                 </button>
                 <div style={{ marginTop: 10, textAlign: 'center', fontSize: 11.5, color: SUBINK }}>
                   {firstName} will be notified the moment your project is live.
                 </div>
+              </div>
+            </>
+          ) : startStep === 'signin' ? (
+            <>
+              <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.4, lineHeight: 1.25, paddingRight: 30 }}>
+                Sign in to start your project.
+              </div>
+              <p style={{ fontSize: 13.5, color: SUBINK, margin: '10px 0 0', lineHeight: 1.65 }}>
+                Welcome back — sign in with your existing account and the project starts under it.
+              </p>
+              <div style={{ marginTop: 18, display: 'grid', gap: 10 }}>
+                <input style={fieldStyle} placeholder="Email" type="email" value={acctEmail} onChange={(e) => setAcctEmail(e.target.value)} data-testid="input-signin-email" />
+                <input style={fieldStyle} placeholder="Password" type="password" value={acctPassword} onChange={(e) => setAcctPassword(e.target.value)} data-testid="input-signin-password" />
+              </div>
+              <div style={{ marginTop: 20 }}>
+                <button
+                  type="button"
+                  disabled={acctPassword === ''}
+                  style={{ ...confirmBtn(acctPassword !== '', ACCENT, PILL), width: '100%' }}
+                  onClick={signInAndStart}
+                  data-testid="button-signin-start"
+                >
+                  {busy ? 'Signing in…' : <>Sign in &amp; start project</>}
+                </button>
+                {actionError && <div style={{ marginTop: 10, fontSize: 12, color: '#ff6b6b' }} data-testid="signin-error">{actionError}</div>}
+                <button
+                  type="button"
+                  data-testid="button-switch-create"
+                  onClick={() => { setAcctPassword(''); setActionError(null); setStartStep('account'); }}
+                  style={{ marginTop: 12, width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: SUBINK, textDecoration: 'underline' }}
+                >
+                  Need an account? Create one
+                </button>
               </div>
             </>
           ) : (
@@ -769,10 +857,17 @@ export default function PressClientEstimate() {
                 and lets {firstName} know you&rsquo;re ready. Nothing is billed yet.
               </p>
               <div style={{ marginTop: 22, display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" style={confirmBtn(true, ACCENT, PILL)} onClick={() => setStartStep('account')} data-testid="button-start-confirm">
-                  Start project
+                {/* Signed-in customers start directly (no account form). */}
+                <button
+                  type="button"
+                  style={confirmBtn(true, ACCENT, PILL)}
+                  onClick={() => { if (authedCustomer) { startAsExistingCustomer(); } else { setStartStep('account'); } }}
+                  data-testid="button-start-confirm"
+                >
+                  {busy ? 'Starting…' : 'Start project'}
                 </button>
               </div>
+              {actionError && <div style={{ marginTop: 10, fontSize: 12, color: '#ff6b6b', textAlign: 'right' }}>{actionError}</div>}
             </>
           )}
         </Sheet>
