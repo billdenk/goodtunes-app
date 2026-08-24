@@ -903,3 +903,6 @@ Two regressions vs the handoff package builder mock (PressPackageBuilder):
 - [ ] Estimate builder keeps the full math block unchanged.
 - [ ] The "Packages skip quantity and price" caption stays, and the UI above it actually agrees with it.
 - [ ] View-as-press (Andrew's path) sees the identical builder the press sees.
+
+
+**Correction/nuance (after more walking):** "MRP Packages" DOES exist under Product Specs — that's the saved-builds catalog, and it looks right (Black Short Run card, "From"-style anchor, empty-slot invite). What's missing is the Create-side entry: **Create should carry both Estimates and Packages**, each opening its builder (Packages → /vendor?tab=packages&view=builder). Create = where you build; Product Specs › MRP Packages = where saved builds live. Both need to exist; today only Estimates is under Create.
