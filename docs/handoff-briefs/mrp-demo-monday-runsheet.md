@@ -884,4 +884,22 @@ Two regressions vs the handoff package builder mock (PressPackageBuilder):
     **Why this order:** create first, fans second, commerce third, analysis fourth, admin last.
 
     **Must work:** rail identical in structure on GoodTunes portal and every white-label portal; Releases and Team labels everywhere; no Overview anywhere; Team invite carries a role field (Admin/View).
-    
+
+
+## Packages: no rail entry, and the estimate bottom is leaking into the package builder
+
+**Where:** https://admin.goodtunes.music/vendor?tab=packages&view=builder (and the press left rail, Create group)
+
+**Symptom 1 — rail:** The Create group shows only "Estimates". There is no "Packages" entry, so when Andrew was in view-as-press he could not reach the package builder from the rail at all. Canon: Create group carries BOTH Estimates and Packages as separate entries — they are different products of the same component builder.
+
+**Symptom 2 — wrong bottom:** The package builder's "The build. Everything you picked." summary is showing the ESTIMATE math block: Per record $8.93 / Run "100 units · $892.86" / Setup $1,295.00 / FULL RUN TOTAL $2,187.86 — directly under its own caption saying "Packages skip quantity and price — artists pick their quantity later." The two builders share the build page, but the bottoms must differ:
+
+- **Estimate bottom:** full math — per record, run row with units, setup, full run total. (What's showing now.)
+- **Package bottom:** NO quantity, NO run rows, NO full run total. Specs line + the per-record component roll-up only ("From $X.XX / unit at {min}" anchor where a price is shown at all), because artists pick their quantity later in their own portal.
+
+**Must work:**
+- [ ] Press rail Create group lists Estimates AND Packages; each lands on its own tab/view.
+- [ ] Package builder bottom shows no quantity or run math — no "Run", no "FULL RUN TOTAL", no unit count.
+- [ ] Estimate builder keeps the full math block unchanged.
+- [ ] The "Packages skip quantity and price" caption stays, and the UI above it actually agrees with it.
+- [ ] View-as-press (Andrew's path) sees the identical builder the press sees.
