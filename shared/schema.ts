@@ -6395,6 +6395,12 @@ export const completedTemplateFileEvents = pgTable("completed_template_file_even
   dims: text("dims"), // human-readable measured page size at event time, e.g. "779.4 × 539.3 mm"
   result: text("result"), // rolled-up check verdict at upload time ("pass" | "warn" | "fail"); null for downloads
   actorLabel: text("actor_label"), // press name for downloads/unlocks; null for artist/operator uploads
+  // Task #3356 — the uploaded file itself (our /objects path, or the raw
+  // external link for legacy pre-mirror rows), so a File-history row can be
+  // reopened in the template viewer. Null on download/unlock events and on
+  // uploads made before this column existed (those rows are honestly
+  // "not viewable" in the UI).
+  fileUrl: text("file_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => ({
   byAlbumComponent: index("ctfe_album_component_idx").on(t.albumId, t.componentId, t.createdAt),
