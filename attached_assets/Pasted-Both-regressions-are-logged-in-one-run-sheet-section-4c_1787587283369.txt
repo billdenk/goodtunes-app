@@ -1,0 +1,17 @@
+Both regressions are logged in one run-sheet section (4cea1b2). Here's the message to send Otis:
+
+—
+
+Two regressions in the package builder, both against the handoff PressPackageBuilder mock. Details in the run-sheet (4cea1b2).
+
+**1. Quantity cards lost their ··· menu.** Every card in "Pick a quantity" carries a quiet ··· button (top-right of the card) with Hide as its first item — that's how a press stops offering a quantity for this package. Hidden quantities disappear from the artist-facing ladder, and pricing re-anchors to the smallest quantity still visible. Live there's no ··· at all, so a press can't hide anything.
+
+**2. The save section is the old design.** What's live — the ALL-CAPS "THE BUILD" eyebrow, the separate "MINIMUM RUN" segmented picker, Save changes floating top-right — was all removed on Aug 22. The current canon:
+- Two-tone sentence-case heading: "The build. Everything you picked." — no eyebrows anywhere in the builder. Build summary line, then the anchor note: "Priced at N units — the smallest quantity still shown to artists, and the most they'd pay. Bigger runs only get cheaper."
+- No minimum-run picker anywhere. The anchor is derived from the smallest visible quantity card — which is exactly why fix #1 matters: hiding cards is how a press raises its floor. Note the contradiction you shipped: the footer says "Packages skip quantity and price" while showing a minimum-run picker and a run total pinned to it.
+- Package stage on the left (jacket, tucked sleeve, record — hover slides them out); math box on the right: Per record (expands to the component breakdown), Run, Setup (expands; one-time, same at any run size), then the Full run total band with the gradient and the big total.
+- Save sits below the math box, right-aligned, note above the button, one filled action — "Save to catalog" / "Save changes" — flipping to the quiet green check line ("…saved to Product Specs › MRP Packages") after saving.
+
+Must work: ··· on every quantity card; Hide removes the card from the artist ladder and re-anchors pricing; no minimum-run picker anywhere; Per record and Setup expand and collapse; save flips to the confirmation. Acceptance: screenshot diff against the handoff file at 1440px, both themes.
+
+— Bill & Andrew
