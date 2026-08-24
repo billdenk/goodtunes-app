@@ -13159,3 +13159,26 @@ load_mrp_tier3_component_pricing() {
 }
 load_mrp_tier3_component_pricing dev  "${DATABASE_URL:-}"
 load_mrp_tier3_component_pricing prod "${PROD_DATABASE_URL:-}"
+
+# Task #3350 — one-shot rescue: mirror legacy external completed-art links
+# (pre-#3184 pasted Dropbox/https URLs in completed_template_checks
+# components[].assetUrl) into object storage. Marker-guarded inside the
+# script (task_3350_mirror_external_completed_art); dead links are logged
+# as NEEDS RE-UPLOAD and left for the viewer's existing re-upload flow.
+mirror_external_completed_art() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping external completed-art mirror on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/mirror-external-completed-art.ts 2>&1); then
+    echo "post-merge: external completed-art mirror ok on $label"
+    echo "$out" | tail -5
+  else
+    echo "post-merge: WARNING — external completed-art mirror failed on $label (no marker stamped; next merge retries)"
+    echo "$out" | tail -8
+  fi
+}
+mirror_external_completed_art dev  "${DATABASE_URL:-}"
+mirror_external_completed_art prod "${PROD_DATABASE_URL:-}"
