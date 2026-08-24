@@ -118,6 +118,7 @@ import ArtistDashboardMRP from "@/pages/mrp/ArtistDashboardMRP";
 import ArtistDashboardNextStepsMRP from "@/pages/mrp/ArtistDashboardNextStepsMRP";
 import ArtistProjectHomeMRP from "@/pages/mrp/ArtistProjectHomeMRP";
 import MrpSkinGate from "@/pages/mrp/MrpSkinGate";
+import WhitelabelArtistSteer from "@/pages/mrp/WhitelabelArtistSteer";
 import JoinReferralLink from "@/pages/JoinReferralLink";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
@@ -793,6 +794,9 @@ function Router() {
   return (
     <>
       {onWhitelabelHost() && <WhitelabelDocumentHead />}
+      {/* Task #3331 — press-homed artists on a skinned white-label host are
+          steered out of GoodTunes entry paths back into the client portal. */}
+      {onWhitelabelHost() && <WhitelabelArtistSteer />}
       <Switch location={editOverlayActive ? editBackground : location}>
         {/* Task #284 — Friendly error landing for OAuth callback failures
             and any future surface that wants to bounce to a full-page

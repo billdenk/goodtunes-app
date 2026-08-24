@@ -129,7 +129,10 @@ export default function AcceptInvite() {
       // Drop straight into the album editor when a specific draft is waiting,
       // or into the publisher portal for publisher invites.
       // All other partners see the welcome screen first (shown once on sign-up).
-      const goDirectly = landing.startsWith("/admin/albums/") || landing.startsWith("/publisher");
+      // Task #3331 — a press-invited artist accepting on the press's
+      // white-label host lands straight in the branded client portal
+      // (server returns /dashboard); no GoodTunes welcome interstitial.
+      const goDirectly = landing.startsWith("/admin/albums/") || landing.startsWith("/publisher") || landing === "/dashboard";
       navigate(goDirectly ? landing : "/welcome-invitee");
     } catch (e: any) {
       setErrMsg(e.message || "Something went wrong");

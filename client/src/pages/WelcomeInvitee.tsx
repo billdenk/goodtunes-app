@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Factory, HeartHandshake, Star, Building2, Music2, ArrowRight } from "lucide-react";
+import { useWhitelabelBrand } from "@/hooks/useWhitelabelBrand";
 
 type RoleInfo = {
   role: string | null;
@@ -75,6 +76,12 @@ const DEFAULT_VARIANT: WelcomeVariant = {
 };
 
 export function WelcomeInvitee() {
+  // Task #3331 — press-branded welcome on white-label hosts. Data-driven
+  // off the sanitized /api/whitelabel/branding payload (never a press-name
+  // check); on every other host the hook is inert and the GoodTunes copy
+  // below renders exactly as before.
+  const { onWhitelabel, brand } = useWhitelabelBrand();
+  const wl = onWhitelabel && brand?.known ? brand : null;
   const role = useQuery<RoleInfo>({
     queryKey: ["/api/me/role"],
     queryFn: async () => {
@@ -94,20 +101,38 @@ export function WelcomeInvitee() {
   const note = role.data?.welcomeNote?.trim();
   const Icon = variant.Icon;
 
+  // Task #3331 — white-label overrides. Skinned press → CTA into its client
+  // portal (/dashboard, behind MrpSkinGate); a press whose portal skin isn't
+  // enabled yet keeps today's role-based CTA but still gets the branded
+  // card (graceful fallback, never a redirect loop).
+  // Valid press accent tints the CTA; otherwise the default brand-blue
+  // class below stands (no raw hex fallback — token stays authoritative).
+  const accent = wl?.accentColor && /^#[0-9a-fA-F]{6}$/.test(wl.accentColor) ? wl.accentColor : null;
+  const wlLogo = wl ? (wl.logoUrl || wl.lightLogoUrl || null) : null;
+  const wlPortal = wl?.skin === "mrp-light";
+  const primary = wlPortal ? { href: "/dashboard", label: "Open your dashboard" } : variant.primary;
+  const secondary = wlPortal ? undefined : variant.secondary;
+
   return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div
         className="max-w-md w-full bg-white border border-slate-200 rounded-2xl p-8"
         data-testid="welcome-invitee"
       >
-        <div className="w-12 h-12 rounded-xl bg-[var(--brand-blue)]/10 flex items-center justify-center mb-5">
-          <Icon className="w-6 h-6 text-[var(--brand-blue)]" />
-        </div>
+        {wlLogo ? (
+          <img src={wlLogo} alt={wl?.pressName || "Press"} className="h-10 w-auto mb-5 object-contain" data-testid="img-welcome-press-logo" />
+        ) : (
+          <div className="w-12 h-12 rounded-xl bg-[var(--brand-blue)]/10 flex items-center justify-center mb-5">
+            <Icon className="w-6 h-6 text-[var(--brand-blue)]" />
+          </div>
+        )}
         <h1 className="text-2xl font-bold text-slate-900 mb-2" data-testid="text-welcome-title">
-          Welcome to GoodTunes
+          {wl ? `Welcome to ${wl.pressName || "your press partner"}` : "Welcome to GoodTunes"}
         </h1>
         <p className="text-sm text-slate-600 mb-5" data-testid="text-welcome-blurb">
-          {variant.blurb(scope)}
+          {wlPortal
+            ? `Your projects, estimates, and files with ${wl?.pressName || "your press"} all live in your dashboard.`
+            : variant.blurb(scope)}
         </p>
 
         {note && (
@@ -124,26 +149,27 @@ export function WelcomeInvitee() {
 
         <div className="space-y-3">
           <Link
-            href={variant.primary.href}
+            href={primary.href}
             className="flex items-center justify-center gap-2 w-full text-center bg-[var(--brand-blue)] hover:opacity-90 text-white font-semibold rounded-lg py-2.5"
+            style={wl && accent ? { backgroundColor: accent } : undefined}
             data-testid="link-welcome-primary"
           >
-            {variant.primary.label} <ArrowRight className="w-4 h-4" />
+            {primary.label} <ArrowRight className="w-4 h-4" />
           </Link>
-          {variant.secondary && (
+          {secondary && (
             <Link
-              href={variant.secondary.href}
+              href={secondary.href}
               className="block w-full text-center border border-slate-300 hover:bg-slate-50 text-slate-800 font-semibold rounded-lg py-2.5"
               data-testid="link-welcome-secondary"
             >
-              {variant.secondary.label}
+              {secondary.label}
             </Link>
           )}
         </div>
 
-        {variant.footnote && (
+        {(wlPortal ? wl?.contactLine : variant.footnote) && (
           <p className="mt-6 text-xs text-slate-500 text-center" data-testid="text-welcome-footnote">
-            {variant.footnote}
+            {wlPortal ? wl?.contactLine : variant.footnote}
           </p>
         )}
       </div>

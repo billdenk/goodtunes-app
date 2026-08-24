@@ -3556,19 +3556,38 @@ export function registerPressPortalRoutes(
     return row ? { id: String(row.id) } : null;
   }
 
-  app.get("/api/press-client/portal", async (req, res) => {
+  // Resolve the signed-in client identity for the white-label portal reads.
+  // Customers are the original audience; Task #3331 adds admin-kind partner
+  // accounts (press-invited artists land in this portal right after invite
+  // accept, and they are ADMIN kind). For admins we synthesize the same
+  // {id, displayName, email} shape from the users row — estimates then match
+  // by sentTo email (their acceptedByCustomerId never points at an admin id),
+  // and every read below stays scoped to the request host's press.
+  async function resolvePortalClient(req: Request): Promise<{ id: string; displayName: string | null; email: string | null } | null> {
     const userId = req.session?.userId;
     const kind = req.session?.kind;
     let customer = kind === "customer" && userId ? await storage.getCustomer(userId) : null;
-    if (!customer) {
+    let adminUserId = kind === "admin" && userId ? userId : null;
+    if (!customer && !adminUserId) {
       // Bearer fallback (host-scoped sessions can lag right after signup).
       const authHeader = String(req.headers.authorization ?? "");
       const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
       if (bearer) {
         const t = await storage.getAuthBy(bearer);
         if (t && t.kind === "customer") customer = await storage.getCustomer(t.userId);
+        else if (t && t.kind === "admin") adminUserId = t.userId;
       }
     }
+    if (customer) return { id: customer.id, displayName: (customer as any).displayName ?? null, email: (customer as any).email ?? null };
+    if (adminUserId) {
+      const u = await storage.getUser(adminUserId);
+      if (u) return { id: u.id, displayName: (u as any).displayName ?? null, email: (u as any).email ?? null };
+    }
+    return null;
+  }
+
+  app.get("/api/press-client/portal", async (req, res) => {
+    const customer = await resolvePortalClient(req);
     if (!customer) return res.status(401).json({ message: "Unauthorized" });
     const hostPress = await resolvePortalPressForRequest(req);
     if (!hostPress) return res.status(404).json({ message: "Not found" });
@@ -3616,17 +3635,9 @@ export function registerPressPortalRoutes(
   // re-queries this endpoint; series length follows the range. Activity is
   // the estimate lifecycle (created / sent / accepted / files uploaded).
   app.get("/api/press-client/dashboard", async (req, res) => {
-    const userId = req.session?.userId;
-    const kind = req.session?.kind;
-    let customer = kind === "customer" && userId ? await storage.getCustomer(userId) : null;
-    if (!customer) {
-      const authHeader = String(req.headers.authorization ?? "");
-      const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-      if (bearer) {
-        const t = await storage.getAuthBy(bearer);
-        if (t && t.kind === "customer") customer = await storage.getCustomer(t.userId);
-      }
-    }
+    // Task #3331 — shared resolver: customers AND admin-kind press-invited
+    // artists (see resolvePortalClient above).
+    const customer = await resolvePortalClient(req);
     if (!customer) return res.status(401).json({ message: "Unauthorized" });
     const hostPress = await resolvePortalPressForRequest(req);
     if (!hostPress) return res.status(404).json({ message: "Not found" });

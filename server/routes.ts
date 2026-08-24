@@ -1317,7 +1317,69 @@ export async function registerRoutes(
   // partner shell the recipient should land on after 2FA. Used by
   // TOTP/email-OTP verify so OAuth invite recipients land in their
   // partner shell (/non-profit, /artist, /label) instead of /admin.
-  async function landingPathForUser(userId: string): Promise<string> {
+  // Task #3331 — shared white-label landing resolver. Returns "/dashboard"
+  // (the MRP client portal) ONLY when ALL of:
+  //   (a) the request arrived on a white-label host whose slug resolves to
+  //       a real press (dev honors the same ?wl= override as
+  //       /api/whitelabel/branding),
+  //   (b) the account/invite is an ARTIST — operators, press staff,
+  //       manufacturer/label/etc. partners keep their normal landings,
+  //   (c) that press is the SAME press the artist is homed to
+  //       (invite default_press_id / users.default_press_id), and
+  //   (d) the press's portal skin is active (email_branding set — the same
+  //       data-driven rule as /api/whitelabel/branding, never a name check).
+  // Used by the invite-accept handler (new-account AND existing-account
+  // branches) and by landingPathForUser (post-2FA login verify legs), so the
+  // branded destination survives the second factor. Best-effort: any failure
+  // returns null and the caller keeps its legacy landing.
+  async function whitelabelArtistPortalLanding(
+    req: Request,
+    userId: string | null,
+    opts?: { role?: string | null; pressId?: string | null },
+  ): Promise<string | null> {
+    try {
+      const { parseWhitelabelHost, isValidWhitelabelSlug } = await import("@shared/whitelabelHost");
+      const rawHost = ((req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.headers.host || "").trim();
+      let wlSlug = parseWhitelabelHost(rawHost)?.slug ?? null;
+      if (!wlSlug && process.env.NODE_ENV !== "production") {
+        const qs = String((req.query as any)?.wl ?? "").trim().toLowerCase();
+        if (qs && isValidWhitelabelSlug(qs)) wlSlug = qs;
+      }
+      if (!wlSlug) return null;
+      let role = opts?.role ?? null;
+      if (!role && userId) {
+        const { getUserRole } = await import("./auth/roles");
+        role = ((await getUserRole(userId))?.role as string | undefined) ?? null;
+      }
+      if (role !== "artist") return null;
+      let pressId = opts?.pressId ?? null;
+      if (!pressId && userId) {
+        // An artist's press home lives on their Person row (the invite
+        // grant stamps people.default_press_id / invited_by_press_id).
+        const pr = await db.execute<{ press_id: string | null }>(sql`
+          SELECT COALESCE(p.default_press_id, p.invited_by_press_id) AS press_id
+          FROM users u JOIN people p ON p.id = u.role_scope_id
+          WHERE u.id = ${userId} LIMIT 1
+        `);
+        pressId = (((pr as any).rows ?? [])[0]?.press_id as string | null) ?? null;
+      }
+      if (!pressId) return null;
+      const r = await db.execute<{ skinned: boolean }>(sql`
+        SELECT (email_branding IS NOT NULL) AS skinned
+        FROM manufacturers
+        WHERE id = ${pressId}
+          AND (lower(white_label_slug) = ${wlSlug} OR lower(previous_white_label_slug) = ${wlSlug})
+        LIMIT 1
+      `);
+      const m = ((r as any).rows ?? [])[0];
+      return m?.skinned ? "/dashboard" : null;
+    } catch (e: any) {
+      console.warn(`[invite] whitelabel landing resolution failed: ${e?.message}`);
+      return null;
+    }
+  }
+
+  async function landingPathForUser(userId: string, req?: Request): Promise<string> {
     try {
       // Task #1038 — land on the account's HIGHEST-PRIVILEGED hat. At fresh
       // login no active hat is chosen yet, so getUserRole resolves the
@@ -1326,6 +1388,15 @@ export async function registerRoutes(
       // resolve to their one role exactly as the old SELECT role did.
       const { getUserRole } = await import("./auth/roles");
       const role = (await getUserRole(userId))?.role as string | undefined;
+      // Task #3331 — an artist homed to the skinned press of the host
+      // they're signing in on lands in the white-label client portal.
+      // Applies wherever the caller can hand us the request (login verify
+      // legs, trusted-device/skip-2FA bypasses), so the branded destination
+      // survives the second factor. Artist-only by construction.
+      if (req && role === "artist") {
+        const wl = await whitelabelArtistPortalLanding(req, userId, { role });
+        if (wl) return wl;
+      }
       if (role === "non_profit") return "/non-profit";
       // Task #859 — an `artist` partner lands in their scoped quote
       // sandbox (their own releases + the package/quote builder), not
@@ -1574,7 +1645,7 @@ export async function registerRoutes(
         await storage.createAuthToken(token, user.id, "admin");
         const u = await storage.getUser(user.id);
         const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
-        const landingPath = await landingPathForUser(user.id);
+        const landingPath = await landingPathForUser(user.id, req);
         return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath, kind: "admin" });
       }
       // Task #2795 — reviewer/demo account bypass. Accounts provisioned
@@ -1589,7 +1660,7 @@ export async function registerRoutes(
         await storage.createAuthToken(token, user.id, "admin");
         const u = await storage.getUser(user.id);
         const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
-        const landingPath = await landingPathForUser(user.id);
+        const landingPath = await landingPathForUser(user.id, req);
         return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath, kind: "admin" });
       }
       req.session.pendingTotpUserId = user.id;
@@ -2824,7 +2895,7 @@ export async function registerRoutes(
         req.session.userId = userId;
         req.session.kind = "admin";
         req.session.pendingTotpUserId = undefined;
-        const landingPath = await landingPathForUser(userId);
+        const landingPath = await landingPathForUser(userId, req);
         const params = new URLSearchParams({ oauth: provider, next: landingPath });
         return res.redirect(`/login?${params.toString()}#token=${encodeURIComponent(token)}`);
       }
@@ -3331,7 +3402,7 @@ export async function registerRoutes(
     // Task #78 — return a role-scoped landing path so the login UI can
     // drop OAuth-invite recipients into their partner shell directly
     // (e.g. /non-profit) instead of bouncing through /admin.
-    const landingPath = await landingPathForUser(userId);
+    const landingPath = await landingPathForUser(userId, req);
     return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath });
   });
 
@@ -3441,7 +3512,7 @@ export async function registerRoutes(
     }
     const u = await storage.getUser(userId);
     const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
-    const landingPath = await landingPathForUser(userId);
+    const landingPath = await landingPathForUser(userId, req);
     return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath });
   });
 
@@ -27332,6 +27403,18 @@ export async function registerRoutes(
   // Task #933 — also resolves the scope's display name + the inviter's
   // welcome note so the first-visit welcome page can greet the partner
   // by their org/artist name and surface the note their inviter wrote.
+  // Task #3331 — server-authoritative white-label steer decision. The
+  // client guardrail (WhitelabelArtistSteer) asks THIS instead of
+  // re-deriving eligibility: it answers "/dashboard" only via the shared
+  // resolver's full gate (artist role + homed to the SAME press this host's
+  // slug resolves to + portal skin active). Foreign or unhomed artists,
+  // operators, and press users get { landing: null } and are never steered.
+  app.get("/api/me/whitelabel-landing", requireAdmin, async (req, res) => {
+    const userId = req.session.userId!;
+    const landing = await whitelabelArtistPortalLanding(req, userId);
+    res.json({ landing });
+  });
+
   app.get("/api/me/role", requireAdmin, async (req, res) => {
     const userId = req.session.userId!;
     const info = await getUserRole(userId);
@@ -29915,6 +29998,16 @@ export async function registerRoutes(
         req.session.kind = "admin";
         const tok = generateToken();
         await storage.createAuthToken(tok, byEmail.id, "admin");
+        // Task #3331 — existing-account accepts honor the same branded
+        // landing contract as fresh accounts: on the invite press's skinned
+        // white-label host, an account whose EFFECTIVE role is artist lands
+        // in the client portal. Accounts whose primary hat is a
+        // higher-priority non-artist membership keep their normal landing
+        // (the resolver re-derives role from memberships, not the invite).
+        // The pending-2FA path preserves this too: the verify endpoints
+        // mint their landing via landingPathForUser(userId, req), which
+        // applies the identical override.
+        const wl = await whitelabelArtistPortalLanding(req, byEmail.id);
         return res.json({
           id: byEmail.id,
           username: byEmail.username,
@@ -29925,7 +30018,8 @@ export async function registerRoutes(
           role: invite.role,
           existingAccount: true,
           token: tok,
-          landingPath: await computeInviteLandingPath(invite),
+          landingPath: wl ?? (await computeInviteLandingPath(invite)),
+          pressPortal: !!wl,
         });
       };
       if (!_forceProductionAuth && process.env.NODE_ENV !== "production") return fullSignin();
@@ -29996,7 +30090,35 @@ export async function registerRoutes(
     // Invite role drives the landing path (the grant helper already
     // applied the matching per-user permission overrides + press tier);
     // logic shared with the existing-account branch above.
-    const landingPath = await computeInviteLandingPath(invite);
+    let landingPath = await computeInviteLandingPath(invite);
+
+    // Task #3331 — press-invited artists accepting ON a white-label host
+    // (memphis.makesvinyl.com) must stay inside the press-branded client
+    // portal, not drop into GoodTunes chrome. Gate strictly on: (a) the
+    // request arrived on a white-label host whose slug resolves to the SAME
+    // press the invite is homed to, and (b) that press's portal skin is
+    // active (email_branding set — same data-driven rule as
+    // /api/whitelabel/branding, never a press-name check). A press without
+    // the skin keeps today's landing; the branded welcome fallback on the
+    // client handles it gracefully. Accepts on GoodTunes hosts are
+    // unchanged. Best-effort: a lookup failure never blocks the accept.
+    // Shared resolver gates on: white-label host slug → the SAME press the
+    // invite is homed to (default_press_id, both real MRP admin invites and
+    // "View As Press" god-mode invites stamp it; manufacturer referrer is
+    // the fallback for older rows), portal skin active (email_branding), and
+    // an ARTIST invite — press staff / operator / other partner invites keep
+    // their normal landings.
+    const invitePressId =
+      ((invite as any).defaultPressId as string | null) ??
+      (((invite as any).referrerKind === "manufacturer" && (invite as any).referrerScopeId)
+        ? String((invite as any).referrerScopeId)
+        : null);
+    const wlLanding = await whitelabelArtistPortalLanding(req, user.id, {
+      role: String(invite.role ?? ""),
+      pressId: invitePressId,
+    });
+    const pressPortalLanding = !!wlLanding;
+    if (wlLanding) landingPath = wlLanding;
 
     res.json({
       id: user.id,
@@ -30008,6 +30130,10 @@ export async function registerRoutes(
       role: invite.role,
       token,
       landingPath,
+      // Task #3331 — true when landingPath points into the white-label
+      // client portal (accept happened on the invite press's branded host
+      // with the portal skin active).
+      pressPortal: pressPortalLanding,
     });
   });
 
