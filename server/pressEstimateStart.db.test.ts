@@ -30,7 +30,7 @@ import { storage } from "./storage";
 const scryptAsync = promisify(scrypt);
 const exec = (q: any) => db.execute(q);
 
-const created = { presses: new Set<string>(), estimates: new Set<string>(), customers: new Set<string>() };
+const created = { presses: new Set<string>(), estimates: new Set<string>(), customers: new Set<string>(), admins: new Set<string>() };
 let server: Server;
 let baseUrl: string;
 
@@ -73,6 +73,19 @@ async function seedCustomer(password: string): Promise<{ id: string; email: stri
   return { id: c.id, email };
 }
 
+// Task #3361 — artist/partner accounts live in the admin `users` table.
+async function seedAdminUser(password: string, email?: string): Promise<{ id: string; email: string }> {
+  const suffix = randomUUID().replace(/-/g, "").slice(0, 10);
+  const em = email ?? `start-admin-${suffix}@example.com`;
+  const id = randomUUID();
+  await exec(sql`
+    INSERT INTO users (id, username, email, display_name, password)
+    VALUES (${id}, ${"startadmin" + suffix}, ${em}, ${"Andrew Rockstar"}, ${await hashPassword(password)})
+  `);
+  created.admins.add(id);
+  return { id, email: em };
+}
+
 async function loadRow(id: string): Promise<{ status: string; payload: Record<string, any> }> {
   const r = await exec(sql`SELECT status, payload FROM press_estimates WHERE id = ${id} LIMIT 1`);
   const row = ((r as any).rows ?? [])[0];
@@ -106,6 +119,7 @@ after(async () => {
       await exec(sql`DELETE FROM auth_tokens WHERE customer_user_id = ${id}`);
       await exec(sql`DELETE FROM customer_users WHERE id = ${id}`);
     }
+    for (const id of created.admins) await exec(sql`DELETE FROM users WHERE id = ${id}`);
     for (const id of created.presses) await exec(sql`DELETE FROM manufacturers WHERE id = ${id}`);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -184,6 +198,79 @@ test("create attempt with an existing email still → 409 ACCOUNT_EXISTS", async
 
   const row = await loadRow(est.id);
   assert.equal(row.status, "Sent");
+});
+
+// ——— Task #3361: artist/partner (admin `users`) credentials on sign-in ———
+
+test("admin-side account + correct password signs in — fan identity minted, linked, project started", async () => {
+  const press = await seedPress();
+  const est = await seedEstimate(press);
+  const admin = await seedAdminUser("artist-password-1");
+
+  const res = await postStart(est.token, { email: admin.email, password: "artist-password-1", mode: "signin" });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.ok, true);
+  assert.ok(typeof body.token === "string" && body.token.length > 0);
+
+  // A linked fan identity now exists for that email…
+  const fan = await storage.getCustomerByEmail(admin.email);
+  assert.ok(fan, "fan identity must be minted for the admin account");
+  created.customers.add(fan!.id);
+  const resolved = await storage.getAuthBy(body.token);
+  assert.deepEqual(resolved, { userId: fan!.id, kind: "customer" });
+  // …and the admin row carries the unified-identity link.
+  const link = await exec(sql`SELECT customer_user_id FROM users WHERE id = ${admin.id}`);
+  assert.equal(((link as any).rows ?? [])[0]?.customer_user_id, fan!.id);
+
+  const row = await loadRow(est.id);
+  assert.equal(row.status, "Converted");
+  assert.equal(row.payload.acceptedByCustomerId, fan!.id);
+});
+
+test("admin account with a pre-existing fan row (same email) links to it instead of minting a duplicate", async () => {
+  const press = await seedPress();
+  const est = await seedEstimate(press);
+  const cust = await seedCustomer("fan-side-password");
+  const admin = await seedAdminUser("admin-side-password", cust.email);
+
+  // Admin password (fan-side check fails, admin check succeeds).
+  const res = await postStart(est.token, { email: cust.email, password: "admin-side-password", mode: "signin" });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  const resolved = await storage.getAuthBy(body.token);
+  assert.deepEqual(resolved, { userId: cust.id, kind: "customer" }, "must start under the EXISTING fan identity");
+  const link = await exec(sql`SELECT customer_user_id FROM users WHERE id = ${admin.id}`);
+  assert.equal(((link as any).rows ?? [])[0]?.customer_user_id, cust.id);
+
+  const row = await loadRow(est.id);
+  assert.equal(row.payload.acceptedByCustomerId, cust.id);
+});
+
+test("admin-side account + wrong password stays a generic 401 INVALID_CREDENTIALS", async () => {
+  const press = await seedPress();
+  const est = await seedEstimate(press);
+  const admin = await seedAdminUser("the-right-one-1");
+
+  const res = await postStart(est.token, { email: admin.email, password: "not-the-right-one", mode: "signin" });
+  assert.equal(res.status, 401);
+  assert.equal((await res.json()).code, "INVALID_CREDENTIALS");
+  assert.equal((await loadRow(est.id)).status, "Sent");
+});
+
+test("passwordless (OAuth-only) account gets the honest PASSWORDLESS_ACCOUNT message, not a false mismatch", async () => {
+  const press = await seedPress();
+  const est = await seedEstimate(press);
+  // Fan row with NO password — the OAuth-signup shape.
+  const suffix = randomUUID().replace(/-/g, "").slice(0, 10);
+  const email = `start-oauth-${suffix}@example.com`;
+  const c = await storage.createCustomer({ username: `startoauth${suffix}`, email, displayName: "OAuth Fan", realName: null, password: null } as any);
+  created.customers.add(c.id);
+
+  const res = await postStart(est.token, { email, password: "any-password-1", mode: "signin" });
+  assert.equal(res.status, 401);
+  assert.equal((await res.json()).code, "PASSWORDLESS_ACCOUNT");
+  assert.equal((await loadRow(est.id)).status, "Sent");
 });
 
 test("new-email create path unchanged: account minted, token returned, project started", async () => {

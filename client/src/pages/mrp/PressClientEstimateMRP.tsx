@@ -27,8 +27,8 @@
 import { setAuthToken, getAuthToken } from "@/lib/queryClient";
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
-import { stepAfterStartError, type StartStep } from './estimateStartAuth';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { stepAfterStartError, prefilledEstimateEmail, type StartStep } from './estimateStartAuth';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useQuery } from '@tanstack/react-query';
 import californialandCover from './assets/californialand-cover.jpg';
@@ -47,6 +47,9 @@ type LinkEstimate = {
   sentAt: string | null;
   pressName: string;
   clientName: string | null;
+  // Task #3361 — the address the estimate was sent to; prefills the start
+  // modal's email fields (editable).
+  clientEmail?: string | null;
   preparedBy: string | null;
   build: string | null;
   size: string | null;
@@ -301,12 +304,17 @@ export default function PressClientEstimateMRP() {
   const { user: authUser } = useAuth();
   const authedCustomer = !!authUser && authUser.kind !== 'admin';
 
+  // Prefill the recipient's email once the estimate loads (Task #3361) —
+  // editable, and only seeded while the field is still untouched.
+  const emailSeed = prefilledEstimateEmail(data?.clientEmail);
+  useEffect(() => { setAcctEmail((prev) => prev || emailSeed); }, [emailSeed]);
+
   const shareEarned = /.+@.+\..+/.test(shareEmail.trim());
   const closeShare = () => { setShareOpen(false); setShareSent(false); setShareName(''); setShareEmail(''); setActionError(null); };
   const closeAsk = () => { setAskOpen(false); setAskSent(false); setAskMsg(''); setActionError(null); };
   const closeStart = () => {
     setStartOpen(false); setStartStep('confirm');
-    setAcctName(clientFull); setAcctEmail(''); setAcctPassword(''); setActionError(null);
+    setAcctName(clientFull); setAcctEmail(emailSeed); setAcctPassword(''); setActionError(null);
   };
   const firstName = (preparedBy || 'the press').split(' ')[0];
 

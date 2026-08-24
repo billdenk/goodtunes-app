@@ -36,6 +36,7 @@ import { evaluateEarlyCut, syncEarlyCutQueue, resolveAlbumPressTier } from "./ea
 import { signPqToken, verifyPqToken, buildPqPayload } from "./pqSheet";
 import { renderPqPdf } from "./pqSheetPdf";
 import { sqlPersonIdByContactEmail } from "./partnerInvites";
+import { adminLoginPasswordOk, linkAdminToCustomer } from "./auth/identityLink";
 import { hasArtistShape } from "./lib/personArtistShape";
 import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 import { computeQuotePendingIds, invalidQuoteBuilderState, computeQuoteEmailBreakdown } from "@shared/quotePricing";
@@ -3690,14 +3691,72 @@ export function registerPressPortalRoutes(
         // Sign-in variant: an existing customer proves the password and the
         // project starts under their account. Wrong password is an honest
         // 401 — deliberately distinct from ACCOUNT_EXISTS.
-        if (!existing || !(await passwordMatches(body.data.password, (existing as any).password))) {
+        let resolvedId: string | null = null;
+        let adminUser: Awaited<ReturnType<typeof storage.getUserByEmail>> | undefined;
+        if (existing && (await passwordMatches(body.data.password, (existing as any).password))) {
+          resolvedId = existing.id;
+        } else {
+          // Task #3361 — artist/partner accounts live in the admin `users`
+          // table; they were getting a false "don't match" here. Password
+          // verification is a trusted path per the unified-identity rules,
+          // so on success resolve (or mint + link) the fan identity and
+          // start the project under it, exactly like the fan path.
+          adminUser = await storage.getUserByEmail(emailNorm).catch(() => undefined);
+          if (
+            adminUser &&
+            (await adminLoginPasswordOk(
+              { password: (adminUser as any).password ?? null, customerUserId: (adminUser as any).customerUserId ?? null },
+              body.data.password,
+              passwordMatches,
+            ))
+          ) {
+            let linkedId = ((adminUser as any).customerUserId as string | null) ?? null;
+            // Stale link guard — never mint a session for a missing row.
+            if (linkedId && !(await storage.getCustomer(linkedId).catch(() => undefined))) linkedId = null;
+            if (!linkedId) {
+              if (existing) {
+                await linkAdminToCustomer(adminUser.id, existing.id);
+                linkedId = existing.id;
+              } else {
+                // Mint the fan row (password left null — linkAdminToCustomer
+                // fills it from the admin hash) then link, mirroring the
+                // trusted-path promote flow.
+                const base = emailNorm.split("@")[0].replace(/[^a-z0-9_]/g, "").slice(0, 24) || "client";
+                let username = base;
+                for (let i = 0; i < 5; i++) {
+                  if (!(await storage.getCustomerByUsername(username))) break;
+                  username = `${base}${crypto.randomBytes(2).toString("hex")}`;
+                }
+                const displayName =
+                  body.data.name || String(payload.clientName ?? "").trim() || (adminUser as any).name || (adminUser as any).username || emailNorm;
+                const c = await storage.createCustomer({ username, email: emailNorm, displayName, realName: null, password: null } as any);
+                await storage.updateCustomer(c.id, { handle: username, signupCompletedAt: new Date() } as any).catch(() => {});
+                await linkAdminToCustomer(adminUser.id, c.id);
+                linkedId = c.id;
+              }
+            }
+            resolvedId = linkedId;
+          }
+        }
+        if (!resolvedId) {
+          // Honest copy for accounts that genuinely can't proceed here:
+          // OAuth-only rows with no password on either side. Reveals no
+          // more than the create-mode 409 ACCOUNT_EXISTS already does.
+          const usablePassword = (stored: string | null | undefined) =>
+            !!stored && stored.includes(".") && !stored.startsWith("!oauth-only:");
+          if ((existing || adminUser) && !usablePassword((existing as any)?.password) && !usablePassword((adminUser as any)?.password)) {
+            return res.status(401).json({
+              message: "This account signs in with Apple or Google and doesn't have a password yet — sign in there first, then reopen this estimate link.",
+              code: "PASSWORDLESS_ACCOUNT",
+            });
+          }
           return res.status(401).json({ message: "That email and password don't match — try again.", code: "INVALID_CREDENTIALS" });
         }
-        customerId = existing.id;
+        customerId = resolvedId;
         token = crypto.randomBytes(32).toString("hex");
-        await storage.createAuthToken(token, existing.id, "customer");
+        await storage.createAuthToken(token, resolvedId, "customer");
         if (req.session) {
-          req.session.userId = existing.id;
+          req.session.userId = resolvedId;
           req.session.kind = "customer";
           sessionTouched = true;
         }
