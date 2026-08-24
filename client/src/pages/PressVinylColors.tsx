@@ -737,6 +737,8 @@ export function SwatchEditorPopover({
   labelBgColor,
   startInMenu,
   onArchive,
+  onDelete,
+  deleting,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -752,6 +754,10 @@ export function SwatchEditorPopover({
   // shows a lightweight inline confirm and calls onArchive.
   startInMenu?: boolean;
   onArchive?: () => void;
+  // Task #3368 — Delete (hard remove) from the menu, behind the standard
+  // Apple-canon AlertDialog confirm (matches the tier-archive confirm).
+  onDelete?: () => void;
+  deleting?: boolean;
 }) {
   const { toast } = useToast();
   const dark = useAdminDark();
@@ -764,8 +770,12 @@ export function SwatchEditorPopover({
   // bottom row (Bill 2026-08-10) — the confirm's Cancel returns wherever
   // the operator came from.
   const canArchive = !!edit && !!onArchive;
+  const canDelete = !!edit && !!onDelete;
   const [view, setView] = useState<"menu" | "confirm" | "edit">(menuEnabled ? "menu" : "edit");
   const [confirmFrom, setConfirmFrom] = useState<"menu" | "edit">("menu");
+  // Task #3368 — Delete gets a real AlertDialog (permanent removal), not the
+  // lightweight inline confirm used for the reversible Archive.
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   const seed = () => {
     setName(edit?.name ?? "");
@@ -813,6 +823,7 @@ export function SwatchEditorPopover({
   };
 
   return (
+    <>
     <Popover
       open={open}
       onOpenChange={(v) => {
@@ -870,6 +881,22 @@ export function SwatchEditorPopover({
                 >
                   Archive
                 </button>
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onOpenChange(false);
+                      setDeleteConfirmOpen(true);
+                    }}
+                    className="w-full text-left text-[13.5px] font-semibold rounded-lg px-3 py-2 transition-colors"
+                    style={{ color: criticalColor(dark) }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = dark ? CRITICAL_WASH_DARK : "#fdeef2")}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                    data-testid="menu-color-delete"
+                  >
+                    Delete…
+                  </button>
+                )}
               </>
             ) : (
               <div style={{ padding: "8px 10px 10px" }}>
@@ -1053,6 +1080,49 @@ export function SwatchEditorPopover({
         )}
       </PopoverContent>
     </Popover>
+    {/* Task #3368 — Delete is permanent, so it gets the standard Apple-canon
+        AlertDialog confirm (same pattern as the tier-archive confirm). */}
+    {canDelete && (
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent
+          className="max-w-sm rounded-2xl"
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`dialog-delete-color-${edit?.id}`}
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {edit?.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Permanently removes this color from your catalog. This can't be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <button
+              type="button"
+              onClick={() => setDeleteConfirmOpen(false)}
+              className="text-[13px] font-semibold rounded-full px-3 py-1.5 transition-colors hover:bg-slate-100"
+              style={{ color: SUBINK }}
+              data-testid="button-delete-color-cancel"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!!deleting}
+              onClick={() => {
+                setDeleteConfirmOpen(false);
+                onDelete?.();
+              }}
+              className="text-[13px] font-semibold rounded-full px-4 py-1.5 text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: criticalColor(dark) }}
+              data-testid="button-delete-color-confirm"
+            >
+              Delete
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    )}
+    </>
   );
 }
 
@@ -1383,6 +1453,32 @@ export function PressVinylColors({
     onError: onErr,
   });
 
+  // Task #3368 — hard delete (behind the AlertDialog confirm). A 409 means the
+  // color backs pressed-record/SKU history — explain instead of a raw error.
+  const deleteColor = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/colors/${id}`);
+    },
+    onSuccess: (_d, id) => {
+      invalidate();
+      setColorId((cur) => (cur === id ? null : cur));
+      toast({ title: "Color deleted", description: "It's gone from the catalog." });
+    },
+    onError: (err: any) => {
+      const msg = String(err?.message ?? "");
+      if (msg.startsWith("409")) {
+        toast({
+          title: "This color can't be deleted",
+          description:
+            "It's kept for pressed-record history. You can archive it instead so artists won't see it for new projects.",
+          variant: "destructive",
+        });
+      } else {
+        onErr(err);
+      }
+    },
+  });
+
   const addTier = useMutation({
     mutationFn: async (name: string) => {
       if (!activeFormat) throw new Error("No vinyl format enabled yet.");
@@ -1685,6 +1781,8 @@ export function PressVinylColors({
                               onSave={(v) => patchColor.mutate({ id: c.id, ...v })}
                               startInMenu
                               onArchive={() => removeColor.mutate(c.id)}
+                              onDelete={() => deleteColor.mutate(c.id)}
+                              deleting={deleteColor.isPending}
                               labelLogoUrl={labelLogoUrl}
                               labelBgColor={labelBgColor}
                               trigger={

@@ -197,6 +197,13 @@ export const insertsComponentConfigSchema = packagingConfigSchema;
 export type InsertsComponentConfig = z.infer<typeof insertsComponentConfigSchema>;
 
 const priceCentsSchema = z.number().int().min(0).max(10_000_000).nullable();
+// One rung of an imported quantity ladder: per-unit cents (or a one-time
+// total, on `oneTime` rows) at a quantity break. Sheet-genuine 0 = "Included".
+export const pricingRungSchema = z.object({
+  qty: z.number().int().min(1).max(1_000_000),
+  unitCents: z.number().int().min(0).max(100_000_000),
+});
+export type PricingRung = z.infer<typeof pricingRungSchema>;
 export const pricingRowSchema = z.object({
   // Stable row identity: "type:<categoryId>" or "color:<categoryId>:<swatchId>"
   // or a component row like "labels:bw" / "stickers:circle:3x3".
@@ -216,6 +223,25 @@ export const pricingRowSchema = z.object({
   priceCents: priceCentsSchema.optional().default(null),
   // Per-size prices — a price typed under 7" never shows under 12".
   pricesBySize: z.record(vinylSizeIdSchema, priceCentsSchema).default({}),
+  // ── Imported quantity ladders (Task #3325, MRP Tier 3) ──────────────────
+  // Per-size quantity breaks loaded from a press's price sheet. An operator
+  // price typed into pricesBySize ALWAYS wins over these at resolution time;
+  // the ladder is the imported fallback, so re-running an import never
+  // clobbers operator edits (they live in a different field entirely).
+  // For vinyl rows these are the standard-weight (140g / 7" 49g) per-unit
+  // cents; rungsBySizeHeavy carries the 180g ladder.
+  rungsBySize: z.record(vinylSizeIdSchema, z.array(pricingRungSchema).max(12)).optional(),
+  rungsBySizeHeavy: z.record(vinylSizeIdSchema, z.array(pricingRungSchema).max(12)).optional(),
+  // Service rows: rung values are ONE-TIME totals at that quantity (e.g.
+  // stamper fees over the included first 1K), not per-unit prices. A 0 total
+  // renders "Included".
+  oneTime: z.boolean().optional(),
+  // Surcharge rows (Splatter): this row's rungs are a per-unit ADDER on top
+  // of the referenced base row's resolved price ("type:opaque"), never a
+  // standalone price.
+  surchargeOver: z.string().max(160).optional(),
+  // Provenance stamp for imported ladders (e.g. "mrp-tier3-2025").
+  pricingSource: z.string().max(120).optional(),
 });
 export type PricingRow = z.infer<typeof pricingRowSchema>;
 

@@ -26917,7 +26917,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<span className=\"text-[12.5px]\" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(l.v * unitFactor)} <span style={{ color: '#a1a1a6', fontSize: 11 }}>/unit</span></"
+    "snippet": "<span className=\"text-[12.5px]\" style={{ color: INK, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{fmt(scaledUnitDollars(l, unitFactor))} <span style={{ color: '#a1a1a6', fontSize: 11 }"
   },
   {
     "rule": "hardcoded-font-size",

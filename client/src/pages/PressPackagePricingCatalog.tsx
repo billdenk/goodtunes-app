@@ -2281,6 +2281,31 @@ export function PressPackagePricingCatalog({
     onError: (e: any) =>
       toast({ title: "Couldn't restore color", description: e?.message, variant: "destructive" }),
   });
+  // Task #3368 — hard delete a color (behind the AlertDialog confirm). A 409
+  // means it backs pressed-record/SKU history — explain instead of a raw error.
+  const deleteColor = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/colors/${id}`);
+    },
+    onSuccess: () => {
+      setEditColorId(null);
+      invalidate();
+      toast({ title: "Color deleted", description: "It's gone from the catalog." });
+    },
+    onError: (e: any) => {
+      const msg = String(e?.message ?? "");
+      if (msg.startsWith("409")) {
+        toast({
+          title: "This color can't be deleted",
+          description:
+            "It's kept for pressed-record history. You can archive it instead so artists won't see it for new projects.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Couldn't delete color", description: e?.message, variant: "destructive" });
+      }
+    },
+  });
   const deleteTier = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/admin/manufacturers/${pressId}/catalog/tiers/${id}`);
@@ -3415,6 +3440,8 @@ export function PressPackagePricingCatalog({
                                 onSave={(v) => patchColor.mutate({ id: c.id, body: v })}
                                 startInMenu
                                 onArchive={() => archiveColor.mutate(c.id)}
+                                onDelete={() => deleteColor.mutate(c.id)}
+                                deleting={deleteColor.isPending}
                                 labelLogoUrl={labelLogoUrl}
                                 labelBgColor={labelBgColor}
                                 trigger={<DotsTrigger label={`Edit ${c.name}`} testId={`color-menu-${c.id}`} />}
