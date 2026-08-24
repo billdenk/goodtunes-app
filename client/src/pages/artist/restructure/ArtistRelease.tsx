@@ -24,6 +24,7 @@ import { apiRequest } from '@/lib/queryClient';
 import { uploadAdminDocWithProgress } from '@/lib/adminUpload';
 import { useUploadManager } from '@/context/UploadManagerContext';
 import { NewAlbumModeDialog } from '@/components/admin/NewAlbumModeDialog';
+import { ManufacturingLedger } from '@/components/admin/ShopifyPlusPanel';
 import { PageColumn, PageHeader } from '@/components/admin/PageShell';
 import { ArtistReleaseTrackRows } from '@/pages/AdminAlbum';
 import type { AlbumPhysicalFormat, AlbumSellMode } from '@shared/schema';
@@ -1118,6 +1119,15 @@ function ProjectRow({ project, expanded, onToggle, t }: { project: PortalPayload
 function ReleasePayments({ portal, t }: { portal: PortalPayload; t: Theme }) {
   const withSchedule = portal.payments.find((p) => (p.milestones ?? []).length > 0);
   const [expanded, setExpanded] = useState<string | null>(withSchedule?.id ?? null);
+  // Manufacturing-ledger steps (Shopify+ pressing runs) live in their own
+  // table — the same key ShopifyPlusPanel uses, so the cache is shared with
+  // the embedded partner view. gatePayouts admits the release owner and
+  // teammates with payment access; anyone else 403s and we show nothing.
+  const ledgerQ = useQuery<{ steps?: Array<{ id: string }> }>({
+    queryKey: ["/api/admin/albums", portal.release.id, "manufacturing-ledger"],
+    retry: false,
+  });
+  const hasLedgerSteps = (ledgerQ.data?.steps?.length ?? 0) > 0;
   return (
     <>
       <PageHeader
@@ -1126,7 +1136,17 @@ function ReleasePayments({ portal, t }: { portal: PortalPayload; t: Theme }) {
         title="Money out to the plant"
         subtitle="One row per project — a format pressed by one plant. You only ever pay GoodTunes®; we release funds to the plant at each milestone"
       />
-      {portal.payments.length === 0 ? (
+      {hasLedgerSteps && (
+        <div className="mb-4">
+          <ManufacturingLedger
+            albumId={portal.release.id}
+            canEdit={false}
+            canPay={true}
+            isOperatorView={false}
+          />
+        </div>
+      )}
+      {portal.payments.length === 0 && !hasLedgerSteps ? (
         <div className="rounded-2xl flex flex-col items-center justify-center text-center" style={{ padding: '48px 24px', border: `1px solid ${t.hairline}`, background: t.card }}>
           <p className="text-[14px] font-semibold" style={{ color: t.ink }}>Nothing owed on this release</p>
           <p className="text-[12.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>Payment schedules appear here once a pressing project starts.</p>
