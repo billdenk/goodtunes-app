@@ -22177,6 +22177,21 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ color: t.subink }}>Loading payments…</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>Couldn't load manufacturing payments</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
+    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>Refresh to try again. If this keeps happening, contact GoodTunes.</p>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/restructure/ArtistRelease.tsx",
     "snippet": "<p className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>Nothing owed on this release</p>"
   },
   {

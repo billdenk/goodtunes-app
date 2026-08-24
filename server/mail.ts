@@ -794,6 +794,10 @@ export type PressEstimateEmailOpts = {
    * white-label flavor — white canvas, square corners; Ruby handoff b912fb6).
    * Resolved from manufacturers.email_branding, never a press-name match. */
   skin?: "dark" | "light";
+  /** Task #3359 — absolute public URL to the server-composited jacket +
+   * vinyl mockup PNG (keyed to the estimate's share token). Null/absent =
+   * the mockup block is omitted entirely — never a broken image. */
+  mockupUrl?: string | null;
 };
 
 const fmtLongDate = (d: Date) =>
@@ -942,6 +946,14 @@ export function buildPressClientEstimateEmail(
             <div style="font-size:24px;font-weight:700;letter-spacing:-0.4px;color:${PE_INK};margin-top:4px;">${e(opts.clientName)}</div>
             <div style="font-size:12px;color:${PE_SUBINK};margin-top:5px;">${e(preparedForLine)}${preparedBy ? ` · Prepared by ${e(preparedBy)}` : ""}</div>
           </div>
+
+          ${
+            opts.mockupUrl
+              ? `<div style="margin-top:28px;text-align:center;">` +
+                `<img src="${opts.mockupUrl}" alt="${e(opts.jobTitle)} — album jacket with the vinyl record peeking out" width="528" ` +
+                `style="display:block;width:100%;max-width:528px;height:auto;border:0;margin:0 auto;" /></div>`
+              : ""
+          }
 
           ${totalsCard}
 

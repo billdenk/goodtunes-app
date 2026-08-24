@@ -226,6 +226,30 @@ test("computeQuoteEmailBreakdown: mixed manual/ladder surcharge scales only the 
     `manual base scales, ladder adder doesn't (got ${vinyl.unitDollars}, factor ${factor})`);
 });
 
+// ── #3359 — jacket + vinyl mockup image block ────────────────────────────
+test("mockupUrl renders an img block in both skins with alt text; text version unchanged", () => {
+  const url = "https://my.goodtunes.music/api/estimate-link/abc123token/mockup.png";
+  const dark = buildPressClientEstimateEmail({ ...baseOpts, mockupUrl: url });
+  assert.match(dark.html, new RegExp(`<img src="${url.replace(/[/.]/g, "\\$&")}"`));
+  assert.match(dark.html, /album jacket with the vinyl record peeking out/);
+  assert.match(dark.html, /Californialand — album jacket/);
+  assert.ok(!dark.text.includes("mockup.png"), "plain-text version stays unchanged");
+  const accent = resolvePressEstimateAccent({ accent: "#D6A63F", buttonInk: "#1d1d1f" });
+  const light = buildPressClientEstimateEmail({ ...baseOpts, accent, skin: "light", mockupUrl: url });
+  assert.match(light.html, /mockup\.png/);
+  assert.match(light.html, /max-width:528px/);
+});
+
+test("no mockupUrl (null or absent) → no img mockup block, email renders as before", () => {
+  const absent = buildPressClientEstimateEmail(baseOpts);
+  const explicitNull = buildPressClientEstimateEmail({ ...baseOpts, mockupUrl: null });
+  for (const { html } of [absent, explicitNull]) {
+    assert.ok(!html.includes("mockup.png"));
+    assert.ok(!html.includes("album jacket with the vinyl record"));
+    assert.match(html, /Open your estimate/);
+  }
+});
+
 // ── #3295 review gate — delivery recipient selection ─────────────────────
 test("estimate email delivers to the real recipient when no review override is set", () => {
   const d = resolvePressEstimateDelivery("client@example.test", "Your estimate", null);
