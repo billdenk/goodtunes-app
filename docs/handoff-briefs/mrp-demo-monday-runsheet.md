@@ -820,3 +820,18 @@ All MOCK_ consts (album fields, service URLs) are dummy data to wire.
     Same law as everywhere: dressing changes only - every interaction
     the tab has today keeps working.
     
+
+---
+
+## Releases page — customers cannot create a new release (Aug 24)
+
+**Live symptom (viewing as Niina Soleil):** the Releases page shows the catalog wall only — there is NO create action anywhere. A customer with one release has no way to start another. This blocks the core loop.
+
+**Canon (mock: ArtistReleasesIndex):** a quiet outline pill sits top-right of the "Releases." heading row — Plus icon + "New Release", rounded-full, hairline border, card background (templates-page canon: no solid blue; the wall is the hero). It opens the new-release walk (name + format, Release → Draft → Project). The mock's compare chooser (walk A vs walk B) is mock-only scaffolding — the decided walk is the one already specified in the artist-nav brief; do not ship a chooser.
+
+**Must-work checklist:**
+- "New Release" pill visible top-right of the heading row for every artist account, including empty catalogs.
+- Clicking it starts the new-release flow; completing the flow lands the new draft on the wall.
+- Empty catalog state still offers the same path (never a dead end).
+
+**Acceptance:** screenshot diff of the heading row vs handoff at 1440px, both themes; a test customer can create a release end to end.
