@@ -99,6 +99,26 @@ export type CompletedTemplateComponent = {
    * produced.
    */
   previewUrl2?: string | null;
+  /**
+   * Task #3351 — FULL-ARTBOARD raster (/objects/uploads/… path), uncropped
+   * (bleed + flaps included), generated server-side alongside the trim
+   * preview at check time. The artist Test page's pdf.js render is the
+   * primary full-bleed view; this is the lightweight fallback when a very
+   * large master can't be rendered in the browser. When no crop was applied
+   * to `previewUrl` this may be the same object.
+   *
+   * Task #3355 — tri-state for the lazy backfill of pre-#3351 rows:
+   * NULL/absent = never attempted (a view of the art file schedules a
+   * background backfill), '' = attempted-and-failed (honest "preview
+   * unavailable", never re-attempted per view), non-empty = usable raster.
+   * Clients must treat any falsy value as "no raster".
+   */
+  fullPreviewUrl?: string | null;
+  /** Artboard width/height in millimetres (page-1 CropBox, MediaBox
+   *  fallback) so the fallback raster can seat over the measured template
+   *  exactly like the pdf.js render. Null when the boxes couldn't be read. */
+  fullPreviewWMm?: number | null;
+  fullPreviewHMm?: number | null;
   /** Per-rule finished-template check results (empty for a missing slot). */
   checks: CheckResult[];
   /** Worst status across `checks`; null when nothing has been run yet. */

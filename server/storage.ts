@@ -971,6 +971,17 @@ export interface IStorage {
     components: CompletedTemplateCheck["components"];
     status: string;
   }): Promise<CompletedTemplateCheck>;
+  // Task #3355 — atomic conditional patch of one component's full-artboard
+  // raster fields, keyed on the assetUrl the render was made from; false =
+  // stale (a concurrent re-check/replace won) and nothing was written.
+  patchCompletedTemplateComponentFullPreview(args: {
+    albumId: string;
+    componentId: string;
+    sourceAssetUrl: string;
+    fullPreviewUrl: string;
+    fullPreviewWMm: number | null;
+    fullPreviewHMm: number | null;
+  }): Promise<boolean>;
 
   // ---- Task #2109 — Operator-editable press template specs ----------
   // Stored in the press catalog (keyed manufacturers.id → AlbumFormat →
@@ -5621,6 +5632,51 @@ export class DbStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+
+  // Task #3355 — atomic compare-and-swap for the lazy full-artboard raster
+  // backfill. A single conditional UPDATE patches ONLY the target component
+  // element, and ONLY while it still holds the exact assetUrl the render was
+  // made from AND its fullPreviewUrl is still unset (absent or JSON null).
+  // Any concurrent re-check/replace/remove that committed first makes the
+  // WHERE clause miss → returns false and the row is left untouched (no
+  // TOCTOU window: the check and the write are one SQL statement).
+  async patchCompletedTemplateComponentFullPreview(args: {
+    albumId: string;
+    componentId: string;
+    /** The assetUrl the raster was generated from — the CAS key. */
+    sourceAssetUrl: string;
+    /** Raster object path, or '' = attempted-and-failed marker. */
+    fullPreviewUrl: string;
+    fullPreviewWMm: number | null;
+    fullPreviewHMm: number | null;
+  }): Promise<boolean> {
+    const patch = JSON.stringify({
+      fullPreviewUrl: args.fullPreviewUrl,
+      fullPreviewWMm: args.fullPreviewWMm,
+      fullPreviewHMm: args.fullPreviewHMm,
+    });
+    const result: any = await db.execute(sql`
+      UPDATE completed_template_checks
+      SET components = (
+            SELECT COALESCE(jsonb_agg(
+              CASE WHEN t.c->>'componentId' = ${args.componentId}
+                    AND t.c->>'assetUrl' = ${args.sourceAssetUrl}
+                    AND (t.c->'fullPreviewUrl' IS NULL OR t.c->'fullPreviewUrl' = 'null'::jsonb)
+                   THEN t.c || ${patch}::jsonb
+                   ELSE t.c END ORDER BY t.ord), '[]'::jsonb)
+            FROM jsonb_array_elements(components) WITH ORDINALITY AS t(c, ord)
+          ),
+          updated_at = now()
+      WHERE album_id = ${args.albumId}
+        AND EXISTS (
+          SELECT 1 FROM jsonb_array_elements(components) e(c)
+          WHERE e.c->>'componentId' = ${args.componentId}
+            AND e.c->>'assetUrl' = ${args.sourceAssetUrl}
+            AND (e.c->'fullPreviewUrl' IS NULL OR e.c->'fullPreviewUrl' = 'null'::jsonb)
+        )
+    `);
+    return Number(result?.rowCount ?? 0) > 0;
   }
 
   // ---- Task #2109 — Operator-editable press template specs ----------

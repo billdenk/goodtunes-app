@@ -44,6 +44,7 @@ const created = {
 
 let baseUrl = "";
 let httpServer: HttpServer | undefined;
+let appRef: express.Express;
 
 let ownPressId = "";
 let otherPressId = "";
@@ -55,6 +56,7 @@ let pressLessAlbumId = ""; // vinyl SKU but no resolvable press
 
 before(async () => {
   const app = express();
+  appRef = app;
   app.set("trust proxy", 1);
   app.use(authKindMiddleware);
   app.use(express.json({ limit: "10mb" }));
@@ -316,6 +318,216 @@ test("an inner_sleeve catalog row for the album's format derives 'printed'", asy
   const other = await req("GET", getPath(pressLessAlbumId), adminToken);
   assert.equal(other.status, 200);
   assert.equal(other.json.config.innerSleeves, "none", "no resolved press → no derivation");
+});
+
+// ─── Task #3348 — art-file read (full-bleed viewer source) ─────────────
+// The artist Test page fetches the checked art PDF through this authed
+// route (never a raw /objects fetch, never the cropped previewUrl). Pin:
+// 404 with no upload, 302 → the stored own-object path, and the same
+// press scoping as every other completed-template read.
+
+test("art-file: 404 empty, 302 to own-object asset, cross-press 403", async () => {
+  const missing = await req("GET", `${getPath(albumId)}/art-file/jacket`, adminToken);
+  assert.equal(missing.status, 404, "no upload on the slot → 404");
+
+  // Seed a checked component holding a direct-upload object path.
+  const payload = await req("GET", getPath(albumId), adminToken);
+  assert.equal(payload.status, 200);
+  await storage.saveCompletedTemplateCheck({
+    albumId,
+    vendorId: payload.json.vendorId,
+    config: payload.json.config,
+    components: [
+      {
+        componentId: "jacket",
+        label: "Jacket",
+        presence: "present",
+        assetUrl: "/objects/uploads/t3348-art.pdf",
+        fileName: "t3348-art.pdf",
+        previewUrl: null,
+        previewUrl2: null,
+        checks: [],
+        status: "attention",
+        override: null,
+        unverifiedAck: null,
+      } as any,
+    ],
+    status: "attention",
+  } as any);
+
+  const res = await fetch(`${baseUrl}${getPath(albumId)}/art-file/jacket`, {
+    redirect: "manual",
+    headers: { authorization: `Bearer ${adminToken}` },
+  });
+  assert.equal(res.status, 302, "own-object art redirects same-origin");
+  assert.equal(res.headers.get("location"), "/objects/uploads/t3348-art.pdf");
+
+  const ownPress = await fetch(`${baseUrl}${getPath(albumId)}/art-file/jacket`, {
+    redirect: "manual",
+    headers: { authorization: `Bearer ${pressToken}` },
+  });
+  assert.equal(ownPress.status, 302, "the album's own press reads the art file");
+
+  const cross = await req("GET", `${getPath(albumId)}/art-file/jacket`, otherPressToken);
+  assert.equal(cross.status, 403, "cross-press art read must fail");
+
+  const anon = await req("GET", `${getPath(albumId)}/art-file/jacket`, null);
+  assert.equal(anon.status, 401);
+});
+
+// ─── Task #3355 — lazy full-artboard raster backfill ───────────────────
+// Components checked before Task #3351 have no fullPreviewUrl. Reading the
+// art file must schedule a de-duped BACKGROUND backfill (never inline in
+// the GET); an unrenderable file persists '' (attempted-and-failed) and is
+// never re-scheduled; a concurrent re-check/replace must never be
+// clobbered by a stale backfill write.
+
+async function seedJacket(assetUrl: string, extra: Record<string, unknown> = {}) {
+  const payload = await req("GET", getPath(albumId), adminToken);
+  assert.equal(payload.status, 200);
+  await storage.saveCompletedTemplateCheck({
+    albumId,
+    vendorId: payload.json.vendorId,
+    config: payload.json.config,
+    components: [
+      {
+        componentId: "jacket",
+        label: "Jacket",
+        presence: "present",
+        assetUrl,
+        fileName: "t3355-art.pdf",
+        previewUrl: null,
+        previewUrl2: null,
+        checks: [],
+        status: "pass",
+        override: null,
+        unverifiedAck: null,
+        ...extra,
+      } as any,
+    ],
+    status: "warnings",
+  } as any);
+}
+
+function backfillSeam(): { schedule: (a: string, c: string) => Promise<void>; inFlight: Map<string, Promise<void>> } {
+  const seam = (appRef as any).locals.completedArtFullPreviewBackfill;
+  assert.ok(seam, "backfill test seam registered on app.locals");
+  return seam;
+}
+
+test("art-file GET schedules a de-duped backfill; failure persists '' and is not re-scheduled", async () => {
+  const seam = backfillSeam();
+  // Drain any backfill scheduled by earlier tests before re-seeding.
+  await Promise.allSettled([...seam.inFlight.values()]);
+  await seedJacket("/objects/uploads/t3355-art.pdf"); // fullPreviewUrl absent = never attempted
+
+  const res = await fetch(`${baseUrl}${getPath(albumId)}/art-file/jacket`, {
+    redirect: "manual",
+    headers: { authorization: `Bearer ${adminToken}` },
+  });
+  assert.equal(res.status, 302, "GET still redirects immediately — backfill is off the request path");
+
+  const key = `${albumId}:jacket`;
+  const p = seam.inFlight.get(key);
+  assert.ok(p, "a background backfill was scheduled");
+  assert.equal(seam.schedule(albumId, "jacket"), p, "concurrent schedule de-dupes to the same run");
+  await p;
+
+  const after1 = await req("GET", getPath(albumId), adminToken);
+  const jacket1 = (after1.json.components as any[]).find((c) => c.componentId === "jacket");
+  assert.equal(jacket1.fullPreviewUrl, "", "unrenderable file persists the '' failed marker");
+  assert.equal(jacket1.fullPreviewWMm ?? null, null);
+  assert.equal(jacket1.fullPreviewHMm ?? null, null);
+
+  // The '' marker must stop re-attempts: a fresh GET schedules nothing.
+  const again = await fetch(`${baseUrl}${getPath(albumId)}/art-file/jacket`, {
+    redirect: "manual",
+    headers: { authorization: `Bearer ${adminToken}` },
+  });
+  assert.equal(again.status, 302);
+  assert.ok(!seam.inFlight.has(key), "failed marker is never re-hammered per view");
+});
+
+test("CAS: a stale backfill result committed AFTER a re-check is a no-op (deterministic race)", async () => {
+  // The atomic unit is storage.patchCompletedTemplateComponentFullPreview —
+  // condition + write are ONE SQL statement, so "pausing before persistence"
+  // reduces to: commit the re-check first, then fire the stale patch.
+  await seedJacket("/objects/uploads/t3355-cas-old.pdf"); // backfill captured THIS assetUrl…
+  // …then a re-check lands (new file + its own raster) before the patch:
+  await seedJacket("/objects/uploads/t3355-cas-new.pdf", {
+    fullPreviewUrl: "/objects/uploads/t3355-cas-new-full.png",
+    fullPreviewWMm: 300,
+    fullPreviewHMm: 300,
+  });
+  const applied = await storage.patchCompletedTemplateComponentFullPreview({
+    albumId,
+    componentId: "jacket",
+    sourceAssetUrl: "/objects/uploads/t3355-cas-old.pdf",
+    fullPreviewUrl: "",
+    fullPreviewWMm: null,
+    fullPreviewHMm: null,
+  });
+  assert.equal(applied, false, "stale patch (old assetUrl) must not apply");
+
+  // Also refused when the raster is already set on the SAME assetUrl.
+  const alreadySet = await storage.patchCompletedTemplateComponentFullPreview({
+    albumId,
+    componentId: "jacket",
+    sourceAssetUrl: "/objects/uploads/t3355-cas-new.pdf",
+    fullPreviewUrl: "",
+    fullPreviewWMm: null,
+    fullPreviewHMm: null,
+  });
+  assert.equal(alreadySet, false, "an already-filled raster is never overwritten");
+
+  const row = await req("GET", getPath(albumId), adminToken);
+  const jacket = (row.json.components as any[]).find((c) => c.componentId === "jacket");
+  assert.equal(jacket.assetUrl, "/objects/uploads/t3355-cas-new.pdf");
+  assert.equal(jacket.fullPreviewUrl, "/objects/uploads/t3355-cas-new-full.png", "row untouched by both stale patches");
+  assert.equal(jacket.fullPreviewWMm, 300);
+
+  // And the CAS DOES apply while the condition genuinely holds.
+  await seedJacket("/objects/uploads/t3355-cas-old.pdf");
+  const ok = await storage.patchCompletedTemplateComponentFullPreview({
+    albumId,
+    componentId: "jacket",
+    sourceAssetUrl: "/objects/uploads/t3355-cas-old.pdf",
+    fullPreviewUrl: "/objects/uploads/t3355-cas-old-full.png",
+    fullPreviewWMm: 313,
+    fullPreviewHMm: 315,
+  });
+  assert.equal(ok, true, "matching assetUrl + unset raster → patch applies");
+  const row2 = await req("GET", getPath(albumId), adminToken);
+  const jacket2 = (row2.json.components as any[]).find((c) => c.componentId === "jacket");
+  assert.equal(jacket2.fullPreviewUrl, "/objects/uploads/t3355-cas-old-full.png");
+  assert.equal(jacket2.fullPreviewWMm, 313);
+  assert.equal(jacket2.fullPreviewHMm, 315);
+});
+
+test("stale backfill write never clobbers a concurrent re-check/replace", async () => {
+  const seam = backfillSeam();
+  await Promise.allSettled([...seam.inFlight.values()]);
+  await seedJacket("/objects/uploads/t3355-old.pdf"); // never attempted
+
+  const run = seam.schedule(albumId, "jacket");
+  // Simulate a re-check landing while the backfill renders: new file with
+  // its own freshly generated raster.
+  await seedJacket("/objects/uploads/t3355-new.pdf", {
+    fullPreviewUrl: "/objects/uploads/t3355-new-full.png",
+    fullPreviewWMm: 320,
+    fullPreviewHMm: 320,
+  });
+  await run;
+
+  const after2 = await req("GET", getPath(albumId), adminToken);
+  const jacket2 = (after2.json.components as any[]).find((c) => c.componentId === "jacket");
+  assert.equal(jacket2.assetUrl, "/objects/uploads/t3355-new.pdf", "replacement row survives");
+  assert.equal(
+    jacket2.fullPreviewUrl,
+    "/objects/uploads/t3355-new-full.png",
+    "the re-check's own raster wins — the stale backfill write is skipped",
+  );
+  assert.equal(jacket2.fullPreviewWMm, 320);
 });
 
 after(async () => {

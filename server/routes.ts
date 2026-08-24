@@ -35572,6 +35572,75 @@ export async function registerRoutes(
   // partners. Unlike POST /download/:componentId this is a plain read —
   // it never writes a file event and never locks the slot.
   //
+  // Task #3355 — lazy background backfill of the full-artboard raster for
+  // components checked BEFORE Task #3351 shipped (their `fullPreviewUrl`
+  // was never attempted). Runs strictly off the request path, de-duped per
+  // album:component so concurrent views don't double-render. Tri-state on
+  // the persisted field: NULL/absent = never attempted (eligible), '' =
+  // attempted-and-failed (never retried per view), non-empty = usable.
+  // The persist is an atomic storage-level compare-and-swap keyed on the
+  // assetUrl the render was made from (see
+  // storage.patchCompletedTemplateComponentFullPreview): a concurrent
+  // re-check/replace always wins, even across instances (the process-local
+  // de-dupe map only saves redundant renders; correctness lives in the CAS).
+  const fullPreviewBackfillInFlight = new Map<string, Promise<void>>();
+  function scheduleFullPreviewBackfill(albumId: string, componentId: string): Promise<void> {
+    const key = `${albumId}:${componentId}`;
+    const existing = fullPreviewBackfillInFlight.get(key);
+    if (existing) return existing;
+    const run = (async () => {
+      try {
+        const ctx = await resolveCompletedContext(albumId);
+        const component = ((ctx?.row?.components ?? []) as CompletedTemplateComponent[]).find(
+          (c) => c.componentId === componentId,
+        );
+        // Only internal objects; someone may have filled/failed it already.
+        const sourceAssetUrl = component?.assetUrl ?? null;
+        if (!ctx || !component || !sourceAssetUrl || !sourceAssetUrl.startsWith("/")) return;
+        if (component.fullPreviewUrl != null) return;
+
+        const required = await resolveRequired(ctx.vendorId, ctx.config);
+        const spec = required.find((r) => r.id === componentId) ?? null;
+        const previews = await generateCompletedPreview(sourceAssetUrl, spec);
+        // '' = attempted-and-failed marker (client treats falsy as absent).
+        const fullPreviewUrl = previews.fullPreviewUrl ?? "";
+        const fullPreviewWMm = previews.fullPreviewUrl ? previews.fullPreviewWMm : null;
+        const fullPreviewHMm = previews.fullPreviewUrl ? previews.fullPreviewHMm : null;
+
+        // Atomic compare-and-swap at the storage layer: the write lands
+        // ONLY while the persisted component still holds the exact assetUrl
+        // this render was made from AND its fullPreviewUrl is still unset —
+        // the condition and the patch are one SQL statement, so a
+        // concurrent re-check/replace (even on another instance) can never
+        // be clobbered by this stale result. false = benign stale skip.
+        const applied = await storage.patchCompletedTemplateComponentFullPreview({
+          albumId,
+          componentId,
+          sourceAssetUrl,
+          fullPreviewUrl,
+          fullPreviewWMm,
+          fullPreviewHMm,
+        });
+        if (!applied) {
+          console.log(
+            `[completed-art] full-preview backfill for ${albumId}/${componentId} skipped — component changed while rendering`,
+          );
+        }
+      } catch (e) {
+        console.warn(`[completed-art] full-preview backfill failed for ${albumId}/${componentId}`, e);
+      } finally {
+        fullPreviewBackfillInFlight.delete(key);
+      }
+    })();
+    fullPreviewBackfillInFlight.set(key, run);
+    return run;
+  }
+  // Test seam (route tests await the background chain deterministically).
+  (app as any).locals.completedArtFullPreviewBackfill = {
+    schedule: scheduleFullPreviewBackfill,
+    inFlight: fullPreviewBackfillInFlight,
+  };
+
   // Stored /objects/ art redirects (public-ACL, same-origin). A LEGACY row
   // whose check predates the Task #3184 mirroring rule still holds the raw
   // external link — mirror it into our object storage NOW (standing rule:
@@ -35588,7 +35657,18 @@ export async function registerRoutes(
     );
     if (!ctx || !component?.assetUrl) return res.status(404).json({ message: "No art file on that slot yet." });
     const url = component.assetUrl;
-    if (url.startsWith("/")) return res.redirect(url);
+    if (url.startsWith("/")) {
+      // Task #3355 — components checked before Task #3351 shipped never had
+      // a full-artboard raster attempted (`fullPreviewUrl` absent/NULL), so
+      // when the in-browser pdf.js render fails on very large masters the
+      // artist viewer has no fallback. Lazily backfill it in the background
+      // (never inline in this GET); '' persists as attempted-and-failed so
+      // an unrenderable file is never re-hammered per view.
+      if (component.fullPreviewUrl == null) {
+        void scheduleFullPreviewBackfill(req.params.id, componentId);
+      }
+      return res.redirect(url);
+    }
     if (!/^https:\/\//i.test(url)) return res.status(409).json({ message: "This art file's link can't be fetched." });
     const mirrored = await mirrorExternalTemplatePdf(url);
     if (!mirrored.ok) {
