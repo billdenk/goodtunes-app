@@ -14,7 +14,8 @@
 // the q-word. Self-contained per handoff rules.
 
 import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { setAuthToken } from '@/lib/queryClient';
 import { useLocation } from 'wouter';
 import mrpLogoAsset from './assets/mrp-logo.svg';
 import goodtunesLogo from './assets/goodtunes-logo.png';
@@ -150,6 +151,17 @@ function RailRow({ name, active }: { name: string; active: boolean }) {
 const MRP_NAV = ['Home', 'About MRP', 'Products', 'Resources', 'MRP TV', 'MRP University', 'News', 'Shop', 'Contact'];
 
 function MrpSiteHeader({ firstName }: { firstName: string }) {
+  // Signed in, the marketing nav drops away (Andrew, Aug 24 2026) — the
+  // account chip stays and opens a small menu with Sign out.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const signOut = async () => {
+    setAuthToken(null);
+    await fetch('/api/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
+    await queryClient.invalidateQueries();
+    navigate('/next-steps');
+  };
   return (
     <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
       {/* Utility bar — 40px row, 12px / 400 / 0.07em, #333 ink */}
@@ -180,24 +192,32 @@ function MrpSiteHeader({ firstName }: { firstName: string }) {
       {/* Main nav — logo left; signed in, the account chip rides right */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 34, height: 80, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}` }}>
         <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 60, height: 60 }} />
-        <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 30, fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-          {MRP_NAV.map((l) => (
-            <a
-              key={l}
-              href="#"
-              onClick={(e) => e.preventDefault()}
-              className="mrp-nav-link"
-              style={{ color: 'rgba(51,51,51,0.5)', textDecoration: 'none' }}
-            >
-              {l}
-            </a>
-          ))}
-        </nav>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: SUBINK }}>
-          <span style={{ width: 28, height: 28, borderRadius: '50%', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: INK }}>
+        {/* Marketing links removed for signed-in artists (Andrew, Aug 24 2026). */}
+        <span style={{ flex: 1 }} />
+        <span style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: SUBINK }}>
+          <button
+            type="button"
+            aria-label="Account menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((v) => !v)}
+            data-testid="button-account-menu"
+            style={{ width: 28, height: 28, borderRadius: '50%', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: INK, cursor: 'pointer', padding: 0 }}
+          >
             {(firstName || '?').slice(0, 1).toUpperCase()}
-          </span>
+          </button>
           {firstName}
+          {menuOpen && (
+            <div data-testid="menu-account" style={{ position: 'absolute', top: 38, right: 0, minWidth: 150, background: '#ffffff', border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.10)', padding: '6px 0', zIndex: 40 }}>
+              <button
+                type="button"
+                data-testid="button-sign-out"
+                onClick={signOut}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: 13, color: INK, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                Sign out
+              </button>
+            </div>
+          )}
         </span>
       </div>
     </div>
