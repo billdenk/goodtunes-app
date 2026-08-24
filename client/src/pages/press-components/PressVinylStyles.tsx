@@ -323,7 +323,11 @@ function DiscLabelArt({ size }: { size: number }) {
             position: 'absolute',
             top: '50%',
             left: '50%',
-            transform: 'translate(-50%, -50%)',
+            // Nudge the logo UP so its notch (the arc center at the skyline
+            // base, y=143.3 of the 272.4 viewBox ≈ 52.6%) lands exactly on
+            // the spindle hole at the label center — hole sits in the dip,
+            // not the buildings. Label itself stays put. (handoff 3dd5929)
+            transform: `translate(-50%, calc(-50% - ${size * 0.9 * (143.3 / 272.4 - 0.5)}px))`,
           }}
         />
       )}
