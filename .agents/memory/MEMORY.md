@@ -1,3 +1,4 @@
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 - [docs/STATUS.md living status](living-status-doc.md) — update with EVERY completed/merged change, same commit; current-state not changelog; design studio reads it from GitHub.
 - [Authed admin screenshots](admin-authed-screenshots.md) — Screenshot tool keeps cookies across calls: shoot /dev-login?email=<admin> once, then shoot the /admin page; isDev panels hide (host=127.0.0.1).
 - [Grant numbers GR sequence](grant-numbers-gr-sequence.md) — comped copies use user_albums.grant_number ("GR NN"), separate from paid certificate_number; no ??1 fallbacks; mint via assignNextGrantNumber + retry.
@@ -152,3 +153,4 @@
 - [Boot-surface classifier fan-out](boot-surface-classifier.md) — admin/fan/whitelabel loader theming rides lib/bootSurface.ts (+ inline index.html twin); drop gt-admin ONLY via releaseAdminBodyClass, never raw classList.remove.
 - [Completion rebase timeout + sibling drift](completion-rebase-timeout-and-sibling-drift.md) — rebase TIMEOUT = continueMergeResolution then retry; sibling merges leave un-run dev migrations, run their post-merge.sh SQL by hand.
 - [Whitelabel invite landing + portal auth](whitelabel-invite-landing.md) — accept on a skinned press host lands /dashboard (slug must resolve to the invite's press, email_branding gate); press-client reads accept admin-kind too; undici fetch strips the Host header in tests — send x-forwarded-host.
+- [Env-var fixes need a republish to reach prod](env-var-fix-needs-republish.md) — deployment env is snapshotted at publish; completion review rejects "prod fixed" claims until the user republishes + a live verification runs.

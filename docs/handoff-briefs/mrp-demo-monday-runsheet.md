@@ -671,6 +671,7 @@ gets tested.**
     don't guess between candidates.
     
 
+// hint: Logic changed on both sides. Requires understanding intent of each change.
 ## HANDOFF: Album Overview redesign (super-admin) — hold lifted
 
 Bill approved the Overview mock. File: handoff/AdminAlbumOverview.tsx
@@ -819,4 +820,25 @@ All MOCK_ consts (album fields, service URLs) are dummy data to wire.
 
     Same law as everywhere: dressing changes only - every interaction
     the tab has today keeps working.
+    
+
+    ## Pricing page: segmented chip centering + raw codes still showing for MRP
+
+    Bill on the live dev build (Catalog -> Components -> Pricing, Aug 23):
+
+    1. Size segmented control (12" / 10" / 7"): the labels are not
+     vertically centered within the chip - the text sits off-center
+     relative to the full chip height, and the active pill looks
+     offset. Fix: the chip is one rounded rect; every segment's label
+     centers vertically AND horizontally in its segment, active pill
+     inset evenly (equal padding top/bottom). Check the same control
+     everywhere the segmented pattern shipped tonight - if the shared
+     component is off, they're all off.
+
+    2. Splatter (and sibling) pricing rows still show raw internal codes
+     ("O15 w/ O08 O09 O22", "T08 w/ black") in the MRP view. Bill has
+     flagged this before - it was supposed to be gone for MRP. Apply
+     the fix already agreed for this: MRP-facing surfaces never show
+     raw component codes. If there is any doubt about which
+     presentation replaces them, ask Bill - don't invent one.
     
