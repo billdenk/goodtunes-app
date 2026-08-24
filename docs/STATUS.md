@@ -2,6 +2,7 @@
 
 Last updated: 2026-08-23
 
+- Releases wall "New Release" pill (Bill & Andrew run-sheet cc260e2, 2026-08-24): quiet outline pill (Plus + "New Release") top-right of the "Releases." heading row in the artist portal, visible for every artist including an empty catalog (empty state copy points at it). Opens the name + format walk → creates the prepping draft under the artist's own scope (existing scope-forced POST /api/admin/albums) → lands on the project page; wall query invalidated so the draft shows as "In preview". The handoff mock's solid-blue pill and mock-only compare chooser were superseded/dropped per the run-sheet. Both themes.
 - **White-label domains LIVE end-to-end** (Aug 21 2026, Task #3279): makesvinyl.com + pressesvinyl.com apexes serve production with valid TLS (200, neutral page, no 301 to goodtunes.music); wildcard CNAME added in GoDaddy so any slug resolves. Replit issues no wildcard certs, so each press subdomain must be individually linked in the Replit Domains panel (one-time, ~1 min, zero GoDaddy edits thanks to the wildcard). Live now: mrp/memphis on both domains. Memphis Record Pressing assigned slug `memphis` — branded landing, skinned login, and estimate `/e/:token` viewer all verified on memphis.makesvinyl.com; unassigned linked subdomains show the neutral page.
 
 This file is the current-state summary for the design studio. It is kept

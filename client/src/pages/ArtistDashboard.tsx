@@ -473,7 +473,7 @@ export function ArtistTabBody({
         <DashboardTab qs={qs} artistName={artistName} preset={preset} onPresetChange={onPresetChange} />
       )}
       {/* Restructure: the wall of releases IS the catalog. */}
-      {tab === "catalog" && <ArtistReleasesWall qs={qs} onOpenAlbum={onOpenAlbum} />}
+      {tab === "catalog" && <ArtistReleasesWall qs={qs} onOpenAlbum={onOpenAlbum} artistName={artistName} personId={personId} />}
       {tab === "orders" && <OrdersTab qs={qs} />}
       {tab === "referrals" && (
         <>
