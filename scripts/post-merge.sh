@@ -12336,6 +12336,47 @@ SQL
 create_completed_template_file_events dev  "${DATABASE_URL:-}"
 create_completed_template_file_events prod "${PROD_DATABASE_URL:-}"
 
+# ── Task #3356 — file_url on completed_template_file_events ──
+# The uploaded file's reference persisted per 'uploaded' event so a
+# File-history row can be reopened in the template viewer. Idempotent:
+# ADD COLUMN IF NOT EXISTS, and the backfill only touches NULL rows —
+# newest uploaded event per slot inherits the slot's current assetUrl
+# when the file name matches (older rows honestly stay not-viewable).
+add_ctfe_file_url() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "[ctfe-file-url] $label: no URL, skipping"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 >/dev/null <<'SQL' \
+    && echo "post-merge: ctfe file_url ok on $label" \
+    || echo "post-merge: WARNING — ctfe file_url failed on $label"
+ALTER TABLE completed_template_file_events ADD COLUMN IF NOT EXISTS file_url text;
+WITH latest AS (
+  SELECT DISTINCT ON (e.album_id, e.component_id)
+         e.id, e.album_id, e.component_id, e.file_name
+  FROM completed_template_file_events e
+  WHERE e.event = 'uploaded' AND e.file_url IS NULL
+  ORDER BY e.album_id, e.component_id, e.created_at DESC, e.id DESC
+),
+comp AS (
+  SELECT c.album_id,
+         x->>'componentId' AS component_id,
+         x->>'assetUrl'    AS asset_url,
+         x->>'fileName'    AS file_name
+  FROM completed_template_checks c,
+       jsonb_array_elements(c.components) x
+)
+UPDATE completed_template_file_events e
+SET file_url = comp.asset_url
+FROM latest
+JOIN comp ON comp.album_id = latest.album_id
+         AND comp.component_id = latest.component_id
+         AND comp.file_name IS NOT DISTINCT FROM latest.file_name
+WHERE e.id = latest.id
+  AND comp.asset_url IS NOT NULL AND comp.asset_url <> '';
+SQL
+}
+add_ctfe_file_url dev  "${DATABASE_URL:-}"
+add_ctfe_file_url prod "${PROD_DATABASE_URL:-}"
+
 # ── Aug 18 2026 — measured_cut_rect_inches on press_template_specs ──
 # The GT-layer cut rect the press live-test client reads, persisted so the
 # artist-side check gets the same content-bleed trim override. Idempotent.

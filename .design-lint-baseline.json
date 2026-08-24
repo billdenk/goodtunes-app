@@ -21527,6 +21527,16 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<span className=\"inline-flex items-center gap-2 text-[13px] min-w-0\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "className={cn('inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium transition-colors flex-shrink-0', t.hoverCard)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<p className=\"text-[13px]\" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid=\"canvas-no-preview\">"
   },
   {
@@ -21617,17 +21627,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<div className=\"text-[12.5px] font-medium truncate\" style={{ color: t.ink }} title={h.fileName ?? undefined}>{h.fileName ?? 'File'}</div>"
+    "snippet": "<div className=\"text-[12.5px] font-medium truncate\" style={{ color: notViewable ? t.faint : t.ink }} title={h.fileName ?? undefined}>{h.fileName ?? 'File'}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<div className=\"text-[11.5px] mt-0.5 tabular-nums\" style={{ color: t.subink }}>{h.dims ? <>{h.dims} &middot; </> : null}{fmtWhen(h.at)}</div>"
+    "snippet": "<div className=\"text-[11.5px] mt-0.5 tabular-nums\" style={{ color: notViewable ? t.faint : t.subink }}>{h.dims ? <>{h.dims} &middot; </> : null}{fmtWhen(h.at)}</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[11px] font-semibold flex-shrink-0\" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>"
+    "snippet": "<span className=\"inline-flex items-center gap-1.5 text-[11px] font-semibold flex-shrink-0\" style={{ color: viewing && !isCurrent ? t.blue : m.color }} data-testid={`history-status-${h.event}`}>"
   },
   {
     "rule": "hardcoded-font-size",

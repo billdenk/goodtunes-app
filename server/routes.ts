@@ -34936,6 +34936,10 @@ export async function registerRoutes(
     result: string | null;
     actorLabel: string | null;
     at: string;
+    // Task #3356 — true when this uploaded event still holds its file
+    // reference (viewable revision). The raw URL never ships to the client;
+    // the viewer fetches through the gated file-event route below.
+    hasFile: boolean;
   };
   async function completedFileEvents(albumId: string): Promise<FileEventRow[]> {
     const rows = await db
@@ -34954,6 +34958,7 @@ export async function registerRoutes(
       result: r.result,
       actorLabel: r.actorLabel,
       at: new Date(r.createdAt).toISOString(),
+      hasFile: r.event === "uploaded" && !!r.fileUrl,
     }));
   }
   function deriveLocks(events: FileEventRow[]) {
@@ -35625,6 +35630,52 @@ export async function registerRoutes(
     return res.redirect(mirrored.objectPath);
   });
 
+  // Task #3356 — stream a HISTORICAL upload's file by file-event id, so a
+  // File-history row can be reopened in the template viewer. Gated exactly
+  // like the art-file route above (operator, the album's press, or the
+  // album's own artist/label partners); the event must belong to THIS album,
+  // be an 'uploaded' event, and still hold its file reference — otherwise an
+  // honest 404 (older rows predate the file_url column). Stored /objects/
+  // paths redirect same-origin; a legacy external link is mirrored into our
+  // object storage first (standing rule) and the event self-heals to the
+  // mirrored path.
+  app.get("/api/admin/albums/:id/completed-template/file-event/:eventId/file", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const [ev] = await db
+      .select()
+      .from(completedTemplateFileEvents)
+      .where(and(
+        eq(completedTemplateFileEvents.id, req.params.eventId),
+        eq(completedTemplateFileEvents.albumId, req.params.id),
+      ));
+    if (!ev || ev.event !== "uploaded" || !ev.fileUrl) {
+      return res.status(404).json({
+        message: "No stored file for that history entry — uploads made before revision viewing shipped can't be reopened.",
+      });
+    }
+    const url = ev.fileUrl;
+    if (url.startsWith("/")) return res.redirect(url);
+    if (!/^https:\/\//i.test(url)) return res.status(409).json({ message: "This revision's link can't be fetched." });
+    const mirrored = await mirrorExternalTemplatePdf(url);
+    if (!mirrored.ok) {
+      return res.status(422).json({
+        code: "revision_link_dead",
+        message: "The original file link for this revision is no longer reachable, so it can't be shown.",
+      });
+    }
+    // Self-heal: persist the mirrored object path so the next read skips
+    // the external fetch. Failure never blocks serving.
+    try {
+      await db
+        .update(completedTemplateFileEvents)
+        .set({ fileUrl: mirrored.objectPath })
+        .where(eq(completedTemplateFileEvents.id, ev.id));
+    } catch (e) {
+      console.warn("[completed-art] file-event self-heal persist failed", e);
+    }
+    return res.redirect(mirrored.objectPath);
+  });
+
   // Match a pasted (Dropbox/etc.) print-ready PDF URL to a required slot,
   // stream-scan it, run the finished-template checks, and persist the
   // result. Re-checking a slot clears any prior override (new file).
@@ -35835,6 +35886,9 @@ export async function registerRoutes(
         fileName: fileName ?? null,
         dims,
         result: component.status ?? null,
+        // Task #3356 — keep the file reference so this history row can be
+        // reopened in the template viewer later.
+        fileUrl: assetUrl,
       });
     } catch (e) {
       console.warn("[completed-art] file-event insert failed", e);
