@@ -92,6 +92,7 @@ import { getUserRole, getUserMemberships, pickPrimaryMembership } from "./auth/r
 import { resolveInviterBranding, resolvePressInviteBrand } from "./inviteBranding";
 import {
   parsePdfBoxes,
+  rasterArtboardMm,
   resolveFinishedRectPx,
   frontPanelRect,
   clampCrop,
@@ -1317,7 +1318,86 @@ export async function registerRoutes(
   // partner shell the recipient should land on after 2FA. Used by
   // TOTP/email-OTP verify so OAuth invite recipients land in their
   // partner shell (/non-profit, /artist, /label) instead of /admin.
-  async function landingPathForUser(userId: string): Promise<string> {
+  // Task #3331 — shared white-label landing resolver. Returns "/dashboard"
+  // (the MRP client portal) ONLY when ALL of:
+  //   (a) the request arrived on a white-label host whose slug resolves to
+  //       a real press (dev honors the same ?wl= override as
+  //       /api/whitelabel/branding),
+  //   (b) the account/invite is an ARTIST — operators, press staff,
+  //       manufacturer/label/etc. partners keep their normal landings,
+  //   (c) that press is the SAME press the artist is homed to
+  //       (invite default_press_id / users.default_press_id), and
+  //   (d) the press's portal skin is active (email_branding set — the same
+  //       data-driven rule as /api/whitelabel/branding, never a name check).
+  // Used by the invite-accept handler (new-account AND existing-account
+  // branches) and by landingPathForUser (post-2FA login verify legs), so the
+  // branded destination survives the second factor. Best-effort: any failure
+  // returns null and the caller keeps its legacy landing.
+  async function whitelabelArtistPortalLanding(
+    req: Request,
+    userId: string | null,
+    opts?: { role?: string | null; pressId?: string | null },
+  ): Promise<string | null> {
+    try {
+      const { parseWhitelabelHost, isValidWhitelabelSlug } = await import("@shared/whitelabelHost");
+      const rawHost = ((req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.headers.host || "").trim();
+      let wlSlug = parseWhitelabelHost(rawHost)?.slug ?? null;
+      if (!wlSlug && process.env.NODE_ENV !== "production") {
+        const qs = String((req.query as any)?.wl ?? "").trim().toLowerCase();
+        if (qs && isValidWhitelabelSlug(qs)) wlSlug = qs;
+      }
+      // Task #3339 — an ACTIVE press custom domain counts as that press's
+      // white-label host too (same landing rule as its makesvinyl slug).
+      let wlCustomPressId: string | null = null;
+      if (!wlSlug) {
+        const { isCustomWhitelabelCandidateHost } = await import("@shared/whitelabelHost");
+        const h = rawHost.toLowerCase().split(":")[0];
+        if (isCustomWhitelabelCandidateHost(h)) {
+          const cr = await db.execute<{ id: string }>(sql`
+            SELECT id FROM manufacturers
+            WHERE lower(custom_domain) = ${h} AND custom_domain_status = 'active'
+            LIMIT 1
+          `);
+          wlCustomPressId = (((cr as any).rows ?? [])[0]?.id as string | undefined) ?? null;
+        }
+      }
+      if (!wlSlug && !wlCustomPressId) return null;
+      let role = opts?.role ?? null;
+      if (!role && userId) {
+        const { getUserRole } = await import("./auth/roles");
+        role = ((await getUserRole(userId))?.role as string | undefined) ?? null;
+      }
+      if (role !== "artist") return null;
+      let pressId = opts?.pressId ?? null;
+      if (!pressId && userId) {
+        // An artist's press home lives on their Person row (the invite
+        // grant stamps people.default_press_id / invited_by_press_id).
+        const pr = await db.execute<{ press_id: string | null }>(sql`
+          SELECT COALESCE(p.default_press_id, p.invited_by_press_id) AS press_id
+          FROM users u JOIN people p ON p.id = u.role_scope_id
+          WHERE u.id = ${userId} LIMIT 1
+        `);
+        pressId = (((pr as any).rows ?? [])[0]?.press_id as string | null) ?? null;
+      }
+      if (!pressId) return null;
+      const r = await db.execute<{ skinned: boolean }>(sql`
+        SELECT (email_branding IS NOT NULL) AS skinned
+        FROM manufacturers
+        WHERE id = ${pressId}
+          AND ${wlCustomPressId
+            ? sql`id = ${wlCustomPressId}`
+            : sql`(lower(white_label_slug) = ${wlSlug} OR lower(previous_white_label_slug) = ${wlSlug})`}
+        LIMIT 1
+      `);
+      const m = ((r as any).rows ?? [])[0];
+      return m?.skinned ? "/dashboard" : null;
+    } catch (e: any) {
+      console.warn(`[invite] whitelabel landing resolution failed: ${e?.message}`);
+      return null;
+    }
+  }
+
+  async function landingPathForUser(userId: string, req?: Request): Promise<string> {
     try {
       // Task #1038 — land on the account's HIGHEST-PRIVILEGED hat. At fresh
       // login no active hat is chosen yet, so getUserRole resolves the
@@ -1326,6 +1406,15 @@ export async function registerRoutes(
       // resolve to their one role exactly as the old SELECT role did.
       const { getUserRole } = await import("./auth/roles");
       const role = (await getUserRole(userId))?.role as string | undefined;
+      // Task #3331 — an artist homed to the skinned press of the host
+      // they're signing in on lands in the white-label client portal.
+      // Applies wherever the caller can hand us the request (login verify
+      // legs, trusted-device/skip-2FA bypasses), so the branded destination
+      // survives the second factor. Artist-only by construction.
+      if (req && role === "artist") {
+        const wl = await whitelabelArtistPortalLanding(req, userId, { role });
+        if (wl) return wl;
+      }
       if (role === "non_profit") return "/non-profit";
       // Task #859 — an `artist` partner lands in their scoped quote
       // sandbox (their own releases + the package/quote builder), not
@@ -1574,7 +1663,7 @@ export async function registerRoutes(
         await storage.createAuthToken(token, user.id, "admin");
         const u = await storage.getUser(user.id);
         const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
-        const landingPath = await landingPathForUser(user.id);
+        const landingPath = await landingPathForUser(user.id, req);
         return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath, kind: "admin" });
       }
       // Task #2795 — reviewer/demo account bypass. Accounts provisioned
@@ -1589,7 +1678,7 @@ export async function registerRoutes(
         await storage.createAuthToken(token, user.id, "admin");
         const u = await storage.getUser(user.id);
         const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
-        const landingPath = await landingPathForUser(user.id);
+        const landingPath = await landingPathForUser(user.id, req);
         return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath, kind: "admin" });
       }
       req.session.pendingTotpUserId = user.id;
@@ -2824,7 +2913,7 @@ export async function registerRoutes(
         req.session.userId = userId;
         req.session.kind = "admin";
         req.session.pendingTotpUserId = undefined;
-        const landingPath = await landingPathForUser(userId);
+        const landingPath = await landingPathForUser(userId, req);
         const params = new URLSearchParams({ oauth: provider, next: landingPath });
         return res.redirect(`/login?${params.toString()}#token=${encodeURIComponent(token)}`);
       }
@@ -3331,7 +3420,7 @@ export async function registerRoutes(
     // Task #78 — return a role-scoped landing path so the login UI can
     // drop OAuth-invite recipients into their partner shell directly
     // (e.g. /non-profit) instead of bouncing through /admin.
-    const landingPath = await landingPathForUser(userId);
+    const landingPath = await landingPathForUser(userId, req);
     return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath });
   });
 
@@ -3441,7 +3530,7 @@ export async function registerRoutes(
     }
     const u = await storage.getUser(userId);
     const photoUrl = u ? await storage.getProfilePhoto(u.id) : null;
-    const landingPath = await landingPathForUser(userId);
+    const landingPath = await landingPathForUser(userId, req);
     return res.json({ ...shapeAdmin(u, photoUrl), token, landingPath });
   });
 
@@ -27332,6 +27421,18 @@ export async function registerRoutes(
   // Task #933 — also resolves the scope's display name + the inviter's
   // welcome note so the first-visit welcome page can greet the partner
   // by their org/artist name and surface the note their inviter wrote.
+  // Task #3331 — server-authoritative white-label steer decision. The
+  // client guardrail (WhitelabelArtistSteer) asks THIS instead of
+  // re-deriving eligibility: it answers "/dashboard" only via the shared
+  // resolver's full gate (artist role + homed to the SAME press this host's
+  // slug resolves to + portal skin active). Foreign or unhomed artists,
+  // operators, and press users get { landing: null } and are never steered.
+  app.get("/api/me/whitelabel-landing", requireAdmin, async (req, res) => {
+    const userId = req.session.userId!;
+    const landing = await whitelabelArtistPortalLanding(req, userId);
+    res.json({ landing });
+  });
+
   app.get("/api/me/role", requireAdmin, async (req, res) => {
     const userId = req.session.userId!;
     const info = await getUserRole(userId);
@@ -29915,6 +30016,16 @@ export async function registerRoutes(
         req.session.kind = "admin";
         const tok = generateToken();
         await storage.createAuthToken(tok, byEmail.id, "admin");
+        // Task #3331 — existing-account accepts honor the same branded
+        // landing contract as fresh accounts: on the invite press's skinned
+        // white-label host, an account whose EFFECTIVE role is artist lands
+        // in the client portal. Accounts whose primary hat is a
+        // higher-priority non-artist membership keep their normal landing
+        // (the resolver re-derives role from memberships, not the invite).
+        // The pending-2FA path preserves this too: the verify endpoints
+        // mint their landing via landingPathForUser(userId, req), which
+        // applies the identical override.
+        const wl = await whitelabelArtistPortalLanding(req, byEmail.id);
         return res.json({
           id: byEmail.id,
           username: byEmail.username,
@@ -29925,7 +30036,8 @@ export async function registerRoutes(
           role: invite.role,
           existingAccount: true,
           token: tok,
-          landingPath: await computeInviteLandingPath(invite),
+          landingPath: wl ?? (await computeInviteLandingPath(invite)),
+          pressPortal: !!wl,
         });
       };
       if (!_forceProductionAuth && process.env.NODE_ENV !== "production") return fullSignin();
@@ -29996,7 +30108,35 @@ export async function registerRoutes(
     // Invite role drives the landing path (the grant helper already
     // applied the matching per-user permission overrides + press tier);
     // logic shared with the existing-account branch above.
-    const landingPath = await computeInviteLandingPath(invite);
+    let landingPath = await computeInviteLandingPath(invite);
+
+    // Task #3331 — press-invited artists accepting ON a white-label host
+    // (memphis.makesvinyl.com) must stay inside the press-branded client
+    // portal, not drop into GoodTunes chrome. Gate strictly on: (a) the
+    // request arrived on a white-label host whose slug resolves to the SAME
+    // press the invite is homed to, and (b) that press's portal skin is
+    // active (email_branding set — same data-driven rule as
+    // /api/whitelabel/branding, never a press-name check). A press without
+    // the skin keeps today's landing; the branded welcome fallback on the
+    // client handles it gracefully. Accepts on GoodTunes hosts are
+    // unchanged. Best-effort: a lookup failure never blocks the accept.
+    // Shared resolver gates on: white-label host slug → the SAME press the
+    // invite is homed to (default_press_id, both real MRP admin invites and
+    // "View As Press" god-mode invites stamp it; manufacturer referrer is
+    // the fallback for older rows), portal skin active (email_branding), and
+    // an ARTIST invite — press staff / operator / other partner invites keep
+    // their normal landings.
+    const invitePressId =
+      ((invite as any).defaultPressId as string | null) ??
+      (((invite as any).referrerKind === "manufacturer" && (invite as any).referrerScopeId)
+        ? String((invite as any).referrerScopeId)
+        : null);
+    const wlLanding = await whitelabelArtistPortalLanding(req, user.id, {
+      role: String(invite.role ?? ""),
+      pressId: invitePressId,
+    });
+    const pressPortalLanding = !!wlLanding;
+    if (wlLanding) landingPath = wlLanding;
 
     res.json({
       id: user.id,
@@ -30008,6 +30148,10 @@ export async function registerRoutes(
       role: invite.role,
       token,
       landingPath,
+      // Task #3331 — true when landingPath points into the white-label
+      // client portal (accept happened on the invite press's branded host
+      // with the portal skin active).
+      pressPortal: pressPortalLanding,
     });
   });
 
@@ -34408,7 +34552,11 @@ export async function registerRoutes(
   // Only ever runs against our own objects (never a pasted external URL —
   // those get the client's generic PDF tile). Returns null on any failure;
   // the check itself never fails because a preview couldn't be produced.
-  const PREVIEW_MAX_SOURCE_BYTES = 300 * 1024 * 1024;
+  // Task #3351 — raised from 300MB so 350–530MB print-ready masters still
+  // get server previews (pdftoppm works off disk; only /tmp space matters),
+  // giving the artist Test page a full-artboard fallback when the browser
+  // pdf.js render can't cope on low-memory devices.
+  const PREVIEW_MAX_SOURCE_BYTES = 600 * 1024 * 1024;
 
   // Task #3020 — geometry for trim-area previews lives in
   // server/completedArtPreview.ts (pure + unit-tested). The only IO here
@@ -34433,17 +34581,34 @@ export async function registerRoutes(
   // labels also rasterize page 2 (Side B) → `previewUrl2`. Only ever runs
   // against our own objects. Returns nulls on any failure; the check itself
   // never fails because a preview couldn't be produced.
+  // Task #3351 — also returns a FULL-ARTBOARD raster (`fullPreviewUrl`,
+  // uncropped, bleed/flaps included) plus the page-1 artboard size in mm,
+  // so the artist Test page has a lightweight seatable fallback when the
+  // client-side pdf.js render fails on very large masters. When no crop was
+  // applied the trim preview IS the full page and the same object is reused.
   async function generateCompletedPreview(
     objectPath: string,
     spec?: FinishedComponentSpec | null,
-  ): Promise<{ previewUrl: string | null; previewUrl2: string | null }> {
+  ): Promise<{
+    previewUrl: string | null;
+    previewUrl2: string | null;
+    fullPreviewUrl: string | null;
+    fullPreviewWMm: number | null;
+    fullPreviewHMm: number | null;
+  }> {
     const fsp = await import("node:fs/promises");
     const os = await import("node:os");
     const path = await import("node:path");
     const { execFile } = await import("node:child_process");
     const { promisify } = await import("node:util");
     const run = promisify(execFile);
-    const none = { previewUrl: null, previewUrl2: null };
+    const none = {
+      previewUrl: null,
+      previewUrl2: null,
+      fullPreviewUrl: null,
+      fullPreviewWMm: null,
+      fullPreviewHMm: null,
+    };
     let tmpDir: string | null = null;
     try {
       const file = await objectStorage.getObjectEntityFile(objectPath);
@@ -34485,7 +34650,7 @@ export async function registerRoutes(
         return finalPath;
       };
 
-      const renderPage = async (page: number): Promise<string | null> => {
+      const renderPage = async (page: number): Promise<{ url: string | null }> => {
         const outBase = path.join(tmpDir!, `page${page}`);
         try {
           await run(
@@ -34494,11 +34659,11 @@ export async function registerRoutes(
             { timeout: 60_000 },
           );
         } catch {
-          return null; // e.g. the page doesn't exist
+          return { url: null }; // e.g. the page doesn't exist
         }
         const files = await fsp.readdir(tmpDir!);
         const pageFile = files.find((f) => f.startsWith(`page${page}-`) && f.endsWith(".png"));
-        if (!pageFile) return null;
+        if (!pageFile) return { url: null };
 
         const pagePng = path.join(tmpDir!, pageFile);
         let pipeline = sharp(pagePng);
@@ -34556,15 +34721,71 @@ export async function registerRoutes(
           .resize(1000, 1000, { fit: "inside", withoutEnlargement: true })
           .png()
           .toBuffer();
-        return storePng(png);
+        const url = await storePng(png);
+        return { url };
       };
 
-      const previewUrl = await renderPage(1);
+      // Task #3351 — FULL-ARTBOARD raster in the SAME frame pdf.js renders:
+      // pdf.js draws the page viewport = CropBox (MediaBox when absent) with
+      // the page's own /Rotate applied, so the raster runs its OWN pdftoppm
+      // pass with `-cropbox` (poppler falls back to the MediaBox when the
+      // page has no CropBox, and emits the ROTATED raster — the same
+      // semantics). The persisted mm are derived from the rendered raster's
+      // pixel dimensions at the known DPI (rasterArtboardMm), so the image
+      // and its real-world size describe the same rectangle BY CONSTRUCTION
+      // — rotation/framing can never disagree. The trim-preview raster
+      // above deliberately stays MediaBox-framed (its crop math in
+      // resolveFinishedRectPx maps boxes against that frame). Best-effort:
+      // any failure returns nulls.
+      const FULL_RASTER_DPI = 96;
+      const renderFullArtboard = async (): Promise<{
+        url: string | null;
+        wMm: number | null;
+        hMm: number | null;
+      }> => {
+        const noneFull = { url: null, wMm: null, hMm: null };
+        try {
+          const outBase = path.join(tmpDir!, "fullart1");
+          await run(
+            "pdftoppm",
+            ["-f", "1", "-l", "1", "-png", "-r", String(FULL_RASTER_DPI), "-cropbox", pdfPath, outBase],
+            { timeout: 60_000 },
+          );
+          const files = await fsp.readdir(tmpDir!);
+          const pageFile = files.find((f) => f.startsWith("fullart1-") && f.endsWith(".png"));
+          if (!pageFile) return noneFull;
+          const fullPagePath = path.join(tmpDir!, pageFile);
+          // mm of the SAME rendered raster — the client only seats the
+          // fallback when both the image and its real-world size are known.
+          const meta2 = await sharp(fullPagePath).metadata();
+          const mm = rasterArtboardMm(meta2.width, meta2.height, FULL_RASTER_DPI);
+          if (!mm) return noneFull;
+          const fullPng = await sharp(fullPagePath)
+            .resize(1600, 1600, { fit: "inside", withoutEnlargement: true })
+            .png()
+            .toBuffer();
+          const url = await storePng(fullPng);
+          if (!url) return noneFull;
+          return { url, wMm: mm.wMm, hMm: mm.hMm };
+        } catch (e) {
+          console.warn(`[completed-art] full-artboard raster failed for ${objectPath}`, e);
+          return noneFull;
+        }
+      };
+
+      const page1 = await renderPage(1);
       // Center labels: also render Side B (page 2) so the preview dialog
       // can show both faces.
       const previewUrl2 =
-        previewUrl && componentId === "labels" ? await renderPage(2) : null;
-      return { previewUrl, previewUrl2 };
+        page1.url && componentId === "labels" ? (await renderPage(2)).url : null;
+      const full = await renderFullArtboard();
+      return {
+        previewUrl: page1.url,
+        previewUrl2,
+        fullPreviewUrl: full.url,
+        fullPreviewWMm: full.wMm,
+        fullPreviewHMm: full.hMm,
+      };
     } catch (e) {
       console.warn(`[completed-art] preview generation failed for ${objectPath}`, e);
       return none;
@@ -34715,6 +34936,10 @@ export async function registerRoutes(
     result: string | null;
     actorLabel: string | null;
     at: string;
+    // Task #3356 — true when this uploaded event still holds its file
+    // reference (viewable revision). The raw URL never ships to the client;
+    // the viewer fetches through the gated file-event route below.
+    hasFile: boolean;
   };
   async function completedFileEvents(albumId: string): Promise<FileEventRow[]> {
     const rows = await db
@@ -34733,6 +34958,7 @@ export async function registerRoutes(
       result: r.result,
       actorLabel: r.actorLabel,
       at: new Date(r.createdAt).toISOString(),
+      hasFile: r.event === "uploaded" && !!r.fileUrl,
     }));
   }
   function deriveLocks(events: FileEventRow[]) {
@@ -34875,7 +35101,18 @@ export async function registerRoutes(
   // this is a read (no CSRF concern), and operators who signed in via a
   // session cookie only (OAuth / dev-login, no localStorage token) were
   // 401'd by the bearer-only guard → "Couldn't download …" on every track.
-  app.get("/api/admin/albums/:id/masters/:songId/download", requireAdmin, async (req, res) => {
+  // Task #3335 — prod per-track downloads failed while the zip worked. The
+  // zip's PROVEN delivery is: mint a short-lived signed link (authed POST),
+  // then let a plain anchor navigation stream the response via the
+  // browser's own download manager. The per-track flow instead fetch()'d
+  // the whole (often multi-hundred-MB) WAV into a JS Blob through the edge
+  // proxy, which aborted large single streams in prod (dev, no edge proxy,
+  // always worked). Per-track now mirrors the zip handoff exactly: this GET
+  // accepts the same stateless HMAC ?dt= token (albumId + songId + userId +
+  // expiry), and stream errors before headers ship return reason-coded
+  // JSON, never an empty body (empty body + HTTP/2's empty statusText was
+  // the bare "Download failed." toast).
+  async function streamMasterTrack(req: Request, res: Response) {
     if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
     const song = await storage.getSongById(req.params.songId);
     if (!song || song.albumId !== req.params.id) return res.status(404).json({ message: "Song not found on this album." });
@@ -34919,12 +35156,74 @@ export async function registerRoutes(
       res.setHeader("X-Master-Source", resolved.source);
       resolved.file.createReadStream().on("error", (e: any) => {
         console.error("[masters-download] stream error", e);
-        if (!res.headersSent) res.status(500).end();
-        else res.end();
+        // A pre-headers failure must carry a JSON body — an empty 500 body
+        // + HTTP/2's empty statusText rendered a bare "Download failed."
+        // toast (Task #3335). Mid-stream we can only abort so the client
+        // sees a failed (not silently-truncated) download.
+        if (!res.headersSent) {
+          res.status(500).json({ code: "stream_error", message: "Couldn't stream that master from storage — try again." });
+        } else {
+          res.destroy(e);
+        }
       }).pipe(res);
     } catch (e) {
       console.error("[masters-download] failed", e);
-      return res.status(500).json({ message: "Couldn't stream that master — try again." });
+      if (!res.headersSent) return res.status(500).json({ code: "stream_error", message: "Couldn't stream that master — try again." });
+      res.destroy(e as any);
+    }
+  }
+
+  app.get("/api/admin/albums/:id/masters/:songId/download", (req, res) => {
+    const dt = typeof req.query.dt === "string" ? req.query.dt : null;
+    if (dt) {
+      // Signed-link path (plain anchor navigation → browser streams to
+      // disk). Identity comes from the verified token; the operator/press
+      // gate re-runs inside streamMasterTrack.
+      const uid = verifyMasterTrackToken(dt, req.params.id, req.params.songId);
+      if (!uid) return res.status(401).json({ message: "Download link expired — click download again." });
+      (req as any).session = (req as any).session ?? {};
+      (req as any).session.userId = uid;
+      return void streamMasterTrack(req, res);
+    }
+    // Direct call: same session-OR-bearer guard as before (Task #3256).
+    return void requireAdmin(req, res, () => void streamMasterTrack(req, res));
+  });
+
+  // Task #3335 — mint the short-lived per-track download link. Reason-coded
+  // failures (no_master / external / missing_object) surface HERE, at authed
+  // fetch time, so the anchor navigation itself almost never fails.
+  app.post("/api/admin/albums/:id/masters/:songId/download-link", requireAdmin, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const song = await storage.getSongById(req.params.songId);
+    if (!song || song.albumId !== req.params.id) return res.status(404).json({ message: "Song not found on this album." });
+    try {
+      const all = masterCandidates(song);
+      if (all.length === 0) {
+        return res.status(404).json({ code: "no_master", message: MASTER_FAILURE_MESSAGES.no_master });
+      }
+      const candidates = all.filter((c) => c.cls === "object");
+      if (candidates.length === 0) {
+        return res.status(422).json({ code: "external", message: MASTER_FAILURE_MESSAGES.external });
+      }
+      let found = false;
+      for (const c of candidates) {
+        try {
+          await objectStorage.getObjectEntityFile(c.url);
+          found = true;
+          break;
+        } catch (e) {
+          if (e instanceof ObjectNotFoundError) continue;
+          throw e;
+        }
+      }
+      if (!found) {
+        return res.status(404).json({ code: "missing_object", message: MASTER_FAILURE_MESSAGES.missing_object });
+      }
+      const token = signMasterTrackToken(req.params.id, req.params.songId, req.session.userId!);
+      res.json({ url: `/api/admin/albums/${req.params.id}/masters/${req.params.songId}/download?dt=${encodeURIComponent(token)}` });
+    } catch (e) {
+      console.error("[masters-download-link] failed", e);
+      return res.status(500).json({ message: "Couldn't prepare that download — try again." });
     }
   });
 
@@ -34968,6 +35267,32 @@ export async function registerRoutes(
     try {
       const j = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
       if (j.a !== albumId) return null;
+      if (typeof j.e !== "number" || Date.now() > j.e) return null;
+      return typeof j.u === "string" && j.u ? j.u : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Task #3335 — per-TRACK variant of the same stateless HMAC token:
+  // albumId + songId + userId + expiry, download-only, ~2-minute TTL.
+  function signMasterTrackToken(albumId: string, songId: string, userId: string): string {
+    const exp = Date.now() + MASTERS_ZIP_LINK_TTL_MS;
+    const payload = Buffer.from(JSON.stringify({ a: albumId, s: songId, u: userId, e: exp })).toString("base64url");
+    return `${payload}.${mastersZipHmac(payload)}`;
+  }
+  function verifyMasterTrackToken(token: string, albumId: string, songId: string): string | null {
+    const dot = token.lastIndexOf(".");
+    if (dot <= 0) return null;
+    const payload = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const expect = mastersZipHmac(payload);
+    const a = Buffer.from(sig);
+    const b = Buffer.from(expect);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+    try {
+      const j = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+      if (j.a !== albumId || j.s !== songId) return null;
       if (typeof j.e !== "number" || Date.now() > j.e) return null;
       return typeof j.u === "string" && j.u ? j.u : null;
     } catch {
@@ -35227,6 +35552,130 @@ export async function registerRoutes(
     }
   });
 
+  // Task #3348 — serve the artist's own CHECKED ART file for a slot (the
+  // uploaded/pasted print-ready PDF, NOT the press template). The artist
+  // art-test page renders this client-side with pdf.js so the FULL artboard
+  // (bleed included) seats over the template exactly like the press
+  // live-test view — never the trim-cropped previewUrl tile. Same scoping
+  // as the template-file route above: requireOperatorOrAlbumPress admits
+  // operators, the album's press, and the album's own artist/label
+  // partners. Unlike POST /download/:componentId this is a plain read —
+  // it never writes a file event and never locks the slot.
+  //
+  // Stored /objects/ art redirects (public-ACL, same-origin). A LEGACY row
+  // whose check predates the Task #3184 mirroring rule still holds the raw
+  // external link — mirror it into our object storage NOW (standing rule:
+  // external file links never persist as external URLs), self-heal the
+  // stored component, and serve the mirrored copy. If the external link is
+  // dead, answer 422 honestly so the client can show "preview unavailable"
+  // instead of silently seating the cropped preview.
+  app.get("/api/admin/albums/:id/completed-template/art-file/:componentId", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const componentId = decodeURIComponent(req.params.componentId);
+    const ctx = await resolveCompletedContext(req.params.id);
+    const component = ((ctx?.row?.components ?? []) as CompletedTemplateComponent[]).find(
+      (c) => c.componentId === componentId && c.assetUrl,
+    );
+    if (!ctx || !component?.assetUrl) return res.status(404).json({ message: "No art file on that slot yet." });
+    const url = component.assetUrl;
+    if (url.startsWith("/")) return res.redirect(url);
+    if (!/^https:\/\//i.test(url)) return res.status(409).json({ message: "This art file's link can't be fetched." });
+    const mirrored = await mirrorExternalTemplatePdf(url);
+    if (!mirrored.ok) {
+      return res.status(422).json({
+        code: "art_link_dead",
+        message:
+          "The original file link is no longer reachable, so the full-artboard preview can't be shown. Upload the art file again (or paste a fresh link) to restore it.",
+      });
+    }
+    // Self-heal: persist the mirrored object path (and, best-effort, the
+    // trim previews the legacy row never had) so the next read skips the
+    // external fetch entirely. Persistence failure never blocks serving.
+    try {
+      const required = await resolveRequired(ctx.vendorId, ctx.config);
+      const spec = required.find((r) => r.id === componentId) ?? null;
+      let previewUrl = component.previewUrl ?? null;
+      let previewUrl2 = component.previewUrl2 ?? null;
+      let fullPreviewUrl = component.fullPreviewUrl ?? null;
+      let fullPreviewWMm = component.fullPreviewWMm ?? null;
+      let fullPreviewHMm = component.fullPreviewHMm ?? null;
+      if (spec && (!previewUrl || !fullPreviewUrl)) {
+        try {
+          const previews = await generateCompletedPreview(mirrored.objectPath, spec);
+          previewUrl = previews.previewUrl ?? previewUrl;
+          previewUrl2 = previews.previewUrl2 ?? previewUrl2;
+          fullPreviewUrl = previews.fullPreviewUrl ?? fullPreviewUrl;
+          fullPreviewWMm = previews.fullPreviewWMm ?? fullPreviewWMm;
+          fullPreviewHMm = previews.fullPreviewHMm ?? fullPreviewHMm;
+        } catch {
+          /* previews stay as-is — the full-bleed serve below is the point */
+        }
+      }
+      const healed = ((ctx.row?.components ?? []) as CompletedTemplateComponent[]).map((c) =>
+        c.componentId === componentId
+          ? { ...c, assetUrl: mirrored.objectPath, previewUrl, previewUrl2, fullPreviewUrl, fullPreviewWMm, fullPreviewHMm }
+          : c,
+      );
+      const { components, status } = retagCompleted(healed, required.map((r) => r.id));
+      await storage.saveCompletedTemplateCheck({
+        albumId: req.params.id,
+        vendorId: ctx.vendorId,
+        config: ctx.config,
+        components,
+        status,
+      });
+    } catch (e) {
+      console.warn("[completed-art] art-file self-heal persist failed", e);
+    }
+    return res.redirect(mirrored.objectPath);
+  });
+
+  // Task #3356 — stream a HISTORICAL upload's file by file-event id, so a
+  // File-history row can be reopened in the template viewer. Gated exactly
+  // like the art-file route above (operator, the album's press, or the
+  // album's own artist/label partners); the event must belong to THIS album,
+  // be an 'uploaded' event, and still hold its file reference — otherwise an
+  // honest 404 (older rows predate the file_url column). Stored /objects/
+  // paths redirect same-origin; a legacy external link is mirrored into our
+  // object storage first (standing rule) and the event self-heals to the
+  // mirrored path.
+  app.get("/api/admin/albums/:id/completed-template/file-event/:eventId/file", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const [ev] = await db
+      .select()
+      .from(completedTemplateFileEvents)
+      .where(and(
+        eq(completedTemplateFileEvents.id, req.params.eventId),
+        eq(completedTemplateFileEvents.albumId, req.params.id),
+      ));
+    if (!ev || ev.event !== "uploaded" || !ev.fileUrl) {
+      return res.status(404).json({
+        message: "No stored file for that history entry — uploads made before revision viewing shipped can't be reopened.",
+      });
+    }
+    const url = ev.fileUrl;
+    if (url.startsWith("/")) return res.redirect(url);
+    if (!/^https:\/\//i.test(url)) return res.status(409).json({ message: "This revision's link can't be fetched." });
+    const mirrored = await mirrorExternalTemplatePdf(url);
+    if (!mirrored.ok) {
+      return res.status(422).json({
+        code: "revision_link_dead",
+        message: "The original file link for this revision is no longer reachable, so it can't be shown.",
+      });
+    }
+    // Self-heal: persist the mirrored object path so the next read skips
+    // the external fetch. Failure never blocks serving.
+    try {
+      await db
+        .update(completedTemplateFileEvents)
+        .set({ fileUrl: mirrored.objectPath })
+        .where(eq(completedTemplateFileEvents.id, ev.id));
+    } catch (e) {
+      console.warn("[completed-art] file-event self-heal persist failed", e);
+    }
+    return res.redirect(mirrored.objectPath);
+  });
+
   // Match a pasted (Dropbox/etc.) print-ready PDF URL to a required slot,
   // stream-scan it, run the finished-template checks, and persist the
   // result. Re-checking a slot clears any prior override (new file).
@@ -35288,6 +35737,9 @@ export async function registerRoutes(
     let fileName: string | null;
     let previewUrl: string | null = null;
     let previewUrl2: string | null = null;
+    let fullPreviewUrl: string | null = null;
+    let fullPreviewWMm: number | null = null;
+    let fullPreviewHMm: number | null = null;
     let isOwnObject = /^\/objects\/uploads\/[a-zA-Z0-9._-]+$/.test(body.data.url);
     if (isOwnObject) {
       try {
@@ -35307,6 +35759,9 @@ export async function registerRoutes(
       const previews = await generateCompletedPreview(body.data.url, spec);
       previewUrl = previews.previewUrl;
       previewUrl2 = previews.previewUrl2;
+      fullPreviewUrl = previews.fullPreviewUrl;
+      fullPreviewWMm = previews.fullPreviewWMm;
+      fullPreviewHMm = previews.fullPreviewHMm;
     } else {
       // Task #3184 — pasted external links are MIRRORED into our object
       // storage at check time (standing rule: external file links never
@@ -35325,6 +35780,9 @@ export async function registerRoutes(
         const previews = await generateCompletedPreview(mirrored.objectPath, spec);
         previewUrl = previews.previewUrl;
         previewUrl2 = previews.previewUrl2;
+        fullPreviewUrl = previews.fullPreviewUrl;
+        fullPreviewWMm = previews.fullPreviewWMm;
+        fullPreviewHMm = previews.fullPreviewHMm;
       } else {
         const fetched = await fetchAndScanPdf(body.data.url);
         if (!fetched.ok) return res.status(400).json({ message: fetched.error });
@@ -35394,6 +35852,9 @@ export async function registerRoutes(
       fileName,
       previewUrl,
       previewUrl2,
+      fullPreviewUrl,
+      fullPreviewWMm,
+      fullPreviewHMm,
       checks,
       status: rollupStatus(checks),
       override: null,
@@ -35425,6 +35886,9 @@ export async function registerRoutes(
         fileName: fileName ?? null,
         dims,
         result: component.status ?? null,
+        // Task #3356 — keep the file reference so this history row can be
+        // reopened in the template viewer later.
+        fileUrl: assetUrl,
       });
     } catch (e) {
       console.warn("[completed-art] file-event insert failed", e);

@@ -141,6 +141,9 @@ type FileEventRow = {
   result: string | null;
   actorLabel: string | null;
   at: string;
+  // Task #3356 — true when this uploaded event still holds its file
+  // reference (viewable revision); older rows predate the column.
+  hasFile?: boolean;
 };
 
 type LockState = { locked: boolean; pressName: string | null; downloadedAt: string | null };
@@ -224,6 +227,10 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   const [replaceMethod, setReplaceMethod] = useState<'template' | 'images'>('template');
   const [replacePanel, setReplacePanel] = useState<RawPanelId>('front');
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
+  // Task #3356 — the File-history revision being VIEWED (null = current
+  // file). Clicking an older "uploaded" row loads that revision's PDF into
+  // the viewer; the Current row (or the banner's one-click return) restores.
+  const [revision, setRevision] = useState<FileEventRow | null>(null);
   const check = useMutation({
     mutationFn: async (vars: { url: string; fileName: string }) => {
       const r = await apiRequest('POST', `/api/admin/albums/${albumId}/completed-template/check`, {
@@ -235,6 +242,7 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
     },
     onSuccess: (resp) => {
       queryClient.setQueryData(['/api/admin/albums', albumId, 'completed-template'], resp);
+      setRevision(null); // a fresh upload is the new Current — never keep an old revision on screen
       setShowDrop(false);
       setUploadOpen(true);
       toast({ title: 'Checked', description: 'Your file was checked against the press template.' });
@@ -343,48 +351,86 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
     })();
   };
 
-  // ── The artist's checked art, at real measured size where possible: own
-  // stored PDF → pdf.js render with mm; otherwise the server preview raster
-  // (contain-fit by pixel aspect); otherwise an honest "no preview".
+  // ── The artist's checked art at real measured size, ALWAYS the full
+  // artboard (Task #3348): the stored art PDF is fetched through the authed
+  // artist-scoped art-file endpoint (it self-heals legacy external-link rows
+  // by mirroring them server-side) and rendered with pdf.js — the exact
+  // pipeline the press live-test uses, so both surfaces seat identically.
+  //
+  // Deliberately NO fallback to component.previewUrl here: that raster is
+  // the TRIM/front-panel crop (generateCompletedPreview), and seating it
+  // looked like "only the album cover printed, back panel empty". When the
+  // full-bleed render genuinely can't be produced we say so honestly.
   const [art, setArt] = useState<ViewerArt>(null);
+  const [artUnavailable, setArtUnavailable] = useState<string | null>(null);
+  // Task #3351 — true when `art` is the server-generated full-artboard
+  // raster fallback (still genuinely full bleed), not the live pdf.js render.
+  const [artIsServerRaster, setArtIsServerRaster] = useState(false);
   const assetUrl = component?.assetUrl ?? null;
-  const previewUrl = component?.previewUrl ?? null;
   const artFileName = component?.fileName ?? null;
+  // Task #3351 — server-persisted FULL-ARTBOARD raster (uncropped, bleed
+  // included — NOT the trim-cropped previewUrl) + measured artboard mm, so
+  // very large masters that defeat the in-browser pdf.js render still get a
+  // genuinely full-bleed, correctly seated preview.
+  const fullPreviewUrl = component?.fullPreviewUrl ?? null;
+  const fullPreviewWMm = component?.fullPreviewWMm ?? null;
+  const fullPreviewHMm = component?.fullPreviewHMm ?? null;
+  // Task #3356 — a slot switch always lands on the CURRENT file.
+  useEffect(() => { setRevision(null); }, [componentId]);
+  const revisionId = revision?.id ?? null;
+  const revisionFileName = revision?.fileName ?? null;
   useEffect(() => {
     let cancelled = false;
     setArt(null);
+    setArtUnavailable(null);
+    setArtIsServerRaster(false);
+    if (!albumId || !componentId || (!assetUrl && !revisionId)) return;
     void (async () => {
-      if (assetUrl && /^\/objects\//.test(assetUrl) && /\.pdf(\?|$)/i.test(assetUrl)) {
-        try {
-          const r = await fetch(assetUrl, { credentials: 'include' });
-          if (r.ok) {
-            const doc = await (await loadPdfjs()).getDocument({ data: await r.arrayBuffer() }).promise;
-            const { img, wMm, hMm } = await renderPage(doc, 1);
-            if (!cancelled) setArt({ name: artFileName ?? 'Art', img, wMm, hMm });
-            return;
-          }
-        } catch {
-          // fall through to the server preview raster
+      try {
+        // Task #3356 — while a File-history revision is selected, the PDF
+        // loads from the gated file-event route instead of the current
+        // art-file route; the client-side render pipeline is identical.
+        const path = revisionId
+          ? `/api/admin/albums/${albumId}/completed-template/file-event/${encodeURIComponent(revisionId)}/file`
+          : `/api/admin/albums/${albumId}/completed-template/art-file/${encodeURIComponent(componentId)}`;
+        const r = await apiRequest('GET', path);
+        const doc = await (await loadPdfjs()).getDocument({ data: await r.arrayBuffer() }).promise;
+        const { img, wMm, hMm } = await renderPage(doc, 1);
+        if (!cancelled) setArt({ name: (revisionId ? revisionFileName : artFileName) ?? 'Art', img, wMm, hMm });
+      } catch (e: any) {
+        if (cancelled) return;
+        // Task #3351 — the in-browser render failed (typically a 350–530MB
+        // master on a low-memory device). Fall back to the server-generated
+        // FULL-ARTBOARD raster when one was persisted at check time — it is
+        // genuinely full bleed (never the trim crop) and carries its own
+        // measured artboard mm so it seats identically. (Current file only —
+        // a historical revision has no persisted raster of its own.)
+        if (!revisionId && fullPreviewUrl && fullPreviewWMm && fullPreviewHMm) {
+          setArt({ name: artFileName ?? 'Art', img: fullPreviewUrl, wMm: fullPreviewWMm, hMm: fullPreviewHMm });
+          setArtIsServerRaster(true);
+          return;
         }
-      }
-      if (previewUrl) {
-        const image = new Image();
-        image.onload = () => {
-          if (!cancelled) setArt({ name: artFileName ?? 'Art', img: previewUrl, wMm: null, hMm: null, pxAspect: image.naturalWidth / Math.max(1, image.naturalHeight) });
-        };
-        image.onerror = () => {
-          if (!cancelled) setArt({ name: artFileName ?? 'Art', img: previewUrl, wMm: null, hMm: null });
-        };
-        image.src = previewUrl;
+        // apiRequest throws "NNN: <message>" (ApiError also carries .body) —
+        // surface the server's honest message when there is one.
+        const server =
+          typeof e?.body?.message === 'string' && e.body.message.trim()
+            ? e.body.message.trim()
+            : (typeof e?.message === 'string' ? e.message.replace(/^\d{3}:\s*/, '') : '');
+        setArtUnavailable(
+          server && !/^Request failed$|^Unprocessable/i.test(server)
+            ? server
+            : "The full-artboard preview couldn't be rendered right now — the checks above still reflect the uploaded file.",
+        );
       }
     })();
     return () => { cancelled = true; };
-  }, [assetUrl, previewUrl, artFileName]);
+  }, [albumId, componentId, assetUrl, artFileName, fullPreviewUrl, fullPreviewWMm, fullPreviewHMm, revisionId, revisionFileName]);
 
-  // MOCK_ART equivalent — breadcrumb label, art image, alt.
+  // MOCK_ART equivalent — breadcrumb label, art image, alt. `image` is the
+  // full-artboard pdf.js raster only — never the cropped previewUrl.
   const ART = {
     title: component?.label ?? spec?.label ?? 'Art file',
-    image: component?.previewUrl ?? null,
+    image: art?.img ?? null,
     alt: `${component?.label ?? 'Art'} seated in the press template`,
   };
 
@@ -467,7 +513,15 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
         >
           <History className="w-4 h-4" />
         </button>
-        {hasArt && showHistory && <HistoryPanel t={t} rows={history} onClose={() => setShowHistory(false)} />}
+        {hasArt && showHistory && (
+          <HistoryPanel
+            t={t}
+            rows={history}
+            onClose={() => setShowHistory(false)}
+            selectedId={revision?.id ?? null}
+            onSelect={(row) => { setRevision(row); setShowHistory(false); }}
+          />
+        )}
       </div>
       {/* Replace — opens the Replace CHOOSER (Full template vs A single panel;
           Ruby's Aug 19 restructure handoff, supersedes the Aug 18 one-click
@@ -487,7 +541,13 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
         <div className="relative flex-shrink-0">
           <button
             type="button"
-            onClick={() => { setReplaceMethod('template'); setReplacePanel('front'); setShowReplace(true); }}
+            onClick={() => {
+              // Task #3356 — replacing always starts from the CURRENT file:
+              // snap back first so an artist never replaces "based on" an
+              // older revision they were just looking at.
+              setRevision(null);
+              setReplaceMethod('template'); setReplacePanel('front'); setShowReplace(true);
+            }}
             aria-haspopup="dialog"
             aria-expanded={showReplace}
             className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', t.hoverCard)}
@@ -666,7 +726,12 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             open={uploadOpen}
             onOpenChange={setUploadOpen}
             showDrop={showDrop}
-            onShowDropChange={setShowDrop}
+            onShowDropChange={(v) => {
+              // Task #3356 — opening the replace drop box snaps back to the
+              // current file first (never "replace based on the wrong file").
+              if (v) setRevision(null);
+              setShowDrop(v);
+            }}
           />
 
         {/* File history is no longer a standing card — it's revealed from the
@@ -731,6 +796,48 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             The press hasn&rsquo;t attached a template file for this piece yet &mdash; the checks above still ran against its measured specs.
           </p>
         )}
+        {/* Honest degradation (Task #3348) — no full-bleed raster obtainable:
+            say so explicitly instead of silently seating the trim-cropped
+            server preview as if it were the full artboard. */}
+        {artUnavailable && (
+          <p className="text-[13px]" style={{ marginTop: 20, color: t.subink }} data-testid="art-preview-unavailable">
+            {artUnavailable}
+          </p>
+        )}
+        {/* Task #3356 — clear "you're looking at an older revision" banner
+            with a one-click way back to the current file. Word + icon, never
+            color alone (colorblind canon). */}
+        {revision && (
+          <div
+            className="flex items-center justify-between gap-3 flex-wrap rounded-xl"
+            style={{ marginTop: 20, padding: '10px 14px', border: `1px solid ${t.hairline}`, background: t.soft }}
+            data-testid="revision-banner"
+          >
+            <span className="inline-flex items-center gap-2 text-[13px] min-w-0" style={{ color: t.ink }}>
+              <History className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
+              <span className="min-w-0 truncate">
+                <span className="font-semibold">Viewing an older revision</span>
+                {' \u2014 '}{revision.fileName ?? 'file'} uploaded {fmtWhen(revision.at)}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setRevision(null)}
+              className={cn('inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium transition-colors flex-shrink-0', t.hoverCard)}
+              style={{ padding: '5px 12px', border: `1px solid ${t.hairline}`, color: t.ink }}
+              data-testid="button-back-to-current"
+            >
+              <ArrowRight className="w-3.5 h-3.5 flex-shrink-0" /> Back to current file
+            </button>
+          </div>
+        )}
+        {/* Task #3351 — fallback in play: still genuinely full bleed, just a
+            server-generated raster instead of the live in-browser render. */}
+        {artIsServerRaster && (
+          <p className="text-sm" style={{ marginTop: 20, color: t.faint }} data-testid="art-preview-server-raster">
+            Showing a server-generated full-artboard preview — this file is too large to render live in this browser.
+          </p>
+        )}
         {tpl ? (
           <TemplateArtViewer
             template={tpl.template}
@@ -756,9 +863,13 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             >
               {ART.image ? (
                 <img src={ART.image} alt={ART.alt} className="w-full h-auto" style={{ maxWidth: 900, boxShadow: '0 14px 36px rgba(0,0,0,0.28)', border: `1px solid ${t.hairline}` }} data-testid="canvas-art" />
-              ) : (
+              ) : artUnavailable ? (
                 <p className="text-[13px]" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid="canvas-no-preview">
-                  No preview could be generated for this file.
+                  No full-artboard preview could be generated for this file.
+                </p>
+              ) : (
+                <p className="text-[13px]" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid="canvas-art-loading">
+                  Rendering the art preview&hellip;
                 </p>
               )}
             </div>
@@ -973,7 +1084,21 @@ function fmtWhen(iso: string | null | undefined): string {
 // Rows are the REAL fileEvents audit trail: the newest upload is "Current";
 // prior uploads show their check result; press downloads/unlocks are their own
 // event rows. Nothing is ever deleted.
-function HistoryPanel({ t, rows, onClose }: { t: Theme; rows: FileEventRow[]; onClose: () => void }) {
+// Task #3356 — rows are now CLICKABLE where a viewer exists (`onSelect`):
+// clicking a previous "uploaded" row loads that revision into the template
+// viewer; clicking the Current row returns to the current file. Download/
+// unlock rows have no file of their own and never activate. Older uploads
+// with no stored file reference (pre-#3356 rows) show a subtle disabled
+// treatment with an honest tooltip instead of failing silently.
+export function HistoryPanel({ t, rows, onClose, selectedId = null, onSelect }: {
+  t: Theme;
+  rows: FileEventRow[];
+  onClose: () => void;
+  /** The file-event id currently shown in the viewer; null = current file. */
+  selectedId?: string | null;
+  /** Present when a viewer can host revisions; absent = read-only rows. */
+  onSelect?: (row: FileEventRow | null) => void;
+}) {
   const firstUploadIdx = rows.findIndex((r) => r.event === 'uploaded');
   const meta = (row: FileEventRow, i: number): { word: string; icon: LucideIcon; color: string; fillDot?: boolean } => {
     if (row.event === 'downloaded') return { word: 'Downloaded by press', icon: Download, color: t.subink };
@@ -1008,16 +1133,52 @@ function HistoryPanel({ t, rows, onClose }: { t: Theme; rows: FileEventRow[]; on
           {rows.map((h, i) => {
             const m = meta(h, i);
             const Icon = m.icon;
-            return (
-              <div key={h.id} className="py-3 flex items-center justify-between gap-4" style={{ borderBottom: i < rows.length - 1 ? `1px solid ${t.hairline}` : undefined }} data-testid={`history-row-${h.id}`}>
+            const isCurrent = i === firstUploadIdx;
+            // Only uploaded rows can activate; the Current row always can
+            // (it returns to the current file, served off the slot itself),
+            // older rows need their stored file reference.
+            const clickable = !!onSelect && h.event === 'uploaded' && (isCurrent || !!h.hasFile);
+            const notViewable = !!onSelect && h.event === 'uploaded' && !isCurrent && !h.hasFile;
+            const viewing = !!onSelect && (isCurrent ? selectedId === null : selectedId === h.id);
+            const inner = (
+              <>
                 <div className="min-w-0">
-                  <div className="text-[12.5px] font-medium truncate" style={{ color: t.ink }} title={h.fileName ?? undefined}>{h.fileName ?? 'File'}</div>
-                  <div className="text-[11.5px] mt-0.5 tabular-nums" style={{ color: t.subink }}>{h.dims ? <>{h.dims} &middot; </> : null}{fmtWhen(h.at)}</div>
+                  <div className="text-[12.5px] font-medium truncate" style={{ color: notViewable ? t.faint : t.ink }} title={h.fileName ?? undefined}>{h.fileName ?? 'File'}</div>
+                  <div className="text-[11.5px] mt-0.5 tabular-nums" style={{ color: notViewable ? t.faint : t.subink }}>{h.dims ? <>{h.dims} &middot; </> : null}{fmtWhen(h.at)}</div>
                 </div>
-                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold flex-shrink-0" style={{ color: m.color }} data-testid={`history-status-${h.event}`}>
+                <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold flex-shrink-0" style={{ color: viewing && !isCurrent ? t.blue : m.color }} data-testid={`history-status-${h.event}`}>
                   <Icon className="w-3 h-3 flex-shrink-0" style={m.fillDot ? { fill: m.color } : undefined} aria-hidden />
-                  {m.word}
+                  {viewing && !isCurrent ? 'Viewing' : m.word}
                 </span>
+              </>
+            );
+            const rowStyle = { borderBottom: i < rows.length - 1 ? `1px solid ${t.hairline}` : undefined };
+            if (clickable) {
+              return (
+                <button
+                  key={h.id}
+                  type="button"
+                  onClick={() => onSelect!(isCurrent ? null : h)}
+                  className={cn('w-full py-3 flex items-center justify-between gap-4 text-left transition-colors', t.hoverCard)}
+                  style={rowStyle}
+                  aria-pressed={viewing}
+                  title={isCurrent ? 'View the current file' : 'View this revision in the template viewer'}
+                  data-testid={`history-row-${h.id}`}
+                >
+                  {inner}
+                </button>
+              );
+            }
+            return (
+              <div
+                key={h.id}
+                className="py-3 flex items-center justify-between gap-4"
+                style={{ ...rowStyle, opacity: notViewable ? 0.6 : undefined, cursor: notViewable ? 'not-allowed' : undefined }}
+                aria-disabled={notViewable || undefined}
+                title={notViewable ? "This upload predates revision viewing — its file wasn't kept, so it can't be reopened." : undefined}
+                data-testid={`history-row-${h.id}`}
+              >
+                {inner}
               </div>
             );
           })}

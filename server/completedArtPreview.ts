@@ -27,6 +27,33 @@ export const boxH = (b: PdfBox) => Math.abs(b.y1 - b.y0);
 
 export type PageBoxes = { media: PdfBox | null; crop: PdfBox | null; trim: PdfBox | null };
 
+export const PT_TO_MM = 25.4 / 72;
+
+/**
+ * Task #3351 — real-world size (mm) of a poppler raster, derived from the
+ * raster's OWN pixel dimensions at a known DPI. Used for the persisted
+ * full-artboard fallback: because the mm come from the exact image we
+ * store, image and dimensions describe the same rectangle BY CONSTRUCTION —
+ * page `/Rotate` (poppler emits the rotated raster, so the pixels already
+ * swap for 90/270, exactly like pdf.js's default-rotation viewport) and
+ * CropBox-vs-MediaBox framing (`pdftoppm -cropbox`) are automatically
+ * consistent. pdf.js's scale-1 viewport is box-points × rotation (UserUnit
+ * is exposed separately and not baked into viewport dims), matching
+ * poppler's `pts ÷ 72 × dpi` raster sizing, so the client seat agrees.
+ * Returns null for degenerate inputs.
+ */
+export function rasterArtboardMm(
+  pxW: number | undefined,
+  pxH: number | undefined,
+  dpi: number,
+): { wMm: number; hMm: number } | null {
+  if (!pxW || !pxH || !Number.isFinite(pxW) || !Number.isFinite(pxH) || pxW <= 0 || pxH <= 0) return null;
+  if (!Number.isFinite(dpi) || dpi <= 0) return null;
+  const wMm = (pxW / dpi) * 25.4;
+  const hMm = (pxH / dpi) * 25.4;
+  return { wMm: Math.round(wMm * 100) / 100, hMm: Math.round(hMm * 100) / 100 };
+}
+
 /**
  * Parse MediaBox/CropBox/TrimBox for one page out of `pdfinfo -box` output.
  * Poppler always prints a TrimBox, defaulting it to the CropBox — a TrimBox
