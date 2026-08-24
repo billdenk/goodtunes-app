@@ -1218,13 +1218,14 @@ export function registerShopifyPlusRoutes(app: Express) {
       // OPERATORS so leftover/over-paid transfer funds don't sit silently
       // (Stripe auto-returns unreconciled funds after 75 days). Best-effort:
       // a Stripe hiccup must never break the ledger read.
+      const callerRole = await getUserRole(userId);
+      const callerIsOperator =
+        callerRole?.role === "admin" || callerRole?.role === "super_admin";
+
       let cashBalances:
         | { stripeCustomerId: string; availableUsdCents: number }[]
         | null = null;
       try {
-        const callerRole = await getUserRole(userId);
-        const callerIsOperator =
-          callerRole?.role === "admin" || callerRole?.role === "super_admin";
         const customerIds = Array.from(
           new Set(
             steps
@@ -1255,10 +1256,37 @@ export function registerShopifyPlusRoutes(app: Express) {
         cashBalances = null;
       }
 
+      // Partners (non-operators) get a sanitized step DTO: no Stripe
+      // identifiers, payment errors, or payer details, and bank-transfer
+      // funding instructions ONLY for the artist-direct steps they are
+      // authorized to pay. Operator-funded steps' virtual-account details
+      // must never reach an artist.
+      const stepsForCaller = callerIsOperator
+        ? stepsWithEarmark
+        : stepsWithEarmark.map((s) => ({
+            id: s.id,
+            albumId: s.albumId,
+            manufacturerId: s.manufacturerId,
+            description: s.description,
+            amountCents: s.amountCents,
+            marginCents: s.marginCents,
+            sortOrder: s.sortOrder,
+            status: s.status,
+            fundingSource: s.fundingSource,
+            paymentMethod: s.paymentMethod,
+            cardFeeCents: s.cardFeeCents,
+            amountReceivedCents: s.amountReceivedCents,
+            paidAt: s.paidAt,
+            createdAt: s.createdAt,
+            earmark: s.earmark,
+            fundingInstructions:
+              s.fundingSource === "artist_direct" ? s.fundingInstructions : null,
+          }));
+
       res.json({
         manufacturer,
         quotes,
-        steps: stepsWithEarmark,
+        steps: stepsForCaller,
         totals: {
           quotedCents,
           quotedSource,
