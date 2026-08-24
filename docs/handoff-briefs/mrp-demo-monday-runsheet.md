@@ -853,3 +853,17 @@ Two regressions vs the handoff package builder mock (PressPackageBuilder):
 **Must-work checklist:** ··· menu on every quantity card; Hide removes the card from the artist ladder and re-anchors pricing to the new smallest visible quantity; no MINIMUM RUN picker anywhere; Per record and Setup rows expand/collapse; save button below the math box, flips to the saved confirmation.
 
 **Acceptance:** screenshot diff vs handoff PressPackageBuilder at 1440px, both themes.
+
+
+    ## Superadmin catalog heading drift — "Pick a style" vs canon "Pick a type"
+
+    Live superadmin catalog editor shows the vinyl section heading as "Pick a style. What kind of vinyl?" while the view-as-press surface correctly shows "Pick a type. What kind of vinyl?". Canon across every mock (catalog build, superadmin catalog pulldown, package pricing, artist builder) is:
+
+    > **Pick a type.** What kind of vinyl?
+
+    "Type" is the word everywhere — Black / Splatter / EcoMix / Translucent are types; colors live inside a type. "Style" appears nowhere in canon.
+
+    **Fix:** superadmin catalog editor heading → "Pick a type. What kind of vinyl?" (two-tone, sentence case, bold lead + regular gray rest). View-as-press is already correct — do not touch it.
+
+    **Must work:** superadmin and view-as-press show the identical heading; no other surface says "style".
+    
