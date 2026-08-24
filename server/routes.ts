@@ -35452,6 +35452,76 @@ export async function registerRoutes(
     }
   });
 
+  // Task #3348 — serve the artist's own CHECKED ART file for a slot (the
+  // uploaded/pasted print-ready PDF, NOT the press template). The artist
+  // art-test page renders this client-side with pdf.js so the FULL artboard
+  // (bleed included) seats over the template exactly like the press
+  // live-test view — never the trim-cropped previewUrl tile. Same scoping
+  // as the template-file route above: requireOperatorOrAlbumPress admits
+  // operators, the album's press, and the album's own artist/label
+  // partners. Unlike POST /download/:componentId this is a plain read —
+  // it never writes a file event and never locks the slot.
+  //
+  // Stored /objects/ art redirects (public-ACL, same-origin). A LEGACY row
+  // whose check predates the Task #3184 mirroring rule still holds the raw
+  // external link — mirror it into our object storage NOW (standing rule:
+  // external file links never persist as external URLs), self-heal the
+  // stored component, and serve the mirrored copy. If the external link is
+  // dead, answer 422 honestly so the client can show "preview unavailable"
+  // instead of silently seating the cropped preview.
+  app.get("/api/admin/albums/:id/completed-template/art-file/:componentId", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const componentId = decodeURIComponent(req.params.componentId);
+    const ctx = await resolveCompletedContext(req.params.id);
+    const component = ((ctx?.row?.components ?? []) as CompletedTemplateComponent[]).find(
+      (c) => c.componentId === componentId && c.assetUrl,
+    );
+    if (!ctx || !component?.assetUrl) return res.status(404).json({ message: "No art file on that slot yet." });
+    const url = component.assetUrl;
+    if (url.startsWith("/")) return res.redirect(url);
+    if (!/^https:\/\//i.test(url)) return res.status(409).json({ message: "This art file's link can't be fetched." });
+    const mirrored = await mirrorExternalTemplatePdf(url);
+    if (!mirrored.ok) {
+      return res.status(422).json({
+        code: "art_link_dead",
+        message:
+          "The original file link is no longer reachable, so the full-artboard preview can't be shown. Upload the art file again (or paste a fresh link) to restore it.",
+      });
+    }
+    // Self-heal: persist the mirrored object path (and, best-effort, the
+    // trim previews the legacy row never had) so the next read skips the
+    // external fetch entirely. Persistence failure never blocks serving.
+    try {
+      const required = await resolveRequired(ctx.vendorId, ctx.config);
+      const spec = required.find((r) => r.id === componentId) ?? null;
+      let previewUrl = component.previewUrl ?? null;
+      let previewUrl2 = component.previewUrl2 ?? null;
+      if (spec && !previewUrl) {
+        try {
+          const previews = await generateCompletedPreview(mirrored.objectPath, spec);
+          previewUrl = previews.previewUrl ?? previewUrl;
+          previewUrl2 = previews.previewUrl2 ?? previewUrl2;
+        } catch {
+          /* previews stay as-is — the full-bleed serve below is the point */
+        }
+      }
+      const healed = ((ctx.row?.components ?? []) as CompletedTemplateComponent[]).map((c) =>
+        c.componentId === componentId ? { ...c, assetUrl: mirrored.objectPath, previewUrl, previewUrl2 } : c,
+      );
+      const { components, status } = retagCompleted(healed, required.map((r) => r.id));
+      await storage.saveCompletedTemplateCheck({
+        albumId: req.params.id,
+        vendorId: ctx.vendorId,
+        config: ctx.config,
+        components,
+        status,
+      });
+    } catch (e) {
+      console.warn("[completed-art] art-file self-heal persist failed", e);
+    }
+    return res.redirect(mirrored.objectPath);
+  });
+
   // Match a pasted (Dropbox/etc.) print-ready PDF URL to a required slot,
   // stream-scan it, run the finished-template checks, and persist the
   // result. Re-checking a slot clears any prior override (new file).

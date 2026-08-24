@@ -318,7 +318,63 @@ test("an inner_sleeve catalog row for the album's format derives 'printed'", asy
   assert.equal(other.json.config.innerSleeves, "none", "no resolved press → no derivation");
 });
 
+// ─── Task #3348 — art-file read (full-bleed viewer source) ─────────────
+// The artist Test page fetches the checked art PDF through this authed
+// route (never a raw /objects fetch, never the cropped previewUrl). Pin:
+// 404 with no upload, 302 → the stored own-object path, and the same
+// press scoping as every other completed-template read.
+
+test("art-file: 404 empty, 302 to own-object asset, cross-press 403", async () => {
+  const missing = await req("GET", `${getPath(albumId)}/art-file/jacket`, adminToken);
+  assert.equal(missing.status, 404, "no upload on the slot → 404");
+
+  // Seed a checked component holding a direct-upload object path.
+  const payload = await req("GET", getPath(albumId), adminToken);
+  assert.equal(payload.status, 200);
+  await storage.saveCompletedTemplateCheck({
+    albumId,
+    vendorId: payload.json.vendorId,
+    config: payload.json.config,
+    components: [
+      {
+        componentId: "jacket",
+        label: "Jacket",
+        presence: "present",
+        assetUrl: "/objects/uploads/t3348-art.pdf",
+        fileName: "t3348-art.pdf",
+        previewUrl: null,
+        previewUrl2: null,
+        checks: [],
+        status: "attention",
+        override: null,
+        unverifiedAck: null,
+      } as any,
+    ],
+    status: "attention",
+  } as any);
+
+  const res = await fetch(`${baseUrl}${getPath(albumId)}/art-file/jacket`, {
+    redirect: "manual",
+    headers: { authorization: `Bearer ${adminToken}` },
+  });
+  assert.equal(res.status, 302, "own-object art redirects same-origin");
+  assert.equal(res.headers.get("location"), "/objects/uploads/t3348-art.pdf");
+
+  const ownPress = await fetch(`${baseUrl}${getPath(albumId)}/art-file/jacket`, {
+    redirect: "manual",
+    headers: { authorization: `Bearer ${pressToken}` },
+  });
+  assert.equal(ownPress.status, 302, "the album's own press reads the art file");
+
+  const cross = await req("GET", `${getPath(albumId)}/art-file/jacket`, otherPressToken);
+  assert.equal(cross.status, 403, "cross-press art read must fail");
+
+  const anon = await req("GET", `${getPath(albumId)}/art-file/jacket`, null);
+  assert.equal(anon.status, 401);
+});
+
 after(async () => {
+  for (const id of created.albums) await exec(sql`DELETE FROM completed_template_checks WHERE album_id = ${id}`);
   for (const id of created.specs) await exec(sql`DELETE FROM press_template_specs WHERE id = ${id}`);
   for (const id of created.skus) await exec(sql`DELETE FROM album_skus WHERE id = ${id}`);
   for (const id of created.albums) await exec(sql`DELETE FROM albums WHERE id = ${id}`);

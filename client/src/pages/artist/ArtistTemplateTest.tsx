@@ -343,48 +343,54 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
     })();
   };
 
-  // ── The artist's checked art, at real measured size where possible: own
-  // stored PDF → pdf.js render with mm; otherwise the server preview raster
-  // (contain-fit by pixel aspect); otherwise an honest "no preview".
+  // ── The artist's checked art at real measured size, ALWAYS the full
+  // artboard (Task #3348): the stored art PDF is fetched through the authed
+  // artist-scoped art-file endpoint (it self-heals legacy external-link rows
+  // by mirroring them server-side) and rendered with pdf.js — the exact
+  // pipeline the press live-test uses, so both surfaces seat identically.
+  //
+  // Deliberately NO fallback to component.previewUrl here: that raster is
+  // the TRIM/front-panel crop (generateCompletedPreview), and seating it
+  // looked like "only the album cover printed, back panel empty". When the
+  // full-bleed render genuinely can't be produced we say so honestly.
   const [art, setArt] = useState<ViewerArt>(null);
+  const [artUnavailable, setArtUnavailable] = useState<string | null>(null);
   const assetUrl = component?.assetUrl ?? null;
-  const previewUrl = component?.previewUrl ?? null;
   const artFileName = component?.fileName ?? null;
   useEffect(() => {
     let cancelled = false;
     setArt(null);
+    setArtUnavailable(null);
+    if (!albumId || !componentId || !assetUrl) return;
     void (async () => {
-      if (assetUrl && /^\/objects\//.test(assetUrl) && /\.pdf(\?|$)/i.test(assetUrl)) {
-        try {
-          const r = await fetch(assetUrl, { credentials: 'include' });
-          if (r.ok) {
-            const doc = await (await loadPdfjs()).getDocument({ data: await r.arrayBuffer() }).promise;
-            const { img, wMm, hMm } = await renderPage(doc, 1);
-            if (!cancelled) setArt({ name: artFileName ?? 'Art', img, wMm, hMm });
-            return;
-          }
-        } catch {
-          // fall through to the server preview raster
-        }
-      }
-      if (previewUrl) {
-        const image = new Image();
-        image.onload = () => {
-          if (!cancelled) setArt({ name: artFileName ?? 'Art', img: previewUrl, wMm: null, hMm: null, pxAspect: image.naturalWidth / Math.max(1, image.naturalHeight) });
-        };
-        image.onerror = () => {
-          if (!cancelled) setArt({ name: artFileName ?? 'Art', img: previewUrl, wMm: null, hMm: null });
-        };
-        image.src = previewUrl;
+      try {
+        const r = await apiRequest('GET', `/api/admin/albums/${albumId}/completed-template/art-file/${encodeURIComponent(componentId)}`);
+        const doc = await (await loadPdfjs()).getDocument({ data: await r.arrayBuffer() }).promise;
+        const { img, wMm, hMm } = await renderPage(doc, 1);
+        if (!cancelled) setArt({ name: artFileName ?? 'Art', img, wMm, hMm });
+      } catch (e: any) {
+        if (cancelled) return;
+        // apiRequest throws "NNN: <message>" (ApiError also carries .body) —
+        // surface the server's honest message when there is one.
+        const server =
+          typeof e?.body?.message === 'string' && e.body.message.trim()
+            ? e.body.message.trim()
+            : (typeof e?.message === 'string' ? e.message.replace(/^\d{3}:\s*/, '') : '');
+        setArtUnavailable(
+          server && !/^Request failed$|^Unprocessable/i.test(server)
+            ? server
+            : "The full-artboard preview couldn't be rendered right now — the checks above still reflect the uploaded file.",
+        );
       }
     })();
     return () => { cancelled = true; };
-  }, [assetUrl, previewUrl, artFileName]);
+  }, [albumId, componentId, assetUrl, artFileName]);
 
-  // MOCK_ART equivalent — breadcrumb label, art image, alt.
+  // MOCK_ART equivalent — breadcrumb label, art image, alt. `image` is the
+  // full-artboard pdf.js raster only — never the cropped previewUrl.
   const ART = {
     title: component?.label ?? spec?.label ?? 'Art file',
-    image: component?.previewUrl ?? null,
+    image: art?.img ?? null,
     alt: `${component?.label ?? 'Art'} seated in the press template`,
   };
 
@@ -731,6 +737,14 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             The press hasn&rsquo;t attached a template file for this piece yet &mdash; the checks above still ran against its measured specs.
           </p>
         )}
+        {/* Honest degradation (Task #3348) — no full-bleed raster obtainable:
+            say so explicitly instead of silently seating the trim-cropped
+            server preview as if it were the full artboard. */}
+        {artUnavailable && (
+          <p className="text-[13px]" style={{ marginTop: 20, color: t.subink }} data-testid="art-preview-unavailable">
+            {artUnavailable}
+          </p>
+        )}
         {tpl ? (
           <TemplateArtViewer
             template={tpl.template}
@@ -756,9 +770,13 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             >
               {ART.image ? (
                 <img src={ART.image} alt={ART.alt} className="w-full h-auto" style={{ maxWidth: 900, boxShadow: '0 14px 36px rgba(0,0,0,0.28)', border: `1px solid ${t.hairline}` }} data-testid="canvas-art" />
-              ) : (
+              ) : artUnavailable ? (
                 <p className="text-[13px]" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid="canvas-no-preview">
-                  No preview could be generated for this file.
+                  No full-artboard preview could be generated for this file.
+                </p>
+              ) : (
+                <p className="text-[13px]" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid="canvas-art-loading">
+                  Rendering the art preview&hellip;
                 </p>
               )}
             </div>

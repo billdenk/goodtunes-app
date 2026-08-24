@@ -21522,7 +21522,17 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ marginTop: 20, color: t.subink }} data-testid=\"art-preview-unavailable\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<p className=\"text-[13px]\" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid=\"canvas-no-preview\">"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
+    "snippet": "<p className=\"text-[13px]\" style={{ color: '#6e6e73', padding: '48px 0' }} data-testid=\"canvas-art-loading\">"
   },
   {
     "rule": "hardcoded-font-size",
