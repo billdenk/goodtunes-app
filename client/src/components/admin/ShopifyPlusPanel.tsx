@@ -643,6 +643,10 @@ export function ManufacturingLedger({
     queryKey: ["/api/me/role"],
   });
   const isSuperAdmin = myRole?.role === "super_admin";
+  // Task #3380 — accepting a partial transfer as paid is operator-only
+  // (super_admin/admin — never partners; the server re-checks).
+  const isOperatorAdmin =
+    myRole?.role === "super_admin" || myRole?.role === "admin";
 
   const [busy, setBusy] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -782,6 +786,60 @@ export function ManufacturingLedger({
     } catch (e: any) {
       toast({
         title: "Couldn't cancel the payment link",
+        description: String(e?.message ?? e),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  // Task #3380 — operator accepts the received (partial) bank transfer as
+  // payment in full. Server shrinks the Stripe PaymentIntent to the funds
+  // on hand, confirms from the cash balance, flips the step Paid, and
+  // adjusts the recorded total to what was actually collected.
+  async function acceptPartial(step: LedgerStep) {
+    const requested = step.amountCents + step.marginCents;
+    const recorded = Math.min(step.amountReceivedCents ?? 0, requested);
+    // The webhook tally can lag (or be missing entirely) — the server does a
+    // fresh cash-balance read from Stripe and refuses if nothing arrived.
+    const receivedLine =
+      recorded > 0
+        ? `Received: ${formatUsdCents(recorded)}\n` +
+          `Shortfall forgiven: ${formatUsdCents(Math.max(requested - recorded, 0))}\n`
+        : `Received: will be read live from Stripe (our records show none yet — ` +
+          `the action refuses if nothing has actually arrived).\n`;
+    if (
+      !window.confirm(
+        `Accept the received amount as payment in full?\n\n` +
+          `Requested: ${formatUsdCents(requested)}\n` +
+          receivedLine +
+          `\nThis settles the payment at Stripe for the received amount and ` +
+          `adjusts this request's total to match, so Paid/Outstanding reflect ` +
+          `what was actually collected. This can't be undone.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(`accept-${step.id}`);
+    try {
+      const res = await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/manufacturing-ledger/steps/${step.id}/accept-partial`,
+      );
+      const data = await res.json();
+      toast({
+        title: "Payment accepted in full",
+        description: `Settled ${formatUsdCents(data?.acceptedCents ?? recorded)}${
+          (data?.forgivenCents ?? 0) > 0
+            ? ` — ${formatUsdCents(data.forgivenCents)} shortfall forgiven`
+            : ""
+        }.`,
+      });
+      await refresh();
+    } catch (e: any) {
+      toast({
+        title: "Couldn't accept the payment",
         description: String(e?.message ?? e),
         variant: "destructive",
       });
@@ -976,6 +1034,31 @@ export function ManufacturingLedger({
       outstandingCents: 0,
     };
   const runClosed = Boolean(data?.runClosedAt);
+
+  // Task #3380 — non-blocking over-ask warning: when the sum of payment
+  // requests (existing + the one being drafted) would exceed the ledger's
+  // estimated total, warn up front — an over-asking request is how a payer
+  // ends up deliberately underpaying and stranding a step on "Awaiting
+  // transfer". Only meaningful when the estimate comes from a real source
+  // (an estimate PDF or the system cost) — when Quoted IS the sum of the
+  // requests, it can't be exceeded.
+  const draftCents = (() => {
+    const a = Math.round(parseFloat(amount || "0") * 100);
+    const m = Math.round(parseFloat(margin || "0") * 100);
+    return (
+      (Number.isFinite(a) && a > 0 ? a : 0) +
+      (Number.isFinite(m) && m > 0 ? m : 0)
+    );
+  })();
+  const stepsSumCents = steps.reduce(
+    (s, r) => s + r.amountCents + r.marginCents,
+    0,
+  );
+  const projectedRequestedCents = stepsSumCents + draftCents;
+  const overAsk =
+    totals.quotedSource !== "steps" &&
+    draftCents > 0 &&
+    projectedRequestedCents > totals.quotedCents;
 
   // Task #3004 — resolve the step whose transfer instructions are open.
   const instructionsStep =
@@ -1406,6 +1489,32 @@ export function ManufacturingLedger({
                               </>
                             )}
 
+                          {/* Task #3380 — operator-only: accept the received
+                              (partial) transfer as payment in full when funds
+                              arrived but the request over-asked. */}
+                          {/* Shown on ANY awaiting-transfer step: the webhook
+                              tally can be missing even when funds sit on the
+                              cash balance (seen in prod) — the server does a
+                              live Stripe read and refuses if nothing arrived. */}
+                          {isOperatorView &&
+                            isOperatorAdmin &&
+                            step.status === "awaiting_transfer" && (
+                              <button
+                                onClick={() => acceptPartial(step)}
+                                disabled={busy === `accept-${step.id}`}
+                                className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-2.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                                data-testid={`button-accept-partial-${step.id}`}
+                                title="Settle at Stripe for the received amount and mark this request paid in full"
+                              >
+                                {busy === `accept-${step.id}` ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                ) : (
+                                  <Check className="w-3.5 h-3.5" />
+                                )}
+                                Accept received amount as paid
+                              </button>
+                            )}
+
                           {/* Task #3004 — awaiting-transfer: re-open the saved
                               instructions (same virtual account also accepts a
                               follow-up transfer on a partial payment). */}
@@ -1567,6 +1676,22 @@ export function ManufacturingLedger({
                     Request payment
                   </button>
                 </div>
+
+                {/* Task #3380 — non-blocking over-ask warning. */}
+                {overAsk && (
+                  <div
+                    className="rounded-lg bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs text-amber-800"
+                    data-testid="warning-over-ask"
+                  >
+                    <b>Heads up:</b> payment requests would total{" "}
+                    <b>{formatUsdCents(projectedRequestedCents)}</b> against a{" "}
+                    <b>{formatUsdCents(totals.quotedCents)}</b> estimate. If an
+                    earlier request already covered part of this amount (e.g. a
+                    setup deposit), the payer may deliberately underpay and the
+                    request will hang on "Awaiting transfer". You can still
+                    request it.
+                  </div>
+                )}
               </div>
             )}
           </div>

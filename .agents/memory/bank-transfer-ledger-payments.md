@@ -11,3 +11,13 @@ description: Stripe customer_balance bank transfers on the Shopify+ manufacturin
 - Overpayments live on the Stripe customer cash balance — surfaced operator-only on the ledger GET (`cashBalances`); Stripe auto-returns unapplied funds after 75 days.
 - Payment Requests flow (server/paymentRequests.ts) intentionally NOT converted: Payment Links can't do customer_balance.
 - **Why:** wires are push-only ($8 flat vs ~3% card), irreversible; instructions persist so a second transfer to the same virtual account completes a partial.
+
+## Durable rules from the accept-partial work
+- One Stripe customer/cash balance is REUSED across a run's steps, so a
+  step's recorded received tally is historical and can be 0 with funds on
+  the balance (webhook gap). **Why:** money-moving decisions must derive
+  from a live Stripe read (fail closed), and operator UI must not be
+  gated on the tally.
+- A thrown Stripe mutation is INDETERMINATE (timeouts land after the
+  change applies) — reconcile from an authoritative re-read and record
+  Stripe's settled amount, never the intended one.

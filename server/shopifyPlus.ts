@@ -125,6 +125,12 @@ export type BankTransferStripe = {
   paymentIntents: {
     update: (id: string, params: any) => Promise<any>;
     confirm: (id: string) => Promise<{ status?: string | null }>;
+    /** Authoritative re-read used to reconcile after an indeterminate
+     *  (thrown) update/confirm — a network timeout can land AFTER Stripe
+     *  applied the mutation. */
+    retrieve: (
+      id: string,
+    ) => Promise<{ amount?: number | null; status?: string | null }>;
   };
 };
 
@@ -815,6 +821,400 @@ export async function resetStuckPaymentStep(opts: {
     `[shopify-plus] step ${step.id} → unpaid (operator reset, session ${step.stripeCheckoutSessionId ?? "none"})`,
   );
   return { ok: true, step: reset };
+}
+
+// ── Task #3380 — operator accepts a partial bank transfer as paid ─────
+// A pushed transfer that lands short by MORE than the automatic
+// underpayment threshold leaves the step stuck on "Awaiting transfer"
+// forever (Stripe auto-returns unapplied cash-balance funds after ~75
+// days). When the shortfall is deliberate and legitimate (e.g. the payer
+// deducted an already-paid deposit because the request over-asked), an
+// OPERATOR can accept what actually arrived as payment in full: shrink
+// the PaymentIntent to the received amount, confirm it from the
+// customer's cash balance (the same mechanics as the under-threshold
+// auto-close), and settle the step via the idempotent paid path.
+//
+// The step's recorded total is adjusted DOWN to the accepted amount so
+// the ledger's Paid/Outstanding math reconciles with what was actually
+// collected — the GoodTunes margin line is preserved when the received
+// funds cover it; the plant leg absorbs the reduction (the over-ask was
+// plant money counted twice, and the held earmark must only ever hold
+// what we really collected for the plant).
+//
+// Fails closed on any Stripe error; never marks paid unless Stripe
+// positively confirms the payment succeeded. The Stripe surface is
+// injected for hermetic tests (same shape as the webhook's
+// BankTransferStripe seam).
+export type AcceptPartialResult =
+  | {
+      ok: true;
+      step: ManufacturerPaymentStep;
+      acceptedCents: number;
+      forgivenCents: number;
+    }
+  | { ok: false; status: number; message: string };
+
+export async function acceptPartialTransferAsPaid(opts: {
+  albumId: string;
+  stepId: string;
+  /** Caller's resolved primary role — operators only, never partners. */
+  callerRole: string | null;
+  stripe: BankTransferStripe;
+  /** Hermetic-test-only DB failure injection; ignored outside GT_TEST. */
+  testFailpoint?: "totals-restore" | "mark-paid";
+}): Promise<AcceptPartialResult> {
+  const { albumId, stepId, callerRole, stripe, testFailpoint } = opts;
+  if (callerRole !== "super_admin" && callerRole !== "admin") {
+    return {
+      ok: false,
+      status: 403,
+      message:
+        "Only GoodTunes operators can accept a partial transfer as payment in full.",
+    };
+  }
+
+  const [step] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, stepId));
+  if (!step || step.albumId !== albumId) {
+    return { ok: false, status: 404, message: "Step not found" };
+  }
+  if (step.status === "paid") {
+    return { ok: false, status: 409, message: "This step is already paid." };
+  }
+  if (step.status !== "awaiting_transfer") {
+    return {
+      ok: false,
+      status: 409,
+      message: `Only a step that's Awaiting transfer can be settled this way (this one is ${step.status}).`,
+    };
+  }
+  const piId = step.stripePaymentIntentId;
+  if (!piId) {
+    return {
+      ok: false,
+      status: 409,
+      message: "This step has no Stripe payment to settle.",
+    };
+  }
+
+  const dueCents = step.amountCents + step.marginCents;
+
+  // What's actually available = the customer's LIVE USD cash balance,
+  // and nothing else. The webhook-recorded tally is historical: the same
+  // Stripe customer (and cash balance) is reused across a run's steps, so
+  // a stale tally can claim funds that have since settled another step.
+  // A successful live read is REQUIRED — fail closed on any Stripe error.
+  if (!step.stripeCustomerId) {
+    return {
+      ok: false,
+      status: 409,
+      message: "This step has no Stripe customer to read funds from.",
+    };
+  }
+  let receivedCents: number;
+  try {
+    const cust = await stripe.customers.retrieve(step.stripeCustomerId, {
+      expand: ["cash_balance"],
+    });
+    const usd = cust?.cash_balance?.available?.usd;
+    receivedCents = typeof usd === "number" ? usd : 0;
+  } catch (e: any) {
+    return {
+      ok: false,
+      status: 502,
+      message: `Couldn't read the customer's cash balance at Stripe (${e?.message ?? "error"}) — nothing was changed. Retry once Stripe is reachable.`,
+    };
+  }
+  if (receivedCents <= 0) {
+    return {
+      ok: false,
+      status: 409,
+      message:
+        "No funds have been received for this step yet — there's nothing to accept.",
+    };
+  }
+
+  // Never charge more than what was requested; a cash-balance surplus
+  // stays on the Stripe customer (surfaced via the ledger's cashBalances).
+  const acceptedCents = Math.min(receivedCents, dueCents);
+  const forgivenCents = dueCents - acceptedCents;
+
+  // 1) Record the accepted total on the step FIRST, before any Stripe
+  //    mutation. Ordering is the race guard: once the PI is shrunk at
+  //    Stripe, a webhook that settles it concurrently runs markStepPaid
+  //    against ALREADY-adjusted totals (markStepPaid never rewrites
+  //    amount/margin), so the earmark and ledger math stay honest no
+  //    matter which path wins. Guarded flip: only while the step is
+  //    EXACTLY as we verified it — zero rows means a webhook settled the
+  //    (still full-amount) PI first; nothing at Stripe was touched, so we
+  //    just bail.
+  const newMarginCents = Math.min(step.marginCents, acceptedCents);
+  const newAmountCents = acceptedCents - newMarginCents;
+  let adjusted: ManufacturerPaymentStep | undefined;
+  try {
+    [adjusted] = await db
+      .update(manufacturerPaymentSteps)
+      .set({
+        amountCents: newAmountCents,
+        marginCents: newMarginCents,
+        amountReceivedCents: Math.max(
+          acceptedCents,
+          step.amountReceivedCents ?? 0,
+        ),
+      })
+      .where(
+        and(
+          eq(manufacturerPaymentSteps.id, step.id),
+          eq(manufacturerPaymentSteps.status, "awaiting_transfer"),
+          eq(manufacturerPaymentSteps.stripePaymentIntentId, piId),
+        ),
+      )
+      .returning();
+  } catch (e: any) {
+    return {
+      ok: false,
+      status: 502,
+      message: `Couldn't record the accepted amount (${e?.message ?? "database error"}) — nothing was changed at Stripe. Retry.`,
+    };
+  }
+  if (!adjusted) {
+    return {
+      ok: false,
+      status: 409,
+      message:
+        "The step changed while accepting (the transfer may have just settled) — nothing was changed at Stripe. Refresh to see it.",
+    };
+  }
+
+  // Failure-safe helper: mirror the ledger totals back to the ORIGINAL
+  // request (id+PI keyed; optionally only while still awaiting). A DB
+  // failure here is caught, loudly tagged for ops (the route's 5xx also
+  // trips the ops-alert hook), and reported — never thrown. Returns
+  // whether the restore is known-applied.
+  const restoreTotals = async (opts2: {
+    onlyWhileAwaiting: boolean;
+  }): Promise<boolean> => {
+    try {
+      if (process.env.GT_TEST && testFailpoint === "totals-restore") {
+        throw new Error("injected totals-restore failure");
+      }
+      const where = opts2.onlyWhileAwaiting
+        ? and(
+            eq(manufacturerPaymentSteps.id, step.id),
+            eq(manufacturerPaymentSteps.status, "awaiting_transfer"),
+            eq(manufacturerPaymentSteps.stripePaymentIntentId, piId),
+          )
+        : and(
+            eq(manufacturerPaymentSteps.id, step.id),
+            eq(manufacturerPaymentSteps.stripePaymentIntentId, piId),
+          );
+      await db
+        .update(manufacturerPaymentSteps)
+        .set({ amountCents: step.amountCents, marginCents: step.marginCents })
+        .where(where);
+      return true;
+    } catch (restoreErr: any) {
+      console.error(
+        `[shopify-plus] ACCEPT-PARTIAL-RECONCILE-NEEDED step=${step.id} pi=${piId}: ledger totals restore failed (${restoreErr?.message ?? restoreErr}) — recorded totals may not match Stripe; retrying the accept converges.`,
+      );
+      return false;
+    }
+  };
+
+  // Authoritative PI re-read for indeterminate (thrown) Stripe mutations —
+  // a network timeout can land AFTER Stripe applied the change, so a
+  // thrown update/confirm proves nothing either way.
+  const readPi = async (): Promise<{
+    amount: number | null;
+    status: string | null;
+  } | null> => {
+    try {
+      const pi = await stripe.paymentIntents.retrieve(piId);
+      return {
+        amount: typeof pi?.amount === "number" ? pi.amount : null,
+        status: pi?.status ?? null,
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  // Shared settlement tail: Stripe positively settled the PI for
+  // settledCents (the accepted amount, or the ORIGINAL amount when a
+  // racing full settlement won during an indeterminate window). The
+  // recorded totals are made to mirror the settled amount — never the
+  // amount we merely intended — then the idempotent paid path runs.
+  // Money has already moved at Stripe here, so a DB failure must NOT
+  // read as "not settled": the payment_intent.succeeded webhook re-runs
+  // the same idempotent markStepPaid, which is the durable recovery.
+  const settleAt = async (
+    settledCents: number,
+  ): Promise<AcceptPartialResult> => {
+    if (settledCents !== acceptedCents) {
+      const settledMargin = Math.min(step.marginCents, settledCents);
+      try {
+        await db
+          .update(manufacturerPaymentSteps)
+          .set({
+            amountCents: settledCents - settledMargin,
+            marginCents: settledMargin,
+            amountReceivedCents: settledCents,
+          })
+          .where(
+            and(
+              eq(manufacturerPaymentSteps.id, step.id),
+              eq(manufacturerPaymentSteps.stripePaymentIntentId, piId),
+            ),
+          );
+      } catch (e: any) {
+        console.error(
+          `[shopify-plus] ACCEPT-PARTIAL-RECONCILE-NEEDED step=${step.id} pi=${piId}: settled at ${settledCents}¢ but totals write failed (${e?.message ?? e}).`,
+        );
+        return {
+          ok: false,
+          status: 502,
+          message: `The payment settled at Stripe for ${(settledCents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" })}, but recording the settled total failed — refresh and retry to reconcile.`,
+        };
+      }
+    }
+    try {
+      if (process.env.GT_TEST && testFailpoint === "mark-paid") {
+        throw new Error("injected mark-paid failure");
+      }
+      await markStepPaid(step.id, piId, { amountReceivedCents: settledCents });
+    } catch (e: any) {
+      console.error(
+        `[shopify-plus] ACCEPT-PARTIAL-RECONCILE-NEEDED step=${step.id} pi=${piId}: payment settled at Stripe but marking paid failed (${e?.message ?? e}); the succeeded webhook or a retry completes it.`,
+      );
+      return {
+        ok: false,
+        status: 502,
+        message:
+          "The payment settled at Stripe, but recording it here failed — refresh in a moment (the transfer webhook completes it) or retry.",
+      };
+    }
+    console.log(
+      `[shopify-plus] step ${step.id} partial transfer accepted as paid in full: ${settledCents}¢ of ${dueCents}¢ requested (${dueCents - settledCents}¢ forgiven) by operator`,
+    );
+    const [freshRow] = await db
+      .select()
+      .from(manufacturerPaymentSteps)
+      .where(eq(manufacturerPaymentSteps.id, step.id));
+    return {
+      ok: true,
+      step: freshRow ?? adjusted,
+      acceptedCents: settledCents,
+      forgivenCents: dueCents - settledCents,
+    };
+  };
+
+  // 2) Shrink the PaymentIntent at Stripe to the accepted amount. A throw
+  //    is INDETERMINATE: re-read the PI to learn what Stripe actually did.
+  try {
+    await stripe.paymentIntents.update(piId, { amount: acceptedCents });
+  } catch (e: any) {
+    const pi = await readPi();
+    if (pi?.status === "succeeded") {
+      // A racing settlement won during the indeterminate window. Trust
+      // Stripe's settled AMOUNT — a full settlement of the original PI
+      // must be recorded at the full amount, never at what we intended
+      // to accept.
+      return settleAt(
+        typeof pi.amount === "number" ? pi.amount : acceptedCents,
+      );
+    }
+    if (pi?.amount === acceptedCents) {
+      // The shrink actually applied despite the throw — proceed.
+    } else if (pi) {
+      // Stripe positively shows the ORIGINAL amount — the shrink never
+      // applied, so restore the ledger totals unconditionally by id+PI:
+      // whether still awaiting or a webhook settled the full PI meanwhile,
+      // the FULL totals mirror Stripe.
+      const restored = await restoreTotals({ onlyWhileAwaiting: false });
+      return {
+        ok: false,
+        status: 502,
+        message: restored
+          ? `Couldn't adjust the payment at Stripe (${e?.message ?? "error"}) — nothing was changed.`
+          : `Couldn't adjust the payment at Stripe (${e?.message ?? "error"}) and the request total could not be restored — refresh and retry (retrying reconciles the totals).`,
+      };
+    } else {
+      // PI unreadable — leave the shrunk recorded totals in place and
+      // direct a retry: the accept re-derives everything from the current
+      // step + Stripe state, so retrying converges either way.
+      return {
+        ok: false,
+        status: 502,
+        message: `Stripe was unreachable while adjusting the payment (${e?.message ?? "error"}) and its state couldn't be verified — retry to reconcile.`,
+      };
+    }
+  }
+
+  // 3) Confirm the shrunk PaymentIntent from the customer's cash balance.
+  //    A throw is INDETERMINATE (the confirm may have applied): re-read
+  //    the PI. Only when Stripe positively shows an UNCONFIRMED shrunk PI
+  //    do we compensate: restore the PI to the original amount first, and
+  //    only if that succeeds restore the recorded totals (guarded — a
+  //    webhook that settled meanwhile wins and keeps the shrunk, honest
+  //    total). If the PI restore fails, the PI is still shrunk at Stripe,
+  //    so the shrunk recorded total remains the truthful mirror.
+  const compensate = async (): Promise<string> => {
+    try {
+      await stripe.paymentIntents.update(piId, { amount: dueCents });
+    } catch {
+      return " The request total was adjusted to the received amount to match Stripe — retry, or check the Stripe Dashboard.";
+    }
+    const restored = await restoreTotals({ onlyWhileAwaiting: true });
+    return restored
+      ? " Nothing was changed — retry, or check the Stripe Dashboard."
+      : " The request total could not be restored to the original amount — refresh and retry (retrying reconciles the totals).";
+  };
+  let confirmedStatus: string | null = null;
+  try {
+    const confirmed = await stripe.paymentIntents.confirm(piId);
+    confirmedStatus = confirmed?.status ?? null;
+  } catch (e: any) {
+    const pi = await readPi();
+    if (pi?.status === "succeeded") {
+      // The settle actually applied despite the throw (our confirm, or a
+      // racing webhook). Record Stripe's authoritative settled AMOUNT —
+      // normally the shrunk amount, but never assume it.
+      return settleAt(
+        typeof pi.amount === "number" ? pi.amount : acceptedCents,
+      );
+    } else if (pi) {
+      const note = await compensate();
+      return {
+        ok: false,
+        status: 502,
+        message: `Couldn't confirm the payment at Stripe (${e?.message ?? "error"}).${note}`,
+      };
+    } else {
+      // PI unreadable — indeterminate. Do NOT touch the PI (it may have
+      // settled); the shrunk recorded totals stay as the consistent
+      // mirror. A retry (or the succeeded webhook) completes either way.
+      return {
+        ok: false,
+        status: 502,
+        message: `Stripe was unreachable while confirming the payment (${e?.message ?? "error"}) — retry to reconcile; if it settled, the transfer webhook will complete it.`,
+      };
+    }
+  }
+  if (confirmedStatus !== "succeeded") {
+    const note = await compensate();
+    return {
+      ok: false,
+      status: 502,
+      message: `Stripe did not settle the payment (status ${confirmedStatus ?? "unknown"}).${note}`,
+    };
+  }
+
+  // 4) Settle via the existing idempotent paid path (earmark mint for the
+  //    ADJUSTED plant amount, paid timestamps, notifications) — the shared
+  //    settlement tail records exactly what Stripe confirmed.
+  return settleAt(acceptedCents);
 }
 
 // Called from the commerce.ts Stripe webhook BEFORE materializeOrderFromSession.
@@ -2163,6 +2563,41 @@ export function registerShopifyPlusRoutes(app: Express) {
         return res.status(result.status).json({ message: result.message });
       }
       res.json({ ok: true, step: result.step });
+    },
+  );
+
+  // Task #3380 — operator-only: accept a partial bank transfer as payment
+  // in full on an awaiting-transfer step. Shrinks the PaymentIntent to the
+  // received amount, confirms it from the customer's cash balance, and
+  // settles the step via the idempotent paid path with the accepted total
+  // recorded so ledger math stays honest. Never partners.
+  app.post(
+    "/api/admin/albums/:albumId/manufacturing-ledger/steps/:stepId/accept-partial",
+    async (req, res) => {
+      const albumId = String(req.params.albumId);
+      const stepId = String(req.params.stepId);
+      const ctx = await resolveAdmin(req, res);
+      if (!ctx) return;
+      // resolveAdmin admits ALL partner accounts — this action is
+      // operator-only, so check the primary role explicitly.
+      // acceptPartialTransferAsPaid re-checks it as the authority.
+      const callerRole = (await getUserRole(ctx.userId))?.role ?? null;
+      const stripe = (await getStripe()) as unknown as BankTransferStripe;
+      const result = await acceptPartialTransferAsPaid({
+        albumId,
+        stepId,
+        callerRole,
+        stripe,
+      });
+      if (!result.ok) {
+        return res.status(result.status).json({ message: result.message });
+      }
+      res.json({
+        ok: true,
+        step: result.step,
+        acceptedCents: result.acceptedCents,
+        forgivenCents: result.forgivenCents,
+      });
     },
   );
 }

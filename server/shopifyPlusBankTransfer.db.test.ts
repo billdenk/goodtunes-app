@@ -29,6 +29,7 @@ import {
   handleShopifyPlusWebhookEvent,
   getBankTransferUnderpaymentThresholdCents,
   extractFundingInstructions,
+  acceptPartialTransferAsPaid,
   type BankTransferStripe,
 } from "./shopifyPlus";
 
@@ -37,9 +38,27 @@ const albumId = `sp-bt-album-${randomUUID().slice(0, 8)}`;
 function stubStripe(opts: {
   cashUsdCents?: number | null;
   confirmStatus?: string;
+  updateError?: string;
+  confirmError?: string;
   onUpdate?: (id: string, params: any) => void;
   onConfirm?: (id: string) => void;
+  /** Initial PaymentIntent amount reported by retrieve (default 500000). */
+  piAmount?: number;
+  /** Simulate a network timeout that lands AFTER Stripe applied the update:
+   *  the amount mutates, then the call throws updateError. */
+  updateAppliesDespiteError?: boolean;
+  /** Simulate a timeout after the confirm actually settled: status flips to
+   *  succeeded, then the call throws confirmError. */
+  confirmAppliesDespiteError?: boolean;
+  /** Make paymentIntents.retrieve itself fail (fully indeterminate). */
+  piRetrieveError?: string;
+  /** Initial PI status reported by retrieve (default requires_confirmation);
+   *  use "succeeded" to model a racing settlement that already won. */
+  piStatus?: string;
 }): BankTransferStripe {
+  // Stateful PI mirror so retrieve() is authoritative like the real API.
+  let piAmount = opts.piAmount ?? 500000;
+  let piStatus: string = opts.piStatus ?? "requires_confirmation";
   return {
     customers: {
       retrieve: async () => ({
@@ -51,12 +70,29 @@ function stubStripe(opts: {
     },
     paymentIntents: {
       update: async (id, params) => {
+        if (opts.updateError) {
+          if (opts.updateAppliesDespiteError && typeof params?.amount === "number") {
+            piAmount = params.amount;
+          }
+          throw new Error(opts.updateError);
+        }
+        if (typeof params?.amount === "number") piAmount = params.amount;
         opts.onUpdate?.(id, params);
         return {};
       },
       confirm: async (id) => {
+        if (opts.confirmError) {
+          if (opts.confirmAppliesDespiteError) piStatus = "succeeded";
+          throw new Error(opts.confirmError);
+        }
         opts.onConfirm?.(id);
-        return { status: opts.confirmStatus ?? "succeeded" };
+        const status = opts.confirmStatus ?? "succeeded";
+        piStatus = status;
+        return { status };
+      },
+      retrieve: async () => {
+        if (opts.piRetrieveError) throw new Error(opts.piRetrieveError);
+        return { amount: piAmount, status: piStatus };
       },
     },
   };
@@ -313,6 +349,643 @@ test("a partially_funded event for a foreign PI is ignored", async () => {
     { stripe: stubStripe({ cashUsdCents: 100 }) },
   );
   assert.equal(handled, false);
+});
+
+// ── Task #3380 — operator accepts a partial transfer as paid in full ──
+
+test("accept-partial happy path: PI shrunk to received, confirmed, step paid with adjusted total", async () => {
+  // $5,370 requested, $4,135 wired (the Sherman scenario shape).
+  const step = await seedStep({ amountCents: 537000 });
+  const updates: any[] = [];
+  const confirms: string[] = [];
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 413500,
+      onUpdate: (id, p) => updates.push([id, p]),
+      onConfirm: (id) => confirms.push(id),
+    }),
+  });
+  assert.equal(res.ok, true);
+  if (res.ok) {
+    assert.equal(res.acceptedCents, 413500);
+    assert.equal(res.forgivenCents, 123500);
+  }
+  assert.deepEqual(updates, [[step.stripePaymentIntentId, { amount: 413500 }]]);
+  assert.deepEqual(confirms, [step.stripePaymentIntentId]);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  // Recorded total adjusted down so Paid/Outstanding math reconciles.
+  assert.equal(after1.amountCents, 413500);
+  assert.equal(after1.marginCents, 0);
+  assert.equal(after1.amountReceivedCents, 413500);
+  assert.ok(after1.paidAt);
+});
+
+test("accept-partial preserves the margin line when the received funds cover it", async () => {
+  const step = await seedStep({ amountCents: 500000, marginCents: 20000 });
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "admin",
+    stripe: stubStripe({ cashUsdCents: 413500 }),
+  });
+  assert.equal(res.ok, true);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  // Plant leg absorbs the reduction; margin stays whole.
+  assert.equal(after1.marginCents, 20000);
+  assert.equal(after1.amountCents, 393500);
+  assert.equal(after1.amountReceivedCents, 413500);
+});
+
+test("accept-partial caps at the requested total on a cash-balance surplus", async () => {
+  const step = await seedStep();
+  const updates: any[] = [];
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 600000, // more than the $5,000 due
+      onUpdate: (id, p) => updates.push([id, p]),
+    }),
+  });
+  assert.equal(res.ok, true);
+  if (res.ok) {
+    assert.equal(res.acceptedCents, 500000);
+    assert.equal(res.forgivenCents, 0);
+  }
+  assert.deepEqual(updates, [[step.stripePaymentIntentId, { amount: 500000 }]]);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  assert.equal(after1.amountCents, 500000);
+});
+
+test("accept-partial is forbidden for partners (never touches Stripe)", async () => {
+  const step = await seedStep({ amountReceivedCents: 413500 });
+  const updates: any[] = [];
+  for (const role of ["label", "artist", "manufacturer", null]) {
+    const res = await acceptPartialTransferAsPaid({
+      albumId,
+      stepId: step.id,
+      callerRole: role,
+      stripe: stubStripe({
+        cashUsdCents: 413500,
+        onUpdate: (id, p) => updates.push([id, p]),
+      }),
+    });
+    assert.equal(res.ok, false);
+    if (!res.ok) assert.equal(res.status, 403);
+  }
+  assert.deepEqual(updates, []);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "awaiting_transfer");
+});
+
+test("accept-partial refuses when no funds have been received", async () => {
+  const step = await seedStep();
+  const updates: any[] = [];
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 0,
+      onUpdate: (id, p) => updates.push([id, p]),
+    }),
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 409);
+  assert.deepEqual(updates, []);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "awaiting_transfer");
+});
+
+test("accept-partial refuses an already-paid step (idempotent double-click)", async () => {
+  const step = await seedStep({ status: "paid", amountReceivedCents: 413500 });
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({ cashUsdCents: 413500 }),
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 409);
+});
+
+test("accept-partial refuses non-awaiting states", async () => {
+  for (const status of ["unpaid", "processing", "failed"]) {
+    const step = await seedStep({ status, amountReceivedCents: 100000 });
+    const res = await acceptPartialTransferAsPaid({
+      albumId,
+      stepId: step.id,
+      callerRole: "super_admin",
+      stripe: stubStripe({ cashUsdCents: 100000 }),
+    });
+    assert.equal(res.ok, false);
+    if (!res.ok) assert.equal(res.status, 409);
+  }
+});
+
+test("accept-partial fails closed when the Stripe PI update errors (nothing changes)", async () => {
+  const step = await seedStep();
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({ cashUsdCents: 413500, updateError: "boom" }),
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 502);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "awaiting_transfer");
+  assert.equal(after1.amountCents, 500000); // total untouched
+  assert.equal(after1.marginCents, 0);
+});
+
+test("accept-partial compensates when the confirm fails: PI and totals restored, step intact", async () => {
+  // Confirm throws → PI restored to the original amount, DB totals restored.
+  const step1 = await seedStep();
+  const updates1: any[] = [];
+  const res1 = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step1.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 413500,
+      confirmError: "net down",
+      onUpdate: (id, p) => updates1.push([id, p]),
+    }),
+  });
+  assert.equal(res1.ok, false);
+  if (!res1.ok) assert.equal(res1.status, 502);
+  // Shrink then compensating restore, both at Stripe.
+  assert.deepEqual(updates1, [
+    [step1.stripePaymentIntentId, { amount: 413500 }],
+    [step1.stripePaymentIntentId, { amount: 500000 }],
+  ]);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step1.id));
+  assert.equal(after1.status, "awaiting_transfer");
+  assert.equal(after1.amountCents, 500000); // requested total intact
+  assert.equal(after1.marginCents, 0);
+
+  // Confirm returns a non-succeeded status → same compensation.
+  const step2 = await seedStep({ marginCents: 20000 });
+  const res2 = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step2.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({ cashUsdCents: 413500, confirmStatus: "requires_action" }),
+  });
+  assert.equal(res2.ok, false);
+  if (!res2.ok) assert.equal(res2.status, 502);
+  const [after2] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step2.id));
+  assert.equal(after2.status, "awaiting_transfer");
+  assert.equal(after2.amountCents, 500000);
+  assert.equal(after2.marginCents, 20000);
+});
+
+test("accept-partial keeps the shrunk total only when the compensating PI restore also fails", async () => {
+  const step = await seedStep();
+  let updateCalls = 0;
+  const stripe = stubStripe({ cashUsdCents: 413500, confirmError: "net down" });
+  (stripe.paymentIntents as any).update = async (_id: string, _p: any) => {
+    updateCalls += 1;
+    if (updateCalls > 1) throw new Error("restore failed"); // shrink ok, restore fails
+    return {};
+  };
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe,
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 502);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "awaiting_transfer");
+  // The PI is still shrunk at Stripe, so the shrunk recorded total is the
+  // honest mirror — retrying accept re-runs idempotently from here.
+  assert.equal(after1.amountCents, 413500);
+});
+
+test("accept-partial requires a live balance read: refuses (fail closed) when Stripe is unreachable, even with a recorded tally", async () => {
+  const step = await seedStep({ amountReceivedCents: 413500 });
+  const updates: any[] = [];
+  const stripe = stubStripe({
+    cashUsdCents: 413500,
+    onUpdate: (id, p) => updates.push([id, p]),
+  });
+  (stripe.customers as any).retrieve = async () => {
+    throw new Error("stripe down");
+  };
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe,
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 502);
+  assert.deepEqual(updates, []); // PI never touched
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "awaiting_transfer");
+  assert.equal(after1.amountCents, 500000);
+});
+
+test("accept-partial race: webhook settles BEFORE any Stripe change → 409, PI untouched, totals intact", async () => {
+  // The settle races us during the live balance read: the guarded totals
+  // adjustment finds no awaiting row and the accept bails having touched
+  // nothing at Stripe.
+  const step = await seedStep();
+  const updates: any[] = [];
+  const stripe = stubStripe({
+    cashUsdCents: 413500,
+    onUpdate: (id, p) => updates.push([id, p]),
+  });
+  const origRetrieve = stripe.customers.retrieve.bind(stripe.customers);
+  (stripe.customers as any).retrieve = async (id: string, params: any) => {
+    // Simulate the webhook settling the (full) PI concurrently.
+    await db
+      .update(manufacturerPaymentSteps)
+      .set({ status: "paid", paidAt: new Date(), amountReceivedCents: 500000 })
+      .where(eq(manufacturerPaymentSteps.id, step.id));
+    return origRetrieve(id, params);
+  };
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe,
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 409);
+  assert.deepEqual(updates, []); // Stripe PI never touched
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  assert.equal(after1.amountCents, 500000); // full totals — full PI settled
+});
+
+test("accept-partial race: webhook settles the FULL PI while the shrink call fails → full totals restored on the paid row", async () => {
+  // Totals were pre-adjusted, then the Stripe shrink fails while a webhook
+  // concurrently settles the still-full PI. The restore must apply even
+  // though the row is now paid — the full totals mirror what Stripe took.
+  const step = await seedStep();
+  const stripe = stubStripe({ cashUsdCents: 413500 });
+  (stripe.paymentIntents as any).update = async () => {
+    await db
+      .update(manufacturerPaymentSteps)
+      .set({ status: "paid", paidAt: new Date(), amountReceivedCents: 500000 })
+      .where(eq(manufacturerPaymentSteps.id, step.id));
+    throw new Error("stripe glitch");
+  };
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe,
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 502);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  assert.equal(after1.amountCents, 500000); // restored to the settled full amount
+  assert.equal(after1.marginCents, 0);
+});
+
+test("accept-partial race: webhook settles the SHRUNK PI during confirm failure → paid at the adjusted totals, no restore", async () => {
+  // The PI is already shrunk when confirm errors while a webhook settles
+  // it concurrently. The compensating totals-restore is guarded on
+  // awaiting_transfer, so the winning settlement keeps the SHRUNK totals —
+  // exactly what Stripe collected.
+  const step = await seedStep();
+  const stripe = stubStripe({ cashUsdCents: 413500 });
+  (stripe.paymentIntents as any).confirm = async () => {
+    await db
+      .update(manufacturerPaymentSteps)
+      .set({ status: "paid", paidAt: new Date(), amountReceivedCents: 413500 })
+      .where(eq(manufacturerPaymentSteps.id, step.id));
+    throw new Error("net blip after settle");
+  };
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe,
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 502);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  assert.equal(after1.amountCents, 413500); // shrunk totals preserved
+  assert.equal(after1.amountReceivedCents, 413500);
+});
+
+test("accept-partial indeterminate shrink: timeout AFTER Stripe applied it → reconciled via PI re-read, settles paid", async () => {
+  // The update throws, but Stripe actually applied the shrink. The PI
+  // re-read shows the accepted amount, so the flow proceeds and settles.
+  const step = await seedStep();
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 413500,
+      updateError: "socket timeout",
+      updateAppliesDespiteError: true,
+    }),
+  });
+  assert.equal(res.ok, true);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  assert.equal(after1.amountCents, 413500);
+  assert.equal(after1.amountReceivedCents, 413500);
+});
+
+test("accept-partial indeterminate shrink with unreadable PI: no blind restore, converging state kept", async () => {
+  // Both the update AND the reconciliation re-read fail: fully
+  // indeterminate. The shrunk recorded totals stay (a retry re-derives
+  // everything and converges); nothing is blindly restored.
+  const step = await seedStep();
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 413500,
+      updateError: "socket timeout",
+      piRetrieveError: "still down",
+    }),
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) {
+    assert.equal(res.status, 502);
+    assert.match(res.message, /retry/i);
+  }
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "awaiting_transfer");
+  assert.equal(after1.amountCents, 413500); // consistent, retry converges
+});
+
+test("accept-partial indeterminate confirm: timeout AFTER Stripe settled → reconciled via PI re-read, settles paid", async () => {
+  const step = await seedStep();
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 413500,
+      confirmError: "socket timeout",
+      confirmAppliesDespiteError: true,
+    }),
+  });
+  assert.equal(res.ok, true);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  assert.equal(after1.amountCents, 413500);
+});
+
+test("accept-partial indeterminate confirm with unreadable PI: PI untouched, shrunk mirror kept", async () => {
+  const step = await seedStep();
+  const updates: any[] = [];
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 413500,
+      confirmError: "socket timeout",
+      piRetrieveError: "still down",
+      onUpdate: (id, p) => updates.push([id, p]),
+    }),
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 502);
+  // Only the shrink — no blind PI restore while its state is unknown (it
+  // may have settled; the succeeded webhook completes it).
+  assert.deepEqual(updates, [[step.stripePaymentIntentId, { amount: 413500 }]]);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "awaiting_transfer");
+  assert.equal(after1.amountCents, 413500);
+});
+
+test("accept-partial DB failure during totals restore after a PI restore: caught, flagged, honest message", async () => {
+  const step = await seedStep();
+  const updates: any[] = [];
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 413500,
+      confirmError: "net down",
+      onUpdate: (id, p) => updates.push([id, p]),
+    }),
+    testFailpoint: "totals-restore",
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) {
+    assert.equal(res.status, 502);
+    assert.match(res.message, /could not be restored/i);
+  }
+  // PI was restored to the original amount at Stripe...
+  assert.deepEqual(updates, [
+    [step.stripePaymentIntentId, { amount: 413500 }],
+    [step.stripePaymentIntentId, { amount: 500000 }],
+  ]);
+  // ...but the DB restore failed: totals stay shrunk, step stays awaiting;
+  // a retry re-derives from current state and reconciles.
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "awaiting_transfer");
+  assert.equal(after1.amountCents, 413500);
+});
+
+test("accept-partial DB failure AFTER the payment settled: never reported as not-settled; webhook completes it", async () => {
+  const step = await seedStep();
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({ cashUsdCents: 413500 }),
+    testFailpoint: "mark-paid",
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) {
+    assert.equal(res.status, 502);
+    assert.match(res.message, /settled at Stripe/i);
+  }
+  // Totals stay at the settled (shrunk) amount; the succeeded webhook's
+  // idempotent markStepPaid is the durable recovery for the paid flip.
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "awaiting_transfer");
+  assert.equal(after1.amountCents, 413500);
+
+  // Prove the recovery: replay the webhook's succeeded handling.
+  await handleShopifyPlusWebhookEvent(
+    {
+      type: "payment_intent.succeeded",
+      data: {
+        object: {
+          id: step.stripePaymentIntentId,
+          amount: 413500,
+          amount_received: 413500,
+          metadata: { gt_kind: "shopify_plus_step", gt_step_id: step.id },
+        },
+      },
+    },
+    { stripe: stubStripe({ cashUsdCents: 0 }) },
+  );
+  const [after2] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after2.status, "paid");
+  assert.equal(after2.amountCents, 413500); // settled totals preserved
+});
+
+test("accept-partial indeterminate shrink vs racing FULL settlement: totals restored to the settled full amount", async () => {
+  // After the DB-first adjustment, the update throws because a racing
+  // settlement already succeeded the ORIGINAL full PI. The PI re-read
+  // reports succeeded at the original amount — the accept must record a
+  // FULL settlement (totals restored, nothing forgiven), never the
+  // partial amount it merely intended.
+  const step = await seedStep();
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 413500,
+      updateError: "PI already succeeded",
+      piStatus: "succeeded", // settled at the original 500000
+    }),
+  });
+  assert.equal(res.ok, true);
+  if (res.ok) {
+    assert.equal(res.acceptedCents, 500000);
+    assert.equal(res.forgivenCents, 0);
+  }
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  assert.equal(after1.amountCents, 500000); // full settled totals
+  assert.equal(after1.amountReceivedCents, 500000);
+});
+
+test("accept-partial indeterminate shrink where the PI settled at the ACCEPTED amount: paid at the shrunk totals", async () => {
+  // The shrink applied AND a racing settle confirmed it before our
+  // re-read: succeeded at the accepted amount → partial settlement stands.
+  const step = await seedStep();
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 413500,
+      updateError: "socket timeout",
+      updateAppliesDespiteError: true,
+      piStatus: "succeeded",
+    }),
+  });
+  assert.equal(res.ok, true);
+  if (res.ok) {
+    assert.equal(res.acceptedCents, 413500);
+    assert.equal(res.forgivenCents, 86500);
+  }
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  assert.equal(after1.amountCents, 413500);
+});
+
+test("accept-partial refuses on a stale tally when the shared cash balance is depleted", async () => {
+  // Two steps share one Stripe customer/cash balance: the first settled and
+  // consumed the funds; the second still carries a stale recorded tally.
+  // Live balance is now 0 — accept must refuse, never trust the tally.
+  const step = await seedStep({ amountReceivedCents: 413500 });
+  const updates: any[] = [];
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 0,
+      onUpdate: (id, p) => updates.push([id, p]),
+    }),
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 409);
+  assert.deepEqual(updates, []);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "awaiting_transfer");
+  assert.equal(after1.amountCents, 500000);
 });
 
 test("paid steps ignore late partially_funded replays (idempotent)", async () => {
