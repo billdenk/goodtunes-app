@@ -17,6 +17,8 @@ current, not appended to: stale lines are overwritten when things change.
 
 ## 1. Recent changes
 
+- **/investor-update standalone page (Aug 24 2026, gogoods)**: Bill's externally-built GoodTunes Ecosystem deck now serves at `get.goodtunes.music/investor-update` — same pattern as `/investors` (file at `server/assets/investor-update.html`, streamed no-store, X-Robots-Tag + injected noindex meta, unlinked, every host). Live in dev; **needs a publish to reach prod**.
+
 - **Create → Packages rail entry + package builder loses the estimate math (Aug 24 2026, gogoods walk-through)**: the press rail's Create group now carries BOTH builders — Estimates and Packages (opens `/vendor?tab=packages&view=builder`; registry id `packageBuilder`, aliased in `usePressPortalNav`). Create = where you build; Product Specs › «Press» Packages stays the saved-builds index; rail highlight and god-view breadcrumb distinguish the two. The package builder's "The build." card and top strip drop ALL run math — no Run row, no Setup, no Full run total; only the specs line, the per-record component roll-up, and the "From $X.XX /unit at {min} units" anchor remain, so the "Packages skip quantity and price" caption and the UI finally agree. Estimate builder untouched. God view (AdminManufacturer) mirrors both changes. Needs a publish.
 - **Copy rule (Bill/gogoods, for Ruby too)**: the possessive of Memphis is **"Memphis'"** — apostrophe only, no trailing s. Audited user-facing copy: no "Memphis's" currently ships (all hits are code comments).
 

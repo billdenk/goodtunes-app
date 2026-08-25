@@ -2384,6 +2384,30 @@ export async function registerRoutes(
     );
   });
 
+  // ─── Investor update standalone page ───────────────────────────────
+  // Self-contained HTML ecosystem/update deck (built externally by Bill),
+  // shared by direct URL only — same serving pattern as /investors above
+  // (unlinked, noindex, no-store, wins over the SPA fallback on every
+  // host, e.g. get.goodtunes.music/investor-update).
+  app.get("/investor-update", async (_req, res) => {
+    const path = await import("path");
+    res.sendFile(
+      path.join(process.cwd(), "server", "assets", "investor-update.html"),
+      {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "X-Robots-Tag": "noindex, nofollow",
+          "Cache-Control": "no-store, must-revalidate",
+        },
+      },
+      (err?: Error) => {
+        if (err && !res.headersSent) {
+          res.status(404).type("text/plain").send("investor update is not available");
+        }
+      },
+    );
+  });
+
   // ─── OAuth: Google + Apple ─────────────────────────────────────────
   // Start endpoints redirect to the provider; callback endpoints come
   // back here. The `kind` (admin | customer) is taken from the host on
