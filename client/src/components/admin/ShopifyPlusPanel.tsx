@@ -654,6 +654,11 @@ export function ManufacturingLedger({
     "artist_direct",
   );
 
+  // Task #3004 — the instructions modal (step id being shown, or null).
+  // Must be declared ABOVE the 403 early return below: hooks after a
+  // conditional return crash with React #300 the moment the query errors.
+  const [instructionsFor, setInstructionsFor] = useState<string | null>(null);
+
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ledgerKey });
 
