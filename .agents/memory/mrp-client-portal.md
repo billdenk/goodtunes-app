@@ -10,6 +10,7 @@ description: How the Memphis light client skin is scoped and what stays fan/Good
 - Dev testing: `?gtwl=<slug>` (DEV-only, sessionStorage) fakes the white-label host; dev DB needs `manufacturers.white_label_slug` set (it drifts from prod — prod had `memphis`, dev didn't).
 - Standing rule: white-label hosts set document.title = press name + square-logo favicon (`WhitelabelDocumentHead`, brand-driven, all presses).
 - Estimate-link public payload is an EXACT-keys allowlist test (`pressBranding.routes.db.test.ts`) — adding any field to the `/api/estimate-link/:token` response or its brand block requires updating that test.
+- MrpSiteHeader is intentionally TRIPLICATED (project-home / next-steps / estimate-accepted pages) — keep the copies mirrored when editing. All marketing chrome (utility bar, nav links, social glyphs) is front-door only: render solely when the viewer is signed OUT (estimate-accepted derives signed-in from useAuth kind!=='admin').
 - Dark-mode addendum deliberately deferred to its own round; estimate/email/accepted/public stay light even when it lands.
 - Client-uploaded estimate files (masters/artwork) are stored PRIVATE and read only via the authed `/api/press-client/estimates/:id/files/:objectId` route (client-owner or press-scoped) — never surface them through the public `/objects/uploads` route.
 - The estimate-email review redirect is env-gated (`PRESS_ESTIMATE_REVIEW_RECIPIENT`, default off); remove the shared env var to restore real-recipient delivery.

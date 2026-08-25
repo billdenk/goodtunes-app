@@ -208,7 +208,10 @@ export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean;
     <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
       {/* Utility bar */}
       {/* Utility bar — values pulled from their live stylesheet (Bill, Aug 21
-          2026): 40px row, 12px / 400 / 0.07em body type, #333 ink. */}
+          2026): 40px row, 12px / 400 / 0.07em body type, #333 ink. Marketing
+          chrome for the logged-out front door only — signed in, the whole
+          strip drops away (task, Aug 25 2026). */}
+      {!signedIn && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: 40, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}`, fontSize: 12, fontWeight: 400, letterSpacing: '0.07em', color: '#333333' }}>
         <span>Let&rsquo;s talk about your project</span>
         <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: HAIRLINE }} />
@@ -221,12 +224,11 @@ export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean;
         </span>
         <span style={{ flex: 1 }} />
         {/* Their real social glyphs (Instagram · Facebook · YouTube), gold like
-            the live site — front-door chrome only. Signed in, they drop away
-            so nothing pulls off the page's intent (Bill, Aug 21 2026). */}
-        {!signedIn && (
-          /* Sized + celled like the live site: larger glyphs, hairline
-             dividers between each (Bill, Aug 21 2026 screenshot). */
-          <span style={{ display: 'flex', alignItems: 'stretch', alignSelf: 'stretch' }} aria-hidden>
+            the live site — front-door chrome only, like the whole bar now
+            (Bill, Aug 21 2026). */}
+        {/* Sized + celled like the live site: larger glyphs, hairline
+            dividers between each (Bill, Aug 21 2026 screenshot). */}
+        <span style={{ display: 'flex', alignItems: 'stretch', alignSelf: 'stretch' }} aria-hidden>
             <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(0,0,0,0.12)' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8">
                 <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" />
@@ -244,9 +246,9 @@ export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean;
                 <path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.5 12 4.5 12 4.5s-7 0-8.9.6A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12 31 31 0 0 0 1 16.8a3 3 0 0 0 2.1 2.1c1.9.6 8.9.6 8.9.6s7 0 8.9-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 23.5 12 31 31 0 0 0 23 7.2zM9.8 15.3V8.7l6 3.3-6 3.3z" />
               </svg>
             </span>
-          </span>
-        )}
+        </span>
       </div>
+      )}
       {/* Poppins rides with the header so both stages get the real MRP face. */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');

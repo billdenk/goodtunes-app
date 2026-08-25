@@ -270,10 +270,13 @@ function InsetRule() {
 // gold "GET AN ESTIMATE" rectangle competing with the page's one action. ──
 const MRP_NAV = ['Home', 'About MRP', 'Products', 'Resources', 'MRP TV', 'MRP University', 'News', 'Shop', 'Contact'];
 
-function MrpSiteHeader() {
+function MrpSiteHeader({ signedIn = false }: { signedIn?: boolean }) {
   return (
     <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
-      {/* Utility bar — 40px row, 12px / 400 / 0.07em, #333 ink (their stylesheet) */}
+      {/* Utility bar — 40px row, 12px / 400 / 0.07em, #333 ink (their stylesheet).
+          Marketing chrome for the logged-out front door only — signed in, the
+          whole strip drops away (task, Aug 25 2026). */}
+      {!signedIn && (
       <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: 40, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}`, fontSize: 12, fontWeight: 400, letterSpacing: '0.07em', color: '#333333' }}>
         <span>Let&rsquo;s talk about your project</span>
         <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: HAIRLINE }} />
@@ -283,6 +286,7 @@ function MrpSiteHeader() {
         </span>
         <span style={{ flex: 1 }} />
       </div>
+      )}
       {/* Poppins rides with the header so the whole page gets the real MRP face. */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
@@ -296,11 +300,12 @@ function MrpSiteHeader() {
         .mrp-nav-link:hover::after { transform: scaleX(1); }
       `}</style>
       {/* Main nav — logo left, links centered: 12px / 600 / 0.05em uppercase,
-          resting ink rgba(51,51,51,0.5) (their stylesheet). */}
+          resting ink rgba(51,51,51,0.5) (their stylesheet). Signed in, the
+          marketing nav drops away too (precedent: Andrew, Aug 24 2026). */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 34, height: 80, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}` }}>
         <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 60, height: 60 }} />
         <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 30, fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-          {MRP_NAV.map((l) => (
+          {(signedIn ? [] : MRP_NAV).map((l) => (
             <a
               key={l}
               href="#"
@@ -464,7 +469,7 @@ export default function PressClientEstimateAcceptedMRP() {
 
   return (
     <div style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: font, display: 'flex', flexDirection: 'column' }}>
-      <MrpSiteHeader />
+      <MrpSiteHeader signedIn={authedCustomer} />
 
       <main style={{ flex: 1 }}>
         <div style={{ maxWidth: 660, margin: '0 auto', padding: '0 24px 72px' }}>

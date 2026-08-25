@@ -164,19 +164,9 @@ function MrpSiteHeader({ firstName }: { firstName: string }) {
   };
   return (
     <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
-      {/* Utility bar — 40px row, 12px / 400 / 0.07em, #333 ink */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: 40, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}`, fontSize: 12, fontWeight: 400, letterSpacing: '0.07em', color: '#333333' }}>
-        <span>Let&rsquo;s talk about your project</span>
-        <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: HAIRLINE }} />
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: '#333333' }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-            <rect x="2" y="4.5" width="20" height="15" rx="2" />
-            <path d="M2.5 6.5L12 13l9.5-6.5" />
-          </svg>
-          help@memphisvinyl.com
-        </span>
-        <span style={{ flex: 1 }} />
-      </div>
+      {/* Utility bar ("Let's talk about your project" + help@) is marketing
+          chrome for the logged-out front door only — this page is always
+          signed-in, so it never renders here (task, Aug 25 2026). */}
       {/* Poppins rides with the header — the real MRP face. */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
