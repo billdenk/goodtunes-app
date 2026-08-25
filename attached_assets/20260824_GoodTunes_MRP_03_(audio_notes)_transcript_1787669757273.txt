@@ -1,0 +1,267 @@
+Bill Denk  0:01  
+I can't remember. I know we've done so many things, so it's it's a good chance that it's changed a bit, but it should be better if anything.
+
+Brandon Seavers  0:12  
+I mean, I'll give you an example. We had a customer this week that sent us 30 audio files and said, "Tell us how this fits, right? So, math whiz would have been pretty challenging to figure that out. Trying to, but using a tool where we can drag and drop and see what what fits on different sides, you know, having that ability would certainly be super helpful.
+
+Andrew Goeken  0:37  
+So, yeah, if we go to an example here. Let's just go keep it with Nina. So the this is the digital component where people would Nina would come in and upload all their tracks. They can be uploaded individually, or you can just paste a file or upload a file, your WAV file, or you can upload via advanced, which is uploading multiple tracks from the Dropbox link, and then it will take all of those tracks if they're ordered and you know properly by name, which most. And we can just show a demo.
+
+Andrew Goeken  1:19  
+Yeah. Oh, yeah. That's a good Idea. Brains. So like
+
+Bill Denk  1:49  
+here, one of the things we do is see as he goes through here, reigns is giving us we already have rains in there.
+
+Andrew Goeken  1:55  
+It didn't auto correct it.
+
+Bill Denk  1:57  
+So if we didn't, we could search shop on Spotify, click on them, and then that quickly it adds the adds the artist in, so it's connected to their Shopify. I mean Spotify account. I've been working on Shopify, so yeah. Go ahead and choose that because our database. Just name
+
+Andrew Goeken  2:12  
+yeah set fire to boxes. I'll just save us time here.
+
+Bill Denk  2:19  
+So if they're not doing a Shopify store, it's just we call GoodTunes Direct, where they the customer comes to our store to actually it's a single page and we call preview and purchase page, where they can preview 30 second previews and they can purchase. If it's if it's Shopify, then the artist will host on their store, but fans can still get a preview of the music when they buy it, so that, and I can talk about this later. But the short story is that most time people have to wait until till the us out on streaming. We provide through our service the ability for fans to get instant access into the music on a free player, so only the fans who purchase can can do that, but you go to GoToSiract,
+
+Andrew Goeken  3:06  
+and then we go to the digital. I can upload multiple tracks. Go into my Dropbox folder here. Copy the link. Paste it in. And
+
+Bill Denk  3:22  
+what it will do is it's going to actually ingest all of the files first from the Dropbox link, and then the second thing is it's going to run through. There's something called Mux M UX that actually provides the the chunking of the audio out for us for when we use it on our player, so that it'll actually make sure that somebody tries to steal the audio, they'll only get a piece of it. They're not going to get the whole thing.
+
+Andrew Goeken  3:46  
+Also converts it to flak, I think. Right.
+
+Bill Denk  3:48  
+So additionally, what you're going to find here is it's going through the the tracks as well, and then it's placed them all in. You can see the little spinners on the left hand side, but so it's not kind of doing its process.
+
+Andrew Goeken  4:03  
+So then here you'd be able to drag and drop to reorder them. If you're like, oh, I actually, you know, put them in a track order and they did. So pulled in the names and renamed it based off of you know what's most logical, removing the zeros, etc. Here they can upload their lyrics, and we have what we've created as lyric flow, meaning they base their lyrics in here. You can sync it with the audio, and it will line up. That's all.
+
+Bill Denk  4:33  
+I'm trying to play. That's all for player. Yeah, because it brings. Yeah, so if you go up to physical, then what you see is it does the side breaks, the side A, side B. You can just zoom into the top right hand corner there, where it says 1217. Yeah. So then it lets them know what it is. If it's over, if they have 25 minutes or 22 01, whatever it is within the buffer that you say you want to have, then it will let them know. Hey, this this won't fit. Will it
+
+Brandon Seavers  5:02  
+prohibit them, or will it just give them a warning?
+
+Andrew Goeken  5:04  
+Prohibit.
+
+Bill Denk  5:05  
+We can. Well, it'll give them a warning, suggest what they need to, but we can prohibit it. We wouldn't prohibit. No. Okay. And then
+
+Andrew Goeken  5:12  
+they could also drag and drop, and it keeps their track number, so they know. Oh, I want track one to move over here because of time. I can make sure that I'm still ordering it correctly based off of how I have it on my digital side. If I release to streaming already, and I haven't tried this
+
+Bill Denk  5:26  
+yet. But if you click on the PQ sheet, so yes, we haven't
+
+Andrew Goeken  5:34  
+we haven't pre-run these because we just uploaded. They're probably still encoding.
+
+Brandon Seavers  5:38  
+So will it? Let's say you put 30 tracks. Will it automatically suggest sideburns,
+
+Bill Denk  5:46  
+and then you
+
+Brandon Seavers  5:46  
+can drag and drop as you want? Yeah, we actually
+
+Bill Denk  5:48  
+know that. Like, we'll click on a button and it'll actually reorder them for
+
+Brandon Seavers  5:52  
+you. And will it automatically, like you said, automatically determine the track titles by scrubbing the bombing? Yeah, it already does. And you can always edit
+
+Andrew Goeken  6:01  
+it. So if you look at my tab go,
+
+Bill Denk  6:09  
+is that another screen?
+
+Andrew Goeken  6:10  
+Here it is. Yeah. So if you look at my Dropbox, here's what my file, the files are named in here. You can
+
+Bill Denk  6:16  
+zoom in.
+
+Andrew Goeken  6:17  
+Yeah. Sorry. So you can see 01 Mary Bill's master input that as o1 and remove master and remove o1. So yeah, automated all that. If we go to what if
+
+Brandon Seavers  6:29  
+what if you change where is your
+
+Andrew Goeken  6:36  
+cutting speed? I think auto isn't the speed set based off of whether it's set up in the beginning. Do
+
+Brandon Seavers  6:44  
+we want to give them the choice there because like that would be perfect for
+
+Bill Denk  6:51  
+45. Yeah.
+
+Brandon Seavers  6:52  
+So and and I can give. Do I did I give you the recommended side brakes for different speeds?
+
+Bill Denk  7:01  
+It might be in the system if you go into system, Andrew. Because
+
+Brandon Seavers  7:05  
+we would want to, we would want to,
+
+Brandon Seavers  7:08  
+we would want to pop up. So just like we would want to pop up or a warning that says, "Hey, this is probably too long. You probably also want to have one that says, "Hey, this would actually fit, and you would have higher sound quality at 45 RPM.
+
+Bill Denk  7:21  
+Okay. I can
+
+Brandon Seavers  7:25  
+send you those
+
+Speaker 1  7:27  
+because 12 minutes going on a. Yeah, you can. I guess even going to 45. Yeah, so
+
+Brandon Seavers  7:32  
+say that could be 45 RPM.
+
+Lance Binder  7:33  
+What What's the longest on a 45 RPM? Um.
+
+Brandon Seavers  7:37  
+So at 40, so seven inch at I mean 12 inch at 45 RPM is 12 to 16 minutes.
+
+Bill Denk  7:52  
+Yeah. So if you go down, so Andrew, if you go left hand side, I'm sorry. Go go is them as Memphis, and then go down to specs. So this is what we have right now for your, based on we saw online.
+
+Brandon Seavers  8:09  
+On your chapter 12, I'm going to send you this.
+
+Bill Denk  8:14  
+So that could be updated by you at any time as well. But we're glad to do that too.
+
+Brandon Seavers  8:30  
+Yeah, I think I think it'd be great to have a warning if it's over, but not prohibited, and have a recommendation that's under like, hey, this is I do think two minutes. Yeah. Do we want to give them the option to choose the cutting speed?
+
+Arian Kennedy  8:53  
+I would say yes because we've had people be very particular about their cutting speed, and you know, for a while there, we weren't seeing a lot of requests for 45, but I feel like we're and people are adjusting. Yeah,
+
+Brandon Seavers  9:08  
+I do think we should give them the ability to choose the cutting speed. Obviously, the system can automatically recommend it, but you can still have a selector up there, right? And then if they try to go 45. It would just give them the warning. Hey, this is this is we recommend 33 RPM.
+
+Andrew Goeken  9:29  
+Here's where you'd be able to download once they have everything uploaded. I know what my sides are. We have a PTC sheet. We can run pre-flight on the masters, making sure that it would pass for based on your spec. On your spec. So if we switch it to 45, but then if we ran it on a seven-inch, I imagine this would probably fail, right? Yeah. So just it fails the. This is for us, for the customer. This
+
+Bill Denk  10:02  
+is for you.
+
+Brandon Seavers  10:03  
+Okay. Yeah.
+
+Andrew Goeken  10:04  
+So you can guarantee that whatever they uploaded would fit per their what they want. Making sure that would pass. Then you can download a zip file of the same files that were just uploaded from one place instead of having to get emailed Dropbox links and those existing in email, and oh, which email was that, and when did they send it? And as soon as they upload it here, it's always in the same place, and you can go into the the project.
+
+Brandon Seavers  10:34  
+No, this is great. The app customer right now is asking how to send audio. I said, go create an account. Send us your audio because they don't know what Dropbox is. They want to say they don't know how to create an account too. They'll send
+
+Arian Kennedy  10:50  
+us the audio and be like, "What's a what's a track list? What do you mean by track list? So
+
+Andrew Goeken  10:56  
+your audio is going to be low bit MP3s.
+
+Bill Denk  10:59  
+Yeah. So for example, if they're in, like for example, can you go into adding a customer?
+
+Andrew Goeken  11:07  
+And
+
+Bill Denk  11:08  
+so, yeah, so like, so just a project. If you're doing it for for
+
+Andrew Goeken  11:14  
+Memphis,
+
+Bill Denk  11:15  
+it's a good one. So, basically, code here. I don't add artist, and you start to. So, what was the name of the the customer you're talking about? Sue. Sue. What do you mean? Is that the name of the album? Yeah, the
+
+Brandon Seavers  11:30  
+artist is Sue. Sue. That's true. Sue Foley. O U F O L E Y. F L L E Y. Oh. That's right there. isn't
+
+Andrew Goeken  11:43  
+F O L e1? So I searched streaming and it found all these close matches. That's right. Yeah, that's if she's only on Apple Music and on Spotify.
+
+Bill Denk  11:51  
+So what it was, add her in. So then, if you wanted to send like an invite or something, you could always then just invite her to the system and then put her email address. Here's the message, and then that gets her in the system. Yeah, that's great. And now it's already already pulled in. And actually, see this at the top. It also comes that out.
+
+Brandon Seavers  12:10  
+Oh, so we could actually guide her. Yeah, and you guys record
+
+Bill Denk  12:14  
+so pulls her pulls her picture in there, and then the other part that we have is the ability on our side, it pulls our streaming in. So when the player happens, we can talk more about how we do the player thing. So we pull a player ahead. We can also have people can learn more about what they do to make sure it's the right artist by going out and music that way. So and so it's an easier way we think, at least, for getting the artist to become engaged because they just click. They enter in, and they're good to go. And you can and you can invite them to come as the artist with no quote or anything, or you can invite them to come in by sending an estimate. Same thing. We've also been working on a way where if we want to make sure that the person is the actual artist. We have it set up, and I think you tested this with Jonathan. But we have it set up so that if a person comes in, we don't know who they are, and they say that they're somebody, the system will actually ask them to put a code in their Shopify Spotify. I'm sorry, Spotify for artists-they put it into their bio, and the system will confirm that it's actually there. And when it does, we verify that they're not who they are. Sorry, supposed to be on mute. That's okay. Trying to look at track size on this 45 versus 33 RPM.
+
+Arian Kennedy  13:37  
+You got me stuck on that?
+
+Speaker 1  13:38  
+I mean, this has to be curious. Yeah. Do we email to you. No, I got. I found it too. I was. I was double checking. Now let's just look at this particular songs and records.
+
+Arian Kennedy  13:52  
+This is very very cool though.
+
+Bill Denk  13:57  
+Yeah. So then the artists could be able to come in, sign up, and they could use you could use some use Spotify to double check it to make sure that they're legit artists, so you know they are who they are. Because anybody come
+
+Brandon Seavers  14:09  
+and
+
+Bill Denk  14:09  
+give you something to take. No,
+
+Brandon Seavers  14:10  
+that's beautiful. Closest representation in Bill's brain, right? No, that's great. Trying to think. Is there anything else specifically you want to show? The
+
+Bill Denk  14:24  
+one thing I just want to talk about was the economics of what I think we can save. But I don't know if you want to do a group setting. If it's however you want
+
+Brandon Seavers  14:33  
+to do it. Why don't we do that separately so that we don't lose the team's time, we maximize the time. The guys we can do that separately.
+
+Bill Denk  14:47  
+Okay. If you want, it's up to you. It took a few minutes, and then they can go through whatever else needs to be done. That's fine. Or
+
+Brandon Seavers  14:54  
+what do you guys want to talk about next?
+
+Speaker 2  14:57  
+How we manage. You and I carve off
+
+Brandon Seavers  15:07  
+for a minute.
+
+Bill Denk  15:07  
+Okay.
+
+Speaker 2  15:10  
+Well, then we have a conversation back and forth with them, and they're like, "Well, I bill black requests. Yeah, we can. We should. We will then be able to go in and edit the quote that they need. Yes. Yes. We need to update that. Say, okay, well, here's here's the new breakdown. We made the change for you. Here's what the employer looks like.
+
+Andrew Goeken  15:37  
+Okay. Yeah, it may. Because that's going to happen a lot. Yeah. We'll be thinking about what? And this is actually a good question. Logistically, I would imagine if they created a
+
+Bill Denk  15:49  
+quote, you would want to go and just duplicate that quote and send them a book.
+
+Andrew Goeken  15:52  
+So that way, if you wanted to compare to their whole world, like oh yeah, wanted this, this, and this, then you sent them when it changed it today. Yeah, and they might be like, "Oh, well, what
+
+Speaker 2  16:04  
+happened in the original film? So yeah, is it such that we can duplicate the
+
+Brandon Seavers  16:09  
+original? So
+
+Unknown Speaker  16:10  
+we'll send it out the link.
+

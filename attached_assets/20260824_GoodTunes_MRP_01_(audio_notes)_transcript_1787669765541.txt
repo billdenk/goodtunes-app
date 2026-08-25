@@ -1,0 +1,1899 @@
+Brandon Seavers  0:00  
+And ultimately, that system would be into our system. So we have a single source of truth. Right now, we don't have a single source of truth. We have multiple sources of truth, which means we have lots of lies. Yeah, information going into different areas. We still are very heavily invested in Google Sheets. There's still some duplicate. That does not change. Well, I would say there's not duplicate or fitting quadruple. Probably even more entry. Triple. Yeah, we have we have one master document. We call it the project tracker. So when Google first announced the free version of Google Docs, which was on 2000 something, eight, 910, something like that, I was like, "Oh, this is free, and it'll replace these little sheets that we pass to our CD company. So we created something called the project tracker. Let's put it on the screen and then move in a room. And our team was like two people in the team that could manage the projects. It was awesome. So we started the vinyl company. We just repurposed that document, and it grew and it grew and it grew and it started to break. And it broke so much that Google said we will no longer support you. Oh my gosh! They said you are trying to do something with this that was not intended to
+
+Brandon Seavers  1:21  
+do.
+
+Brandon Seavers  1:22  
+We tried to get them to change the rules. They wouldn't do that either. So I'm not changing the rules for you. But this document is our Bible. It still is our Bible. It's it's going to be the last piece. Lance is actually going to retire the day the day the project tracker
+
+Brandon Seavers  1:35  
+is taken down. So
+
+Lance Binder  1:37  
+there's communication between that Google sheet and our ERP back and forth. So a lot of the stuff is some of the updates are automated. Yeah, we're harvesting that
+
+Brandon Seavers  1:45  
+document, and then and then, but for season, everything lived there. All purchases, all print receipts. Wow, there are still things that live there that live only in email, like test pressing approval. So that that audio test pressing approval. There's a few things. We have a song Arian's written on it that someday mine's different. But if you if you want to know if something from 2015, when we cut it last or when it was last approved, you can ask me, Arian, Bill, our planning manager, or my business partner she is. We're the only people to have that information because it's in our inbox. Doesn't live anywhere else because test pressing approvals only live in in the inbox and on the project tracker. But once the order is completed, it's removed from the project tracker, which means he only has read the inbox. It's a great system. So one of one of the one of the many things on our roadmap to to move into into our, but you know it's interesting. You know, if you look at just when we kind of get started, if you look at the way an order flows, audio and art are completely separate on these parallel tracks that only come together when everything is approved, all components are made, the printing is complete, and it comes together. So it only only comes together later in the game. So you know you kind of have to have you have to develop two different workflows for those two pieces of the puzzle. So whatever
+
+Adam Denk  3:13  
+being asynchronously as you're going,
+
+Brandon Seavers  3:14  
+and test pressings can also sit over here for a very long time. When we have, for example, Pink Boy the Wall. We've been working on that two, three years. So it's the last Dark Side of Good Setup. Dark Side of the Moon took five years, and so they're just the legacy titles are really really challenging from the audio standpoint because all most of those the people that are still alive, if they're dead, it's not all that complicated. Yeah, they're still alive. At some point, it'll be okay. Yeah. At some point, it'll be all right. We're not hoping that they die. We make it simpler. But the wall is the last of our big boy titles. We've got the football and all the others, I think, maybe most of them, all the big ones, and it has just been sitting in no man's land now for two or three years, we make it, we ship it, goes into the black hole. Six months later, they come back to us with some weird commentary or request when they made a mistake, and then we start over again. So it could actually sit over there on this parallel track, but this track might all be done. In fact, we've got center labels. We just passed by, and we moved out there, and we said we were here for. year, probably that we already won't be able to use by the time that order comes around because they'll pay for the drive up. That that parallel track makes it a little challenging to put them in into the into a system and develop a system for it. Where do we want to start, mr. Bill? You're in charge.
+
+Bill Denk  4:43  
+Yeah, I'll kind of go through just a real short thing, and I'm switch over to Andrew. And so, if I can use the screen real quick, won't be a lot of stuff to show, but just kind of share here.
+
+Arian Kennedy  5:22  
+That's a cool background. Nice.
+
+Lance Gorji  5:24  
+We met a couple times over the last few weeks. We just saw this thing growing and changing quite a bit, almost as we were. It's been fun watching it. What have you guys been doing? Uh oh.
+
+Speaker 1  5:38  
+All right, so I'll try.
+
+Bill Denk  6:00  
+Let's do it. This grabs to make the same.
+
+Brandon Seavers  6:03  
+Does that TV see some more air sight? It has a crump cast on it, though. No, don't cast that. I've never seen it
+
+Adam Denk  6:16  
+do that. No, no, no.
+
+Speaker 1  6:47  
+Let's try this one.
+
+Brandon Seavers  6:49  
+If it goes out again, try that
+
+Bill Denk  6:55  
+one. You'll see it clicker. Let's try um. Actually, use the settings.
+
+Adam Denk  7:05  
+under display,
+
+Bill Denk  7:15  
+I think. Displays. The very
+
+Adam Denk  7:17  
+top is
+
+Bill Denk  7:19  
+something. Actually, maybe this is. I don't know. this one
+
+Andrew Goeken  7:32  
+has different plug. It might
+
+Adam Denk  7:38  
+be the USB C.
+
+Bill Denk  7:57  
+go. Okay, so the first light's going to be blank. We're actually going to get back here. So let's hear which is this. I want to find out as far as what your expectations of this week or these two days are. Oh, is this an
+
+Brandon Seavers  8:35  
+interactive conversation? Yeah, yeah, just yeah.
+
+Brandon Seavers  8:44  
+Expectations for the week is obviously completed. Hey, we're going to be done. We're going to have a deliverable by the end of the day tomorrow. I think to understand kind of the roadmap, to understand what our priorities are, and we've we've kind of we we've been talking a little about it last couple of weeks about what we think our priorities are, what's what is executable, what you guys think is possible within a certain time range, and then just you know setting some expectations around what that delivery window looks like. So from a priority standpoint, we we broke this down into into three pieces: a a customer facing public quote generator, right? That lives on the website for the window shoppers. So we spend a significant amount of time in house. Ariane's team just fielding requests from our website, quoting things. We quote. We have two different methods that we use to quote. Just give you some backstory. We use. We have quoting set up in our in our ERP encoder. But for quick quotes, we use Google Sheets, and it's a manual entry. We've got some pre-filled forms that we can drop down, but it's manual entry. If you're. Savvy, you can create a quote 15 minutes. It's not very efficient, right? If you're not all that savvy, it probably takes you 20 to 30 minutes to create an estimate, depending on the complexity of the price. So we want to build a quote generator for the window shoppers because you know I don't know what percentage of these quotes never convert to orders. Probably the majority of the I would say 51 plus never convert, so we want something that allows us to capture that information. You know, be able to do some follow up with the customer, you know, in a way in a manner that's a little more efficient than what we're doing today. But that that's priority number one for us is that that Windows shopper customer facing quote generator as a As a as an extension of that, that the back end, which is what you've kind of been working on on the Goodens thing, and then have been working on modifying that for us. That you know, once a quote is is once a customer has a quote, in order to receive that quote, and then and and maybe even the mockup. We talked about them being able to have that mockup with their art for their jacket and their center labels to be able to receive that mockup as a downloadable image and be able to be able to receive the quote as if let's say a PDF, they would have to to create an account, right? I think our original scuba work had them giving us such information for PDF for an email PDF, but this but since we're building this back end, we would drive them to the back end, capture their information. It also gives them the ability to save their quote for later if they want to come back and revisit it later. So that would be priority number two. And then one of the other things we talked about was having this drag and drop artwork builder. And for us, I feel like that's priority number three. It's it would it is a great tool, and I think for the shorter run, less experienced customers, it's definitely going to be a time saver and game changer for us. Bill and I've talked about that many times. It's the amount of time we spend going back and forth with the customer. Your art is not the right resolution. Your art is rectangle, but we are making you a square product. You know, no, your art can't be the size of a postage stamp and be blown up to 12 by 12. And so, building a system that, in my mind, if I can, if the customer can drag and drop build a greeting card, they can drag and drop build a mile project. And that could even be that could even be an iterative thing that we start with just short run orders because short run orders from Memphis are fixed. You can have a jacket, you can have an insert, you can have black vinyl if you can mix color, and you can have a center label, and that's it. There are no other options, at least at the moment.
+
+Brandon Seavers  12:39  
+There used to be no inserts. Obviously, that's subject to change. But for the moment, those are fixed, and so that would be a very simple version of this drag and drop that. That hopefully, ultimately, we then could expand upon. Right? We expand it to gatefold. Expand it to people to insert a sticker, because stickers are very common. That's probably the thing that's going to end up being we're going to start leaning into on the short run is allowing for a sticker because it's a great way to market in the product. So that's really our our kind of from our perspective what we see the priorities and one one quick side note to the to the quote gen versus the back end. Last week when we were meeting, we were talking about for the quote generator, for the public facing quote generator that we limit that to we limit the options to be 80% right? What are 80% of our orders? Seven five 80% We're not going to put an OB strip or a 24-page booklet in our customer-facing, web-facing code generator because 5% of our orders receive those things. Probably less, probably 2% So we don't want to waste a bunch of real estate on the screen and a bunch of development time doing that. But what if part of the drive or the push to get a customer to develop an account is to have like a disclaimer or a tooltip or something that comes up on the screen when they're hey don't see all the options you're looking for, create an account to see our full library of packaged options, right? And then have they go in, and then you have a much more fully fledged ascent. I don't know if you guys saw the pricing list I sent over on Thursday, but a lot of items there. We don't we don't want to build all those items into a book generator because they'd be scrolling until the end of their life, right? And that's not and that's not what we want. We want we want simple. We want quick. You know, we really want a single-page design. I did send you some examples of some other some others kind of talk through that, but we want something that is simple and and ergonomic and very user-friendly that always keeps the customer's price at the top of their screen, whether they're mobile first or whether. On the screen, that price is always visible, and I know we're kind of getting into specifics there, but but then when we go, if they does, if they develop, they they create an account, they go in, then they can see the full breadth of wealth of options that are available to them. What are
+
+Bill Denk  15:16  
+your thoughts? By the way, excuse my Twitch, I don't normally have a twitch. I think it started like a month ago. It's harmless.
+
+Lance Gorji  15:24  
+It's because you're working. I talked to Doc. I'm like, this
+
+Bill Denk  15:28  
+happened like two years ago. Never had it my life before. So if you see it, it's just.
+
+Brandon Seavers  15:33  
+Do you know this twitch is this side of the brain? This twitch is this. Yeah,
+
+Bill Denk  15:36  
+this is my right side of brain. Yeah, turn
+
+Adam Denk  15:38  
+off that right side. Yeah. So anyway, she's seen me
+
+Bill Denk  15:40  
+doing this just so I could talk, but the so with so a couple questions I have. One is with the quote, would you want to have a login first for
+
+Brandon Seavers  15:50  
+the? I don't think for the quote generator. I mean, that's what we what we really want to develop for the the web for the customer for the in the public, customer-facing, non-Memphis record-present customer, we want to give them a tool to window shop without having to create few
+
+Lance Gorji  16:09  
+hostile obstacles, right?
+
+Brandon Seavers  16:10  
+Without having to create an account, to have just drag and drop, like we talked about, they can create. They can, but then if they want to save that, they want to get their mock-up, or they want to know more. That's when we create
+
+Brandon Seavers  16:23  
+an account.
+
+Brandon Seavers  16:25  
+Any restrictions there? You see? I mean, do you think there are any restrictions to not having the creative account? I think
+
+Bill Denk  16:30  
+the only thing I was curious about was: Do you want potential competition? Everybody else coming in and checking up the pricing, some of the statue. Well, I mean, we're putting
+
+Brandon Seavers  16:38  
+our highest price on the web.
+
+Speaker 2  16:40  
+Okay.
+
+Brandon Seavers  16:40  
+Right. So there aren't going to be any confidential price grids there. If you're savvy enough and you want to get our price, you can email us from any email address and get a price in place. Right. And so, and in this industry, price grids and invoices and estimates tend
+
+Bill Denk  16:56  
+to
+
+Brandon Seavers  16:57  
+tend to get passed around. I mean, we see estimates from other plants all the time, so not really so concerned about that. And we're also not the cheapest, right? So there are other plants that are openly cheaper than us because it's a pretty competitive industry right now. So I would say no, I'm not so concerned about that.
+
+Bill Denk  17:17  
+Well, then I mean, and if
+
+Brandon Seavers  17:19  
+that changes down the road, we can always move on. But I think to start, no, we would want to have this this first iteration of conclusion be a public-facing non-account. No requirements for an account.
+
+Bill Denk  17:32  
+Okay. All right. So I went through your 2025. So so to take a look and see what was their requirements. that things this kind of what seemed to me to boil down to were were these like 39 items, and and basically when we looked at them with what we had been building and will probably explain my Twitch is we've actually
+
+Brandon Seavers  18:04  
+have you slept in the past week?
+
+Bill Denk  18:05  
+I did actually. Actually, last this morning I went to bed at 130, got up at 630. So I had these five hours. Yeah, so so so basically, these are the things that our system already does, and based on what you have in this. And then when I took another look at, we really believe that in these areas we exceeded what was being requested. Was being requested, and then that leaves two things here, which are these two, which is the code ERP, which we're if I'm understanding, this is the superhuman coda.io. Is that correct, or is code is something different?
+
+Brandon Seavers  18:40  
+This is our ERP system. Our homegrown terminal. All right. So when
+
+Bill Denk  18:45  
+you say Coda, because there's a thing called Coda.io that was acquired by Superhuman, and they use people use them for the backends. Yeah,
+
+Speaker 3  18:52  
+but they still learn
+
+Bill Denk  18:53  
+it. Okay. All right. And and then Aaron mentioned about the assembly, you know, fee per insert. So we just have to figure that out.
+
+Speaker 4  19:02  
+Rules define that.
+
+Bill Denk  19:05  
+Okay. Oh, great. So, so we kind of we'll go through a little bit. Here is the first thing is the customer side. You know what they'll see, and then the other side is what will look like how it gets done. And so the the bottom line is we have all of the pieces. We just need to make sure that we connect them in a way that works well for you, and and we even have a. What I want to do is create something generics, so we have something for now, meaning that so I have Memphis Pressesvinyl.com. So I have Memphis Presses Vinyl, and I also Memphis Create. But that's not to say we're not going to do Memphis record pressing. I'm just saying if you want something to go to right now and take a look at, and then we just need to figure out from your side how we can create the DNS. To go there, so it's metrosrecordpressing.com/sign-in or whatever you might want it to be. So, with that being said, I'm going to have Andrew kind of take over and kind of walk through. If you want, I guess if you want to start with. If we want to look look at what the should we go through Ruby first and take a look at what the customer sees.
+
+Speaker 1  20:30  
+Sure. What
+
+Speaker 5  20:34  
+was that domain? In this dress is vinyl.
+
+Bill Denk  20:39  
+It's memorable. Yeah. So,
+
+Speaker 4  20:48  
+will the accounts that we had created for the good to tag work here, or do we need to create?
+
+Bill Denk  20:54  
+Oh, that's going to be for customer-facing. Yeah, they will work. That was. you should be able to cover that.
+
+Brandon Seavers  21:07  
+Do we have a sign for this?
+
+Bill Denk  21:12  
+We should should be the same one that you have for. Yeah, but you'll you'll log into our backend. You can always get something for this as well, so you're seeing what's on good tunes you would see is Memphis as well, but this is for like the customer facing the base. So go ahead. So we can and we can do an invite and show you all all that. Basically, start with here or slightly bigger. Oh, we
+
+Speaker 6  22:14  
+didn't have time to do the clothes for cell phones. You can watch how they're
+
+Speaker 7  22:30  
+right
+
+Speaker 3  22:35  
+there, but there's no places they have to be sold because the ones I got are.
+
+Andrew Goeken  22:44  
+would be like an email of what a estimate would be sent out to the artist.
+
+Bill Denk  23:04  
+So basically, this just showing kind of we can send an actual quote away to take a look at. So whatever we'll figure out, I'll do the estimate numbers for you. We have something just kind of color generated. We give it the month. I think we typically might provide it. Provide also the liquid. Now we put in here whatever the artwork is. If you have them know what the customers are, this is something that you're doing to send your quote out. That can be done. Otherwise, we can just add whatever we want. We have a logo that we send them if you want, and then we have the record. We have the set costs. We have the total estimate down here. Click there, open your estimate. Brandon will answer all the estimates. Thank you. That's correct. Personally, and it's not
+
+Speaker 8  24:00  
+even my birthday. Thank you. So the thing. anybody who generates the quote, if you want, we can have that person automatically their name would be at the bottom for the person's customer service rep to respond, or it can just be generic. And then we also think here of the eligible for the
+
+Bill Denk  24:17  
+zero out of pocket, or however we want to phrase it at the bottom. So people want to do the thing with hoodunes then they can do that and I can talk to guys about later about how that can drive more revenue to you as well because we can give you a piece of what we're getting as kind of referral fee and then get a per unit bump on top of that as well. So that's kind of the way it would look coming in and you know, and then if you want to go back to there and show, we're just using some stacked screens here, so
+
+Speaker 6  24:50  
+we can close
+
+Speaker 3  24:52  
+that. Do you know the URL? I think.
+
+Speaker 1  25:16  
+Let's try this. All right, sir. Do you want to go? Go to the actual rest.
+
+Bill Denk  25:43  
+So once they would land on the page, they would see the item again. Should be inserted using animation with with the the album if we want to, and then we can provide like let's say they wanted what I'm imagining for example is let's say they wanted to have 1000 units, right? So you sent. This is something you sent to them. They would see the 1000 units highlighted. But then, if you wanted to, again, you wouldn't want to go. You wouldn't want to say, "Hey, let's do less, so we could eliminate those. But you could do 1000, 2000, 3000. They could click on it, and if you scroll, scroll, and start scrolling a little bit more, you'll see if you as you scroll if you. click up here, you'll see that the price per record is going to change here. 2000, you'll see changes down here automatically, and you see changes down there. So this price will update based upon what what you've chosen here. Plus, you have the ability to add in quantity, which I think is one of the things we have. And so, I also have this here about choosing masters. So I'm not sure that we have this right or not, but I want to do some of the fine-tuning things like to find out. If they want to, they can also expand this. They can see what the what this could be, and then on top of that, we can do something with the zero out of pocket if we want. And once again, people can ask Brandon a question. We think because we can't take a lot of questions. You also have yes, we could have like an uptick here in the switch. You know, your next break is 6:27. Switch to 2,000 minutes or whatever might be, and then they start the project. So those two. I'm not sure if there's another dashboard. Yeah. So once they would accept it, and they go into the dashboard. They'll they would get sorry, I asked you to drive. Do you get drive away? So so basically, come in and they see all the next steps that they need to do: project created, all your artwork, text press approval, deposit, press, impact, and shipping. If they want to, they can collapse this at any time, and they'll just see what their sales have been and whatever else in the back end. That's if they're going to do it through 15 states, so they know the sales and things work. But again, we can go back expanded as well. So all this stuff is functional today, and we'll be able to take you through it and show you. One of the things that I'd like Andrew to do is to show on the template side of things, yeah. So what we've done is we've actually ingested your templates. Go to admin, and and so basically we'd put in like your center labels, your single jacket, whatever might be, and if and if we, for example, choose a single jacket, and your team decides, okay, well, this is up there. Upload the template, and then once you do, is we'll do is you can actually test it, certify that this is the way you want your template to be. You can use any job that you have that was based on the template itself, and when you click to upload it, it's going to bring you in the system. Oh, if you go to the top there, you'll see that it's checked the the lead size, the pages, the file hygiene, and at the very top you can see that there's a progress bar up there. What it's doing right now is it's looking through the color and the resolution to make sure that it's CMYK, no RGB, and to make sure it's also 300 pixels per inch, where I think that your specs would be 100 pixels per inch if it's black and white. Or it'll also see if it's vector as well instead of doing that. They can, in addition to this, they can upload a via PDF, it can be a TIFF, JPEG,
+
+Andrew Goeken  29:42  
+Cordotts. and
+
+Bill Denk  29:43  
+Photoshop file. So,
+
+Andrew Goeken  29:46  
+what how what do you what parameters are using to make these files? Your parameters, like resolutions. Okay. Yeah. Yeah. So this this art measures right here. We if we. Down here, that's going to be your actual bleed in the document. So those parameters would be making sure that it fits this bleed, 635 six by 320 1.1 millimeters. So exactly what's kind of in that document, putting that layer in there exactly, and then they can see. All right, this is going to be my spine.
+
+Bill Denk  30:26  
+Right. So it allows you to actually go through and check and ensure that this matched up to the actual template that's there to make sure that the template's working properly. And again, like Andrew showed on the left, there you can actually slide on the on that to actually view it underneath, just to see how it lines. Yeah, and we know that that that won't print in the final piece, but this is for you all to check. And now what happens is, when the artist uploads, they'll see the template initially, and when they upload it, they'll see the same thing, and they can check it to make sure it's right. So instead of your team having, so this is just for your team to check to make sure the template is ready to go to the public, and then when they get it, they're going to get something similar. We're just going to let them know if it's rejected or not without a human having to touch it. Again, if we go back to the top, we'll be starting processing. It just might be the connection, but but it'll go through. Usually, takes we find it takes like maybe 30 seconds of that to test it. So, and then as Andrew showed before, you can see there's the full template, and then if you want to, you can actually zoom in. Yep. So the spine. Yeah. So
+
+Andrew Goeken  31:33  
+here's maybe like the front cover, or if I want to go the full template and I've got some text written on the spine, you might want to click and zoom and see. Hey, does that actually follow within the spine line here? I can just isolate it to just the spine, so that I know. Oh, this is exactly what's printing on the spine here, and then all the extra space there is going to be your bleed.
+
+Bill Denk  31:56  
+Then we can go by line or by area as well.
+
+Andrew Goeken  31:58  
+Yeah, so I can go by area if I want to knock out the area, if I just want to see the bleed area, so everything that's going to be cut off, when I go back to 100% you can see the red bleed area that's going to be knocked off. So all that will be part of your trim, or we can go straight to cut and switch that to line and see. Oh, this is what's getting trimmed in the final product.
+
+Bill Denk  32:20  
+And so the idea is to help save time by a couple of things. One is that as a customer, I don't have, I won't have to go in and go to the website to figure out which template I need, then download the template. All I'll have to do is just it'll be right there. So when I chose this is what my package was, my templates are sitting there. I can click to download them, or then upload them. The other thing we've built, which I can show later, is the ability to choose front, back, spine, and you can drag and drop it. So you can drag and drop. And right, you know, so we're still finalized now to be done in a couple of days. But it's but we want to make the simplest. So you can actually build your jacket in. That's right. So the goal was to start here, defining what all the areas were. Then next, then next, we realized that we could actually drop that in with all the bleeds and put in the estimates. So there's that, and then the other thing that we've done is we built. You want to go to the builder or the estimate? Yeah, sure. Yeah.
+
+Andrew Goeken  33:23  
+Oh, yeah, and then here's the color and resolution as well. So it's measured at 363 PPI. I
+
+Bill Denk  33:32  
+would like to test some of these, maybe with some files that you have, if you have by any chance that didn't work against the templates, just to make sure it's flagging things. But we've done our own tests in house. We've done RGB versus CMYK. We've done all kinds of different files. Did you have someone? A lot of
+
+Arian Kennedy  33:48  
+stuff that gets by does RGB, so we should be able to have some data tested.
+
+Bill Denk  33:55  
+And the other thing you can do, I'm sorry, real quick on the right hand side, which says save. So you can say if if it didn't if it failed at the top you could always choose on the file. But if you go back in there again, the other thing we have is if you go up to the left of test and sort of to left that, so that shows you all the different things that were those. I'm sorry, there's layers in the layers, and then over here in history actually see what was uploaded and tested, and I don't know we have this work right now, but we'll have it. So if you want to click on something, you ought to go to view what that test was, just to see how that looked, and it'll appear in the center area for you as well. So any questions or thoughts on this?
+
+Arian Kennedy  34:36  
+Great, Paul.
+
+Brandon Seavers  34:38  
+So this this the purpose of this tool is twofold. The customer can verify that the files they're sending are correct, and then if our team wanted to use it to drop the files from the customer in to see if they're correct, is that is that essentially what the purpose of this tool is?
+
+Bill Denk  34:57  
+Yeah, I think it's so. Yeah, there are a couple things. One is. This part that you see right now underneath is record pressing. This would be your backend. The customer doesn't see where you're like, oh, we just created this new template for whatever. You can upload your brand new template in, and then you can use this to test it to make sure that it's good. And then, then once you set that, then that's going to go out for the consumer to be able, for the client to be able to see, so that they can upload their stuff against it. So this is your ability to create your own templates and whatever you want to put up there. That's and then the second thing is when you do a quote or something. I mean, any of the if you do something that has a uses the jacket, 12 inch, three millimeter spine, five millimeter spine, it'll actually. add this template to it so that they can automatically input next to it.
+
+Andrew Goeken  35:47  
+So the goal on the customer's side of things is artist comes in, they might have a graphic designer that's working on their art. You guys send out the templates. Hey, here's here's the template to do your artwork. Instead of having to send it out, they would have that on your backend. Oh, I can just click here to download the template. I can follow the specs, then I can upload that template against your template that you already have there before the art team even has to take a look at it. So then, once that gets art uploaded, they can take a look, pass the BI test. Oh yeah, that looks good to me. Then it can do a bounce back, meaning let's say it's not 300 PPI and it's you know the size of a stamp, as you said. Then that would bounce back to the artist first before bothering the art team with having to go in and take a look. Oh, is this 300 PPI? Oh, is is there any live text or anything like that? So having these kind of really quick checks of okay, it's 300 PDF fits the bleeds. There's no live text in it. Everything's expanded. All those checks pushing it back onto the artist to get fixed first if they can,
+
+Bill Denk  36:55  
+or their designer. Yeah, or
+
+Andrew Goeken  36:56  
+their designer exactly. So
+
+Bill Denk  36:57  
+the other thing I'm real quick to say is this: is that what we'd like to talk about is like let's say somebody goes through and they upload two files and both of the files don't work out. Instead of them getting frustrated or having to pick up the phone, maybe we can put something up there that says, "Hey, need some help with this? You know, get us. We'll do it for X number of dollars, whether it's an ounce a year, or we do that. But basically, then it's an upsell to handle it, rather than it being something that's taking time and money away from nothing.
+
+Brandon Seavers  37:25  
+So let's say the files are then good. Can the customer just leave it there, and they've submitted their files in the back end, and then we have it? Now, is there a way to extend beyond that to where that then they it generates a proof for them.
+
+Bill Denk  37:45  
+Oh yeah, that's all. Right. The only thing that we don't have on the proof side is because we're talking about this is the I'll call live proof where you can actually see that this slide slides into this. But we have the artwork and we can actually make that happen so they can see. Have you
+
+Brandon Seavers  38:00  
+seen our pogs, our package orientation guide? Did I share that with you?
+
+Bill Denk  38:05  
+If it's one of the ones we just got, we
+
+Arian Kennedy  38:06  
+we've sent it a proof recently. So the pog will be on there. It's that last image that's on there. That's what I'm talking about. So it
+
+Brandon Seavers  38:13  
+would be great if the system generated the pog because then that's one less thing for our team messages, right? But but in between there, if there's a proof like that, the cust so the customer could actually approve the proof. Let's say it removes the template lines and shows them just the cropped jacket, and then maybe it generates a positive, so it shows them how everything goes. So they
+
+Bill Denk  38:39  
+so they do get that right now. So right now, what happens is they'll be able to see it just like you saw there. So can you upload Nina again? So let's say I'm the customer. I'll actually see this thing. Say upload my template. It'll look just like this, except for they won't be able to test and certify and all that. And then they'll choose the their PDF to upload, and when they do, it's going to do the exact same thing. It's going to go through, it's going to process, it's going to let them know how everything if it all checks out, and if it's ready for it to be produced. And then if you look down the bottom, that's this is what they're going to see. And if they want to, they want to take the time to measure against it. They'll be able to zoom into the front, where you can see just the front area, so they can front, so they can view the front through the spine. They'll be able to view all of this as well, and then we they can download it, and we will have it download ready for them to view against your template as well, so they can confirm. Now on your side, we can we have it set up so that when you download the final artwork, there's no template behind it because I think that's the way you want your files. So it's only the artwork itself, but we've already passed through this.
+
+Brandon Seavers  39:53  
+Also, when our team downloads it, it would be just the art, but
+
+Andrew Goeken  39:57  
+you want it for free.
+
+Bill Denk  40:04  
+So the thing we haven't done is the pod side, but that's something that we could have to do.
+
+Speaker 4  40:11  
+You have an example of what the customer would see when they download this. Is it a single download that's everything?
+
+Speaker 3  40:20  
+Yeah.
+
+Brandon Seavers  40:30  
+How do they do it now? Do they pull the files in into the template, check it, look
+
+Speaker 3  40:44  
+at it. They're
+
+Arian Kennedy  40:45  
+like a pre-flight thing. So
+
+Brandon Seavers  40:46  
+this be helpful to them if we have a tool like this, they can drop files into. Yeah, I mean, we would need to. This is a great start for sure. We would definitely need to to connect you with our prepress team and just run it by them to see, because I'm sure they poke a bunch of holes in
+
+Bill Denk  41:04  
+it. We'll see. I'd like to see that. They won't poke holes in it. We've been working really hard to make sure this thing's going to be
+
+Brandon Seavers  41:14  
+tight. Have them can poke holes in steel. You can. can't. I'm trying to get you the other one. Who knows the other Wi-Fi password? That's got to be why this is running slow. FNRP. I remember that.
+
+Speaker 4  41:31  
+Wireless or gas?
+
+Brandon Seavers  41:33  
+They're on gas. Yeah, but I mean that that's got to be why this one is controlled. Shouldn't be.
+
+Andrew Goeken  41:43  
+So this would download as a PNG here for like the center labels for where the bleed and cut marks are.
+
+Bill Denk  41:58  
+But this
+
+Andrew Goeken  41:58  
+is for the artist facing side, so it's not not quite your pog from
+
+Speaker 2  42:03  
+level one. I think I've got the password.
+
+Speaker 3  42:07  
+That's right.
+
+Bill Denk  42:08  
+Which one is this? Where those? This which network? No, it's just really 2015. Is there Murphy wireless?
+
+Arian Kennedy  42:22  
+MRP Wireless is.
+
+Bill Denk  42:30  
+Just have to give us authorization coin if you're on that network. This
+
+Speaker 3  42:35  
+is the pass. This is the password password
+
+Speaker 2  42:44  
+saver for MRP system built
+
+Speaker 7  42:57  
+in.
+
+Lance Gorji  43:05  
+It's not a C; it's a P.
+
+Speaker 6  43:09  
+Oh,
+
+Brandon Seavers  43:11  
+probably not going to help. I just ran through this. It's just
+
+Bill Denk  43:14  
+there's a booster here.
+
+Brandon Seavers  43:16  
+Yeah, so definitely want to connect with our team. Don't want to don't want to stay in that rabbit hole too long. I know that when we show the proof to the customer, like we would want them to be able to see a final cropped proof with no lines, right? No nothing for them to decipher. That is cropped, center hole knocked out, cropped jacket. The pog is extra because we do provide that for them so that they can see, but we definitely would want to provide a proof that eliminates all guides and eliminates all 10 loop lines just to crop together.
+
+Bill Denk  43:50  
+Yeah, similar to remark because we already got everything in there. Yeah, all you have to do is just make that happen, right? And then the question is going to be: Do you want them to download a PDF and view it, or do you want them to see it both ways? So we can do it so that's online, and also if you want them to download the PDF, and then we can track that they download the PDF, and when they come back, then we can just give them thinking you're quick to approve and click it.
+
+Brandon Seavers  44:14  
+I think both, you know, give them the opportunity to view it online and approve it right there, but also the ability to download it as well. We have a system in place with Rosellis that does just that. It processes the file. It actually rips the file. So the raster image process it rips that file. It gives us back a new file that has the has the template on it, and we can either approve it right there or we can download it. So it'd be similar to that, I would imagine. Yeah. So it gives us gives the user to do both. We typically download the proof so that we have it for save people for later when we get the customer.
+
+Bill Denk  45:00  
+Okay. Absolutely. Yeah. So no problem. And then on
+
+Brandon Seavers  45:06  
+there probably are some other things we're going to want to check for. I don't know if we can, like text size, right? So if there's any text that's below, I don't know. Gavin will have to give us some information. Gavin's our progress director for four and after, we want to go through some sort of pre-flight or pre-flight that catches any text that might be under a certain point size that might drop
+
+Bill Denk  45:32  
+out. So the one thing that we're not catching here right now is text. We're doing those outlines, and then and so we can we're catching if it is text, but we're looking for outlines. So if we have certain text, we can capture that. The only thing my question would be around the around the font itself. Like for example, if the file uploads, it has text on it. I think with Illustrator, we don't change anything, and you have the fonts, then we can just detect the font size, but it won't adjust the fonts or change the fonts or anything like that.
+
+Brandon Seavers  46:07  
+Yeah, we wouldn't want to do that. I don't think we'd want to convert the outlines or anything like that, just because sometimes that can change the appearance of the font appearance of the font.
+
+Bill Denk  46:15  
+Well, I'm saying that they would convert outlines before they upload, but if you
+
+Brandon Seavers  46:18  
+if they know it, if
+
+Bill Denk  46:19  
+you want them to have yeah, do you want them to have text that I can see about?
+
+Brandon Seavers  46:23  
+Yeah, I would say 90% of our customers don't have any idea what you're talking about. We invest in the. Or this guy down here. We asked him to convert some outlines. That'd be great.
+
+Bill Denk  46:34  
+Okay.
+
+Brandon Seavers  46:36  
+No, I think that's that's awesome.
+
+Bill Denk  46:39  
+All right. Then if you want to show the estimate to build that question.
+
+Speaker 1  46:42  
+So there's an
+
+Bill Denk  46:46  
+example of building an estimate. If it was being done here, would it be similar to how we had a customer do it? So Andrew, if you want to go through just like an idea.
+
+Andrew Goeken  46:58  
+So if you wanted like a 12-inch double LP, 140 gram. Let's go with splatter.
+
+Speaker 1  47:11  
+You can
+
+Bill Denk  47:12  
+choose different colors there as well. Yeah, you can
+
+Andrew Goeken  47:13  
+choose your different colors with the splatter depending on which one you're offering here. Let's do both of your nice painting here. Single jacket. We can do wide spine. Maybe it's old style tip on. Maybe one with a double gatefold. This would be kind of on the customer facing side too. They would be seeing these things to understand. Okay, well, it's a gatefold jacket. They might not know what an old style tip on is right off the bat, but at least that might give them an idea. Your inner sleeve, printed four-way paper, unprinted, white, black, polyline, white or black, label style, color, black and white, blank.
+
+Bill Denk  47:58  
+You also had a thing called flood, and I'm not moving to the term flood. So
+
+Brandon Seavers  48:01  
+it's just a flood of ink. We're probably going to just leave it at those three.
+
+Speaker 6  48:06  
+Okay. Yeah. Then you
+
+Andrew Goeken  48:09  
+could do your insert, whether you want a regular insert, a gatefold insert, you know, booklet here for a page poster, and then two sizes in, we could add any inserts that you wanted here very easily. Stickers as well, rectangle, square, etc.
+
+Bill Denk  48:32  
+I think that you wanted up to like two stickers, so that's something that we can have as any multiple select. And the other thing that we haven't done, I'd like to talk about sticker placement. So if somebody wants a sticker to be used, then where they might want the sticker, if you'd like to have that, where they'd want to have the sticker on the other side.
+
+Brandon Seavers  48:48  
+We have we have a grid that we could supply that just that numbers the locations. It's got nine locations
+
+Bill Denk  48:55  
+for the sticker. We have it, and that would make it that would sync sync it up with what we do. Right. And then the other thing you're not seeing is, I think, the coating or the beauty coating, and what you want that on, and we're going to add that as an option as well. So then, once you pick your stickers, for example, then you go to whatever the quantity is, a good specific quantity you have for the customer, and you could choose that, and if you want if you have customer artwork, you can click on the there to choose what it would like to. But actually, basically, it'll open up a little dialog box for you to go and drag and drop the artwork if you want. And then I'm not seeing maybe I maybe I edit that out, but I'm not seeing where to do a custom amount. But I can get that back in like in 15 minutes. I just put it out, and then at that point we go down, and you can actually create the package. You can send an estimate, and you can add who the person is with their name. So if you want to. Do we've been branded? Let's do an artist. So I can. So is there an artist you guys can think of offhand? Does anybody else have favorite artists? One
+
+Speaker 5  50:14  
+that we work with, sure. Cindy Calvary. Okay, I don't think Albrecht has an email address. So we can sure he's positive. Does he have an E at the end?
+
+Bill Denk  50:27  
+No. You should have spelled. I should be able to figure out what that is for you.
+
+Andrew Goeken  50:34  
+Let's do. I can send it to Brandon. Brandon.
+
+Bill Denk  50:52  
+And so, then you should have one email that gives you the quote for this. So, again, there'll be things here and there that we'll tweak whenever else as we go. But you want to get getting the end process before we got here, so it wasn't starting from scratch. But this was something, you know. Now all those prices in there were based on components. We uploaded your, we ingest all the Excel file that you provided, and put all the data in there. And when we go to components, we have components for.
+
+Speaker 1  51:20  
+Then
+
+Bill Denk  51:22  
+you'll see like vinyl, and so scroll down. So sorry, scroll up. I always get a mixed up. You're good. So we have 12 inch, 10 inch, 7 inch. You can choose from whatever you want, and then if you hover over like let's go over 4LP. If you don't want to offer that as something for customers, we can just click on it and hide it. Tendons you want to offer, you can click on it and hide it. When you go down 140 or 180 gram, you can choose to add a weight if you have something in between, or or whatever you might want to be, or you can hide one or the other. Same thing too. If you want to go down here to your colors, you can click on a color and then and then Oh, so this is defining this is defining what
+
+Speaker 3  52:06  
+the user is going to see. That's right. So if you wanted
+
+Andrew Goeken  52:09  
+to hide this purple color that you maybe offer, but you want to hide it for online, you can say don't offer.
+
+Bill Denk  52:17  
+Yeah. So what we've also done is we had originally had some images that you hear that we pulled from the site, but if you click on one of the one of the images, the spiders. Yeah, you can kind
+
+Andrew Goeken  52:27  
+of see. You know, it's got this black outline. It's not cropping
+
+Bill Denk  52:32  
+because the sizing. Just
+
+Andrew Goeken  52:33  
+because of the sizing of the.
+
+Bill Denk  52:35  
+But if you go to show how they can edit one.
+
+Andrew Goeken  52:37  
+So we decided, okay, we like this one here, but we want to edit to make it look cleaner on the customer-facing side. We could go in and say, "Okay, this is clearly a splatter. So I could go in here and choose splatter, and we just want one color, and then I can pull from your image here the base color for the suspension. Figure out what colors were coming from your photos. From your photo, and like, well, maybe that's a little darker. I'll adjust that. And
+
+Adam Denk  53:06  
+then,
+
+Andrew Goeken  53:07  
+and then, if you have any other new colors, and you just know the hexes, you wouldn't have to. Let's say we have a new splatter color, and it's a neon pink that you've never had before, and you know you can get an RDP hex from the art team to say, hey, what are these two colors most likely that we're offering here? You can not have to scan the vinyl. You can just create a new color and use this to create it based off of the styles that we have here.
+
+Bill Denk  53:31  
+There was also one that you did with DC WMR, I guess. If you want to go to there's one that we've done with the gradient.
+
+Andrew Goeken  53:39  
+Yes, so the gradient ones would be I pulled in metallic lens. I think they usually have to be graded. So like this metallic gold here. This one's set up on a gradient. So you could choose two colors if you wanted to get it closer, but with gradients, sometimes I can go to this advanced gradient mode, and if our team's like, you know, we want to get this really looking like what we have, and that maybe our darks and the golds are a little bit darker than that, and you have, you know, again, you have those exact hex numbers. This kind of gives you more control, the same kind of control that you have if you're trying to create like a Photoshop mockup for these. So you can add up to eight colors on this one to get it to almost exact of what you have. There's some other ones that have the gradient as well.
+
+Bill Denk  54:41  
+And then once those are all done, we'll dismiss the photos and we'll just use that those items. But the idea is to give flexibility and control that for all your colors, you can put in your hexes if you want. With a new style that's created, you can quickly and easily create a new style, and then create the colors that go with that. And if there's another color you want. Offer you can do that as well, and if there's a pattern in here that you see that because we know the spiders can all be different stuff, but if there's something like well that's you know our spider never looked like that would look like this, then let's figure out how to get that in there for you. So I mean that takes a few minutes really once we got in once we are so so that's the that's the example of how the colors will be changed there, and if you go to another component, no, I'm sorry, go back to mine. If we go very top, so that's everything that's vinyl. Then if you go to the jackets, then you can choose the different jacket sizes. You can add different items to that. Whether it's going to be if it's not, if it has an option under it that we're not showing today, or whatever might be, so the point is that it's totally customizable. And if there's something in there that you're not seeing that you want to have in, let us know. And we also just took liberty with just the full color jacket. Just do that, which is what we did to make it different than than black. But you can do whatever you want. Service that. Some
+
+Speaker 4  55:59  
+of these options for the print will change based on if you're 12, 10, or 7. So, yes, with Sauce will offer like one thing for one size and another thing for another size. Yeah. So when
+
+Bill Denk  56:12  
+you click on the 10 inch there, now you're setting everything for 10
+
+Speaker 1  56:15  
+inch. Got it. And if you go back to
+
+Bill Denk  56:17  
+12 inch, then we would have those offer for the 12 inch. So we'll have it. So it can flip from either one.
+
+Speaker 1  56:28  
+Maybe that's that.
+
+Bill Denk  56:36  
+There you go. Six.
+
+Andrew Goeken  56:42  
+Yeah, like here, I think we have these inserts 1012, only, because I think based off our conversation, they weren't. These probably weren't going to be offered for seven.
+
+Speaker 4  56:56  
+Yeah, seven set their own insert,
+
+Brandon Seavers  57:00  
+and we can set it up to have set it included. This is pretty impressive. Can we great work, guys? Can we go back to customer estimate view?
+
+Speaker 1  57:11  
+Which one?
+
+Speaker 9  57:12  
+The customer view. Yeah, where the customers are creating an estimate. Okay, so look like.
+
+Bill Denk  57:22  
+See, we go back to Neil?
+
+Andrew Goeken  57:24  
+Can you?
+
+Bill Denk  57:26  
+Before we do that, we could just really quickly because it's part of what you're talking about. If you go back to that and go to packages, one of the things we've done is we've also created this kind of concept of packages. So I'm not sure if we have it in on the customer side of it. That's what I'm showing here. Basically, you can have these packages that can appear. So when a customer goes in to create a new, get a new estimate on something, they'll see. If you click on that real quick, Andrew, I'm sorry. Okay, there's
+
+Speaker 3  57:54  
+new one. I'm sorry.
+
+Bill Denk  57:55  
+Go back to so we can like create the most common
+
+Brandon Seavers  57:57  
+packages. Like which which we if you look at our website, if you look down bottom
+
+Bill Denk  58:02  
+of the
+
+Brandon Seavers  58:03  
+final options, we we have some examples to be the same thing. That way, you don't have to click through all the options and be a quick quick way to get an estimate.
+
+Bill Denk  58:13  
+I just want to go to the back. I just want to show what it looks like in the preview. I think I had set up so that when I click up here, not there, just click there. That's all. So whatever that says test, that would be hey this is the the bargain black or something like that. So you can have this is what whatever tagline you want. So on that's what the customer would actually see at the top the choices, and they could go down to build in the builder below that. And what industry you're you want to add in the builder, it's really just you go and just like you just pick things. You would choose what the colors are going to be and stuff. And then when you get all the way down to the bottom, in fact, if you go, let's go back up just a little hair. So right there, you can see that pick a quantity. So let's say if you go to 300 really quickly and just click on, I think we have that should be set up that you can actually hide those quantities, and if not, I'll figure out. No,
+
+Andrew Goeken  59:11  
+on this one you wouldn't because you're picking the quantity that this package would have.
+
+Bill Denk  59:14  
+Yeah, but what I wanted to do is if they wanted a quantity of just 100, and you can't get that package anything higher than that because I think that might be one of the things you want to offer. We can restrict the other numbers so it just becomes that package is 100 units only. It's black. It's this vinyl. It's this color. Whatever else, and and so we can do that as well. But if you just scroll down the bottom then, like we're doing, yeah. Then for the way that this rename it, attach whatever, and then you choose from some basic colors, or you can have your logo behind it. Again, where it says logo, we can figure out if you want another placement of it there as well, or upload an image to go behind it as well. And then, so yeah. So this sorry. And you can see your changes, and we do what the faction number was, and so on. So we'll. Where would that show up? If you go now to New Instate, it should show up in there. And if it doesn't, I'll make sure it doesn't. So that'd be under releases. Releases. Well, where should show is you should be able to create a new release. So if you go to releases, it should show up in there. There's a way to create one that you don't. I have to add in the add-on. So I'll I'll add that, and you'll you'll be able to see that. That'll
+
+Brandon Seavers  1:00:42  
+make if you want to create a new estimate, can you imagine that? Yeah. So we build an estimate here. So it would it would be here. This is where your packages would, your pre-configured packages would show for the customer. For the yeah, the
+
+Bill Denk  1:01:05  
+customer would be actually in their in their. They would have
+
+Andrew Goeken  1:01:10  
+a version. The customer would have a version of this that they could create their own custom package that would operate the same way, but it would be limited by the restrictions that you put on this end. Yeah.
+
+Brandon Seavers  1:01:21  
+So let's say we want. Let's say we're talking about going back to our initial conversation. This is going to be a custom public-facing estimate builder. Would the would would we want to show those pre-configured package options in this estimate builder? Like, would if we know where would we show those? We could show messages
+
+Bill Denk  1:01:42  
+out there if you wanted to have your sign.
+
+Andrew Goeken  1:01:43  
+Yeah. So like, oh sorry, I was going to say like above here, maybe you'd say you know pre-configured packages and then or build your own. Yeah. You know, and then that would either jump down to this screen. We can have it open in a new tab, or you know, and you can have the prices on those as well. The prices and selling point on a short run buy all in black. That might be a big thing show at the time as well.
+
+Brandon Seavers  1:02:18  
+And if you if you start clicking around there, it starts populating pricing at some point.
+
+Bill Denk  1:02:23  
+Yeah, you see at the top. Yes. Once once you get to the price, once you get down to what your selection of vinyl is, that's when the price will kick in, and then you have your add-ons after that. Can I get your restroom up there? Yeah, there's one right. Yeah,
+
+Speaker 2  1:02:37  
+and there's a room on the other side too. If there's like snacks and coffee and stuff like that too. Restock snacks. Chelsea did. She did a great job.
+
+Arian Kennedy  1:02:48  
+So you've already perused the snacks. Huh? You've already looked at the snacks. I checked. We met
+
+Speaker 2  1:02:53  
+them. They're all full, and I'm sure they're not expired. I'm
+
+Andrew Goeken  1:02:59  
+okay, but I might. I might use the restaurant
+
+Adam Denk  1:03:01  
+and build. I'll never say no to a pop. Hey guys, is living is
+
+Speaker 9  1:03:07  
+okay for y'all? Sandwiches. Sorry, what'd you say? We're gonna grab some sandwiches. It's a great deli.
+
+Speaker 2  1:03:15  
+Got a Nespresso publishing, but we also have like a curry. Oh, yeah. So on the colors, I didn't want to sidetrack it, but I know that we had a lot of conversation about it the other day about how we wanted that. There's Peter. I don't know how. There's lots
+
+Brandon Seavers  1:03:28  
+of needs. There's lots of things we need to change here. I mean, we need to show pen and paper, foundation paper options. Yeah.
+
+Speaker 2  1:03:35  
+But this is later. Yeah. Now he's working off of that sheet that went to Santa Rita, though, isn't he? Because he said from the 205, from the 2025 statement of work.
+
+Brandon Seavers  1:03:45  
+Yeah, a lot of this he's he's just making up.
+
+Speaker 2  1:03:48  
+Yeah, and a lot of it's stuff that I think we had already wanted to add anyway. Yeah. Okay.
+
+Arian Kennedy  1:03:52  
+So that's like the comparison that he did for the when he said 39 bullet points, and most of them already
+
+Brandon Seavers  1:03:59  
+done. I'm not interjecting anything until he stops. Yeah,
+
+Speaker 2  1:04:02  
+he's pretty.
+
+Brandon Seavers  1:04:03  
+That's why he has an eye twitch. He's probably. He's literally been. He's
+
+Speaker 1  1:04:06  
+pretty savvy. He's
+
+Speaker 3  1:04:07  
+probably been awake for the past 85 hours.
+
+Arian Kennedy  1:04:10  
+He told me his record is
+
+Brandon Seavers  1:04:15  
+90 hours.
+
+Lance Gorji  1:04:16  
+True. Then he's
+
+Brandon Seavers  1:04:18  
+worked without sleeping.
+
+Speaker 7  1:04:18  
+That's insane. That's
+
+Speaker 2  1:04:19  
+not healthy. That's not good.
+
+Brandon Seavers  1:04:21  
+No, I told him that. Three seven
+
+Lance Gorji  1:04:23  
+was mine. So what? Is he only 30 years old and he looks? Yeah, he's
+
+Speaker 8  1:04:29  
+22. How many of us are there? There's three. There's 12345, or there's eight of us.
+
+Speaker 2  1:05:22  
+So when were you here? You said you'd been here before. About a month ago. About a month ago. Okay.
+
+Bill Denk  1:05:34  
+I stretch myself in the mirrors like my dark circles and going. I really am more tired than I thought it was, but it's worth it because one of the reasons we're doing this is to get here to be able to show you all the stuff that can be done and save money. My my goal is that that we're able to save you two thirds of every of your customer service costs. So you know, if you're spending 300 bucks, you're saving $200 for the
+
+Speaker 2  1:06:04  
+woman. I know that's be a big, big help. St. Mary's cook a whole bunch of time.
+
+Speaker 8  1:06:16  
+Yes. No,
+
+Brandon Seavers  1:06:20  
+man, sleeping great. I can tell you haven't been sleeping by looking at that, not not looking at you. It's
+
+Bill Denk  1:06:29  
+a lot of work. Andrew's been there helping out let Adams be able to come on board, help us with some stuff, get some artists on board and so on. Which would be great.
+
+Brandon Seavers  1:06:40  
+I thought we'd just let you guys go walk all through everything, and then we can kind of back up and start having some fine-tuned discussions. You tell us what's going to work best for you.
+
+Bill Denk  1:06:51  
+Yeah, I mean, I think we're. I think that's made sense. We're pretty much through most of the stuff. I mean, I can see.
+
+Brandon Seavers  1:07:15  
+It's funny that the week you decide to come here on flying to your place,
+
+Speaker 2  1:07:23  
+yeah. We're in Southern California. Dana
+
+Bill Denk  1:07:25  
+Point. We're about an hour south of LA. Dana Point, and about an hour north of San Diego. Okay. Just one thing.
+
+Speaker 7  1:07:49  
+Daniel, you're brave. Leaning back in the chair like that.
+
+Speaker 2  1:07:54  
+Oh, we realized that that one wasn't fixed. Is that the
+
+Speaker 7  1:07:57  
+one? That's the one that I thought it was Saturday. I
+
+Brandon Seavers  1:08:02  
+think it's hilarious that it took us three years to figure out you can adjust that. You can adjust only when we threaten to throw them away and Mark was like, "Oh no! But right at the, it's it's trying to figure what it, but it reminds me of one of those the freaking tower of terror,
+
+Speaker 1  1:08:17  
+the tower
+
+Speaker 2  1:08:17  
+of terror kind of thing. Yeah, drop
+
+Speaker 7  1:08:19  
+you.
+
+Speaker 2  1:08:35  
+Coffee's a good, but they do take them
+
+Bill Denk  1:08:36  
+in. That's fine. I'll make
+
+Speaker 2  1:08:39  
+the wok for it. Yeah,
+
+Speaker 6  1:08:41  
+good things for you.
+
+Speaker 4  1:08:44  
+There was a question before we walked out about this. I told
+
+Brandon Seavers  1:08:53  
+them that we would we would go back and interject after they walked through the rest of it because there's lots of if then's if this then that's
+
+Arian Kennedy  1:09:06  
+who would believe it.
+
+Brandon Seavers  1:09:12  
+I love that color selector you built in the back end. That's pretty cool.
+
+Bill Denk  1:09:16  
+Thanks. Yeah, it was something Andrew and I had worked on because we were trying to. We were looking at people. If you go to Memphis and we say you gotta take all of your images and reimport all of them, and what happens if the nuke just seemed like so cumbersome. So what can we do to make it simple so the art department can quickly, easily, and accurately put in what their next numbers and stuff are. I really
+
+Arian Kennedy  1:09:45  
+like the view that you have for the jackets. Like, be surprised if people aren't sure what a gate from the jacket is. So having that little image about opening like that's also very very cool too.
+
+Bill Denk  1:09:56  
+Nice. The thing is that they're the different layers, right? So there's the super admin that we have, good teams, and then there's your admin that you have, and then there's the customer demand that they have, and so it's just determines your two admins, the customers and yours, and we can take you through them. Like I said, the one we have for you is style is good tunes, but we can change that to be something that looks more like. But the customers will always see nothing else. I'll just update a couple things in the wrong.
+
+Speaker 1  1:11:01  
+Yeah.
+
+Bill Denk  1:11:03  
+No, Neil. Did you want me to grab
+
+Andrew Goeken  1:11:08  
+me a copy? No,
+
+Bill Denk  1:11:10  
+we do.
+
+Arian Kennedy  1:11:40  
+What?
+
+Speaker 6  1:11:41  
+When are you ready to give the project to one of the books because I've got it
+
+Arian Kennedy  1:11:44  
+on. Spinal CD and
+
+Brandon Seavers  1:11:49  
+cassette.
+
+Speaker 7  1:11:51  
+No, can't do that.
+
+Brandon Seavers  1:11:54  
+Like I've already priced them. I've already done all the hard work.
+
+Speaker 7  1:11:57  
+That's like setting them up to see.
+
+Brandon Seavers  1:12:02  
+And they have to say his, they have to say his name right the first time.
+
+Speaker 7  1:12:06  
+No, neither one of them. That would be setting up to see doing like a white funeral.
+
+Andrew Goeken  1:12:15  
+That reminds me of one of my my friends, Superintendent Metal, and it's like he's like, dude, going to the sick metal show. So I'm like, I'm expecting like, you know, just black makeup and nails and stuff like that. And we show up and everybody's in line and kilts. What band is it? It was Elvietti. I don't know if you ever heard of them. They're a Celtic folk metal band. I didn't know there was such a good band, Celtic
+
+Speaker 6  1:12:43  
+Folk Metal. Yes. Wait at it. Hurry Gertie
+
+Andrew Goeken  1:12:46  
+and and you know and flute solos with heavy metal guitars and and screaming. Yeah. So like that. Like
+
+Brandon Seavers  1:12:54  
+you imagine them dancing around, right, in their kilts. Yeah. But they're also heavy. They're
+
+Andrew Goeken  1:12:59  
+moshing in kilts. Yeah. And all dudes that at the time I was in college, so they were all most of the guys were like in their 40s, you know, with full beards and like totally Viking and stuff like that. It was awesome. Yeah, and are you sure that was really? It was still, and the lead actually the lead female singer has a gorgeous voice. Like she's a really, really good singer. They are actually a good man. But she was singing,
+
+Speaker 2  1:13:24  
+singing, and she was the Cookie Monster. No, no, no. Guy, guy was a Cookie Monster. Never heard of
+
+Arian Kennedy  1:13:30  
+that referred to as Cookie Monster. Oh yeah. Oh, see,
+
+Speaker 9  1:13:33  
+we used to. That's what
+
+Speaker 2  1:13:34  
+Vince, or one of our QA guys, called. That's what Bruce
+
+Brandon Seavers  1:13:37  
+Salmore. So we had a QC guy here forever. He was our only QC guy from 2015 to 2023, or primarily, and then and we had this one label out of the UK that all their music he would say it's just Cookie Monster rock, and he never knew what speed it was supposed to be. So he would come in and he would say, "Can you tell me the cutting speed for this? Is it like is it low pitch Cookie Monster? We even we even cut a few of them the wrong speed because we we need to tell them. But what is this supposed to sound like? Cooking monster on. Poor Bruce. He finally retired. He's like, I can't. I can't take. I've never heard of a Celtic bolt. Celtic metal. band, metal band. Yeah,
+
+Andrew Goeken  1:14:24  
+apparently it's pretty musical. Yeah, it's E L U V. What's sort of different? L V E. Yeah. L E L U V I. Able
+
+Brandon Seavers  1:14:34  
+to spell that. B L U V. Oh, I see. I found Swedish. No, Swiss. Yes, Swiss. Yes. I thought Dred Zeppelin was the most unique thing ever. I've never heard that
+
+Speaker 4  1:14:47  
+you ever heard of that band. So they're Swedish. It's like metal melodic stuff, but they get like suits of armor on stage and that sort of fight. Oh yeah, and the crowd is always.
+
+Andrew Goeken  1:15:00  
+The best crowd that you have. Yeah, the nicest people. Yes.
+
+Brandon Seavers  1:15:02  
+Field trip. You got to go see it. I don't think Red Zeppelin's touring anymore, but it's a Led Zeppelin Trudy band with an eldest impersonator. No, that's right. What? Yeah, that's awesome. So they play they play they play Led Zeppelin music, reggae style, with a guy that is completely in in in character. That is
+
+Speaker 6  1:15:34  
+awesome. Oh gosh,
+
+Speaker 5  1:15:36  
+I don't know. They're probably not together. That was a long time ago.
+
+Adam Denk  1:15:39  
+Yeah, looks like they're stopping 10 years ago.
+
+Brandon Seavers  1:15:44  
+I guess he yeah he outgrown his ride and stuff. He only
+
+Speaker 2  1:15:50  
+goes so long. Yeah, it's
+
+Adam Denk  1:15:53  
+maybe one day he'll stop the pack on and lighten this off. The
+
+Brandon Seavers  1:15:57  
+guy that managed them was the manager for Casey the Sunshine Band, no way. Something was like disco band manager managing Reggae's. That selfless thing. It's amazing how popular those cover bands get. Like, look, I mean, look at what's look what's right on top of the world. Foreigner has a new record out, a new live record out. There's there's one original member in order. Yeah, that band. Well, they're also a VC. It's kind of the band.
+
+Speaker 2  1:16:32  
+You know, John, I paid that we have been having a meeting, and John Roth, guitar player from Memphis, joined Foreigner. Wow. So there's a local guy who's my guitar player. He's really. I listen to that live
+
+Brandon Seavers  1:16:43  
+record. That guy's got a great voice, but everything's tuned down like eight steps for him to be able to sing it. Oh,
+
+Speaker 2  1:16:49  
+to to do the original blue craft stuff.
+
+Brandon Seavers  1:16:54  
+Wow. There's all kind of bands tuned out. You know, they're cover bands. Some of them, there's no original names in the band. Somebody got the
+
+Lance Gorji  1:17:03  
+rights to the name.
+
+Andrew Goeken  1:17:04  
+Yeah, I did see Leonard Skinner like a year and a half ago, and some of those they all did. Not all of them. No, some of the guitarists are still alive. The main lead singer has been dead since the '80s, but his brother. He was like Ron Denk. think he written headlock
+
+Speaker 2  1:17:25  
+from Blackfoot's one of the guitar players. Which bands end
+
+Brandon Seavers  1:17:28  
+singing with
+
+Speaker 2  1:17:29  
+them? One of the other things. Don, Donnie, Donny. The guy that used to be the side singer in 38 specials. Yeah, he's now the main singer. Yeah, he was. Some of us are old
+
+Lance Gorji  1:17:37  
+enough to like remember when they were the real bands. Yeah,
+
+Brandon Seavers  1:17:40  
+30 specials are great, but I think Don Barr's the only guy. Last year
+
+Speaker 2  1:17:43  
+they were fantastic. Okay,
+
+Brandon Seavers  1:17:46  
+all right, we could we could stay down that rabbit hole. Let's not do that. All right, back in action.
+
+Bill Denk  1:17:53  
+Okay, so I'm putting together CBOC. What the the packages look like at the top, so I'll have that standing up. But the We want to show Memphis, I guess, what the Memphis admin looks like and stuff. Sure, yeah.
+
+Andrew Goeken  1:18:16  
+One thing actually, before that, I'll run you through just because I know we touched on creating my own colors, but just like if you wanted to add another option, like looking at all the, we have like a whole bunch of different styles in here as well that would all be sorry. But yeah, so we had like so. If you wanted to add like a three-colored, you know, a double-colored color in here, we have options for that. We have you know cornetto that can be translucent with splatter up to three. So just kind of the whatever you guys think is possible. Our goal is to try and have that be done without it having to be scanned in or a picture of, but something that you know of a new employee could go in and be like, oh yeah, just apply these colors to it, and it's just that easy. So you know, like a kid can come around. Like my wife could come and play with this, and she hates computers. She would tell you that. So that was kind of our goal with this: is like as many styles as we possibly could in here. I know there's probably even more that we could put in here, but try and you know make it as dynamic as possible here. I think that's
+
+Lance Gorji  1:19:39  
+awesome. I mean, already would have a field day. People go crazy. Yeah, and then we're
+
+Andrew Goeken  1:19:47  
+having conversations with them and be like, "Hey, what do you want? Let's let's see what we can do. Is the conversations that I look forward to. And then you wanted to show on the Memphis side of things there about. Yeah,
+
+Bill Denk  1:20:00  
+just kind of give an idea. Yeah, there's also dark mode too.
+
+Andrew Goeken  1:20:04  
+Oh yeah, if you guys, Bill's a really big fan of the dark mode because he got sick of seeing everything in light mode. So we have both now. If you like working in black, like Batman. Hey,
+
+Speaker 7  1:20:14  
+there's nothing wrong with that. Yeah, does it come in black? Yes, it does.
+
+Andrew Goeken  1:20:18  
+Yeah, we should have put that in a presentation and just had the Batman scene that said, "Does it come in black? And then we cut to this. It's like, but yeah, here you can you know add your artists. You may have seen some of this stuff before. You know, if we did Al Green, you'd be able to search for him, add him in, link his Apple music, his Spotify. On the customer-facing side, we want to push out to to streaming when their dates hit because we know that's important for them when they're on the pit that they want to get as many streams as possible. So, kind of advertising to that. Let's see. I'm trying to think of things that might. Oh yeah, this might be new. I know we overhauled this a little bit. Uploading on the dark and black backgrounds with light mode. All your information here. We do have trying to build out CDs. We really didn't have a lot of too much information, so this is pretty basic compared to vinyl. But we also have the jewel case here. Can be silkscreen, full color offset, and then you know here you can choose your three colors and see. Oh, okay, this is punching in blue, red, and black only. Or if I switch it to yellow, those are the three colors that I'm, you know, getting printed on that. With your units, the other we also have cassette with you know all whatever colors you want to offer here. We'll probably want to do a similar thing that we did with vinyl, where you know you can put in any color hex that you guys might end up purchasing, and just being able to create that instantly should be really easy to do. And then we have we pulled in all of your pricing here from translucent down to. to your lacquer and everything, and then all these are edible. So if a price changes, you should just be able to find, you know, neon. Oh, there it is. Go into Finder and then update the price.
+
+Lance Gorji  1:22:38  
+Ways to do. It's time for questions. Yeah. Can you do? Can you update multiples?
+
+Andrew Goeken  1:22:46  
+Oh no, but that's a good idea. We can make that happen. Each individual color
+
+Speaker 2  1:22:51  
+is a new enterprise. Yeah, you've got categories like translucent or opaque, and they're going to wind up with the. So I think this
+
+Andrew Goeken  1:22:57  
+one actually is. I think this one is set as a bucket at the top. The
+
+Bill Denk  1:23:05  
+way that you do your pricing, yours is an add-on. Yeah, yeah. I set it up because yours is-it's like an add-on or upcharge for whatever it is. So whatever you change on all of us. Yeah. So
+
+Andrew Goeken  1:23:17  
+splatter is actually plus 55, and it changed all the ones below. I didn't think you would have
+
+Bill Denk  1:23:21  
+a different. I didn't think you'd have a splatter that would be different within that. But if there is a lot of snow, we can modify.
+
+Andrew Goeken  1:23:27  
+And then right now we have these locked just so we don't accidentally accept your current price. I actually
+
+Brandon Seavers  1:23:32  
+like the idea of all that's everything that's not black being a surcharge because that's how this bills are. If you look at our well, you don't see the formulas in our price for us, but our price grid. Yeah, everything is just is just a search article on top of black. That way, if we have a if we have a global bottle price change, which we do come to at one level, we can just update our black and revises all the pricing.
+
+Bill Denk  1:23:57  
+Yeah, so that's what we built it. I saw it within the Excel sheet
+
+Andrew Goeken  1:24:01  
+that you had. So I apologize. That's all the rows. I was like, I think I can change these individually, but it's all this one's per unit, though. Yeah, I think Splatter's the only one that has a surcharge currently, but we can switch that easily. And those just
+
+Bill Denk  1:24:17  
+parts of things will work, and then find out about your ERP and the pricing, because our my goal at least is that if you're doing your pricing on that side, it just feeds into here. And if somebody changes something on here, if you want someone to have control, we can look at different permissions and feed into the other side too. So they can talk back with each other, back and forth if you want, or it can just be one side.
+
+Brandon Seavers  1:24:37  
+Back and forth between what your
+
+Bill Denk  1:24:39  
+ERP.
+
+Brandon Seavers  1:24:39  
+Oh yes, that we have
+
+Bill Denk  1:24:40  
+repricing right now set up so we can push them here. Yeah,
+
+Speaker 4  1:24:43  
+so we should be able to replace most of this configuration with just requests to our DRP.
+
+Speaker 7  1:24:49  
+I think right, and
+
+Bill Denk  1:24:51  
+then if you have that
+
+Speaker 4  1:24:52  
+changes, it'll update here.
+
+Bill Denk  1:24:55  
+And if you have tiered pricing for different customers, you're doing something for that customer. Pricing would reflect for that customer whatever level of that. Yeah, that was a question too. Content pricing would be great. We
+
+Andrew Goeken  1:25:09  
+have your referral link. You have your dashboard here. I think that's am I blanking on anything that they haven't seen yet? I don't want to. So they
+
+Bill Denk  1:25:27  
+haven't seen anything yet. Oh, they
+
+Andrew Goeken  1:25:28  
+haven't seen anything. Okay. So yeah, we have your dashboard here. If you haven't seen that. Is there something
+
+Bill Denk  1:25:34  
+that you'd like to see that you don't see? Yeah.
+
+Andrew Goeken  1:25:38  
+Yeah. So these are kind of placeholder. You know, sales window. Yeah, being able to toggle between 90 days all time. But yeah, anything, any data that is important to you that you guys need to see, we can probably populate it pretty easily. Oh yeah, I haven't seen gear yet. This is you want to show gear feature.
+
+Brandon Seavers  1:26:18  
+What's a reseller dashboard?
+
+Bill Denk  1:26:23  
+That was oh yes that's something that I think we can is this Good Tuesday or is this in Good Tooth not in Memphis oh yeah this is in Good Tooth yeah so reseller dashboard that's just for that's our super but the reseller dashboard that's basically for a thing called super credits I'm going to talk to you about this. We want to do for customers when they, when somebody comes in and hears music on our free player. If they want to go to the track level and actually, oh yeah, tell me who made the yeah yeah see what guitar was used on. That's right. Yeah, yeah, yeah.
+
+Speaker 1  1:26:58  
+It's cool.
+
+Andrew Goeken  1:26:58  
+There we go. Here's the pipeline that we have, where you can see who you've invited, outstanding, who's accepted. Elvis and Albertine have been accepted. What does invited mean? Invited meaning that you had invited the artist to come on board to, like, let's say you sent them a quote and invited them, gave them a referral link to create a referral link to create an account, or if you sent them a quote or an estimate, and they haven't created an account yet, they would appear as invited, but they haven't accepted yet. You put in their email information, and that's only usually when you attach like an artist through Spotify. But we can also include it to, yeah, if you're sending it to us. manager and they need. So
+
+Brandon Seavers  1:27:44  
+let's say they let's say we they go to our public facing quote generator and they generate a quote and they create an account because they want to get that file right. You have to create an account to get PDF, maybe to generate a mockup. Would they end up in the invited. Where where would those where would they end up? Because that that doesn't exist yet. So yeah, would that be in prospects?
+
+Andrew Goeken  1:28:08  
+That would probably be would probably organize that as yeah.
+
+Bill Denk  1:28:12  
+So if somebody comes in, then so you you would get we call inbound and outbound estimates. So you know what's been sent out by your team, what's actually come inbound from people coming outside the west, so that could be
+
+Brandon Seavers  1:28:24  
+public facing, right? Yeah,
+
+Bill Denk  1:28:25  
+and or it could be we could determine if it's inbound. Like Al Green's team was invited by you, they came and they signed up, and then they created their own inbound quote or estimate that you didn't have to send out to them. And so for generic or anonymous people, I haven't built it for that, what we can is not very hard for us to do. Where we can just show the number of estimates that are coming in, and we can determine a lot of information about who's coming in, as far as we can know where their location of their computer was.
+
+Brandon Seavers  1:28:56  
+Well, if we if we tell them they have to create an account in order to get the estimate, then we'll have their information, and they would just land in a new pipeline, right? A new category, I guess, right? Like prospects or something like that. Or we could
+
+Andrew Goeken  1:29:09  
+even just say that this is all people that have come from your quoting system. If you wanted to know from a marketing standpoint, oh, these are this is how much our quoting system is generating online. Here's how much outreach is if we're sending it, you know, via the link instead of the quoting? Yeah, because
+
+Bill Denk  1:29:25  
+the link you talked about the generic. So, and what you were talking
+
+Brandon Seavers  1:29:28  
+about earlier, let's say somebody comes in and they get a quote, but they don't want to save it. They're just window shopping and they're just going to move on. We can track that too.
+
+Bill Denk  1:29:36  
+Yeah, we track the quotes, but create time. That's what I'm saying. Like when I say information about who came, they're just generic information, like the browser type they use, what location. So we could, but but
+
+Brandon Seavers  1:29:47  
+capturing their info requires them to create an account, right? Set it up. Okay.
+
+Bill Denk  1:29:53  
+And so what I thought we would do when we first start is maybe have a few friendly artists come through. Use the system, make sure everything is the way you want it to be, and everything that they want it to be, and what they're expecting, and then we tailor it to whatever you want, and then we can open it up to more people.
+
+Speaker 3  1:30:11  
+Okay. And we get back in the pools.
+
+Brandon Seavers  1:30:20  
+So
+
+Bill Denk  1:30:21  
+my second. All
+
+Brandon Seavers  1:30:22  
+right. What's next? Do you want us to start poking holes in it? Yeah, please. Yeah. Okay. Yeah. The thing is, we have the we have the pieces. First of all, this is look that that that this is impressive.
+
+Speaker 5  1:30:34  
+Yes.
+
+Brandon Seavers  1:30:35  
+It's it's eye twitch impressive. Yeah. I earned this. Yeah. So,
+
+Bill Denk  1:30:40  
+but I I earned this. So the the thing is that we want this to be the best it can be. So don't feel bad about saying anything to us that you don't see here, because we can I'm sure easily add it. I wanted to have the basic pieces together so that we could figure out okay how do you want to stitch them together, and is there any indies that you're not seeing that you want to see, or is there something we completely missed, or is there something in there that you don't want to see? Well, there's a
+
+Brandon Seavers  1:31:09  
+lot. Yeah. So there's we're drinking from the fire hose at present. So I think we have to kind of back up. I think when we, unless you guys want to start somewhere else, I think we got to go. We need to go to the quote generator view when somebody when they're when they're going to develop a quote, and let's just talk through the steps there and some of the if this then that that we need to talk about. And this is something
+
+Speaker 2  1:31:31  
+they're going to be led to. They're going to come to our website. Just go to our website. There's a thing that says get
+
+Brandon Seavers  1:31:36  
+a quote. Get a quote. Right now you get a quote. You you fill out a form. But instead of filling out a form, you're going to be presented with to this to this thing.
+
+Speaker 4  1:31:43  
+Yeah, it would be beneficial to do that, and then maybe also look at once we do that, what is it created in the back end, and what has that information presented to us? The customer creates this thing, and then we see a new project in the back end, right? And so, is that what does that outline look like based on what we can do
+
+Bill Denk  1:32:07  
+is Andrew, you can do is you can create with the builder and go with yeah that's and then what I'll do is I'm just updating some things here so that we can do customer side of things, but for right now we can use the builder to show how how that would go out to the customer, and then we can because the customer's view is going to be pretty much the same as this, except for the packages on top that will be there for months. Yeah, and then that way you can.
+
+Speaker 1  1:32:39  
+I might have hidden that actually what we're going through.
+
+Bill Denk  1:32:53  
+can send the estimate to somebody here, and then they can see from that side, their side,
+
+Speaker 1  1:32:58  
+right.
+
+Speaker 4  1:33:03  
+We want to talk about the shorter thing.
+
+Brandon Seavers  1:33:08  
+Yeah, in a minute. In a minute. So, so we got our price pins at the top. I love that. So pick a size. That's great. I don't think anything has changed there. How many disks? That's great. We'll probably limit that for the customer-facing view. I think that three and four will be, unless you disagree. Probably be a back-end submission. Maybe the front-end only be two, unless you want to have three output.
+
+Arian Kennedy  1:33:37  
+So we were looking at our condensed price list. We did put trifold on there.
+
+Speaker 8  1:33:42  
+Okay.
+
+Arian Kennedy  1:33:43  
+So we can't go too deep, but I would say like four would be
+
+Brandon Seavers  1:33:46  
+yeah. And I don't and I think that that's something we can we can we can easily modify that. Yeah, sure, go do whatever. Yeah. So I don't think so. I don't think that's you know that that's something that we can kind of play around with. So pick a weight. So 1480, 108 gram. only applied to 12 inch.
+
+Andrew Goeken  1:34:04  
+Got it.
+
+Brandon Seavers  1:34:05  
+Right. So if you choose 100, if you choose 10 inch, there's only one weight. If you choose 7 inch, there's only one weight. Right. So if you choose seven and 10, I don't think pick a weight even needs to be there because you can't choose a
+
+Bill Denk  1:34:17  
+weight. Okay. Right.
+
+Speaker 4  1:34:19  
+It's going to be either 49 for seven or 110,
+
+Brandon Seavers  1:34:22  
+but I don't even know that we need to list that because they're choice. Yeah, I think if they choose seven or 10, pick a weight goes away.
+
+Speaker 4  1:34:29  
+Got it. Right.
+
+Brandon Seavers  1:34:34  
+Okay. All right. So pick a type. Oh goodness! So there's a lot here, and I think that that what we need to what we need to determine is how do we want to present that to the customer? Like, do we want to give them every single option visible in the. Screen like this, right? You know, or do we want to do we want to condense it some? And I'm looking at I'm looking to air in real quick just because her team is going to be fielding 100 of these reports from the
+
+Speaker 2  1:35:13  
+categories themselves, right? These are header level
+
+Andrew Goeken  1:35:16  
+measures, right?
+
+Speaker 2  1:35:17  
+And I guess depending on the quantity you select, that's going to limit what you see here too, isn't it?
+
+Arian Kennedy  1:35:23  
+It's only going to limit it if it's short run.
+
+Speaker 2  1:35:25  
+What is that going to be? It's on categories. We'll talk about short run in
+
+Brandon Seavers  1:35:30  
+a minute. Yeah, let's talk about short run in a minute. Okay.
+
+Arian Kennedy  1:35:33  
+But as far as the color, what I would prefer is maybe we have it by our header level categories as far as like translucent, opaque, and then our standard blends, deluxe blends, and then special effects. I think that would make more sense
+
+Speaker 2  1:35:50  
+rather than subdividing the blends by cream and
+
+Arian Kennedy  1:35:53  
+so like if we can have like pick a type. Your type is what type are you looking for? Translucent, opaque, standard blend, deluxe blend, or special, and then from there we can get into the specifics. Like if they chose a standard blend, then they can do smoke blend or the cream blend. Some of
+
+Speaker 4  1:36:08  
+these options would would all fall in together as a standard blend or a deluxe
+
+Arian Kennedy  1:36:15  
+blend.
+
+Speaker 4  1:36:15  
+Got it. Some of these buckets may get consolidated together, and then there might be one or two that that we would add.
+
+Speaker 2  1:36:21  
+Well, do we want to look at the at the five bullets or the bullets we talked about last week on that new SOW?
+
+Speaker 1  1:36:27  
+Yeah.
+
+Speaker 10  1:36:28  
+Okay.
+
+Speaker 2  1:36:29  
+Yeah, that's that's basically that's basically it. So vinyl color options specify vinyl color effect field, and the following changes will be made in mockup. Okay, these options we've got displays an example article. Select the final color. Some categories are single color transparent, translucent, single color opaque, single color neon. Then you get into blends, standard blends, deluxe.
+
+Speaker 3  1:36:58  
+Different blends in standard.
+
+Speaker 2  1:37:00  
+Yeah, it's in that. Yeah, you guys all have that. Yeah, yeah,
+
+Andrew Goeken  1:37:03  
+I have a copy of it too. So, not
+
+Speaker 2  1:37:04  
+that it has, not that it's set in stone, because there could be things that come out of that. That's
+
+Andrew Goeken  1:37:09  
+basically limiting it to six overarching options, and then everything would fall into that.
+
+Speaker 2  1:37:15  
+Well, except for the like the
+
+Speaker 4  1:37:18  
+only exception of the special vests, like the
+
+Speaker 2  1:37:20  
+galaxies, half halves. Those things are separate. They're not.
+
+Andrew Goeken  1:37:24  
+Got it. Are are those are those special effects like A side, B side, color and color already options on here? Yeah. So I have half, half and half. Yeah. Okay. Yeah. Yeah. So basically, for context, we organized this, and it may have been the wrong thing to do, but based off of what's currently on your website in terms of categories. So, if we saw, you know, half here as the as the category, and then we saw the list of images below that, then we pulled that in and made that a category. But yeah, we can resort this to kind of anything you'd like here. I did have a question on this, and this is more for me from the vinyl creation side: is are the like deluxe blends and the smoke blend and the deluxe blends, the standard blends blends are those the same effect? Meaning, in terms of the marbling, is almost the same across the board on those. It's just pricing, and it's just they're going to look a little different.
+
+Brandon Seavers  1:38:36  
+It's pricing. I really think that we need to back up, and that when we when we present the quote generator to the customer, because we want to consider this, right?
+
+Speaker 11  1:38:45  
+Yeah,
+
+Brandon Seavers  1:38:46  
+this way this way too much information, right? We want to consider that that 75% of our users are going to be shopping on their mobile phone, right? So we like pick a size, yeah, pick a weight, pick a color. Yeah, black, solid, blended, or swirl, whichever we want to call swirls. I guess we could call that blends. Blend. So black, solid. Yeah, but what we call it, and what what what the vast majority of the people in the world what they think marble. We need to think about that. We need to think about what the people are like a blended color, so black solid blended special effect and picture disc. Can't forget picture disc, right? I don't think we talked about that because it's an effect. So black solid because a solid can be opaque, it can be translucent, it can be neon. It can be glow in the dark, right? So those are all solid colors, right? So I think we we give them black, we give them solid, we get them blended, and then blended can be can be a standard blend, a deluxe blend. Nobody in the world understands what that is, right? Right. So I don't think we need to present them with standard deluxe. It's
+
+Andrew Goeken  1:40:00  
+just going to be here's our blends
+
+Brandon Seavers  1:40:02  
+smoke or cream or double double. They're not going to understand any of that, right? Then we can give them subcategories of, of you know, for solid it can be solid translucent, solid opaque, solid neon, and go in the dark, right? So we give them those subcategories of solids, and then if they pick a blend, black solid blend special definitions.
+
+Speaker 4  1:40:24  
+At the later level, you have your overall family and then your specific family. So you choose like if you pick the single color and then opaque, and then then you have all your opaques to choose from. If you
+
+Brandon Seavers  1:40:35  
+pick solid, then you're going to get your opaques, your translucents, your neons, your those are your four solid colors.
+
+Speaker 4  1:40:41  
+But is there a layer where you're picking? I'm picking opaque, and then I'm going to pick translucent, and then I get all my translucent colors, or are they all fitting together? Not going to pick opaque. These are one colors, and then you're going to get four
+
+Brandon Seavers  1:40:54  
+choices. You're going to get opaque, solid, neon, opaque, translucent, neon. So, is it solid
+
+Speaker 2  1:41:02  
+or is it single color, or is that too denking? If solid makes it sound opaquey to me, is it single color translucent, single color opaque, single color neon?
+
+Andrew Goeken  1:41:17  
+I feel like solid. We've always called it solid. Solid
+
+Speaker 2  1:41:20  
+solid color. Yeah,
+
+Andrew Goeken  1:41:22  
+yeah. So then I'm used
+
+Speaker 2  1:41:24  
+to losing
+
+Andrew Goeken  1:41:27  
+for my peace of mind. Special effects. I know you might have mentioned this already. That would be your splatters, your color and color. Special
+
+Brandon Seavers  1:41:33  
+effects is going to be a splatter, color and color, half and half. Cornetto.
+
+Brandon Seavers  1:41:37  
+Cornetto, all that. But then again, on this customer-facing thing, there's some things we're probably not going to offer. Right. Yeah. Like three color A side B side. Yeah. Probably not going to offer that. Cornetto. Maybe I don't know that it was even on our list. No, we lined out. I said I think we we we we were just drawing it back to before we get the special effects. Right. So we've got black, we've got solid, which are translucent, opaques, neons, and aluminum dark. And if we list them like that, translucent, opaque, neon, and aluminum dark, that's least expensive, more expensive, more expensive, most expensive, right? And then we go to blends, blended colors. What do we want to call that? Blends. So, and then under blends we have standard blends and we have deluxe blends and smoke blends. I honestly don't know that we need to break all. I'm not sure how we break those down because standard smoke cream blends they're all same price. Yeah.
+
+Arian Kennedy  1:42:40  
+So on our the price list that we shared with you guys, the standard color mixes, there's parentheses with CB, DD, NB, and SB. Those prefixes are what all is under that pricing criteria. Bring the sample
+
+Brandon Seavers  1:42:52  
+doubles, NB blends, and SB, which are smoke blends.
+
+Arian Kennedy  1:42:59  
+And then the same goes for the deluxe colors. All the prefixes in there apply for the deluxe colors: MD, HB, HD, and SHM.
+
+Brandon Seavers  1:43:09  
+So, I guess the question then is, if we're going to if we're going to give them pick a blend, what are our subcategories, or do we have subcategories under we have standard blends, and then we just list them all.
+
+Speaker 7  1:43:23  
+I would say. And
+
+Brandon Seavers  1:43:23  
+deluxe blends, and we just list them all.
+
+Arian Kennedy  1:43:25  
+List them all in alphabetical order.
+
+Speaker 2  1:43:26  
+115 or whatever. I think it really a top 10. It really ought to be a drop. It
+
+Brandon Seavers  1:43:33  
+really ought to be a drop down. Okay. I think that that that I love this view in a mobile first, even in a web first, because we we eventually could have 1000 colors, right? We ain't gonna want to put 1000 colors, so really really make it be a drop down with. I don't know how we do a drop down and then see the color.
+
+Bill Denk  1:43:56  
+One of the things that we have here, we have the color picture. We have a search
+
+Andrew Goeken  1:44:07  
+in components.
+
+Bill Denk  1:44:10  
+We have built a search in
+
+Speaker 1  1:44:12  
+here.
+
+Bill Denk  1:44:12  
+Yeah. So type in type in Ruby or something. So we have a way that somebody can type in for different colors that we built for ourselves or something, and that might be a way that they could actually then click on them and go. Yeah.
+
+Brandon Seavers  1:44:29  
+So we we had originally talked about having a swatch pop up like on our beta that we were working
+
+Speaker 1  1:44:36  
+on. Do
+
+Brandon Seavers  1:44:38  
+we want to consider that?
+
+Arian Kennedy  1:44:40  
+I like those swatches.
+
+Brandon Seavers  1:44:41  
+Can you go to Can you go to the Echo Base website real quick.com?
+
+Speaker 1  1:44:52  
+I think it's Echo Base. I can also Google it. Maybe it'll come up somewhere.
+
+Andrew Goeken  1:45:02  
+Echo base temporary,
+
+Speaker 6  1:45:06  
+echo base file.
+
+Speaker 3  1:45:15  
+You guys?
+
+Speaker 6  1:45:16  
+Yep.
+
+Speaker 3  1:45:17  
+Second, it wasn't right. Yeah, just didn't want to come in for artists.
+
+Speaker 6  1:45:27  
+Yeah, we saw the we saw this one, which is yeah, this is the. So just real quick, so go. Oh nope,
+
+Speaker 3  1:45:33  
+I don't want to do that.
+
+Brandon Seavers  1:45:35  
+Just close that out. That's something we need to be talking about. Scroll on down. Click on color. Yeah. So we were we were working on a builder previously that that's how that it had a pop-up swatch book. Okay. But the swatch book actually had a like
+
+Andrew Goeken  1:46:00  
+for the solid colors, go go to swirls. Click on click on swirls. Have a swatch, but we didn't have it like that. We just had a swatch of the swirl, like just a piece of the image, right? So we could do it like that. I love the search option. That's great. If they're looking for something that's blue or looking for something that's green, they can search for all of the different options, and it even gives them the swirls that are listed there. But I definitely think it needs to either be something like this, or it needs to be a drop down. Yeah, because otherwise it's just going to take up too much real estate. And I would say, and Bill, you can let me know what your thoughts are. This is my own thinking here. You know, we've already got the this built out, so if we want, we could turn this into instead of being an actual hex code. If they upload their list of colors, we can say, hey, here's your. You can select from this number of base, this number of splatter colors, this number of splatter two colors, and have the artist see that change dynamically. Yeah, let's talk about that in a minute. So I do
+
+Brandon Seavers  1:47:03  
+want to talk about that. That's that's creating your lens. No, not lens. Splatters are important because because the splatter, the yeah, the the options are almost endless, right? So we are going to need to be able to give the customer the choice: pick your base, pick your splatters, right? We're going to need to allow. We need to allow them to have that choice. Lens are
+
+Lance Gorji  1:47:26  
+fixed, right? Yeah, but before we get to splatter, that's that's a that's a
+
+Brandon Seavers  1:47:29  
+telling unique beast. We do need to think about how we want to show, like we got black solids. How do that? How are they going to pick their? And I think we give them their subcategories for solidus, translucent, opaque, glow in the dark. And they pick that. Then what are they presented with? Are they presented with like what you have here? If we're going to go back to our book, are they presented with this page has all these different options, all these different icons, or do we give them a drop down? What do you What do you think? Post because we get about 40 base colors, so this isn't this list isn't going to be huge. But when we get into the blends, the standard blends alone is hundreds. I don't know that we want hundreds of scrolling endless options. Do we want to have a condensed swatch foot, a condensed a drop down that maybe when you click on the drop down it gives you an icon, even though it's tiny or it hovers. I don't know.
+
+Bill Denk  1:48:28  
+Yeah, on mobile we won't be able to hover. So, so one of the other things I don't know if this will solve it. I'm thinking about for later, but is I don't know if we can bump it up or not. Is the ability for someone to to request through the system, I want a splatter record that's yellow, green, and blue, whatever, or and describe what is that they want. Have the system then build it, and they have choices of computers with these colors, with these colors, with these. So now, like the splatter it's building for them, rather than them having to pick themselves. So talking about splatter, it's its own unique beast.
+
+Brandon Seavers  1:49:09  
+Okay, but even the colors. I'm looking for. I'm open to examples. It pops up. I'm open to suggestions here of examples of what you guys think might work best for when we pick those subcategories, whether it's solid colors, you know, when you go to blends, then you're going to have your standard blend and your deluxe blend. Within those, there's 100 options. So how do we how do we give the customer those options? I love the search field. I think we need the search field is great. I think it needs to be more.
+
+Bill Denk  1:49:39  
+Yeah, I guess the question I'm having is, do you think that when customers come there, come here, they're going to say, "Oh, I want blue, I want red, they already have their their colors in mind, which means if you have hundreds or 1000s of colors, now we've just shrunk what's going to appear as options for them, so that we don't have to. And scrolling and scrolling and scrolling and scrolling colors.
+
+Brandon Seavers  1:50:03  
+So the initial search, right off the
+
+Adam Denk  1:50:05  
+kind of yeah.
+
+Brandon Seavers  1:50:06  
+Sometimes they might. Yeah, I think because then we could always
+
+Bill Denk  1:50:09  
+have advanced, and then they expand it out. But at least we start with a basic, make it even more simple.
+
+Andrew Goeken  1:50:16  
+I think from an artist perspective, just thinking like if I upload artwork, I might have five colors in that art that I might want to be like, oh well, what if I found a red that was exactly the main color of that red, or hey, what if I pulled out from the gold here and made it a gold record, or what about this little green bit? Does that pull it out? So I think in those terms, but I know not every person coming on is going to do that. To
+
+Bill Denk  1:50:40  
+that point, one of the things that I wanted to do is, if artist already has their cover art and they upload it and they say, "Give me something complimentary, then we have the system on this covers, right? But let's say it'll have our AR, which is
+
+Brandon Seavers  1:50:52  
+common. They're searching for pricing before they have anything. They might know what their favorite colors are, their colorways, but they may not even know what the art's going to be. Yeah. So they might want to just peruse our entire library. So I think the the idea here for a condensed view, simple plug gen is how do we give them the ability to peruse our catalog without overwhelming the screen real estate, right? How do how do we give them that both?
+
+Bill Denk  1:51:19  
+Okay, I'll think around.
+
+Brandon Seavers  1:51:20  
+So I love the search idea. I think that it needs to be more visible. Well, again, that
+
+Bill Denk  1:51:26  
+was just created for us. Yeah, I think that's a
+
+Brandon Seavers  1:51:28  
+great idea. I think that you know maybe we even call that out. You know, search for your favorite color. You know, know what know what color you're looking for. Search here or click the drop down below. One of the ways that we could do it is if the I don't know how it's going to work on mobile first, but if if the mockup is always visible, you always see the mockup for every color. You it automatically updates the mockup, and so they can just scroll through a drop down.
+
+Bill Denk  1:51:58  
+We have that right now, so if you click on any of those. It'll actually once you once you choose the style and you get out, then you just choose it. It will actually change the colors and stuff right away. I
+
+Arian Kennedy  1:52:09  
+have a question while we're while we're just hanging out here. Do we want to make this like two part thing for a color, like the second part of the have to choose? Like what if they're like I just want a standard blend, but they don't have that yet? We always wanted to let them like pick what type, and that way they can just see what pricing would look like for opaque versus standard blend without having to choose an actual color. My reason for asking that right now is because on our our website quote we have vinyl color as a type two field.
+
+Lance Gorji  1:52:42  
+You have what?
+
+Arian Kennedy  1:52:43  
+We just type in the color whenever they have a request, a quote. Now, so they're probably putting like a blend or opaque, not a natural like color code.
+
+Speaker 4  1:52:52  
+Yeah, not the specific color code. Right, that doesn't influence the other use of color. So if it doesn't
+
+Arian Kennedy  1:52:57  
+influence the price, and we're trying to not lose somebody choosing them from hundreds of colors. Like, do we want to double?
+
+Brandon Seavers  1:53:05  
+Maybe, maybe. But they're, they. How are they going to know the difference between a standard and a deluxe lid?
+
+Arian Kennedy  1:53:12  
+I mean, they can still play.
+
+Brandon Seavers  1:53:15  
+Well, I think you got a point, but I mean, how are they going to know the difference? I mean, I think that certainly we can. If they don't know yet what solid color they want to do. If they know if it's pricing is different from friends or pegs beyond the billing art, they don't necessarily need to pick a color. But we are going to need to have a tooltip there that says if you want to create a mockup, you got to pick a color. All right, pick a color and create a mockup. Maybe over there on the mockup side it says the bottom. Pick a color and create a mockup, right? But they don't necessarily have to pick it to move to the next step.
+
+Arian Kennedy  1:53:47  
+I think whenever I was saying that, I was thinking like we had it split up further. But you're right; they're still not going to know what standard or deluxe slim, what the difference between that is.
+
+Andrew Goeken  1:53:57  
+They might not know the difference between the pricing right away either. They might not be thinking in terms of oh this vinyl costs 50 cents more. They're gonna be like oh this is a pretty color, but then oh my price changed. I just try
+
+Arian Kennedy  1:54:08  
+not to get lost in the the colors too much. I really
+
+Brandon Seavers  1:54:12  
+like the idea of letting them search for a color range because then it get you know they have a drop down yeah maybe at the top of the drop down is a search field, search for a certain color of the tooltip that maybe tells them what to do, and then it limits their options there, so they're not having to scroll through
+
+Speaker 7  1:54:30  
+all 100 options. That's this goes
+
+Speaker 2  1:54:33  
+back to the visualizer, doesn't it? So we're going to have to know the component colors of each of these blends that have to be baked into this too. Which we already have. Okay,
+
+Brandon Seavers  1:54:42  
+we've already we don't you guys don't have that, but we've already we have a grid we can share that shows what the base what what makes up all of our lids. Yeah, that way you can you can put that into your database and if they choose red, you know that this one it may have it may have may have one of four different reds, but it's got a red one. Yeah, we can give we can supply you with that. Drive the search fields. Yeah, but those are on the blend. So they just type in red and want to see ruby. Or even if they don't type in red, if we
+
+Bill Denk  1:55:11  
+just give them, I mean, how many different colors do we want? Red, green. I mean, they can be basic colors. They tap on one, and then all those colors come up. Or they could choose all, and they could go through
+
+Adam Denk  1:55:21  
+and select Shocked by vibe or sort of esthetic more so than picking the specific category names as you know them. From a customer-facing perspective, you could do almost like genres and music. You could do like metal records or whatever something some sort of color combinations that are attached to that that are separate on the front end that makes sense to someone coming in that doesn't know that that's
+
+Brandon Seavers  1:55:44  
+kind of what I was talking about earlier when when we were talking about whether it's blend or swirl or marble
+
+Adam Denk  1:55:49  
+yeah
+
+Brandon Seavers  1:55:49  
+I don't know that it matters yeah what matters that's a great point we we need to think about that the the people using this the vast majority of that, 90% of them have never worked with us, right? So they're just looking for what's cool, yeah, right. So we, so we need to build this for that. We're building this for them. It'll, it'll parse it into into our language in the back end, right? But on the front end, what it, what are how, what language are we using? I'm not really all concerned, all that concerned with the language. I am concerned with condensing the view, right? So so that we just simplify it because we've seen it. You know, I'm sure you guys have too. If you if there's too many steps, like I sent you the precision record pressing quote generator, you got to go through multiple pages to get to your quote. You make them go to multiple pages, they're going somewhere else.
+
+Adam Denk  1:56:37  
+What if you provided like smaller examples of each, and then you get to drill down into that from there. Forgot colors and time.
+
+Brandon Seavers  1:56:44  
+Just have just have a placeholder. Yeah. Solid color, you know, solid color, and then you know, then you start drilling down, right? Yeah. Yeah. Blent marble or blend or swirl or whatever we want to call that. Yeah.
+
+Andrew Goeken  1:56:57  
+Another thing I'll throw in the air is maybe like filters that you would if you were shopping for a pair of shoes, right? Hey, I want running shoes. I want the brand to be Adidas, and I want to see all the ones that are white. So if I can do a, if we can have the filter drop down, so maybe I still see all of these styles populated here, right? And I have my search, but maybe I have a filter button here. Then I can filter, and then there's like generic. Hey, there's red, green, blue, or whatever, and I can hit that, and it will populate that. Oh, you know what? I really like what this splatter, you know, or I want to see the special effects in green. I want to see the solids in green. Oh, that could be a green neon. It could be green translucent. Could be green solid, or maybe I know you have some. Even the metallic blends come up as almost some form of green. So anything generally in that green might pop up. I love that. I
+
+Brandon Seavers  1:57:50  
+love the idea of choosing and filtering it. Use filters
+
+Arian Kennedy  1:57:53  
+on any shopping. Yeah, that's great. I think that I think
+
+Brandon Seavers  1:57:58  
+using a filter, then it's just defining what the what the characteristics the filter are, right? I think that's that's a great idea. It
+
+Adam Denk  1:58:06  
+feels more like you're discovering something and you're going through that rather than going through what's because I mean we don't we don't want
+
+Brandon Seavers  1:58:12  
+to pigeonhole them right we don't want to force them to pick something but we also don't want to overwhelm them yeah
+
+Speaker 3  1:58:18  
+because
+
+Brandon Seavers  1:58:18  
+our our we don't even have all of our colors on our website. There's even more options available that aren't listed there, and that that list is growing every day. And so we don't want to overwhelm them, but we do want to give them the ability to explore. It's pretty fun. Yeah, and we also we want to we want to drive them to the deluxe blend, right? On this 90 cent surcharge, 95 cents. We want to drive them to that because that's the whole point of having the builder.
+
+Speaker 5  1:58:47  
+Agreed.
+
+Brandon Seavers  1:58:48  
+So maybe if we want to think about the best way to do that, let's talk about the special effects. That's all we keep trying to jump to.
+
+Adam Denk  1:58:57  
+Yeah, yeah, go ahead. So when
+
+Brandon Seavers  1:59:02  
+it when it comes to special effects, I love the ability to build those things in the back end, and I think that we can we can utilize that. Maybe we utilize that to give people options. Yeah. But let's say they they know specifically what they want. They want to be able to build their own with a with a splatter, for example, choose your base and choose your splatter colors because those are pre those are fixed, right? Right. We've got 40-ish bases, which and we have the we have 40-ish of the same. So for a splatter, then they can really choose any of the 40 bases. They can choose any of the 40 base colors for splatter, but they can choose it three times. Yeah, right. So they can they can combine those any number of ways. So we really are black. Yeah, including black. So we're going to need to be able to give the customer the ability. Maybe we give them some suggested splatter options. Here are some options, but then don't see what you like. Customize it. You can maybe even
+
+Adam Denk  2:00:05  
+pick with your top selling ones that you have going out right now. Yeah, and then clear with
+
+Brandon Seavers  2:00:10  
+clear with red. Yeah, we sell it all the time. Like clear with red. No, clear with really everything. Yeah, yeah, right. And then, but then they might want to do something special. So I think that maybe we give them the top 10, yeah, and then say create your own. Maybe
+
+Adam Denk  2:00:26  
+click the clear with red, and then maybe can show you here's some other similar combinations that you can do. If they want to get deeper and do the sort of full customization, do that. And then,
+
+Andrew Goeken  2:00:35  
+like you said, the create your own would work in this way, right? You have your base color, you have you select your score color, you select splatter 1234, however many we want to do. And we are not. Just to
+
+Brandon Seavers  2:00:46  
+clarify, we are not going to give people the ability to build their own squirrel. Got. Yeah. Got it. But yeah, but for splatter. Sorry. First splatter. For splatter.
+
+Andrew Goeken  2:00:53  
+Or and and we can even denote. Hey, if if you guys know that. Hey, if somebody wanted to build their own color and color, we would allow that up to three colors. I mean, like
+
+Brandon Seavers  2:01:03  
+color and color is only two colors, right? You get a base, and you get and you get a color and color. You get a base. Some colors, there are many color options that actually don't work with color and color. Yeah, I don't know that we can have this system vet that. That could limit
+
+Andrew Goeken  2:01:17  
+it. So you would define you would define colors like they've done define colors here, where you say, okay, our tangerine. I don't know what that tangerine is going to look like, but you guys know in your backend that it's always this color. And we say, okay, you can only choose tangerine red, violet, but like there's no neon green on here because maybe that wouldn't work with splatter for their splatter. There's a lime green on the splatter color too, so even these colors are different. So they can we can set a definition for you can only choose from these bases, and then you can choose from this splatter. But maybe there's even a logic that if you choose that splatter there, then you can't choose it a second time. So we don't want to. Do we
+
+Brandon Seavers  2:01:55  
+want to do that, or do we want to just let them pick whatever they want? And then when it gets to us, we tell them what they want. A certain color color these areas
+
+Arian Kennedy  2:02:02  
+have. there are three.
+
+Brandon Seavers  2:02:04  
+Well, you can't do you can't do a black record with white color and color. Right, you can, but it's just gonna be black. Yeah, you know, and and sometimes you know you can do a white record with black, and sometimes even that doesn't pay himself. Yeah, I would say you limit
+
+Andrew Goeken  2:02:18  
+it because if I created something and I'm like, oh, I have the ability to create a white color and color, and then I order it, and then all of a sudden they're like, oh yeah, you can't do that. I'd be like, why do you have it on the site? I would.
+
+Arian Kennedy  2:02:30  
+I mean, if we want to have it, I would want a disclaimer on there because there's some like there was this I think something was like KRS One or something. It was the orange and silver, and I was shocked that it didn't work. It was honestly like I thought it would. So like today, like right now, if we had somebody come into us with color and color, we would be in the same situation as this the quote right now. We'd be like, okay, cool, that sounds great. Yeah. And so we're like, oh, yeah. I mean, look,
+
+Brandon Seavers  2:02:57  
+but then again, so there should be a disclaimer somewhere, you know. Colors are for you know visual representation, right? Yeah. But at the end of the day, this is that's not what the system's for. Right. That's what our account managers, our customer service team, right? They're the ones that they're going to guide them through the process once it comes in. We just want to give them the option. So I think that we can we can give some hard nos as to what doesn't work, best rules. But a lot of stuff we're just not going to know. We don't know if those go to suppress. So for those, I think we figured that out. But for for most of the special effects, it's going to be the same for half and half. Yeah. Choose color one. Choose color two. Yeah. Yep. Right. And for color and color with splatter, choose your base, choose your color, color, choose your spliners. Right? We can give them some examples.
+
+Speaker 1  2:03:45  
+Yeah.
+
+Brandon Seavers  2:03:45  
+But we're only going to be able to guide them a little bit because there, again, there's an infinite number of combinations. Right? We're not going to. We won't want to try to guide them too much because there's just so many options.
+
+Speaker 3  2:03:57  
+Right.
+
+Brandon Seavers  2:04:00  
+Three color A side B side. I don't know that we're gonna offer that. Yeah, these are all
+
+Andrew Goeken  2:04:05  
+suggestions, and just we'll probably have even some of them in the back end, so that way, if you ever decide, hey, this is working out great, we want to offer butterfly, you can add that. But that's they. These are options for you as the press, not no customer is going to see this until you add the color in.
+
+Bill Denk  2:04:24  
+Yeah, you can you can totally customize this to whatever you want. So you want to show them two options. That's all they see. But you still got all these in the back to do whatever you want. Yeah, but I
+
+Brandon Seavers  2:04:33  
+think most of them, like cloudy, is actually made. You don't choose cloudy. You just choose what color you want. Ghostly. Yeah. Can we change that officially to cloudy. What's it? We're still calling it ghostly, right? Yeah, it's it's going to change to cloudy. By the way, that appears right. But cloudy is it's it's one of right. It's a fixed right. You just choose what color you want because because of it's actually a it's a translucent color. Mixed with clear,
+
+Andrew Goeken  2:05:01  
+yeah,
+
+Brandon Seavers  2:05:01  
+with the same translucent splatter. Yeah, so you've got blue or green or whatever, and those are fixed. But I think for a lot of the others, like half and half, half and half a splatter, color, color, a side, b side, you just choose your two colors, right? Or choose your two colors plus your splatter.
+
+Andrew Goeken  2:05:15  
+And so for you, just so you know, so this use case would be: let's say you have cloudy, and we're like, sweet, we're adding this new cloudy color. This would be where you'd go to create your mockup based off of hey, we sent this thing to print. We did a cloudy color that is all these layers of blue, and then you can put in the hex colors to show what this will look like to the customer. Not that they would ever be able to customize it themselves, but as you add new colors, you'd be able to create them in your back end and push them out quickly. Yeah, without having to press one, take a high-resolution photo or scan of it, and then upload the image. You can just build one out. We want
+
+Brandon Seavers  2:05:55  
+to use a photo account,
+
+Andrew Goeken  2:05:58  
+so we can have a photo or create a mock. Yeah, but the mockup is going to be a much cleaner experience for the customer. So we would, I think, we would prefer if we can work towards that. Meaning, hey, any kind of styles that we want to create, let's figure out how we can make this editable in the back. Yeah,
+
+Speaker 2  2:06:19  
+instead taking a picture of it, put it up against us, and try to mock up something that looks like yeah. Wait, you just add something cleaner visual? Yeah, it'll be
+
+Andrew Goeken  2:06:26  
+a cleaner visual for them, and so when they get the mockup, when they get an estimate sent to them, and maybe you send them this final, it's going to be you know a nice clean picture that's consistent and will fit with the label and fit within the parameters of you know the sleeve and how all that stuff is set up. So that's kind of why we set this up.
+
+Bill Denk  2:06:50  
+The thing I was curious about too is that would this might be a dumb idea, but I was wondering if if on the press side of things, if this could be something that could expand out to that. That if you had like an iPad at the press, and they could see they could see the the album right there, what the color was, or they could tap other specs. So this could be a sheet for whatever they needed.
+
+Speaker 4  2:07:13  
+Something like that now at the press, where the color that's defined on the work order pulls into the screen and shows them a bit, but it's it's those photos. It's from the photos. It's the same photos that you would have found on the website.
+
+Bill Denk  2:07:28  
+Okay.
+
+Lance Gorji  2:07:29  
+Yeah, I think we're talking about going back and talking about making.
+
+Brandon Seavers  2:07:32  
+I think we ought to be. We we definitely want to have the ability to do both because there are some of these blends that are pretty tricky. Yeah, and we also have many horror stories of using mock-ups in a in a that when the customer gets their vinyl, yeah, this doesn't look like the mock-up. And when we already have, we fight a big battle with the customer getting their vinyl, and it doesn't look like the photo. Yeah, and we have to explain to them the photo is is representative of the effect, but they're all going to look different unless it's pictures, right? Yeah,
+
+Brandon Seavers  2:08:06  
+that's that is a conversation we have literally every single day. Mockups have been a challenge because we get that all the time. A customer sends us a mockup they created in Photoshop. Hey, we need you to make this. Like, well, that's actually not possible in the real world.
+
+Speaker 3  2:08:20  
+Yeah. So now
+
+Brandon Seavers  2:08:21  
+this, obviously, we are going to be matching. I think this would be a great tool that we could use. I just don't know that we're going to be able to use 100% of the time. So we definitely want to have the ability to do both. Yeah. That is perfect, honestly. Yeah. Yeah. And I would also say even even a new color and color. Well, color and color is going to be challenged. We do have that for sure. So when
+
+Bill Denk  2:08:43  
+Andrea brought up to me the thing, the question, okay, how many of these different splatter effects, and the reason splatter I kept coming up because it's the most complex it seems. How many different splatter effects am I going to have to do? Because will Memphis say, well, our splatter doesn't look like the splatter you put up there, or whatever. But then that made me think about the customer. You're just saying that too. What I would just like to roll around the back of our heads at some point is just would it be beneficial to the customer to say what will mine look like, and you click it and it just goes through random patterns and says yours could be any one of these or even something you're not seeing here, so they understand that their splatter effect may not have to be the same as what the splatter is. No, I
+
+Brandon Seavers  2:09:23  
+think that I love the mock-up thing because it just it gives us the ability to not have to use a press for something for a splatter or something like that. Yeah. Yeah. Three color A side B side.
+
+Speaker 3  2:09:33  
+Yeah.
+
+Brandon Seavers  2:09:34  
+We we got to test it because you know you're literally layering. Have you guys ever been in a pressing plant before? No. Is that my first time? We're going to show you that. Yeah. So you're literally layering three pre pre pressed PVC pucks, and you have no idea what's going to happen to press the first one. Wow. But then when you press the second one, it's going to look different. Yeah. So that middle color, sometimes it comes through on the B side. Sometimes it comes through on A side. Sometimes it doesn't come through at all. It just depends on what the press decides to do with it on that particular press. Color color is the same way. You never know what's going to happen. So splatter is a little easier, a little bit easier to to kind of predict what's going to happen. I mean, you you don't want to put black. But when you have multiple pucks, you know, you just don't know what's going to happen. Well, the
+
+Speaker 2  2:10:20  
+tour will also show you that why the blends need to remain static and not build your own because that's an entirely different process done on an auto press where stuff is done in a hopper where these effects are all done in a manual process a little more easy. So a little easier to manipulate. Yeah, I think this is a great start. I think we do
+
+Brandon Seavers  2:10:38  
+want to make sure we've got the ability to do the mockup versus an image, and let's just think about how we drop those into categories, and then let's play around with this best way to feed, and then we can kind of help you help guide you through what what needs to be in each of those categories. But a special effect is is anything that's not a blend, so A side B side, half and half, anything that takes a splatter, color and color, cloudy or ghostly, those are manual effects. Manual meaning that they are made by hand. Yeah, right. Like literally, they're they're loaded on the press. Show different each time.
+
+Speaker 1  2:11:18  
+Yeah,
+
+Brandon Seavers  2:11:19  
+yeah. I mean, even the blends are going to be different every record, just because you're blending your pre, blending your PVC. Throw it in a semantics, we literally throw it in a semantics, or we mix dry PVC pellets, yeah, like making a cake, and the hopper and just being vacuumed into the machine, it never knows what what is in that particular area. Yeah,
+
+Andrew Goeken  2:11:42  
+yeah. You actually answered one of the questions that I was talking to Bill before. I think it was last week because I was like, I don't know why. So we have this blend, this blend, and this blend. But I was like, is the effect? Isn't the effect exactly the same? Because I see every picture looks significantly different. Like the effect texture. You know, some are a little bit darker, some are a little bit lighter, which makes the two colors. And it's also percentages of each component. And like a deluxe, like a
+
+Brandon Seavers  2:12:07  
+deluxe blend. The reason that they are called deluxe is they use two different types of PVC. So we have our 40 base colors that are one type. Yeah. But then we have specialty PVCs that are actually, if you look at them, they look a little different. Sometimes they're a little bigger, but they're formulated to melt either at a higher temperature or they're dispersed in a different way. Like your metallics, the reason your metallics have that that kind of liquid look in the middle. Yeah, that's a high. We call it a high dispersion material. So you use a very small percentage. You use about two to 3% of that, and the base is clear. So it's clear with two, and it is it's manufactured to disperse instead of swirling, and it's
+
+Speaker 2  2:12:43  
+more expensive. And it's
+
+Brandon Seavers  2:12:45  
+50 pounds is $1,000. Wow, it's very expensive. That's why you only use two to 3% And then the others, the on the on the on the deluxe lens, that material melts at a higher temperature. So instead of homogenizing and making a new color, it allows you to get those very defined streaks and swirls. Some of our standard colors we can actually blend, and they don't just homogenize into another color. They still allow for swirling. But those are our MB blends, which MB originally was Memphis blend. But those are our standard blends. SB is not a standard blend. SB is a smoke blend, and smoke is just any translucent color that's cut half and half with clear, just to lighten it up, and then we put half percent black in
+
+Adam Denk  2:13:26  
+it. You smoke it up. You put more than half
+
+Brandon Seavers  2:13:28  
+percent black in a in a mix. The record becomes black. It
+
+Lance Gorji  2:13:31  
+looks like somebody made a mistake. Yeah, black
+
+Brandon Seavers  2:13:34  
+is a very strong pigment. Yeah. So the reason, but those those deluxe blends, they use these really expensive, really expensive pellets, and that's why they cost more.
+
+Speaker 2  2:13:44  
+Speaking of black, real quick. So I saw one screen had a header, and then it had six underneath it, and then it only had three. Right. So do we need to talk about just black is black?
+
+Bill Denk  2:13:55  
+Yeah, we put that just as an example because we didn't know if you had other choices. Black is black for black is black.
+
+Speaker 1  2:14:00  
+Yeah.
+
+Bill Denk  2:14:01  
+So you just go in there and just just I don't know. Yeah,
+
+Speaker 2  2:14:04  
+if somebody wanted one versus the other. If we
+
+Brandon Seavers  2:14:07  
+ever make spinal tab, we'll be a different. But for now, it's just we'll just have none more black. That versus glossy. Now there are you know different materials do look different. Like we would you know during during COVID, we were forced to use whatever we could get, and we were running three or four or five different materials, which was a nightmare because they all they all operate differently, they sound different, but they all look different, and some of them recycle differently. Some, when you recycled it, they would they would get hazy and swirly, like they didn't look look like they were burnt. Some, but they're like the French material that we had was like it was like a super super dark jet black. It was blacker than the black that we use now. Wow. So and it just depends, you know, because all material PVC starts out as milky clear, and then they add a pigment to it. So the pigment is going to depend, but the pigment also. Affects what it sounds like.
+
+Adam Denk  2:15:01  
+Interesting.
+
+Speaker 1  2:15:02  
+Okay. Do
+
+Andrew Goeken  2:15:03  
+you have a favorite pigment? Like I really love black is
+
+Brandon Seavers  2:15:07  
+black. Actually, clear actually historically did not sound great. It's better now. But black is is supposedly the cleanest. Although it's the it's changed so much in the past decade that there's not that big of a difference now.
+
+Speaker 2  2:15:21  
+Okay, question here: Who do you guys own turntables? Yeah. Okay.
+
+Andrew Goeken  2:15:26  
+Yeah, we usually have a. I have Bill's old. Was it the core? Crossly, yeah, the Crossley. My wife, Crossley, because my my wife had a suitcase. Yeah, the suitcase ones or whatever, and she put it on. I was like, "That sounds terrible. It's a
+
+Speaker 2  2:15:43  
+sleepover. Yeah,
+
+Andrew Goeken  2:15:44  
+I'm like, yeah, it was not. It was not fun to listen to. I was like, we need something else. So I have I have bills, and my plan is to get some good speakers to to hook up to that, and then eventually get into the turntable. My
+
+Bill Denk  2:15:57  
+wife is the one who started us somehow. She started with that, and then when she got that, they started getting more vinyl, and then she wanted to upgrade it. Oh yeah! And then she gave it to me, and I never like I can't. I'm working all the time, so I can't listen to it. But I'm just in my office, so then I had it sitting there, and then I decided to get one and put it in there since I started doing stuff with vinyl and music, and I'm like, I have to have one now, and be able to play it. And then I said, Hey, Andrew, welcome to the clubs.
+
+Brandon Seavers  2:16:28  
+Crosley's the best and the worst thing to ever happen to us. There are horrible turntables. Well, not all of them, most of them. Yeah. But those entry-level suitcases, the best thing for the industry. Maybe that is a low barrier, low barrier of entry. Yeah. Got people
+
+Andrew Goeken  2:16:41  
+collecting, and that's why my wife had them. Just
+
+Brandon Seavers  2:16:44  
+have to teach people that you don't listen to your test pressings on a suitcase.
+
+Speaker 1  2:16:47  
+You shouldn't,
+
+Brandon Seavers  2:16:48  
+anyways. Well, we're going to have lunch here in a few minutes. Chelsea's going to bring that upstairs, so we probably got a little more time. I think that's probably all we need to chat about on the final options for now. Talk
+
+Speaker 4  2:17:02  
+about galaxies. that something that's always going to have to have the individual photo taken of it, or is there some way that we can approach mock-up?
+
+Brandon Seavers  2:17:19  
+Galaxy is another standard blend, so it's just another option under standard blends. Quite special equipment. We we will probably want to provide photos on those, so that's why we want to have the option.
+
+Arian Kennedy  2:17:31  
+Do we want to include
+
+Speaker 5  2:17:32  
+Galaxy
+
+Speaker 7  2:17:32  
+here? Is it as
+
+Speaker 2  2:17:34  
+bill your own?
+
+Arian Kennedy  2:17:35  
+Well, it's priced as a special two color. It's not priced as a standard blend. So it's like we will want to include that on just
+
+Speaker 2  2:17:44  
+query it and say, "Hey, can I get this in these two colors? Is that how we wind up doing our galaxies?
+
+Arian Kennedy  2:17:49  
+Well, more so recently, our galaxy requests have come from the vinyl visualizer, like established galaxy, like they're giving us a color code.
+
+Speaker 2  2:17:58  
+Things that work, yeah. No,
+
+Brandon Seavers  2:17:59  
+yeah, we'll put it under special effects. I think we do. Do we do anything with it? Yeah, well, it'll be under a special effect.
+
+Andrew Goeken  2:18:05  
+Does your galaxy look similar to this?
+
+Speaker 1  2:18:07  
+Yep. Okay.
+
+Andrew Goeken  2:18:08  
+Because we could also do the same same tool and mock it up based off of you know. I mean, galaxy is
+
+Brandon Seavers  2:18:16  
+galaxies varies a lot. We have a new Galaxy machines in now. I think we should put it there just so that we can maximize the use of those. Yeah, and we can we can let we we can get Marty behind some of this and talking about how best to use whether it's. But I think if we have the ability to use a photo or the mockup, yeah. One
+
+Andrew Goeken  2:18:36  
+small note on the photos: I would upload them without the label because we have the label, these labels here are set across the board to be clean. And if you ever decided to change your logo per se, that would populate across the whole app for you. So,
+
+Bill Denk  2:18:54  
+so I do want to say that we can we made that because we thought that would be the easiest way to do it. So everything was consistent across the whole thing, but if we need to segment something for you,
+
+Andrew Goeken  2:19:04  
+yeah. But yeah, basically, so that way, when you're in your builder, the artist is seeing the same exact graphic. When you send out an estimate and a mockup happens, it's keeping everything the same size. So then, if you do upload a photo without a label, then it will just auto layer behind the label that we've created here, because you can see some of the photos that we pulled from the website. I
+
+Brandon Seavers  2:19:32  
+saw one. Yeah, might not
+
+Speaker 3  2:19:33  
+line up. So we do
+
+Brandon Seavers  2:19:34  
+want to make sure, like that one right there. If you want to stay there, we need to make sure that we're centering that logo,
+
+Speaker 3  2:19:39  
+right? Because
+
+Brandon Seavers  2:19:40  
+it's not centered. It's slowed down a little bit. So that logo is really weird. Like the top, the the the top line of the M of the Memphis at the top actually does not align with the bottom groove on that logo. It aligns with an imaginary circle that goes around. So just keep in mind that when you center that logo, you're centering it based on the center hole.
+
+Speaker 1  2:20:00  
+I see. I never noticed that. I would have
+
+Lance Gorji  2:20:04  
+never noticed that without that explanation of the other scripts for you.
+
+Brandon Seavers  2:20:08  
+So it often gets it often gets centered. Yeah. Yeah. Like that's where it cuts down and
+
+Andrew Goeken  2:20:13  
+just needs to bump up. Yeah, just needs
+
+Brandon Seavers  2:20:14  
+to bump up. Yep. But we do the same thing, and all the photos that are on our website, we're actually that logo is overlaid over the top. Whatever was pressed,
+
+Lance Gorji  2:20:23  
+so it's not from the picture. It's overlayed.
+
+Andrew Goeken  2:20:25  
+Yeah, we we overlay in Photoshop because yeah, usually that's it's torn, dipped, missing white. You know. Yeah, yeah. So we could we could also you can even remove the logo in Photoshop just you know as well. If you had the label starting up below, like if you had an image and you're like, "Oh, it has a label on it, you can even just remove that in Photoshop and then upload that, and that will just sit behind that label and look perfect.
+
+Bill Denk  2:20:52  
+Well, I wanted to say this too. If you, if you,
+
+Lance Gorji  2:20:56  
+could you? If there's a
+
+Bill Denk  2:20:57  
+lot of work to do, let's see if we can. What if
+
+Andrew Goeken  2:21:00  
+you just your overlay was just a black circle with logo on top, so that it covered up whatever was underneath? It currently is. It's just sometimes it's just the ones that if the logo like on the like double double
+
+Bill Denk  2:21:11  
+go to double double apple orchard.
+
+Speaker 2  2:21:13  
+Double double apple orchard.
+
+Brandon Seavers  2:21:17  
+People buy double double
+
+Bill Denk  2:21:20  
+or just do apple orchard or something. Double double. It's the first one actually for double double. It's right there, left hand side.
+
+Speaker 3  2:21:33  
+Oh, there we go.
+
+Bill Denk  2:21:34  
+Oh, there. So zoom in.
+
+Andrew Goeken  2:21:36  
+Yeah. So you can see this one here. Sorry, my our animation is. Yeah, you can see that pretty clearly without me zooming in. Yeah, wait for that. Yeah, but that's a that's a simple like I can probably go into Photoshop and fix that and re-upload the image. Yeah, we can we can we can fix that.
+
+Brandon Seavers  2:22:00  
+You guys want to grab some lunch over here? Sure. And then we can move to. We have anything else on the vinyl? I think we're good for the moment. I think we move to brick components next. So lunch is in the big room in there. Oh, there's a table in there. We'll bring it back in here. I don't
+
+Speaker 7  2:22:29  
+think we have a table in there.
+
+Speaker 8  2:22:30  
+Just bring it back in here.
+
+Arian Kennedy  2:22:32  
+We have a whole bunch of boxes. We can make a table.
+
+Speaker 3  2:22:35  
+You guys want some vinyl? Vinyl table. You like vinyl? know
+
+Speaker 1  2:22:43  
+the restroom. I really think you're here, by the way. Yeah. We have to talk about something definitely wise alley for sure. Yeah. Could she have stuff next door, Brandon?
+
+Brandon Seavers  2:23:49  
+Yeah, y'all. Y'all gonna go grab a sandwich? I'm just trying to get y'all to just bring it back in here. Let's try and get the whole thing fixed. You know. Thank you. Hot snacks, lunch. Oh yeah, I
+
+Speaker 7  2:24:39  
+saw that.
+
+Brandon Seavers  2:24:45  
+Oh, all
+
+Brandon Seavers  2:24:49  
+right, Bill. You gotta, you gotta force yourself to take a break. I
+
+Bill Denk  2:24:52  
+will. I promise.
+

@@ -1,0 +1,1578 @@
+Brandon Seavers  0:00  
+So just a preference on our side because can't put it in a jacket. You put it in the sleeve. So order progression. The next thing you need to sleeve. But let's talk about jackets. So size. Pick a size. It's great. Just think that that's great. There, we would we would definitely want to call that a full color jacket, not a full color sleeve. Guys, that's just semantics there, just so we don't get them confused. So, pick a style. I would probably call that a type, a type of jacket style. You know, again, because I ask a
+
+Zack (MRP)  0:48  
+question: because size is that already going to be dictated by the size of the vinyl? So
+
+Andrew Goeken  0:57  
+these are these were the I guess the component view. So this is what's offered.
+
+Zack (MRP)  1:03  
+12 inches; those would be the options for a 12-inch LP.
+
+Andrew Goeken  1:09  
+Should they even be able to do that if they already picked the top? So right now we're in the components. So if we were to go to the
+
+Bill Denk  1:18  
+component certified to do each section.
+
+Brandon Seavers  1:21  
+Okay. Yeah. So you're
+
+Bill Denk  1:21  
+choosing what's going to go in each section. Sure.
+
+Andrew Goeken  1:23  
+Gotcha. Okay. Whereas
+
+Andrew Goeken  1:30  
+the oh, you go to packages. Yeah. Whereas packages is
+
+Andrew Goeken  1:34  
+going to be more what the artist would be customizing here. Sure. So then this would be dictated to answer your question. So if I do 12 inch here, when I get down to the sleeves and everything like that, that's all. You
+
+Zack (MRP)  1:47  
+can define those by package too, right? Yeah, you
+
+Andrew Goeken  1:49  
+can define these
+
+Zack (MRP)  1:49  
+by package.
+
+Andrew Goeken  1:50  
+Your components is going to be his where everything vinyl wise. Yeah, and then I can set these to be hidden. Okay, we don't want to offer the double gatefold on the 12-inch, so then that won't appear in our packages anymore, and an artist can't price that for themselves.
+
+Brandon Seavers  2:07  
+Okay, so we got it. So first, we're going to pick a style or pick the type of jacket, right? So the next scroll down, the next order of progression there. Let's say they pick a full-color jacket, right? Yep. Before we go out of that page, they have other things they need to choose. They need to choose paper type.
+
+Speaker 1  2:28  
+Got it.
+
+Brandon Seavers  2:29  
+Right. So we need to choose if it's a I don't remember how we have coated paper or uncoated. Right. Well,
+
+Arian Kennedy  2:37  
+we're talking about jacket. Just jackets. Yeah.
+
+Brandon Seavers  2:40  
+And I did. We put that in the scope of
+
+Zack (MRP)  2:43  
+work. No, we do. We put distinctions based on color and whether it was single, wide spine, or
+
+Brandon Seavers  2:51  
+actually. So the next thing is not paper type. The next thing is color, right? So pick a jacket type or style. Right. Then do you want that to be black and white or full color? Did you choose whether you want to be black and white or full color?
+
+Bill Denk  3:05  
+Right. Blank. Did you ever do blank? I actually
+
+Brandon Seavers  3:09  
+removed. I removed blank from when I sent you that pricing grid because we do it like .0001 percent of the time. So, I mean, maybe we can have that as an option, but it is so rare. Do we really want to add that then?
+
+Arian Kennedy  3:25  
+No, I mean like the only time that we're really offering the generic link ones is if somebody wants to just do raw vinyl. Yeah, it is very. It is
+
+Brandon Seavers  3:34  
+so rare. I think that we we just remove that. So, jacket tie, jacket color, black and white or full color.
+
+Andrew Goeken  3:41  
+Okay.
+
+Arian Kennedy  3:43  
+When we get into like just the surcharge for finishes, because we don't have unfolded for the jackets, or if you stand in glosses if they want to do a finish on
+
+Brandon Seavers  3:54  
+it, which yeah, we we do that much better.
+
+Arian Kennedy  4:00  
+That's the surcharge. probably at 4000 units, so I don't think that we're putting that in there. So
+
+Speaker 2  4:14  
+one of the
+
+Arian Kennedy  4:15  
+other print options I did not UV high loss, and that was it. I mean, we can, but we have to build in a weird mask for it.
+
+Brandon Seavers  4:32  
+Yeah, I'm trying to figure out what. There's a lot. We need to build a cap. I think we should because reverse board is relatively popular, is it
+
+Arian Kennedy  5:13  
+not? Relatively new for those to actually build what is. Well, call it uncoding. Yeah.
+
+Arian Kennedy  5:19  
+Now we just have to do the the weird math to get us to be able to do it for 1000 or less than 1000.
+
+Brandon Seavers  5:31  
+So there's there's three things that you continue to allow people to choose the jacket: the color of the jacket, full color black and white. The type of paper that it's going to print on, and the finish. So there's type jacket, paper type. 20. It's the it's the 20 point or 24 point. Are we gonna we're gonna allow both of those?
+
+Arian Kennedy  6:17  
+We didn't account for 24 point on here. So you don't
+
+Brandon Seavers  6:20  
+want to?
+
+Arian Kennedy  6:21  
+We can, but I would say 24 points on the less than reverse for it as well. So we
+
+Brandon Seavers  6:28  
+wouldn't have a paper finish at all option though.
+
+Arian Kennedy  6:30  
+For like the front, I would say it's standard to take a while to work for that.
+
+Brandon Seavers  6:36  
+But we are going to need it in
+
+Arian Kennedy  6:38  
+the back end. We would need it in the back end.
+
+Brandon Seavers  6:39  
+Okay. So there's two different paperweights that we can print on: print on 20 point or 24 point. 24 point is like a heavyweight, expensive option, but but since that's not the majority of our orders, we would only include that in the back end. So we're talking about the quote generator here, and then we would not have a paper finish option then, right? But we are a paper type option. But we would have a finish option selection, right? Standard gloss. I think we do include uncoated. Okay. The other options are you'd be high gloss in that. Are you wanting to include both of those?
+
+Arian Kennedy  7:22  
+Yeah,
+
+Brandon Seavers  7:27  
+I can send you a bomb, like a drop-down PDF bomb that shows all these things. Also, I've got-I'm pretty sure I've got this all in in order flow for some stuff that we've done previously. But the bomb is super simple because it just steps through all the all the pieces of all the components.
+
+Bill Denk  7:45  
+Okay, because yeah, because what we can do is the thing I want to do is I make sure you build out all the options that you want, and then let you choose which filter which ones you don't. Yeah,
+
+Brandon Seavers  7:56  
+but they will need they'll need to be able to choose that. They want a single jacket. Okay, shows them single jacket. They want them to do full color, black and black and white or full color. Yeah. Is
+
+Bill Denk  8:07  
+that based on paper type though? Because if they do the inside out, doesn't it? Doesn't
+
+Brandon Seavers  8:10  
+matter. Black color doesn't matter.
+
+Bill Denk  8:12  
+Okay.
+
+Brandon Seavers  8:13  
+All you need is they print on the inside of the paper. You mean? Well, if it's reverse board, it's under
+
+Bill Denk  8:17  
+reverse board, right? So reverse is the reverse board. The outer will look like the what's usually inside. Yes. Yeah. You just see print on
+
+Brandon Seavers  8:24  
+the backside of paper. But you
+
+Bill Denk  8:25  
+still do. Yeah.
+
+Brandon Seavers  8:27  
+But that would be under that would be under the. We just consider that the finish, right? We don't we don't consider even though that's actually paper type. We don't. We just to make it clear, we offer four different finishes: standard gloss, which is the majority of our features; uncoated, which is actually reverse floor. It's where you put a broker to print on the backside. So standard gloss, reverse,
+
+Brandon Seavers  8:53  
+uncoated, high
+
+Brandon Seavers  8:54  
+gloss, you get high gloss, and then that. Four options there. I'm going to go ahead and send before you guys this fall.
+
+Zack (MRP)  9:42  
+Okay, I did that. The wide spine option is there. Sorry, and we have white. What category is
+
+Andrew Goeken  9:52  
+that? That's under single jacket, and and you can do well. White spine would be. Do you have a wide spine room for people? No. Okay. Yeah, that's that's like a subtype of the single jacket. Yeah, and then we also have tip on for both single and gatefold. I'm not sure if that's accurate to yours, but yeah, nothing good. Trifold. So you need a tip on option for trifold. I've never seen one. Yeah,
+
+Brandon Seavers  10:22  
+there he is, but no, we're not going to offer that. Got it. And then yeah, we have a disco bag. Yeah, this disco bag is just we call it a euro jacket, but we're we're we're not gonna we don't ever. I mean, we may have done five of those ever. Like it's very seldom that we get.
+
+Arian Kennedy  10:42  
+I mean, usually at this point, when people are talking about the scopag or a year-up jacket, they truly need the 12-point board misery. Yeah,
+
+Brandon Seavers  10:49  
+yeah. So
+
+Arian Kennedy  10:50  
+we wouldn't have that as an opportunity. Yeah, we won't even
+
+Brandon Seavers  10:52  
+have that as an average. We should know this go back. Yeah.
+
+Arian Kennedy  10:59  
+Then as far as like the website quote generator, we were not looking at tip-ons for those.
+
+Andrew Goeken  11:07  
+No tip-ons.
+
+Arian Kennedy  11:09  
+Unless unless you want to, but we can
+
+Brandon Seavers  11:11  
+turn that off still. I think that we we can leave that there for now. We can turn that off.
+
+Speaker 4  11:15  
+Turned off for the window shop. We
+
+Andrew Goeken  11:16  
+can also leave the disco bag and just have that not be available on the generator, in case for whatever reason disco bags come back. Yeah, number six pops up inside. And then yeah, we have the inner sleeve, printed, unprinted black or black or white, and also polyline, black or white. This is where we need to talk about the Euro sleeve.
+
+Arian Kennedy  11:44  
+That would yeah, that would be the the board sleeve.
+
+Brandon Seavers  11:47  
+Yep. So when you go to printed sleeve, you're going to be so they've already got that board sleeve and paper. Okay. And then you you're going to be presented there with options as well. Okay.
+
+Bill Denk  12:03  
+By the way, when I had built this, I went vinyl first because I was thinking the vinyl is the one thing that I'm then going to fit into the sleeve into the sleeve into the cover.
+
+Brandon Seavers  12:14  
+Yeah,
+
+Bill Denk  12:15  
+and so when I built the builder, it was thinking that way rather than the cover because I thought there might be a point where we, as we bring up, so we build the album first, then you bring up the inner sleeve to cover it,
+
+Speaker 2  12:27  
+yeah,
+
+Bill Denk  12:27  
+and then you bring up the album,
+
+Speaker 2  12:28  
+yeah,
+
+Brandon Seavers  12:29  
+yeah, vinyl first, inner sleeve second, jacket first. If that works, yeah, yeah. Color selection on the printed sleeves also. So you have printed sleeve type, paper or board, color, black and white or color, black and white color, and. The type of paper and the finish is dependent upon whether or not it's a paper sleeve or a board sleeve. Because if it's a board sleeve, you're going to have the exact same options as you do on a jacket. You're going to have standard gloss, uncoated, high UV high gloss for that. But if it's a if it's a paper sleeve, you only have two options. And the way that we've done it in the past, you can actually see it when you look at that bomb. We've combined those. You can do you can do 100 pound gloss text paper or 70-pound uncoated paper, so you can either do a gloss paper or an uncoated paper stock.
+
+Andrew Goeken  13:49  
+So paper on that? Should we just say gloss or uncoated? I think so.
+
+Brandon Seavers  13:53  
+I think we should say a gloss or uncoated. Yeah.
+
+Andrew Goeken  14:11  
+Yeah, we could definitely set that up. So once once you hit board weight, you have your three finishes. Once you toggle the paper, we would have three two other finishes options.
+
+Brandon Seavers  14:20  
+Yeah, we can kind of finesse that once we get there. Do we want to? We can take. We we have we can modify even the headings and everything on this too. Like
+
+Andrew Goeken  14:34  
+like if you wanted to call it something other than printing.
+
+Brandon Seavers  14:36  
+Yes.
+
+Andrew Goeken  14:37  
+No, but I think we can we can build on it.
+
+Brandon Seavers  14:40  
+Do so. Does that work for you? Unprinted versus polyline. Do it. Should polyline say unprinted polyline?
+
+Arian Kennedy  14:51  
+I don't like like I really don't like unprinted. I mean, I would. I mean, at that point, I would rather say generic that one than have the generic language.
+
+Bill Denk  15:01  
+And what is what is the polyline? Because I saw that on the California California land, one of us being done. Is it lined inside of it? Yes, plastic line.
+
+Arian Kennedy  15:13  
+We used to have like standard white paper as our our complementary sleeve with the memory bio record, and we recently moved to I say recently to white polyline as the complementary sleeve with that. It's just like a quick more said
+
+Bill Denk  15:30  
+something like it was like a paper polyline or something.
+
+Arian Kennedy  15:36  
+There's like paper on the outside. It's
+
+Brandon Seavers  15:39  
+a paper sleeve with a polyline.
+
+Bill Denk  15:40  
+That's right. Okay.
+
+Andrew Goeken  15:44  
+Yeah, we can. We'll. I'll put a note here. We can figure out a good way to give you the ability to modify the headings, and then figure out, you know, maybe that where that lives. If it should live, maybe that lives in the estimates. You know, so that way you know on the back end, hey, we know this is unprinted, but the customer facing, we're going to call it a different product, or maybe it does list components and you just change the name and it's the same. I mean, I
+
+Brandon Seavers  16:13  
+don't hate unprinted because I think logically it makes more sense than generic for not for us, and for the customer, unprinted. But if we're going to use that terminology, polyline needs to be unprinted polyline, right? Because they're both because we don't want to give them the impression that the polyline is printed.
+
+Speaker 2  16:33  
+So
+
+Andrew Goeken  16:35  
+you can also use the term plain, plain white paper. I
+
+Bill Denk  16:38  
+think I think unprinted makes more sense.
+
+Andrew Goeken  16:40  
+Okay. Yeah. So then add up, polymer.
+
+Bill Denk  16:44  
+Yeah, because even with plain, that's something big. Yeah,
+
+Brandon Seavers  16:46  
+we call them plain white. We call them plain white sleeves too.
+
+Bill Denk  16:49  
+Do you? Okay.
+
+Andrew Goeken  16:50  
+Sounds like a good name for a band. We have cover band.
+
+Brandon Seavers  16:52  
+Plain white sleeves. Yeah. Let's go right for plain white. We can actually build that band in this room. I think.
+
+Bill Denk  16:59  
+I can do the mark. It's the other one.
+
+Brandon Seavers  17:03  
+Yeah, we don't we don't we don't get no band. Been there, done that.
+
+Andrew Goeken  17:07  
+Early 2000s, maybe.
+
+Speaker 3  17:09  
+Yeah.
+
+Brandon Seavers  17:12  
+Okay. No, I think that those, and then we we can. I mean, there are other options that we left.
+
+Speaker 5  17:17  
+There, there's
+
+Brandon Seavers  17:18  
+generic options, and so I don't know if we want to have.
+
+Zack (MRP)  17:23  
+I think those all would fall under. They would
+
+Brandon Seavers  17:25  
+all they would all fall under unprinted, like generic unprinted sleeves, and then there'd be options. You can have your plain white sleeve, your polyline white sleeve, plain black sleeve, your polyline black sleeve. You can have an anti-static clear sleeve and a rice paper sleeve. And so I don't know that we do. We need to include rice paper sleeves. Yeah, I don't know that we could. What about Andy Snake? Clear.
+
+Arian Kennedy  17:48  
+I mean, there are some people who are asking for it, but again, they're looking at the 80% of
+
+Brandon Seavers  17:53  
+it. I think if we're looking at the 80% of it, then what you have here is it printed sleeve, a generic unlined or unprinted plain white sleeve, black and white, and then a plain polyline generic unprinted polyline black and white. I think it's just you know semantics about whether or not we how we want to label those.
+
+Zack (MRP)  18:13  
+And then for seven inch, it's a lot simpler. There's only plain white paper and black paper.
+
+Brandon Seavers  18:21  
+Right, we can choose that. We get to choose that in the back end that applies to seven inch, right? Yes. Once all, once it's defined. Yeah. Because you can't do polyline sleeves to seven inch. Where you just turn it off. Okay. That it for sleeves. Some labels, which I actually would put labels all the way at the top before you even go to sleeve or jacket. Got it. You have your you have your record. You got your label on it. You got to put it in an inner sleeve. Put it in a jacket, and then after the jacket is anything, come else like an insert. But full color black and white or blank. I think that's fine.
+
+Andrew Goeken  19:04  
+Do those have any finishes on? Nope.
+
+Brandon Seavers  19:06  
+Nope. People ask me all the time, and they'll can
+
+Andrew Goeken  19:10  
+I get that back?
+
+Brandon Seavers  19:11  
+They want foil stamp and all kind of kind of frames and stuff. Okay, so inserts are tricky because you can print so many different options. I actually removed some when I sent that grid. You can print one black and white one side, black and white two side. You can print full color with one side only, full color one side with black and white on the other side, or full color on both sides. So there's a bunch of different options, and budget really dictates what people want to do. Do they just want one side, one one color? So I think we kind of kind of think we ought to give them all those options. We just need to make. Sure, it's clear as you want to pick it. Black and white, one side only. Black and white, both sides. Full color, one side only. Full color, black and white on the inside, and full color, both
+
+Andrew Goeken  20:11  
+sides. And that would be applied basically to insert sheet, gatefold insert in a poster. Or no, gatefold is always going to be both sides, right? No.
+
+Brandon Seavers  20:24  
+Gatefold is just a. It's just instead of a 12 by 12, let's see, 12 by 24 in the folds and down. Right, and it's pretty common for it not to be printed on the backside because it significantly increases the cost on the lower volumes. Yeah.
+
+Andrew Goeken  20:50  
+Yeah, maybe I'm thinking in that the logic in my head is you know I'm going from options, so I choose you know one-sided, two-sided print, and then from there I can do color, you know, side one color, side two black and white.
+
+Brandon Seavers  21:05  
+What one thing that I thought of, you tell me what you think about this is is just eliminating the affordable one option.
+
+Arian Kennedy  21:12  
+Yes.
+
+Brandon Seavers  21:13  
+Right. So we have black and white, one-sided or two, full color, one-sided or two. Yep. And just make it just eliminate the being able to mix the color in black and white, that way we can say you know prints pre-printing black and white, pre-printing on one side or two, print full color, print on one side or two, yeah. And then there is a then there is a paper option for inserts as well.
+
+Andrew Goeken  21:38  
+Paper options that also can be glossed and uncoated,
+
+Brandon Seavers  21:43  
+like the sleeve. Yep, and that applies to both the single and a gatefold insert. But for a single only, you can also print on gloss or uncoated board.
+
+Speaker 1  21:56  
+Got it. A heavier weight
+
+Brandon Seavers  21:59  
+stock. You just can't do that on a on a gatefold gloss or sorry, those the high gloss? No, just gloss board and uncoated board. Gloss board and uncoated board.
+
+Speaker 3  22:21  
+Stickers.
+
+Bill Denk  22:23  
+Oh, by the way, go ahead.
+
+Andrew Goeken  22:26  
+Stickers. We put in just some generic ones at certain sizes, but we can limit this to you know basically anything, whatever size you'd offer.
+
+Brandon Seavers  22:44  
+I think that we there are so many options to us to
+
+Speaker 3  22:47  
+do.
+
+Brandon Seavers  22:47  
+I think that we should start with shape,
+
+Speaker 2  22:52  
+square, or circle, square, rectangle. Start with shape, circle, square, rectangle.
+
+Brandon Seavers  23:04  
+Got it. And then, do you want to do give them a size, or give them up to a size?
+
+Arian Kennedy  23:14  
+Right, up to a size.
+
+Speaker 3  23:24  
+Okay,
+
+Brandon Seavers  23:24  
+so a circle and a square are going to be the same up to two by two, up to three by three, up to four by four. All right, that's simple. Two by two, up to three by three, up to four by four. Yeah, and then for a rectangle,
+
+Arian Kennedy  23:42  
+so. by three,
+
+Speaker 2  23:45  
+two by three, three by four, four by five. Four by five is a huge sticker.
+
+Arian Kennedy  23:49  
+This massive sticker. I guess just just
+
+Arian Kennedy  23:55  
+make them all the same, and just give options.
+
+Brandon Seavers  24:00  
+I think we should. Why don't we just simplify it? If it's a pick your pick your shape, and then you pick your size. You do a two-inch, two by two, three by three, or four by four, and then for a rectangle, you do a two by three. Because there's so many different options, we we can't put them all in there. Suggestions.
+
+Andrew Goeken  24:26  
+Our stickers set up that maybe this is where the filter comes in. Hey, I know when I deal with print stuff, a lot of times people are only worried about the width or their height. Like, oh, I know I want it to be this wide. I don't really care how tall it is, but I know I want it to be this wide because it needs to be at least an inch QR code size because they're thinking in those terms. So maybe we toggle and say, hey, I want all of I want four inch options, and then. That just produces. Oh, you can do a four by four circle, four by four square, two by four, and three by four, whatever. I can go and see that, and then maybe it's a width height. So here's something width for the height.
+
+Brandon Seavers  25:10  
+Here's a question.
+
+Andrew Goeken  25:12  
+No.
+
+Brandon Seavers  25:12  
+Can we just let them choose? Because our stickers are priced by the square inch. Yeah. Okay. Right. So I've got. I can give you pricing. We go all the way up to 16 square inches, I think, maybe 20 square inches. So the logic we can have in the back end. What if we say pick a shape, pick a size, and then you just enter your size? I want it to be two, and it forces it to be two if it's round or square, right? But if it's a rectangle, they can drop down of any quarter inch increment. Yeah, right. They can do. We just we just have a minimum and a maximum in quarter inch increments that we can give them, and they can just do whatever size they want because we can print it. Yeah, and we have the pricing that can drive the back end. Yeah,
+
+Bill Denk  25:58  
+and our and our stickers typically done it for the outside of the album, or for the inside.
+
+Brandon Seavers  26:03  
+Outside, marketing. Yeah. Do you
+
+Bill Denk  26:05  
+ever do any for the inside at all?
+
+Brandon Seavers  26:07  
+Very occasionally, primarily. Usually, if it's inside, it's going to be a special like a die cut, a die cut or a kiss cut sticker. You know, the sheet where you peel it off.
+
+Bill Denk  26:17  
+Would it be helpful in sizing to show show this on the album, so I know what a two-inch or a four-inch or whatever it's like. Like that block
+
+Brandon Seavers  26:24  
+there, I think so. Yeah, I mean I think so. And then you pick your location and move it, and it's going to be in the our sticker location. If you look at that bomb I sent you, you'll see the sticker locations at the bottom. We just set it up in nine grid, you know, a nine-piece grid. Do you have? Do you have any opposition to letting you choose your side? It makes it easier than trying to pigeonhole them into because a rectangle. We do like skinny, long stickers regularly. Yeah. But we're not going to be able to determine what they're trying to do. Yeah,
+
+Arian Kennedy  27:03  
+and I just like went through like most recent stickers, and a lot of them were just like two inch by three inch. But if we just have that one on there, of course they're going to want something different. So I think if we give one the opportunity to do their
+
+Speaker 4  27:17  
+own trash. Oh yeah, yeah.
+
+Bill Denk  27:20  
+Alexandra, are you still working on that? Are you sure? Keep my stuff in
+
+Brandon Seavers  27:26  
+the bag. Okay. My wife saw this bowl of lettuce right here. She did right here. Don't come in the house with that. She wouldn't even let me in the house for
+
+Arian Kennedy  27:35  
+like a week.
+
+Brandon Seavers  27:36  
+You can't eat lettuce. It's all painted.
+
+Zack (MRP)  27:41  
+So with the stickers, very often the UVC is in addition to the sticker, and there are we do want to provide the ability to do up to two normal stickers. So overall, you may have two two front facing stickers and a UVC sticker on the back.
+
+Speaker 1  28:00  
+Got it.
+
+Zack (MRP)  28:02  
+So the first thing we want to need to start with is number of stickers. We're a way to add another sticker after the first one is. I think
+
+Arian Kennedy  28:08  
+when we're talking about the ability to add two stickers, it was a promo sticker and an UPC sticker, unless I'm tripping.
+
+Lance Binder  28:13  
+I don't think we talked about the UPC distinction. No, I don't think we
+
+Brandon Seavers  28:17  
+need to add two stickers as a customer, as the public facing quotient. I think we need to have one, and then UPC will actually okay. Well, that's sticker really simple. UPC will actually be a separate category, right? Right. Do you need a UPC sticker? Do we want to add a UPC sticker to the quotient?
+
+Arian Kennedy  28:41  
+Are
+
+Brandon Seavers  28:46  
+we going to ask the question if they need us to generate a barcode, or will that be a backend?
+
+Speaker 6  28:50  
+I think we said we were going to assume that we were going to host a barcode. Yeah, not host, but to generate everything.
+
+Andrew Goeken  29:06  
+And then the generator would be they already have the barcode. They put that in, and you guys generate it based off of their code that they've already purchased, or you or we can purchase that. We can we can sell them code for
+
+Arian Kennedy  29:20  
+that. I mean, currently right now, when we do our quote, do you have a UPC? Yes or no, and do you want us to generate it? So I think including a UPC server here. Yeah,
+
+Andrew Goeken  29:32  
+and then
+
+Arian Kennedy  29:33  
+at least we're also introducing the question like, hey, do you need a UPC? That's been that we we're still finding out during the proofing process, they're like, "Oh, yeah, I actually do need one of those.
+
+Andrew Goeken  29:44  
+Yeah, and then we can set the prices for that. If you, I'm assuming those are two different prices, whether they have one, and whether or not you guys are purchasing one for them.
+
+Arian Kennedy  29:52  
+We have a fee if if they want us to generate it for them.
+
+Speaker 1  29:55  
+Got it.
+
+Adam Denk  30:01  
+Do we want that to be a prompt before the UPCs didn't really have up to say my stuff that pop up or something? I think they point that out.
+
+Brandon Seavers  30:08  
+Do you you know do you have your own parking number?
+
+Adam Denk  30:11  
+Yeah.
+
+Brandon Seavers  30:12  
+Do you need one?
+
+Adam Denk  30:13  
+Yeah. I think that'd be a better. Yep.
+
+Andrew Goeken  30:16  
+Or it could be in the flow too, where it says UPC don't need one, you know. None. I have one as an option.
+
+Adam Denk  30:25  
+That's like a required field to fill out. And you fill it out to prove that you have one. Yeah. Yeah. Because you
+
+Andrew Goeken  30:30  
+don't want it to get. Yeah. So I mean, I do that. I'm required to input my UPC code. If not, then I have to select none or have you generate one for me. Yeah. And
+
+Brandon Seavers  30:41  
+do we really want that to be part of the
+
+Arian Kennedy  30:43  
+work better? I mean, maybe it's just if you need an EP sticker, or if you just stick it out. But it's just the opportunity to ask the question. There are still independents who are asking for the PC sticker. More so lately, they're like, I don't want it to mess up like the the art. They want a sticker.
+
+Adam Denk  31:01  
+How much more does add the? It's for the quote, and it adds a $35.35. bucks. Okay, then I don't know if I would. That's
+
+Brandon Seavers  31:09  
+why I wonder if that's just a back end thing that we we don't have that as part of the quote generally. Like on a
+
+Adam Denk  31:15  
+follow-up, saying do you? And then we make it as part of the back when they get in the back end. They'll
+
+Brandon Seavers  31:19  
+ask them that question. You know, do you need a UPC code? Do you want that on the product, or do you want that as a sticker? Okay, do you have your own number? Like we can walk, but we don't need to waste real estate here.
+
+Adam Denk  31:29  
+Yeah, that
+
+Brandon Seavers  31:30  
+that's something once we convert it into a customer.
+
+Andrew Goeken  31:33  
+Why want to go to print, or I want to put this in order? Last two things.
+
+Brandon Seavers  31:38  
+Yeah, because there will be other things we've got to ask them. We got to grab their audio. We got to do all this other stuff in the back end. Right. The UPC is just part of that stepping process. Okay. Yeah. We can add a sticker there. I just don't. I think that it just it's real estate here that we don't need to
+
+Bill Denk  31:55  
+waste. Speaking of audio, we don't catch it right now. But you've seen how we upload the audio and what happens when we go through from that couple.
+
+Brandon Seavers  32:01  
+Yeah, but I would like to walk through that at some point because I do have some questions about that too. That's right.
+
+Andrew Goeken  32:06  
+Yeah, we can have them upload, you know, their high wave, you know, 24-bit high wave files, and then you'd be able to download them as a zip file. I
+
+Brandon Seavers  32:15  
+just had a call with a customer. How do I get my audio to this? If you could just send it by Dropbox, or because I don't know how to do that.
+
+Bill Denk  32:23  
+With this, they'll just just click on it. They can upload it.
+
+Andrew Goeken  32:27  
+Yeah, upload track by track. If they have it already in Dropbox, they can upload the whole folder, and that will pull from there. And also set
+
+Bill Denk  32:34  
+up for customers that might have all of their stuff put together already as one song and one file.
+
+Andrew Goeken  32:42  
+Yeah. and it's already great final. And then yeah, yeah. Let's look. Let's walk through that after we finish them. You want to try that one? No, totally. Thank
+
+Zack (MRP)  32:54  
+you. UBC stickers. Do we want to include the second size as an option to choose because that's one size, but we have another. We're
+
+Speaker 3  33:02  
+going to take the. We're going to
+
+Zack (MRP)  33:03  
+remove the UBC sticker from the quote-unquote. Oh, so the secret completely, not just the whether or not you need to. But we will, but
+
+Bill Denk  33:09  
+we will want to add it back in. It'll be in
+
+Brandon Seavers  33:11  
+the back end. We just won't put it on the close-in. Right. Got it.
+
+Andrew Goeken  33:24  
+Last is quantity.
+
+Brandon Seavers  33:29  
+So I have a question about that. Yeah, should the quantity be first so that they can see their price populating in real time as they're adding all these options? It
+
+Zack (MRP)  33:38  
+should be a lot of these what we call the short run option. Yes, that's going to be part of the package, right? But many of these options are not going to be available if your quantity is 100, 200, or 300.
+
+Andrew Goeken  33:49  
+So you want them to pick quantity first, so that way I'm not going through. Oh, I built my whole mineral way that I want it to be, and then now we're back to start.
+
+Speaker 3  34:01  
+So that's what that's what we've been through those. Yeah, so that's what we need
+
+Brandon Seavers  34:03  
+to talk about now. So when we have two different avenues, the customer can go. They can pick a short run order, like when that we went to Decobase earlier. That pop up that came up was asking them, "What do you what do you need? Right. So you can you have a short run order that's 100, 200, 300 units, or you can have what we call a standard order, which starts at 300 units. So it's pretty simple with 100 or 200. If there's 100, 200, you can only do have certain options: single jacket, generic sleeve, black or eco mix vinyl, insert. That's it, shrink wrap. No other options, right? So it's very limited options for the for the short run and under 200.
+
+Speaker 4  34:48  
+What was the limit on the jacket?
+
+Speaker 2  34:50  
+Single jacket only.
+
+Speaker 4  34:51  
+Color.
+
+Brandon Seavers  34:52  
+Single color jacket only. No no choice of any special finishes or anything. Yeah, black vinyl only. Yeah. Or eco mix, lacquer eco mix, generic generic inter sleeve. You can have an insert in trim run for 100 200. But at 300, you can do both. 300 you can do short run order, fixed package, or you can have the world open up to you, and you can do all these bills and assists and options. The difference there is that short run order does not allow for test pressings and is ready in four to six weeks, whereas a standard order produces test pressings and it's going to take eight to 10 weeks turn time. So we do need. I think quantity does need it to be at the very top. Yeah. They choose one or 200. It's easy. Yeah. Because, but if they choose 300, then they have to make a choice. And we're we're we are all we're kind of at a stalemate on this side as to how do they choose that? Do we want to have something at the very beginning that asks them the question, looking for 300 or less in four to six weeks? Click here. Looking for 300 or more with all the bells and whistles and to want multiple LP sets because you can't do the multiple LP set much shorter. You know, click here. Do we want to have a three
+
+Bill Denk  36:20  
+things? Do we want to have a
+
+Brandon Seavers  36:21  
+landing page that guides them first? That's one thing we kind of landed on the other day. We have a landed on. We have a landing page that asks
+
+Speaker 3  36:29  
+them the question:
+
+Bill Denk  36:30  
+speed, price, quantity. Speed, speed, price, custom. So I want it. I want it fast. So that's going to limit your quantity. Looking for
+
+Brandon Seavers  36:43  
+300 or less in four to six weeks. Click here. Looking for 300 or more in multiple. You know, and I'm not sure exactly how we spell that out. Can't do a double LV. Right. I'm wondering if
+
+Adam Denk  36:59  
+we do spitballing here. If we do like an initial sort of onboarding screen, to your point, where you fill out those three things, and then if you want to make further customizations or change something, and it runs you through that process, then you can go into this whole experience here.
+
+Zack (MRP)  37:15  
+Correct. You know
+
+Adam Denk  37:15  
+what I'm saying.
+
+Andrew Goeken  37:16  
+So then, if you go through, I pick my speed price two to four weeks. Then all of a sudden, I still see the option for double LP. But as soon as I click that, I get a pop-up saying, "If you choose this, your order will bump to eight to 10 weeks, and your price is going to change. Like I'm almost measuring, like just in my eyes, I hear like three screens that are set up. Go through that flow. After go through that initial flow, then you can open up to all the other options that you
+
+Brandon Seavers  37:40  
+can do. Either that, or you have a landing page with two columns.
+
+Adam Denk  37:48  
+Yeah. What are you looking
+
+Brandon Seavers  37:49  
+for? You're looking for two columns. Click here. Click here. Yeah. And that's going to be complicated. This though.
+
+Andrew Goeken  37:54  
+Yeah.
+
+Brandon Seavers  37:55  
+Right. So we got to figure. We got to. We got to think about everything we do. We got to think about what's going to fit here. Something. the multiple landing pages. I just what I really would like to avoid is people having to click too many times to get right. Yeah, exactly. Right.
+
+Andrew Goeken  38:12  
+Yeah, I think if you come in and you say like like Bill was saying, you have your speed, your price, and full custom, meaning before I go in, I know I need vinyl in four to six weeks. Click that. What does that mean? And at the beginning, when I click that, you're limited to you know no two LP. You know, so two LP might be gray down. You know, and then when you hover that, it gives you no. If you want two LP, you can't do four to six weeks, and we'll take you to custom, and then that takes you to the the custom page where now it's six to 10 weeks.
+
+Adam Denk  38:46  
+But it's just one page, 200, based on time. 204 to six weeks. Okay, just so you know, it's going to shoot you over to this sort of short run page. You have more time than that. Click on that, then you get the whole sort of process out there, but then there's but then there's the budget. Well, I think
+
+Bill Denk  39:06  
+I'm wondering, what do people care about most of the time when they're coming? Are they calling for time? Hey, I get this. Okay,
+
+Brandon Seavers  39:15  
+time is one thing. Yes, I want to avoid focusing on time. Yeah, this is the is the primary driver because everybody wants it faster right now. Yeah, sure, right. So it's really a matter of budget. Short run is all about budget because everybody wants all the bells and whistles. They want the blended colors. They want splatter.
+
+Adam Denk  39:34  
+Yeah,
+
+Brandon Seavers  39:35  
+you're not going to get that. You know, the the time is a is the is the bonus.
+
+Speaker 2  39:41  
+Yeah, for
+
+Brandon Seavers  39:42  
+only being able to get certain options. Right, we're going to bonus you and give it a to you in four to six weeks because we're we're limiting what we're actually allowing you to do. So the what they're really looking, what we're trying to drive on short run is budget.
+
+Speaker 3  39:56  
+Got it.
+
+Zack (MRP)  39:57  
+Right.
+
+Andrew Goeken  39:58  
+So then we offer those two options. And maybe it comes into your packages thing, right? If it's a package at top and it's just a short run package right off the top, and then in that advertisement we say plus you get your vinyl in four to six weeks versus eight to 10, and that's another selling point on the short run vinyl than anything else is custom. So it's just short one package to save money. If not, then we'll take you to the full custom option, which is eight to 10 weeks in both places.
+
+Brandon Seavers  40:30  
+Probably should have capped store on a 250. No, we wouldn't have the 300.
+
+Arian Kennedy  40:37  
+Can I get 75 of this color? 75 of this color.
+
+Brandon Seavers  40:41  
+I want 25. colors, please.
+
+Arian Kennedy  40:43  
+Thank you.
+
+Andrew Goeken  40:44  
+Right, this
+
+Arian Kennedy  40:45  
+is four weeks, please. Good
+
+Speaker 3  40:46  
+ice
+
+Adam Denk  40:47  
+cream. I really like that idea too, because if you go through that whole customization process, or you're excited to go through it, it's going to be pissed if you if you plan out. You can't even get. It doesn't even matter, even if the stuff's at the top. Yeah. So it might be good just to have that like prepackaged thing, like you said. I just I have this much money to do this with short run go. It could not be this. Go back to
+
+Brandon Seavers  41:06  
+the Echo Base page wherever it was. The what page? Echo base.
+
+Adam Denk  41:12  
+Oh yeah. Oh the their main the site that they had it.
+
+Brandon Seavers  41:18  
+Oh Echo Base has it. Yeah. Yeah. So just go back to their main their main or refresh that page. Yeah. Right. So that's what they do. Yeah. And that that if you hit build your short run here, build your short run now, it takes you a little different builder. Builder. Yeah. Okay.
+
+Bill Denk  41:36  
+Right. But go go to our yeah go to our building for. Memphis packages. Refresh your stream. Go to packages. So that's what I'm wondering. Like, if they get on top, black short run, whatever it is, maybe at the top of their thing, they have choices that they can choose from. Once they choose that, that's the path that they're on. If they want to do it completely custom, they can do it, but they at least get segments. You know what I'm saying, or packages they can choose from, where where it could be this could be limited to 100. Yeah,
+
+Brandon Seavers  42:26  
+but we're talking about just Joe Public coming to the website.
+
+Bill Denk  42:32  
+But with the public, could we give the same thing to them? They get your this thing for we'll describe whatever you're describing it. But here are three quick packages, and then based on what they choose, their options are limited based within that within that bill.
+
+Andrew Goeken  42:46  
+And you can create as many of these as you want.
+
+Bill Denk  42:48  
+Yeah. Nice. Yeah. It's because we say click on that, but if you click on that, it's just going to lead you down the path to edit it, right? Which is different than what we want to have for the customer than
+
+Andrew Goeken  42:58  
+the customer facing side. Customer will have all the. Yeah, we should. I mean, I'd like to say I took credit for what Adam was saying was a great idea. Bill already built it out. Yeah, I just was like, oh wait, Bill. You know, Bill had the the foresight in this, but that's. I think that is the best way to make it work because because you're advertising that at the the front the pop up, I don't personally like it. I don't I don't love the pop up. Yeah, I don't think it looks I don't think it looks good. And then this gives you this gets me what I call playing. Yeah, it gets me playing faster. Meaning, I get in, I see the custom builder, and I see the short run price. So as I start building this, I'm like, "Oh wow, that's expensive. Let me scroll back to the top where I saw that low price at the top. I mean, it could be
+
+Brandon Seavers  43:48  
+something as simple as you know a disclaimer. You know, need you know need short run final budget? Click here. You know, looking for multi LP sets, bells and whistles. Click here. There we go. So yeah, this is kind of what what Bill's here is.
+
+Bill Denk  44:13  
+And don't know where it says splatter spatula. They had any weight, whatever. But the idea is, you can have three or whatever category. This is built in now, where you can actually build that, choose what it is, and then once the person were to click on it, this is just our mockup. Once the person clicks on it, you know, or if they want to, they can click to build from scratch, and we can take them there, and we can decide on quantity or whatever else.
+
+Speaker 6  44:32  
+With this setup, we'd have two options:
+
+Bill Denk  44:37  
+okay, yeah. So we have the
+
+Zack (MRP)  44:40  
+short run, you get three blindees to choose from.
+
+Brandon Seavers  44:42  
+Yeah.
+
+Zack (MRP)  44:42  
+of them being 300 custom order. You also can choose, but that would be your minimum. And
+
+Andrew Goeken  44:48  
+then the build from scratch would take you to the full custom build, and then here's your MRP package. Oh, which one do I have selected? You know, it switches based off of whatever ones you want, and then if you switch to custom. You're toggled, and then I have the full my full ability to select anything that I want here. And
+
+Bill Denk  45:06  
+I know we've got a lot of notes and stuff we've been taking here and stuff, so we'll go back and and work on those. But
+
+Speaker 1  45:13  
+standard, okay.
+
+Bill Denk  45:17  
+So here's an example, like how it might look on. So you might have those two that they could slide back and forth to three, whatever basically slide on mobile, choose it, or they can go down and choose their custom and and just ignore her. The choices here, I'll get that all right, but the but the point is they could start from the top and choose what they want, or choose custom.
+
+Adam Denk  45:46  
+Yeah, and you can see the mock up the entire time. Companies, yep. I
+
+Arian Kennedy  45:51  
+like going from the package aspect of it. This is what a mobile view would look like.
+
+Andrew Goeken  46:02  
+Yeah.
+
+Speaker 3  46:04  
+Just an example. So quickly, but I want to do something quick
+
+Bill Denk  46:07  
+so you guys can take a look. And then there's one more. We can come back to this one, but click on that one.
+
+Speaker 6  46:16  
+Yeah, sure.
+
+Bill Denk  46:18  
+What I was thinking about was maybe this is something for like the sticker. So, like for example, you can you can you know click. You can choose different sizes, whatever. So again, just a concept for we're talking about. But maybe you build that. Huh? You just did that. Yeah.
+
+Andrew Goeken  46:45  
+And then the back it looks like you have the UVC code. Yeah, I don't
+
+Bill Denk  46:48  
+read on the barcode and stuff it out. Yeah, on the other thing. Oh yeah, that's cool. You
+
+Andrew Goeken  46:53  
+can post a sticker on the back here. That's right. Yeah.
+
+Bill Denk  47:08  
+So yeah, so we can.
+
+Brandon Seavers  47:11  
+I think that's a good way to start with packages. I mean, let's start there and see where it takes us. Okay.
+
+Bill Denk  47:20  
+All right. And then I just have to figure out. I want to work on the quantity thing because I agree with you on the quantity because you don't want to get down to a package and then get all ticked off. What the heck? The other thing is, I like this the idea that you had. You see, that's not this idea, which was you were saying that if we had kind of the upsell that's there. Sometimes we find a way of the options might still be there. So if I click on it, go well. I want that option. Oh, you can have this for extra. But then that loop gets me to the next level. So I may decide myself to the next level because I want whatever the next next level is. And I'm like, all right, it's you know $4 per or I'd say $1 per unit difference, or 50 cents per unit difference, and then I'm thinking about it in terms of that versus thinking about in terms of it being you know $500.
+
+Brandon Seavers  48:12  
+So something that we didn't can we go back to the quote estimate builder quote builder. So, Harry and I were talking about this the other day. This doesn't give them the ability to choose how it's cut. We don't. We don't want. Do we not want to? I wonder if we should just not have that option. If they if they want to provide their own lacquer, which I know those those options are in the back end on the goods end side, we have that as an option once you're in the system. Like you can provide your own lacquer, you can choose if you want to do a lacquer versus a BMM. But we, I actually like the quote Jen not having any of that because so many people just don't understand. Yeah,
+
+Arian Kennedy  49:28  
+and for the most part, if they have any questions about that, they want to talk to a specific person to get their advice on it too. So I think not including that on this quote, Jen, is a more streamlined view for it for sure, and regardless, we're going to be quoting them the cheaper option, right?
+
+Speaker 2  49:46  
+Yeah,
+
+Arian Kennedy  49:47  
+DMM. DMM. So I mean, that way we can just start there. We don't want to talk about anything else.
+
+Brandon Seavers  49:54  
+Yeah, these prices by default will include the DMM cutting a plate.
+
+Andrew Goeken  50:00  
+I would wonder if somebody decides they want to check out right through Stripe through the backend. I'm wondering if before that, if we have a like a questionnaire or in the checkout page a selection thing, and maybe that's where the UPC comes into play, plated and the cut, and their option can be I don't you know I don't know yet or I have one or something like that just to give you guys information when the order comes through.
+
+Arian Kennedy  50:29  
+I kind of want to have just like the open dialog at the open dialog like any additional do you see something or are you looking for something that you didn't see here or do you have any questions or like and then just have the ability for them to just type in whatever questions that they have. Yeah. Got a question
+
+Speaker 7  50:51  
+for
+
+Speaker 2  50:54  
+Brandon?
+
+Arian Kennedy  50:56  
+We're gonna launch a new a new series. Ask Brandon. Yeah,
+
+Andrew Goeken  50:59  
+we'll get a question
+
+Adam Denk  51:00  
+for Brandon? Please come.
+
+Andrew Goeken  51:04  
+We'll just have a cell phone that just has his like, you know, voice built into it. So whoever's talking into it, it's just Brandon's voice. Yeah, voice changer probably already
+
+Brandon Seavers  51:14  
+out there. I mean, yeah, because in the backend we can we can we've already got that stuff built in good tools back, and we can again all these other things we can add once that you're in the system if you want to customize you want to provide your own lacquer you know you want to do lacquer code instead of medium code all that stuff can be selected for.
+
+Bill Denk  51:55  
+So what's that? A cutter? What's the breathing that I keep hearing? The metallic, almost fog mark. Yeah. You don't hear anymore.
+
+Arian Kennedy  52:06  
+Just the the hum of the floor. Yeah, that's
+
+Brandon Seavers  52:09  
+that's hydraulics. Okay. Yeah. That noise right there is hydraulics. Sounds like an F. No. Yeah. Oh, that's the presses. That's the presses open and closing
+
+Bill Denk  52:23  
+down. Okay.
+
+Arian Kennedy  52:24  
+And no, we don't hear that anymore.
+
+Andrew Goeken  52:26  
+Like I'm pretty sure. It starts to put you
+
+Brandon Seavers  52:30  
+to sleep. I do. You know, it's white noise. I do miss the old machines. You know, back when we had the old machines, we were only in the other building. Those machines were much more violent than these. They shook the building, and so we had nine of them. And so they would, there would be a rhythm in the building when things were going well, and there would there would be no rhythm in the building. So these aren't nearly as violent. You can't really tell when things are going well. Good. My
+
+Andrew Goeken  52:59  
+neighbor downstairs just moved in, and their garage is right under my pretty much majority of my apartment. But also, I work from home, so right under my office. And he has an old, gosh, must be like a V12 truck that he like 70s truck that he's been working on with no muffler. And I could play you a clip of the sound. It literally sounds like my sink starts to rattle, like the the food the processor or whatever the disposal starts grinding, and the whole house shakes or whatever. It feels like an earthquake the first time, and made me think of that when you're describing. I was like, oh, I'm pretty sure I live in a pressing plant when he decides to turn his car on. I
+
+Speaker 6  53:42  
+would have to move. Yeah. Yeah.
+
+Andrew Goeken  53:46  
+And it's on. He's not even running. It's just it's on. It's like, but he can't he can't hear it on meeting, so I'm fine.
+
+Brandon Seavers  53:56  
+All right. Let's next. We walk through
+
+Zack (MRP)  54:03  
+test pressing option real quick. Is that no?
+
+Brandon Seavers  54:07  
+Let's let's go back to the quote generator real quick. So we probably do need to give them an outer wrap option at the very end. Like, do they want to shrink wrap it? Do they want to have an open top poly bag, or those the three options we really give them?
+
+Arian Kennedy  54:29  
+Yeah, I want to say when we were going through the options here, do we have a PVC in the jacket?
+
+Speaker 6  54:37  
+Yeah, we do. In the jacket.
+
+Arian Kennedy  54:40  
+I thought I saw PVC somewhere.
+
+Brandon Seavers  54:42  
+It was in the jacket option.
+
+Andrew Goeken  54:43  
+It might be the components. It might. Yeah, it might be in components under jacket.
+
+Bill Denk  54:49  
+Yeah.
+
+Andrew Goeken  54:50  
+Yeah, we do have a PVC deluxe bag.
+
+Arian Kennedy  54:52  
+So like for that, I would we would just have all like that in the outer rabbit option. Okay, so.
+
+Andrew Goeken  55:00  
+The PVC deluxe bag wouldn't be part of the jacket, but that would just be its own.
+
+Arian Kennedy  55:06  
+It'd be in the outer wrap.
+
+Andrew Goeken  55:07  
+Outer wrap, got it.
+
+Brandon Seavers  55:08  
+So how are we going to build that? Somebody choose a picture disc.
+
+Arian Kennedy  55:12  
+We'll just go to picture disc, and then this is your outer wrap. Yep.
+
+Speaker 2  55:19  
+So they won't get any of those. They can get.
+
+Arian Kennedy  55:21  
+They can put a picture disc in a jacket, and then that doesn't get a PVC.
+
+Brandon Seavers  55:26  
+So the PVC sleeve is most often used for a picture disc. Okay. So if somebody uses a chooses a picture disc, probably going to have to have some logic there that guides them. Like they're probably not. Yeah, I mean we've we've maybe done one picture disc in a standard jacket because it defeats the purpose of the picture disc. You can't see it. We've done it maybe one time, but we do have a jacket option that has a giant die cut hole. But we're probably not going to include that. Yeah, like a
+
+Adam Denk  55:55  
+highlighter for that option. I would highly recommend it. Recommended. Yeah, or just a little your purchase or like when a picture
+
+Brandon Seavers  56:03  
+when they choose picture disc as an option, you know you're probably going to guide them straight to the PVC sleeve because now they can't do an insert which is pretty common. Yeah, an insert that goes in behind the disc, but then they don't typically don't do it in their sleeve or a jacket. So I don't know. Again, we don't want to build this, complicate the build for the minority. In
+
+Adam Denk  56:29  
+which case, yeah, I think you just have it highlighted, literally, like text editing in that line. We would highly recommend.
+
+Speaker 3  56:39  
+Yeah,
+
+Adam Denk  56:39  
+picking this with this.
+
+Andrew Goeken  56:41  
+Yeah, or just like recommended for picture disc. So I click picture, then yeah, like you said, highlight that thing. They can choose whatever they want. Still, if they're dead set on not having, we could
+
+Speaker 2  56:52  
+actually short term jacket save off picture disc.
+
+Andrew Goeken  56:56  
+We couldn't. You could have picture disc just be offered as a package
+
+Arian Kennedy  57:00  
+into the where they can add it insert. I think I would rather us make a package for the picture desk, but then yeah.
+
+Zack (MRP)  57:07  
+Yeah, and then we can omit the other outer wrap options because that's something we're gonna have to deal with anyway. Yeah, like you can't shrink wrap it if it's in a PVC.
+
+Arian Kennedy  57:15  
+And if you have a jacket, you can't put it into a PVC.
+
+Speaker 1  57:18  
+Yeah, yeah.
+
+Arian Kennedy  57:19  
+Put it into polybag and not a PVC.
+
+Andrew Goeken  57:21  
+We probably have an outer wrap, you know, section that says pick our, you know, pick a wrap or something along,
+
+Adam Denk  57:25  
+you know, similar
+
+Andrew Goeken  57:26  
+to this heading, and then we'd have that's where you'd have your pollen bag, your deluxe bag, your shrink wrap, any other outer wraps that you have there, and then yeah, you could toggle those off for whatever packages that you want.
+
+Zack (MRP)  57:48  
+Yeah, there's two different kinds of the ones: PVC bag bags, one for GDPs, and one for singles. Sorry, so Arian, is it a gatefold bag? You
+
+Arian Kennedy  58:07  
+haven't
+
+Brandon Seavers  58:08  
+the. I took no.
+
+Arian Kennedy  58:09  
+Yeah, well, we won't need just dillups,
+
+Brandon Seavers  58:11  
+PVC dilips. Okay.
+
+Arian Kennedy  58:13  
+But yes, there are two LPs for picture desks that go into a gatefold PVC. But
+
+Zack (MRP)  58:21  
+we're not going to include that.
+
+Arian Kennedy  58:22  
+Not for the website generator.
+
+Zack (MRP)  58:53  
+So is the consensus that the deluxe bag is going to stay as a jacket option, and we're going to have separate outer wrap options for all the other,
+
+Speaker 5  59:00  
+like shrink wrap open top poly bag, resealable poly bag, or nothing.
+
+Arian Kennedy  59:10  
+I I heard you. I heard you, but also like I think what I would rather is if we have the picture disc, like the PVC, still maps to the outer wrap. That that makes more sense to me because it's not a jacket; it's a PVC bag.
+
+Zack (MRP)  59:32  
+So you'll have some some configurations where the deluxe PVC deluxe bag is a jacket option, and other configurations for I guess for picture disc, it is then an outer option.
+
+Arian Kennedy  59:42  
+The PVC doesn't need to be an option for a jacket at all.
+
+Andrew Goeken  59:48  
+PVC sleeve? No. Yeah. Would you have a full color sleeve or something? We might put that in a PVC deluxe bag as their wrap. No.
+
+Arian Kennedy  59:57  
+Holly bag. Only the PVC is. Only fit for like a LP. Like it's not big enough to house a jacket.
+
+Zack (MRP)  1:00:04  
+Okay. Okay. So when you're doing a picture disc, your jacket option is not going to be PVC deluxe bag. It's going to be nothing.
+
+Arian Kennedy  1:00:11  
+You don't have an option for jacket. You don't have an option
+
+Zack (MRP)  1:00:13  
+for jacket at all. Got it. It's always the deluxe bag is your outer app option.
+
+Speaker 3  1:00:16  
+Yes. We
+
+Brandon Seavers  1:00:19  
+could leave PVC sleeve in the jackets area, but have it only visible if you use a picture disc.
+
+Arian Kennedy  1:00:24  
+Maybe
+
+Brandon Seavers  1:00:25  
+I think that I think I misunderstood, and that's what I was thinking. Yeah, because then it because otherwise it's confusing because people aren't going to understand why they're trying to put the jacket into something just out around,
+
+Arian Kennedy  1:00:36  
+right? Yeah, I guess so.
+
+Brandon Seavers  1:00:42  
+It's only visible if you choose if you choose a PVC sleeve. The other things are
+
+Arian Kennedy  1:00:46  
+not pictured.
+
+Brandon Seavers  1:00:47  
+Yeah, I mean, yeah, picture miss.
+
+Arian Kennedy  1:00:49  
+Yeah, I mean, we can. It doesn't make sense to me. It doesn't mean it makes it to somebody else.
+
+Brandon Seavers  1:00:56  
+Well, it is kind of the jacket, though.
+
+Zack (MRP)  1:01:00  
+Well, you're doing a picture disc. There's two options you can do. You're going to have to omit one of them, right? You're going to have to either omit a jacket option or an outer wrap option if you're doing a picture disc, because you're just going to have that PVC sleeve, maybe with an answer.
+
+Arian Kennedy  1:01:16  
+Yeah. Then just leave it on a jacket then, and just make it available only for picture discs.
+
+Andrew Goeken  1:01:23  
+And whether it lives in jacket or it lives in outer wrap, we can always. If you guys decide, you're like, you know what, this is confusing. Let's put it to outer wrap or vice versa. We can.
+
+Arian Kennedy  1:01:35  
+We'll start off with it in jacket. We can leave it there, but just only available for picture discs.
+
+Zack (MRP)  1:01:40  
+Yeah. So I guess what what you should do is include it as an option for both, and then we'll choose based on the package whether we want it here or there.
+
+Andrew Goeken  1:01:48  
+It's got to get
+
+Zack (MRP)  1:01:50  
+just omit the other one. So now, can we talk about the other outer route options?
+
+Arian Kennedy  1:02:14  
+Yes.
+
+Zack (MRP)  1:02:15  
+So forget picture disc for everything else. You can have nothing. You can have shrink wrap, and then what we talked about also was open top poly bag and resealable poly bag.
+
+Arian Kennedy  1:02:28  
+Yeah, for the for the this quote gym though, do we want to put have undone option available because we don't recommend shipping it without a no? I think we need to have
+
+Brandon Seavers  1:02:40  
+shrink wrap, open top of your ceiling. Those are the opportunities. So important to have one of them.
+
+Speaker 6  1:02:45  
+Yes. Yep. Otter wrap this, of course. Can we talk? Are we ready to send us? Yeah. Without download cards. That's an insert technically, right?
+
+Brandon Seavers  1:03:39  
+Yeah, but I don't think we need
+
+Speaker 6  1:03:41  
+to put them on them to need its own section. I just I mean it on
+
+Arian Kennedy  1:03:47  
+here or not? How often are we doing download cards? I mean I just
+
+Brandon Seavers  1:03:51  
+think in the world of streaming demo cards were restream,
+
+Speaker 2  1:03:55  
+and you know people still do them, but it's so rare.
+
+Bill Denk  1:04:00  
+Well, my hope is that they switch to cartoons.
+
+Brandon Seavers  1:04:03  
+Yeah, and we can in the base of making
+
+Bill Denk  1:04:05  
+money every time.
+
+Brandon Seavers  1:04:06  
+We could we could make it part of the back end quote, Jim, but I don't think it needs to be public facing this building.
+
+Speaker 1  1:04:18  
+Just going through the rest, or making sure anything that we haven't talked about yet. Because were they in your doc? Yeah, yeah. The car hosted. Yeah.
+
+Zack (MRP)  1:04:34  
+For no more for for custom orders, test pressing option. Yes or no?
+
+Arian Kennedy  1:04:40  
+So for similarly to what we're talking about for this automatically doing a DMN cut and planning, I feel like we should just default to our normal five test pressings, two day shipping.
+
+Zack (MRP)  1:04:52  
+Yeah, that's what we had.
+
+Brandon Seavers  1:04:54  
+Yeah.
+
+Zack (MRP)  1:04:54  
+So there's no decisions you made. Correct. You're going to get five test pressings. Yes. Yes.
+
+Andrew Goeken  1:05:00  
+That's for anything custom. Anything custom. Got it. And then short run is no test pressing. Correct.
+
+Arian Kennedy  1:05:48  
+I think we've gone everything like over the pricing grid that we have, and we've got to finish too. The only things that we haven't gotten into are the if this then that rules for for all this stuff as far as like mapping out this I think we've covered everything.
+
+Zack (MRP)  1:06:11  
+Yeah, well we'll have to talk about the assembly fees and how to calculate that. There was some stuff that we wanted to present the user about their assembly fees, right? In which we said
+
+Speaker 3  1:06:21  
+we do. That's what we wrote
+
+Speaker 8  1:06:23  
+up. On the
+
+Speaker 3  1:06:24  
+clothes yet? Yeah.
+
+Zack (MRP)  1:06:24  
+Do we want to give the customer a breakout? If you're in charge for this, this, this, as far as assembly. So building. Well,
+
+Brandon Seavers  1:06:32  
+it'll be. It'll be. It'll be. They're just going to get a price. It'll be billed. Now, there. Are we going to give? Are we
+
+Bill Denk  1:06:37  
+a lineup? Are we going
+
+Brandon Seavers  1:06:38  
+to give them a line item?
+
+Speaker 4  1:06:40  
+I think that's the way we have this way built in. Yeah, we have this built in in the quote. Somebody says, "Hey, all your prices are shown. All your
+
+Andrew Goeken  1:06:47  
+costs are reflected. Yeah, I have it.
+
+Andrew Goeken  1:06:50  
+Now, would you just build the assembly, the insertion fee on top of whatever? So there is a breakdown on that example, right? There is placed
+
+Zack (MRP)  1:06:59  
+in the top before shrinks. So we're saying maybe we want to just omit that and then just make the assembly a single line item with the number that's calculated in the background.
+
+Speaker 4  1:07:08  
+They want to know what what it's made of.
+
+Brandon Seavers  1:07:10  
+I don't think we need to give them a breakdown for assembly.
+
+Zack (MRP)  1:07:14  
+Just make
+
+Arian Kennedy  1:07:15  
+it a
+
+Speaker 3  1:07:16  
+lot,
+
+Brandon Seavers  1:07:16  
+but it's driven by we. That's that's part of the logic. We'll need to give you what drives those assembly costs. The setup costs are listed on that
+
+Speaker 3  1:07:34  
+sheet recent
+
+Bill Denk  1:07:37  
+sheet. I
+
+Speaker 9  1:07:38  
+think we
+
+Brandon Seavers  1:07:38  
+are the grid.
+
+Zack (MRP)  1:07:40  
+I think we have those. matter right now. We're just going to debuff the DMN.
+
+Brandon Seavers  1:07:45  
+I got to remove the DM.
+
+Andrew Goeken  1:07:55  
+Yeah. So then these we won't be having this choice, the lackers. Well, this is this is
+
+Brandon Seavers  1:08:04  
+this is when they've logged in and they're in the backend, right?
+
+Andrew Goeken  1:08:08  
+This is where we've sent them a quote, and them viewing their that's before they've logged in. It's before they've logged in.
+
+Bill Denk  1:08:17  
+So basically, they can go from an email quote to click here to get more information. If you go to the top again, we just confirm that that's yeah yeah that's just the
+
+Brandon Seavers  1:08:27  
+quote. Oh, so now we're giving more options if you want.
+
+Speaker 4  1:08:29  
+Yeah, but then their total is going to it's going to look different than their quote was.
+
+Andrew Goeken  1:08:34  
+Right, but they can see that change here.
+
+Bill Denk  1:08:37  
+Right, it's going to change. Okay, change there. So
+
+Andrew Goeken  1:08:39  
+if if I choose DMM now, we're adding on a price of 150. I can see that. We can
+
+Bill Denk  1:08:46  
+make the we can make the price
+
+Lance Binder  1:08:47  
+included in the first one,
+
+Lance Binder  1:08:48  
+right? And then if we choose the latter, it would show an increase.
+
+Andrew Goeken  1:08:51  
+Right. Okay. But we can set it up differently if you like. That's just how we have it. Yeah.
+
+Brandon Seavers  1:09:07  
+Yeah. So basically, the goal here is sending them their own calculator on a quote. Do we want some? We're gonna. We're not gonna offer blackers reading them. We'll get off masters, but and I was talking to Arian this last week the potential of actually changing the terminology there that we say Masters Cup of Memphis, right? Because then then it's not Lacquer and it's not DMM. It's just your Masters Cup by two, right? So Masters Cup by Memphis have one option: use DMM pricing. Now, do we want to allow the option here when they get to this point, that they can provide their own wipers. I mean, it's easy enough again. Yeah, we can have a view on. I'll provide my own. So that that will the logic behind that. So if a masters are cut by Memphis Record Pressing, we're going to use the DMM cutting and the DMM planing piece. Right, which is what I sent you in that grid. But if they if they provide their own lacquers, then we have to we have to decide which lacquer plating feed to use. There's a two step and a three step act. That probably needs to be defined by quantity, the logic on the back end. So if they provide their own lacquers, it removes the cutting fee, but they still have to pay a plating fee to process those lacquers. We call it processing fee, lac processing fee. Two step is going to be used for 5,000 units and below. Three step is going to be used for 5,000 units and below. Those are two different costs because there's actually it's more expensive for us to do a three-step laying process.
+
+Bill Denk  1:10:43  
+Okay.
+
+Brandon Seavers  1:10:48  
+But we would just have one cutting line. Masters cut my interest for compressing. You supply one virus.
+
+Speaker 2  1:10:58  
+Then will we?
+
+Speaker 4  1:10:59  
+Will we be questioned by someone if they select go with that ambassador's cutback? We have possibly, but what if they ask us if it's going to be a DMN or lacquer possibly?
+
+Brandon Seavers  1:11:09  
+And if we need them, they want to have they specifically want a lacquer cut. We can go in and modify them annually, but I mean that happens one out of every 1000 orders probably. Most
+
+Speaker 4  1:11:22  
+who has heard that it's better to cut off lap of the PM.
+
+Brandon Seavers  1:11:25  
+Most people just don't get their idea. Most people don't have a clue. Okay. What do you guys need from us on the logic for the assembly touches,
+
+Bill Denk  1:11:42  
+just whatever somebody wants to write it down for us. If then this happens, this happens. I mean, just
+
+Brandon Seavers  1:11:49  
+well, I mean, it's it's easy. It's a it's it's a sleeved record into the jacket. We're not charging to put the record into the sleeve. It's a sleeve record into the jacket, and then anything else into the jacket. Insert, insert. We're only charging. We're only allowing them to build an insert in a sleeve, so they really can only lead to a single piece. And then there's a sticker. Dissertation fee. Correct. The
+
+Arian Kennedy  1:12:13  
+jacket into a poly bag is a insertion fee. Picture. Although we're talking about
+
+Brandon Seavers  1:12:17  
+going into the record, right? So, but then there is if they choose a poly bag, then there's a touch that's here in the poly bag.
+
+Bill Denk  1:12:25  
+Do we see inserts?
+
+Speaker 3  1:12:26  
+Yeah. So if it goes going into the
+
+Brandon Seavers  1:12:29  
+jacket, sleeve directed into the jacket, insert into the jacket. Those are those two things we're offering the privilege, right? Yeah, in the jacket. Right. And then outside the jacket, there's an assembly fee that's on top of putting it into a poly bag, but do we just want to build that price into the cost of the poly
+
+Speaker 10  1:12:50  
+bag? We can. We can do the same thing for the PDC as well.
+
+Brandon Seavers  1:12:57  
+I think we can just combine those into the cost of the poly bag. We charge a fee to put it in a poly bag or a sealable poly bag or PVC sleep. We could just combine that and show it the lineup. Combine it with the poly bag and PVC sleep.
+
+Andrew Goeken  1:13:14  
+And you choose poly bag as just automatic. Same thing as the I think the splatter is an add-on fee, so yeah,
+
+Brandon Seavers  1:13:21  
+poly bag into a poly bag or into a PBC is 12 cents. So just add that 12 cents to the price.
+
+Bill Denk  1:13:30  
+I added a header on there so you can see. Now as you're going down, if you select the different prices and stuff, you'll pay what does
+
+Andrew Goeken  1:13:36  
+yeah that way change down the bottom. Okay, I want to see my 125. So obviously, we're getting rid of those. I'll switch to the Masters Cup on Memphis or your own lacquers with that fee, dependent on quantity.
+
+Brandon Seavers  1:13:57  
+Where does the customer upload their art, and at what point can they download that log?
+
+Andrew Goeken  1:14:07  
+Instantly.
+
+Brandon Seavers  1:14:09  
+After they've created an account.
+
+Andrew Goeken  1:14:11  
+Yeah. So if they've created an account, they can go and start uploading their artwork. They would see the what we were showing you before, same as. do
+
+Speaker 2  1:14:23  
+that. So during the quote process,
+
+Brandon Seavers  1:14:30  
+they can add your art so they can see that in real time. Yeah. The only thing that would request so in the mockup is that you you modify that so you can see at least half of the center window. Do you see a little more of that center looking? The
+
+Bill Denk  1:14:46  
+only thing I'm curious about is, will most people have the art for their center there? They might have for their album. Sometimes, but it's one of the reasons I didn't have it come all the way out because I was thinking chances that they won't see it if we have Memphis there. Did they want to see your logo? Their art. That's the only reason I did it
+
+Speaker 11  1:15:03  
+that way.
+
+Bill Denk  1:15:03  
+But I'm glad.
+
+Brandon Seavers  1:15:04  
+I mean, that's a good point. Maybe we maybe we don't. We only allow them to upload their jacket art, and we just show the color.
+
+Bill Denk  1:15:17  
+The other thing I thought about was, what if? And this might be a dumb idea, but what if we had to choose the color they think their album color is going to be? They can upload their art, or they can choose the color, and then we let them put their name in in a font. So it just says the name of the album, even if it's not some great font or whatever. They just see the name of their album, so it may evoke some feel of ownership of it.
+
+Andrew Goeken  1:15:44  
+I feel like most people would be savvy enough if we just have them upload like a a placeholder JPEG or PNG or screenshot of their art, even if it's not what goes to print temporarily before uploading their official high resolution stuff. Maybe if they don't, it's just wonder why. Yeah, or the color. If you chose color vinyl, it's the color mockup, so they know. Oh yeah, I selected the color, the full color outer sleeve, so I see everything in kind of that rainbow. I was gonna maybe have it
+
+Bill Denk  1:16:13  
+complement. Yeah, outer sleeve and cover could complement whatever vinyl color you chose automatically, and we could let the placeholder. Yeah.
+
+Andrew Goeken  1:16:22  
+Upload your own art to see, you know, and then maybe in the text it just says this is placeholder, and tell you up. Yeah, I was just picturing. Imagine,
+
+Bill Denk  1:16:32  
+imagine just for a moment that you had a had California land that it was just red. Maybe it was like a slight gradient red, and then it had California land like down the bottom, so at least you get a sense that it's a cover with your name on it, even if it isn't the art that you're uploading, so that there's some ownership in a sense in the look of the feel of
+
+Speaker 3  1:16:52  
+it. Yeah. Okay. And
+
+Bill Denk  1:16:55  
+then we could have the center label be a color as well.
+
+Brandon Seavers  1:16:57  
+Right. So what can we so that price will stay at the top, right? Once they're building it. Yeah. Yeah. Where where where will the so go back to the close? So this one, by the
+
+Bill Denk  1:17:09  
+way, this is this is I got this from an email, and I so this is the path I got from email, clicked on that. Now I have a web page before I logged in. Now it shows me my stuff, so I can play around with it a little bit, which I can't do in an email, and maybe that can hopefully upsell them to go. Okay, let's start this as a project, which is down the bottom. So
+
+Brandon Seavers  1:17:27  
+on the quote generator, where does the mockup of the color it stays there? Okay. Yes. So when when they pick a record, where do they see it?
+
+Andrew Goeken  1:17:40  
+So if you're going in, if they're going via the quote generator, that would come down at the bottom. So you're picking all of your pieces, and then it adds all those pieces together. Then this is where we have the prompt to just upload. You know, hey, if you want to upload a picture of your album artwork that's temporary and your yeah inner sleeve, they can do that just to see a general idea of what that might look like quickly before having to upload my whole PDF or worry about it being the right resolution in going into Photoshop and converting the colors to CYMK. Do
+
+Brandon Seavers  1:18:14  
+do we want to tell them there, like down there, where it says send estimate? That's gonna that's that's gonna prompt them to create an account. What does that do? So
+
+Andrew Goeken  1:18:22  
+your send estimate. This is sorry. This is in your backend. So this would be you sending an estimate to Nina. Then Nina would see if you were building it for her. Then Nina would see this. But if
+
+Bill Denk  1:18:35  
+can you go back to that page? Sorry.
+
+Andrew Goeken  1:18:37  
+Yeah. Yep.
+
+Bill Denk  1:18:40  
+Can you refresh it? Because I think I had some updates that didn't go in there because they didn't want to have the confusion of two things. So let's see if the
+
+Speaker 3  1:18:54  
+bottom.
+
+Bill Denk  1:18:56  
+Yeah, so much more still there. I'll I'll figure it out. But I, I think basically how this setup is it should be on the left-hand side under create should be estimates and should be packages, and packages would have create a package under that one. When you go to send estimate, it will be only be send estimates. So I'll find out what happened with those two, but you should get one choice each one. So you're intentional about what it is that you're doing.
+
+Andrew Goeken  1:19:18  
+And then Nina's, if Nina, as an artist, was coming through here, she wouldn't have who this is prepared for to send estimate. It would just be all the pricing calculator options if you were going through the custom vinyl, like we had. It should look like the one that we were looking at over here. look more like this, right, for the artist. So they'd come in. We could upload your art here, you know, and have a placeholder. This is where you pick your vinyl color. So again, this is a mock-up that will be much closer to what. The options are here in terms of the flow, but this one is just stylized to match your website and what your website is going to look like, companies and whatnot. And Bill's showing the the idea of you know the standard black 300 run versus going down into into the custom build. All
+
+Brandon Seavers  1:20:32  
+right, so I have just split in about an hour, so I'd like to relaxes you guys to see a quick trip of the production tour because we've got some inbox anxiety brewing here on this side. What's that like? I can feel it. But we want to take like a 20-minute break, guys. Are we good with that? Take a 20-minute break, and then we can get back up here, 25 minute break, 2020 minutes, something like that, and then get back to it.
+
+Bill Denk  1:21:06  
+That's true.
+
+Brandon Seavers  1:21:10  
+I just copied you in, Michael. That's the first time he's ever eaten. No, no, no, no. He both, both. He called me. He's he's nice enough. His expectations are pretty high. We have visitors.
+
+Speaker 9  1:21:34  
+Yep. We have Gavin. Do the template tour at some point. There's no such thing as Brandon. I'm not giving them all the times you
+
+Speaker 1  1:21:55  
+were throwing out
+
+Brandon Seavers  1:21:56  
+there. I'm not giving them a full tour. In fact, I'm only gonna. I'm just going to start here and take you to the back. It's going to be a very, very truncated tour.
+
+Bill Denk  1:22:06  
+So here's.
+
+Speaker 9  1:22:07  
+He gives a fantastic, thorough tour, but it takes longer than 20 minutes. So
+
+Bill Denk  1:22:14  
+that's that's what when you're building something, he'll show you what the build is in here. So you have your if you're picking quantities, and this is what I was saying, if you want to limit it, you can hide the 300 from the artist, you can hide the 500 from the artist, and so on. And then this, just that, and the estimates part that needs to be in here. I just need to find out why that button's not there.
+
+Speaker 3  1:22:40  
+Okay, good.
+
+Speaker 2  1:22:50  
+Primarily, so what? What?
+
+Arian Kennedy  1:23:02  
+They can use WAV files for the cassette.
+
+Speaker 2  1:23:06  
+Don't know.
+
+Brandon Seavers  1:23:09  
+They're gonna have to send us. I don't know.
+
+Arian Kennedy  1:23:11  
+Okay, because I'm like, if they send us wave files, then copycats can convert that to GDP.
+
+Brandon Seavers  1:23:16  
+I'll help.
+
+Arian Kennedy  1:23:17  
+Okay, but we're gonna have to assign an MRP number for the final for the CD, and hey friends over there, we're gonna have to put a cassette in Dakota.
+
+Speaker 4  1:23:28  
+We are really the kind of stock.
+
+Speaker 2  1:23:33  
+It's another.
+
+Arian Kennedy  1:23:37  
+No, this is gonna be its own package component. It's not going to be used as an insert or anything. I like how we have a drop down for CD for MRP. It's going to have to be like a cassette for
+
+Speaker 2  1:23:48  
+MRP.
+
+Brandon Seavers  1:23:52  
+It's it's a simple single jacket black vinyl. I wouldn't prefer DMM. We think we can get it done just because I didn't, I don't keep those out of pocket for those. Yeah, but it's.
+
+Arian Kennedy  1:24:11  
+Probably like what's happening. I'm just talking about them with that.
+
+Brandon Seavers  1:24:20  
+CD is I quoted in a single sleeve, very simple.
+
+Arian Kennedy  1:24:26  
+You did the quote with Justin. The
+
+Brandon Seavers  1:24:30  
+only cassette pricing is not here. I put it in email.
+
+Bill Denk  1:24:35  
+No, sir. The national audio package is
+
+Speaker 4  1:24:38  
+there. National audio
+
+Brandon Seavers  1:24:41  
+handwrites their estimates. Oh wow! So they have they have clearly a form and they hand write it and they scan it and that's how they send you an estimate. So Indy was complaining about the quality of their templates and they send it. They can write the rest of the books. Do the best we can. He's doing a cassette. I messaged him earlier. Can you share?
+
+Speaker 10  1:25:18  
+That's the copycats book too.
+
+Brandon Seavers  1:25:27  
+Cart files to follow. They said I'm not worried about cassettes right now. I shared this with other people in the email list. Well, I lived in on that one very second.
+
+Bill Denk  1:25:45  
+If I can get five minutes of your time, I know you've got that. That leaves you 15. I just want to run through the economics of how I was seeing things. I can do that here, or however you want to do it, just with
+
+Speaker 2  1:26:02  
+saving. and yeah, do you want to go in? Y'all can maybe walk the floor with them real quick. Sure. Let me go to the restroom. You want to walk the floor with lamps on? What? I want to prove you wrong. I'm gonna do it quickly.
+
+Speaker 3  1:26:24  
+So he could follow and make sure he doesn't forget any placement if you want to be charged. Oh no no, we're still safe here. I don't want it. It's the remarkable. You like it? I love it. I've had a few years of that. I'm enjoying it. Terrible
+
+Speaker 2  1:26:54  
+way.
+

@@ -1,0 +1,978 @@
+Zack (MRP)  0:02  
+And they would be able to basically.
+
+Bill Denk  0:38  
+to bring this with me, but I thought it might have had some mints.
+
+Brandon Seavers  0:41  
+Hey, I won't see it, and it's nice to meet you, brother. Yeah, thank you, my friend. Thanks, guys. Sorry, sorry, I've got a split. But they're also going to be so happy I'm not in here. So what'd you
+
+Arian Kennedy  0:54  
+like that for? I
+
+Brandon Seavers  0:55  
+just picked it up out of the way. Oh, there.
+
+Arian Kennedy  0:57  
+Okay.
+
+Brandon Seavers  0:58  
+I was showing them a indie blend.
+
+Arian Kennedy  1:00  
+Okay.
+
+Brandon Seavers  1:01  
+All right. We'll take it through a cycle. All right. Thanks, y'all. See if I'm going
+
+Lance Binder  1:05  
+to change the quote after the customer comes. So this
+
+Lance Binder  1:09  
+is yeah.
+
+Lance Binder  1:10  
+So we got the window shopping. They get their quote on their own. Not opening an account yet.
+
+Adam Denk  1:18  
+Yeah. Yeah. Yeah.
+
+Andrew Goeken  1:19  
+But they can't save the quote if I remember from what Brandon would want, was saying he wanted to save the quote. Then they save the quote, then they have to create an account because then now you're capturing their information, which is which is totally fine. So you can kind of play with that all you want, but if you want to keep track of all these different quotes that you want, then you have to create an account by that. Any
+
+Lance Binder  1:37  
+revisions and then versions of the quotes? Yeah, things change. That's what I was going to get to. Okay. Yeah,
+
+Andrew Goeken  1:41  
+and we even have it set up. I think it's live on New Year's view right now. That I think that's the hardest thing with the software is we have all these our own view, the artist view. This view, I'm like, okay, does this exist here currently yet? So if I go to her release, no, you're good. The goal is it might just be not live yet, but the goal is that if an artist goes in and they want to create their own release, that they could create. I create this umbrella of Nina's current album, which is California Land. So I have that as an umbrella, and then I create a quote for vinyl here, a quote for vinyl here, and I can compare those two quotes. So maybe I want the black. What happens if I start with a black 300 run and then I do a custom run after that? Once I see how well it sells, so then I can know. Oh, in my next stage of the album, I'll do that, and then I can start even quoting for doing projects for tapes and for CDs, if I want to add those, additionally, all under the same umbrella. Because
+
+Lance Binder  3:04  
+I wanted Zach here for this, because we talked about indexing as well too. Is there some kind of a unique identifier that's that's associated with each one of those things, especially as it's as it's finished, so that you can, if you pull up an account, you know that it's not just by name or title; it's by name and title, and some kind of uniquely formatted thing that you guys assign to it on the back end. That's Bill. I'm
+
+Andrew Goeken  3:30  
+assuming that piece. Yeah, I'm assuming. Oh, it had the catalog number. Yeah, any catalog within the tubes. Yeah, within the teams. I'm sure he set that up. That one's that is a good question. Okay.
+
+Arian Kennedy  3:48  
+I know they briefly mentioned like y'all briefly mentioned some sort of quote identifier, like whenever we first started talking about that. But
+
+Andrew Goeken  3:59  
+yeah, like you can name right now. Like I could name this package for this name, but having something that I guess is
+
+Lance Binder  4:08  
+automated. Like whenever you send it to the
+
+Arian Kennedy  4:11  
+client, the email that they get.
+
+Andrew Goeken  4:14  
+Oh yes, do you
+
+Arian Kennedy  4:15  
+have that one up? That one is yeah, like a reference number.
+
+Andrew Goeken  4:19  
+Yeah, that
+
+Arian Kennedy  4:21  
+estimate that estimate number up top. Oh,
+
+Adam Denk  4:23  
+there is. Yeah,
+
+Arian Kennedy  4:24  
+yeah, yeah. Yeah.
+
+Andrew Goeken  4:27  
+And that's a placeholder. Yeah. So that's a placeholder. So we would probably want to figure out with you guys. Hey, how would we want to run these?
+
+Arian Kennedy  4:35  
+Yeah. But if Nina ran her own like quotes, like three of them in a day. Is there a unique identifier on the back end for one, two, and three for that day or something like
+
+Andrew Goeken  4:46  
+that? Yeah.
+
+Arian Kennedy  4:47  
+Right.
+
+Andrew Goeken  4:47  
+Well, yeah, we'll have to figure out how to how to catalog that those estimates, and then maybe we might want to figure out if you want to separate. Hey, these are the estimates that we created versus the estimates that Nina created. Or and at some point, if one of them gets actioned on,
+
+Lance Binder  5:04  
+how is
+
+Arian Kennedy  5:05  
+it? It turned into a real project. Trained
+
+Lance Binder  5:07  
+from some kind of a draft or first iteration, second iteration to this is the one we lock down on, and that kind of hits into my. And again, this may be too early to talk about it, but if we're doing this quote generator, at some point if we get all the way to them uploading audio sounds like we're going to make something for them, right? Right. So,
+
+Andrew Goeken  5:27  
+so those those would be put into so once your projects on your side
+
+Lance Binder  5:33  
+with your own front end, you guys are turning those into real orders, right? Yeah. Finding a vendor to press, right? Yeah. Yeah.
+
+Andrew Goeken  5:42  
+So here, like we would, artists themselves could say, "All right, I'm moving this to prepping, or I'm moving it to like you know submitting it to the press as an actual order. We'd also probably would want your payments included in that as well, meaning that she would, you can connect either you know Stripe or whatever, and actually check out through here and run you know pay for the order through here instead of having to contact you guys. So everything can be run through. Oh, I upload my uploaded this my art my arts approved. I got my own you know got approved digitally. There was no problems with it, where I had to reach out to the art team or anything like that, or reach out to you guys. So all of these green light checks have passed through. My masters have passed, and I know what my A side and B side is going to look at. If I didn't have to contact you and I'm ready to go and pay for this thing, then pushing that into you know like an order system where it's like, all right, this is greenlit and ready to. And I
+
+Lance Binder  6:44  
+wonder if that was discussed between Bill and Brandon because if it comes in, if they want to turn a quote through this, it's through our they go into our website, but then they go into this to create the quote. They upload the idea. We've got the artboard, and they want to turn it into an order. You know, would that in an early phase of this, would payment and order generation wouldn't necessarily come from the good tunes application? Yeah, we would have to have
+
+Arian Kennedy  7:11  
+some sort of like internal because like there's things that we have to set up on our side in order to match like payment to a job and things like that too.
+
+Lance Binder  7:19  
+And master data on our side that needs to support whatever order we're pulling. Oh yeah, we've got our own structure and still
+
+Arian Kennedy  7:29  
+like the the manipulation of this voting phase turning into an actual order. Like having all that verification within the system is still really excellent. Yeah, yeah. But also like how many of our jobs that we're working up with are going to be through this system compared to the other inquiries that we have, existing customers, things like that. So like this isn't. I mean, we. I'm theoretically we could use this for other inquiries that come through that aren't from our website. That is just for like we do need to streamline at least the internal set that we have to match with
+
+Andrew Goeken  8:04  
+what you currently have. Yeah, because like we're working
+
+Arian Kennedy  8:06  
+on EDI with some of our customers, but then we have EDI for some of them. We have this checkout system over in this environment for some of them. Then we have our good old Monday.com for other things.
+
+Lance Binder  8:20  
+You know, yeah, and this isn't to confuse what we haven't even talked about yet. Is if for some reason Good Tunes gets a legit order and they're your customer, you just throw them throughout the paper without the pressing business our way. That's entirely different. Right. Yeah.
+
+Andrew Goeken  8:33  
+Well, if we send them your way, we would still want to make sure that that order comes into you in a in a in a way that we wouldn't be able to project. Yeah, yeah, yeah, yeah. And so, yeah, whatever.
+
+Lance Binder  8:46  
+And that would be in that case. You would be our customer, right? Yes. And it would, on behalf as a broker, brokering this other artist. Yeah, it would have the information would have to be all together. What is
+
+Andrew Goeken  8:57  
+your, I guess, your system in terms of attaching payment to, you know, an order number internally,
+
+Arian Kennedy  9:07  
+so that's probably in
+
+Andrew Goeken  9:11  
+order to make that happen seamlessly for you. You know,
+
+Arian Kennedy  9:16  
+so as far as like the system that we use, we use QuickBooks, and to get to a place where our financing can issue the invoice, we have an internal number that we assign to all of our projects called an MRP number. Okay. Okay. And then we also have a SO number, which I don't think Lance. Yeah, it's a misnomer,
+
+Lance Binder  9:36  
+but it's another reference number that we assign to one or more orders that a customer has generated usually for the same title, but that would be your umbrella. That would be an umbrella order. We've got
+
+Zack (MRP)  9:48  
+five different versions that we're going to fulfill through that order. So an
+
+Andrew Goeken  9:53  
+SO number would be like all of California land, like the first order. Yeah, well, always following this. And then the MRP number is going to be
+
+Lance Binder  10:02  
+is title specific. Yeah. Okay. So the next time we order California Land comes through, it's the same MRP number, but it would be different. Okay. So I had a reverse. So the
+
+Andrew Goeken  10:10  
+MRP number is the umbrella.
+
+Lance Binder  10:11  
+Basically, the title, artist and title specific type thing. Yep. Got it. Title equals MRP number.
+
+Arian Kennedy  10:18  
+So for this though, like let's say for California Land, the first order that Lena sent us, she had 1,000 units in that red color, but then she also wanted to do 300 units in black. But she ordered those at the same time; they would both be under the same SO number. Okay. But then, if she submitted a new order five months from now, that would be a new SO number. Got it. So we already like completed that first one,
+
+Lance Binder  10:41  
+and there's pros and cons to that all set up.
+
+Arian Kennedy  10:43  
+Pros and cons to it all. It was a
+
+Lance Binder  10:44  
+legacy process that made it easier to bill when it was very manual.
+
+Lance Binder  10:48  
+We
+
+Lance Binder  10:49  
+kept it. We didn't get a vote. Did we get a vote? I don't know. We still have it, and sometimes it's very helpful. Yeah. So if
+
+Andrew Goeken  10:55  
+Nina comes in and wants to do red cassette tapes, that's going to have a new SO number, same MRP number.
+
+Arian Kennedy  11:03  
+It would have a different MRP number because it's a different. A cassette is different than the vinyl. It wouldn't have the same MRP number. Yeah, you're right. Okay, whole
+
+Lance Binder  11:12  
+different format. It would be a whole
+
+Arian Kennedy  11:14  
+different format. So new MRP number, new SO number. Yeah, got
+
+Zack (MRP)  11:17  
+it. MRP number represents because that's the audio. Yes. So 12 inch. This audio on a 12 inch vinyl, got it. This MRP, the same audio on a cassette, maybe a different number. Got it. But they're all different colors. Same MRP number.
+
+Arian Kennedy  11:31  
+Different size vinyl would also be a different MRI.
+
+Lance Binder  11:33  
+These aren't things that we typically do. Right. Yeah. Usually it's 12 inch. Usually it's 12 inch. But we're
+
+Arian Kennedy  11:39  
+literally talking about this job, the brand is under sections.
+
+Lance Binder  11:42  
+Yeah, well,
+
+Arian Kennedy  11:43  
+CD and cassette.
+
+Andrew Goeken  11:45  
+Yeah, and so those can't be under the same MRP number because
+
+Arian Kennedy  11:48  
+there's there's a different audio source for those. Right, and so there are different setups involved, like the cut and the plating. What we're identifying for, like a master source, we're looking at Stanford ID and be like, oh hey, here we go for California land. Nope, that's a cassette. So originally,
+
+Lance Binder  12:02  
+I think whether if the order was generated for us via the MRP version of this versus it would be a boat generator turned into an order, or if it came from Good Dudes, I don't think you guys would have to worry about sending any of that information to us. At least not while we're pushing something to us, and we would
+
+Arian Kennedy  12:21  
+have to make the connection internally. But
+
+Andrew Goeken  12:24  
+you might want to have a place to assign that in the back end. Oh yeah. So if we gave you an input on your back end, if we created inputs for all at any time an order came in, maybe if it's in the source, yeah, yeah, an invoice or whatever. Hey, this is our input for the MRP number. Here's the input for the SO number. Once the order comes in from Nina, so Nina sends you an order. She says, "Hey, I want to do this. Sweet, we want to. We have we'll have a page where the orders come in, right? You view the order, and then maybe when you're sending that out to press, you're you're looking at it at QuickBooks or other, and you're like, okay, I'm going to sign this MRP number and this SO number to that vinyl that we're pressing, and then we're good to go and send it out.
+
+Lance Binder  13:16  
+I mean, typically that MRP number is usually one to one with the clients a week. know if they're going to call it a catalog number with whatever is going to be etched into the
+
+Speaker 1  13:26  
+right.
+
+Andrew Goeken  13:28  
+Got it. Well, we do have a place to input catalog numbers. I think currently, because we were working on that last week, because we're like we're kind of debating, do we? Is that something that we should require everywhere? We know you guys require catalog numbers from working from you. Well, definition of catalog number is something too. So
+
+Arian Kennedy  13:52  
+we call it. There's another term for like what have y'all looked at this closely? So if you look here, look in here. There's a an etching.
+
+Brandon Seavers  14:03  
+Right.
+
+Arian Kennedy  14:04  
+There are numbers etched in here, and that's how like you can look at the stamp bridge associated with this. You look at that etching, and you're like, this is the correct title. So we we refer to that as a matrix as well. Some people are like, oh, with this catalog number on here, we call it matrix. There's a whole bunch of terms for it. It's like what number, identification number do you want etched in the metalwork, and that's where like that overall umbrella number for organizing your projects comes from. That some
+
+Lance Binder  14:31  
+folks think of a catalog number is what the finished good is known as in the retail, and sometimes you can have multiple finished good catalog numbers that all have the same matrix, and so people use these words. Sometimes they can interchange or confusion. Yeah, yeah. Sometimes it's it makes sense. Sometimes it's one to many. Sometimes it's one more. I've been properly confused. So oh yeah, and that's good. That's good. And we don't want we don't want this to be a confusion. No, but just no, no. I'm saying in a like.
+
+Andrew Goeken  15:00  
+With catalog numbers and learning, I mean it's all yeah all new to me in the context
+
+Lance Binder  15:04  
+of customers. Yeah, they may never create different packaging for the same type. I don't know.
+
+Arian Kennedy  15:10  
+It really just depends. Like you know, the people who have a more robust like PO system and like a way of organizing their projects because they do so many editions of a particular title. Like they want to like how many? Yeah, how many times have we produced this specific version of this specific audio? Is like I want to see how many times we ordered something for a retail variant or a Walmart variant, Barnes and Margaret variant. Yeah, yeah,
+
+Lance Binder  15:40  
+same audio. The target special, but it's different. And usually, catalog number is linked to the UPC because that's the sellable. Yeah. Yeah.
+
+Andrew Goeken  15:49  
+Got
+
+Arian Kennedy  15:50  
+it. And then as far as like whatever like original reference number that they want to have that relates to the metal parts, you know, usually it's under like a retail catalog numbers. Like this is like the one that we're going to be ordering the most of. Sometimes they have a number that they're just like we're just going to put audio under this, and then like we're not even going to reference that number anywhere else. Only solely for the audio. We've had instances of that too. Just like they might have like a unique alphanumeric for the etching, and then all their catalog numbers for the variants are just the
+
+Andrew Goeken  16:23  
+UPC. So
+
+Arian Kennedy  16:24  
+there are a lot of ways to go about it, but something that we do have to know is what do you want etched on the metal parts?
+
+Andrew Goeken  16:31  
+And that's usually what you refer to as the catalog number.
+
+Arian Kennedy  16:33  
+Well, we we call it the matrix.
+
+Lance Binder  16:35  
+Our parent company in the Czech Republic calls it the catalog number.
+
+Arian Kennedy  16:40  
+And as far as like, and I didn't like an easily identifiable like word to our customers, catalog number would probably be the best bet for that.
+
+Lance Binder  16:50  
+So the backend term is matrix. And the most important thing is know when you're know who you're talking to when you're using using these
+
+Speaker 2  16:59  
+certain words.
+
+Andrew Goeken  17:01  
+So the the customer provides us what we ask for is the catalog number, which is the matrix, and the matrix is a direct, usually a direct version of the MRP number.
+
+Lance Binder  17:18  
+Yeah, I wouldn't even wouldn't worry about that. Yeah, whatever's gonna whatever. Yeah,
+
+Andrew Goeken  17:24  
+I would say whatever you guys need as far as hey, this is what we want when we log in. We want to see an order come in this, and we want to see either a place to manually upload the MRP and SO number because obviously, are those auto-generated usually?
+
+Arian Kennedy  17:41  
+We have it's like a next-in-line type of deal. So we have we're into the 8000s of our MRP number, and so just claiming the next one. We
+
+Lance Binder  17:50  
+would I don't think we would even in the future if we're connected electronically. I don't think we we would ever expect to see an SO number coming from you. Got it. We would have seen to agree on what's the best cross reference.
+
+Andrew Goeken  18:06  
+Yeah, so we just need a place for you guys to input that when an order comes in, so you can reference it when another team member takes a look at it. If somebody's on the floor and they've got an iPad and they want to know what the MRP number is or the SO number, they would be able to get that from Goodtoons and see. Oh, here's the projects. Boom. Here's the MRP number. Here's a picture of what it's supposed to look like, and there's the catalog number, which we would call the matrix for them. Yeah, we could definitely get. What do
+
+Lance Binder  18:37  
+you guys refer to? I guess in the clients that you're dealing with now, a lot of great independents, and they're kind of wild. They even issue a ID. Most of the ones that
+
+Andrew Goeken  18:45  
+we talk to say no, we don't want to use a catalog number. And I say, well, you have to have one. Yeah, like what? You have to have one if you want to go. Yeah, for print for our printer, we just need something to to etch in there. Yeah, because they just they could be their initials
+
+Lance Binder  19:01  
+and a numeric number. Yeah, yeah, that's usually what we have. Otherwise,
+
+Bill Denk  19:05  
+I'm gonna find it on Disco. Yeah. Okay.
+
+Speaker 1  19:09  
+Yeah. Yeah. Yeah. Lots
+
+Adam Denk  19:10  
+of it before, and I know like you can look for that number to like specific pressings and things. Yeah. Exactly. Yeah. People just
+
+Andrew Goeken  19:16  
+don't. I think a lot of times it's this. Oh, I want to get some this product out to my fan, and you don't think about your fan. You know the collectability of it and how things are typically done. So yeah, I think I've had the last two or three said, "Oh yeah, we don't want to use a catalog number. Like, well, you should. So we we end up having just as a reference. Like, is
+
+Lance Binder  19:39  
+there one on this? Yeah. So I know
+
+Andrew Goeken  19:43  
+we were working on
+
+Arian Kennedy  19:44  
+it because I was like, "Hey,
+
+Andrew Goeken  19:45  
+we. I was actually emailing you, and you asked for the catalog number. I was like, "Oh, I need a place for that because I want to be able to track that, and we hadn't had it in. So I know
+
+Arian Kennedy  19:57  
+there's like NS dash o1 or something. Like that, right? Somewhere,
+
+Lance Binder  20:02  
+which which is pretty difficult, I think.
+
+Andrew Goeken  20:04  
+Yeah, I might have not. I might have it in my notes and not have actually.
+
+Lance Binder  20:09  
+Oh, is this a real album?
+
+Arian Kennedy  20:10  
+This is this is a real yeah. Yeah, me and
+
+Zack (MRP)  20:12  
+is a real project. Say it
+
+Lance Binder  20:13  
+in my skirt. That that that song title.
+
+Andrew Goeken  20:17  
+Yeah, she's her music video. I think she has like a dominatrix on a plane to California, and all these different.
+
+Arian Kennedy  20:26  
+Yeah, she's in S-P level one.
+
+Andrew Goeken  20:28  
+Yeah, and I don't know. I'm in the unfun zone. I like to call it where you can put all the information in my head. Okay, here's a UPC yeah catalog number, and I haven't haven't input it for her yet.
+
+Lance Binder  21:02  
+There's a spot for it. Okay, and that's it. So I have
+
+Andrew Goeken  21:04  
+a spot for the catalog number. We have a spot for the UPC, which would be optional. That's optional. And then yeah, this is where all this is my unfund zone where you have to type in all your information that you don't like to. This is not playable. Because if we got an order from you, and you decided you weren't impressed with us. We'd probably come back to you and say, "What do you want us to achieve? Which is what her email, like I said, was what made me think. It's like, "Hey, Bill, we should put catalog in UPC because we I know UPCs are optional, but it'd be nice for us to not have to deal with it, or you to have to deal with it. So, if they already have their UPC code, they can paste it in there. And yeah, I believe we've set up a logic to make the catalog number required, so they always have to have something. We have an
+
+Lance Binder  21:53  
+independent that doesn't provide an internal matrix or one of their own their own. We say one up for
+
+Arian Kennedy  21:59  
+them. We like we would suggest something, yeah. So it'd be like, oh, if this is like Nina LC California Land, and this is the first one that she's done, it might be like NSLP O1, something like that. And then usually they're like, oh, cool, that's great. Actually, I want to do NSCALP. She fits. And so I was like, okay, cool. That's great. Yeah, it's my favorite stuff. Yeah. Yep.
+
+Andrew Goeken  22:24  
+So,
+
+Arian Kennedy  22:25  
+but just you know, even with that too, like if we have an independent who is doing more than one version, and they didn't have a catalog number, they're like, oh, let's just use the same one on both of these. Like we try to steer them a little bit, be like out of v1 and or v2 with it just to differentiate it because not only is it helpful like on their side they are really looking at their projects. It's helpful on our side too. Going back to like the carton labeling. Well, see now you're talking
+
+Lance Binder  22:50  
+about now you're talking about true catalog numbers, not matrix. Right, right. Okay, right. You're talking about the package good having a unique identifier.
+
+Arian Kennedy  22:56  
+Yes.
+
+Andrew Goeken  22:58  
+Oh yeah, like printing that on the label.
+
+Lance Binder  23:01  
+Well, meaning same audio, yes, same things etched in the vinyl, but one one's blue, one's red, one's white Bible,
+
+Speaker 1  23:08  
+but it
+
+Lance Binder  23:09  
+has different packaging, different stickers, different different pressing,
+
+Andrew Goeken  23:12  
+and knowing which one of those sells the best
+
+Lance Binder  23:14  
+choice. But well, that goes doesn't really go back to the press. Okay, so
+
+Arian Kennedy  23:18  
+just a different color, like a vinyl or different
+
+Lance Binder  23:21  
+packaging. Yeah, yeah.
+
+Arian Kennedy  23:22  
+So like it would be like if it's NS dash 001 V1 versus NS 001 V2, so we'll get V1 out of the SOV1 is maybe the black version, V2 might be the red version, something whatever. But like we like to have that for. It's one of
+
+Lance Binder  23:38  
+the ones we have that had like 20 some odd versions.
+
+Zack (MRP)  23:41  
+Blue like supplier exclusives. Like Target may get its own exclusive version with specific packaging, right? Or maybe a specific color. So you might even want to just play have another TGT at the end of it. Yeah, something like that. Yeah, yeah.
+
+Arian Kennedy  23:53  
+With freaking Charlie Brown, we have like
+
+Adam Denk  23:57  
+Charlie Brown. There's like
+
+Arian Kennedy  24:00  
+we have so
+
+Arian Kennedy  24:01  
+many versions of that job, like it's insane. We have like over 70, like I think we're nearing 50 to 70 sticker part numbers on. We have many
+
+Andrew Goeken  24:10  
+more every year.
+
+Arian Kennedy  24:11  
+It's insane. It's insane. I honestly like I don't really want to hear Charlie Brown. I've been that. I hate him. I've been
+
+Andrew Goeken  24:21  
+that for a long time, and I love. I love that. I was trying to show
+
+Lance Binder  24:24  
+the example of the just, and again, not so much. Bear that recent hair. Hearing
+
+Adam Denk  24:32  
+is the vinyl industry as a whole, especially Charlie. Yeah, Charlie. I've been kicking over the vinyl industry. Yeah, they're just one word
+
+Arian Kennedy  24:42  
+or two. band there too.
+
+Speaker 1  24:44  
+Okay. Yeah, I saw that
+
+Zack (MRP)  24:45  
+band. We here's a visited and did autographs. Oh no way! Yes, that's so cool. Where would I
+
+Lance Binder  24:52  
+find a good? Oh, there's a good shows the same matrix and all the different catalog numbers next to it that feature conversions. Oh yeah! Do you
+
+Andrew Goeken  25:04  
+want the the plug?
+
+Speaker 1  25:07  
+So you might do this every day license some sort of things right now.
+
+Lance Binder  25:26  
+Not. This is just by way of explanation, not so much requirement or whatever. That will start a MRP list. So this is we're just going to copy that first. So let me talk about our MRP numbers, which we started way back in the past. We missed name numerically. It's it is tied to basically artist and title. But if we want to look down here in versions, these are all the different package versions that we have of each one. But if we just want to go look at the versions, I already I copied that that Bear Tooth. That's what they have etched on the audio. F E A R, which is the label, right? Fearless 05269. That's etched on every single record for this title and this recording. But they have 17 unique catalog numbers. 5269. That's going to be their main, their primary release. Probably the Black vinyl. It's very basic. It's not retailer specific, and then they've got same same same etching, unique catalog for an indie, unique catalog for Amazon, unique for Revolver, unique for Hot Topic. All these direct to consumers, and none of these appear on the vinyl Itself only this is, but it could all be. If we look further into these, one may be, you know, this kind of a blend, this kind of a splatter, this color, this opaque, this translucent, and then the packaging is probably going to be different because of the unique catalog. Remember, for each version, it'll have even if they use the same jacket,
+
+Adam Denk  27:21  
+yeah,
+
+Lance Binder  27:22  
+it'll have a UPC sticker for those that aren't printed on the jacket. That's so at retail, they will know that it's a different item,
+
+Andrew Goeken  27:32  
+yeah, and that it's a different price. And then what if and if
+
+Lance Binder  27:34  
+you look at that UPC, so that's so there's the UPC code for that internal matrix, I had to go out and get a UPC code for whatever the UPC code board is. But then each of the different packagings has a unique UPC for retail.
+
+Andrew Goeken  27:54  
+Right. And then what is that etched number that you said that's etched on every single one of them? What does that call? Well, well, and we call it the client matrix. Client matrix. That's the etched one that's on the top. That's on every single one.
+
+Lance Binder  28:06  
+That's the one. Yeah, this 5269. That's going to be on every version of this Bear Tooth Pure XSC record.
+
+Bill Denk  28:14  
+Got
+
+Speaker 1  28:14  
+it. So,
+
+Andrew Goeken  28:15  
+so yeah. So we would want the way that we currently have it structured. If I guess so, that would get printed on all of the same MRP number. If they got, if they did a not even think so
+
+Lance Binder  28:37  
+much about MRP. Oh yeah, if it was a different. If it was a different
+
+Andrew Goeken  28:39  
+album, is it going to be a new client matrix printed? Okay. So every new different album has a client, different comment matrix. But if they do a rerun, would you go back to that client matrix? Yes, absolutely. Yeah. So that
+
+Lance Binder  28:52  
+client matrix is what we refer to as the MRP, and it's the audio and the format. Audio and format. So if so, for this particular this client matrix, which we assigned MRP AP 171, is if you look over here, our MRP number is the same throughout. Client matrix is the same throughout. You need catalog numbers is the same throughout. Different EPCs, but it's again, it's an LP, and it's a 12 page.
+
+Andrew Goeken  29:18  
+And then, is there any number that you associate to, if Bear Tooth comes back for CDs in a year with a different project, do they have you have a number for them that like are there any numbers that are assigned to them so that way you know we
+
+Lance Binder  29:35  
+would assign it a unique MRP probably a different I don't know what we what's a CD have as an internal matrix number? Client matrix. We
+
+Arian Kennedy  29:43  
+don't. We don't have a client matrix for CDs. We just have MRP. We don't actually anything on actually that. No, we. I think we have a client matrix. We don't have an internal matrix, right? Well,
+
+Lance Binder  29:53  
+GZ would make. Yeah, that's a whole other thing. But that would get a new MRP number for us. But Bear Tooth
+
+Andrew Goeken  30:01  
+itself, for all Bear Tooth projects, you don't have like a Bear Tooth number. No. Okay. So you just search in by Bear Tooth, and you know, here's all their projects instead of cool. I mean, well, we could. We could
+
+Lance Binder  30:10  
+just look up the look up the artist. Yeah. And show all their stuff. Cool.
+
+Andrew Goeken  30:14  
+Cool. Yeah. No. I think getting inputs for for those wouldn't be difficult, and again, as we move along, when you start seeing these things, we're like, oh, it'd be really great if we could see this matrix number, this client matrix number here on the project when we open up this screen. Great. Well, we can we can add that in. This is where we want the you know if if you look and you're like you know what the overview isn't the place to have that. Maybe, but maybe the overview is where we input. You know, you guys can go in and edit and input the the matrix number. And then there's certain things that we want to make sure that like the client probably doesn't need to see the matrix client number on there. But if it's helpful for them to see, we can include it. You know, whether or not they need to see that, but it might be a good reference number for them for their order. Those types of things, I think, as we whittle away at connecting all these things, well, the thing
+
+Lance Binder  31:12  
+that gets unconstrained, thinking of a potential confusion. I don't know if this is stuff being dealt with, Karen. We maybe come too far afield. Going back to what was the artist we were just looking at? Your artist.
+
+Andrew Goeken  31:25  
+Oh, Danita.
+
+Speaker 1  31:28  
+Nina. So if
+
+Lance Binder  31:29  
+we had a make believe what's with NS. Oh one, I think 001. And what color is she pressing that in? Red. Red. Now if she comes back and she wants to press the same audio but make it black, the question then is: Are you going to package it different? Do you want to give it a unique identifier? That would be the catalog number, but using the audio from NS001.
+
+Arian Kennedy  32:02  
+Yeah, so I mean, again, the overall like etching on there is going to remain the same. But if we're like, hey, you're doing a new color here, you know, to identify and like organize projects on this, we would recommend you shifting to a new catalog number and a new UPC, you're needing to track sales because if you don't give any new UPC anything that you sell against that original UPC, you're not going to be able to tell. Oh, I sold 1000 of black and 300 of red. Yeah, so we've been
+
+Andrew Goeken  32:36  
+spending all this money on the red, and nobody wants it. But
+
+Lance Binder  32:38  
+a lot of these things are just sold, and you know, depending on where they're going to sell the shows, probably a lot of them are merch tables, right? Yeah,
+
+Andrew Goeken  32:44  
+merch tables, and for Nina specifically, Shopify, where it's direct to consumers, so they didn't want to deal with the UPC. They
+
+Lance Binder  32:51  
+will want UPC, right? They'll want to know the the color variant if there's differences.
+
+Andrew Goeken  32:56  
+Yeah, I think they. Do you think they do want UPC? No, I don't think they did because they're they're just mailing these direct because they're not they're not having a store scan them. As far as
+
+Arian Kennedy  33:07  
+Shopify, they'll they'll be able to track how many they sold through that. Yes, and we want to
+
+Lance Binder  33:11  
+be careful not to not to to to lend too many requirements. No,
+
+Arian Kennedy  33:17  
+definitely not, and not for something like this. But like their specific customer service rep would ask that question, like, "Hey, can are you looking to assign a new catalog number to this? And also, just give a brief explanation on why we would recommend doing so. And again, it's really just to organize projects, and it's also helpful for us internally as well to have a unique catalog number, especially if we're running them at the same time. But also, it's like if we were shipping everything to a singular address, like we do, call out the vinyl color on the carton labels. But for again another layer of identification, if this one had B1 on here and this one had B2 on here, it just helps with like
+
+Lance Binder  33:53  
+we'll assign a unique inventory number to the red version versus to the black. Yeah, we're gonna track anybody. We said we're gonna track the work separately. Yeah, and the price.
+
+Andrew Goeken  34:07  
+Yeah, so maybe with that, I wonder if we some of these things would be great.
+
+Speaker 1  34:12  
+Yeah, yeah. It'd be great to also
+
+Andrew Goeken  34:17  
+run past Bill's way in terms of, he's really good at hey, this is the best way to organize. Yeah, this is the best way to do this. Here's how we create. Here's how we do a variant. So if somebody creates a project in red, and then you know I decide I want to order run of 300 with that and duplicate the project. Do we just yeah do we just auto generate based off the last one? Do we just add that into one. Yeah, just read that it's under the same words,
+
+Adam Denk  34:44  
+and if it reads that it's the same album, yeah, it could auto generate whatever the an initial code, and then auto generate a new one. Might even be able to do something like feel like new words distributing to you, and it could be like automatically generate that as well. And
+
+Andrew Goeken  34:58  
+that might just be us. Not even telling the consumer that we're doing it because half of them don't really care as long as they can see it. Yeah, yeah. Half the time when I'm like, "Hey, can we get a catalog? and you want a UPC, they're like, "Uh, what? And you're like, "I just want records. Yeah, I just forgot a show catalog. I need them now. And it's like, "Okay, we can just help you with that and automate it, and then you can go in and see, and then you can always ask, "Hey, why do we have V3 on here? Oh, that's for this, this, and this. Oh, I'm glad you thought about that because I would have never thought about that. You know, it's like if it's already built into the system, it makes it your guys's life easier. You don't have to have a back and forth with them, and they'll say, "Oh, if you already have
+
+Adam Denk  35:36  
+it, we could probably already build the logic into the system itself. Oh yeah, yeah. But you'd have to know
+
+Lance Binder  35:42  
+what to tie that new version back to. You'd have to have a primary to make something, right? Yeah. So I'm
+
+Andrew Goeken  35:47  
+wondering if when we create, this is where the vinyl tapes and CDs gets confusing because when Bill and I were initially talking about this, he liked the idea of having, hey, California Land is this umbrella that the artist can always come back to and say, I can create projects for vinyl. I can create project projects for type, and this and that. But given that these numbers are different depending on what the product is, for we might want to have another layer to that where I have three vinyl projects, so then they're all tied to the same client matrix, which is what you etch on. Yeah, yeah.
+
+Lance Binder  36:30  
+Unless you had a a title specific umbrella there, and then it again, you have you have a unique matrix that's going to get etched in the vinyl when something else. Yeah, yeah. However you guys yeah, and then
+
+Andrew Goeken  36:43  
+every variant of the vinyl one would get okay. Here's e2, e3, e4. Yeah, yeah, yeah, yeah. And then they can go in and change that if they want to. But if not, then it just auto generates e2, e3. Because you know, yeah,
+
+Lance Binder  36:57  
+you don't need to copy what ours. We we kind of need that for the format because that's how we grandfathered in that old MRP number.
+
+Adam Denk  37:04  
+Yeah.
+
+Speaker 1  37:05  
+So as long as we
+
+Zack (MRP)  37:06  
+have the flexibility to only get two in order that we create go to later. Yeah. Yeah. Yeah.
+
+Adam Denk  37:12  
+Everything's going to be editable. So as long as someone that human can go in there, yeah, the
+
+Zack (MRP)  37:18  
+hierarchy on the website. Yeah. Or the whatever
+
+Andrew Goeken  37:22  
+order in our system. Yeah, and if it's just to make everything comfortable for you, I would say we could probably do 90 like 5% of if you can think it, we can probably do it. Yeah, that's you know, it's just thinking through and be like, okay, what makes sense to streamline this so that way we're nothing gets broken, right? How do we make sure that it just doesn't break? But it also thrives in a way that's easy for you guys to link it to Coda, and is it another step? We don't want to make it feel like, oh, this is another step where we just have to input stuff, you know. That's how sometimes Jira felt for me early on. We're like, oh, I have to go into Jira and log this. These guys live in Jira, Daniel especially. Yeah, she's like, it's like, oh man, I finally got all the work done that I needed, and now I have to go and you know do an hour's work of Jira update Jira tickets. Yeah, document everything that I did. Yay! So trying to not make it feel like another Jira, even though we understand the importance of that. We're trying to do focus on time savings for you, not not adding more steps. So, but if if it's replacing having to have long email chains and tracking the emails and where was that Dropbox file and you know storing it internally and stuff like that. I mean sometimes I'll have like notes, you know oh I just needed it I have a note that I created and all this stuff isn't a note I'm like I really shouldn't have done that but yeah then you go and figure out how to organize it properly, but yeah,
+
+Zack (MRP)  39:01  
+I think long term we can get to the point where these orders can be made in the backend, so we can send them straight to our ERB. Yep, you send us the standardized format of the specifications for the order, and we can use that to create a drafted order within our side. Yep, yep,
+
+Andrew Goeken  39:17  
+yeah. And as soon as the artist pays for it, and then it's green lit and ready to go, and then if anything's flagged, then you only reach out to them when you need to. Yeah. Hey, we
+
+Adam Denk  39:27  
+easy for the artists. Easy for you guys. Yeah. Easy for us. Everything's also
+
+Brandon Seavers  39:36  
+anything else you got?
+
+Andrew Goeken  39:37  
+Is there any other? Yeah, when we
+
+Zack (MRP)  39:39  
+want to add new colors.
+
+Andrew Goeken  39:41  
+Yeah, when you add that new colors, the new colors
+
+Zack (MRP)  39:44  
+pop up all
+
+Andrew Goeken  39:44  
+the time all the time. So yeah, this one's specifically like balloons and special
+
+Speaker 3  39:49  
+effects. Yeah,
+
+Andrew Goeken  39:50  
+yeah. So we will, per the meeting, have a way for you to upload. Images like if there's something that's never been created before. Great, I'm going to leave about 430. I'm I'm
+
+Arian Kennedy  40:13  
+trying to think of my kids as well. So
+
+Speaker 1  40:16  
+mine's fairly selfish. I'm
+
+Lance Binder  40:18  
+a drummer's coming over to cut drums on an original thing tonight. I've been trying to nail them down for six months, so I finally got it.
+
+Arian Kennedy  40:31  
+What time are you guys thinking about coming here tomorrow? Same time, or
+
+Andrew Goeken  40:36  
+I think the plan was eight. But well, whenever yeah, whatever works for you guys.
+
+Lance Binder  40:43  
+We have at 8o'clock with G. So is the line okay? Yeah. Because we have a meeting at eight with our with the
+
+Andrew Goeken  40:49  
+check. No, we have to meet at eight. How long are you? Probably the same hours. Yeah, yeah, we're we're kind of here. No, driving back to Nashville. Driving back to
+
+Adam Denk  41:04  
+Nashville tomorrow night.
+
+Andrew Goeken  41:07  
+Yeah, tomorrow. Yes, I
+
+Lance Binder  41:08  
+guess it'll depend whatever time it adjourns. Yeah, yeah. So I feel like
+
+Andrew Goeken  41:12  
+probably I'm guessing 530 ish at the latest, and then that will it'll give us plenty of time to get
+
+Speaker 1  41:21  
+back to Nashville. Yes, get checked
+
+Andrew Goeken  41:22  
+in. We don't really have anywhere to decide to make sure that we get food at some point. So you would add a color in here. It shouldn't be asking you to change the image. So that's an update that I have to know. It should work where when you add a new color, you're going to be able to upload an image. It'll take you here first, and or give you the ability to upload a photo. And so from there, you have you know your standard, which you can assign a color to if you just want it to be you know, solid color. You're cloudy, which gives you your base, which is going to be, you know, translucent, and then whatever colors on top of that you want to add to it. And if translucent is always going to be kind of red, you can, you know, layer those hexes to kind of look like that. And I think you guys call this torrent.
+
+Lance Binder  42:20  
+So here's the question. So is it different? It's a different type of thing. So so so what's in there right now for MRP? You guys got that from what we had on file? Yeah. Yeah. Everything is from the website. So I think yeah, I don't to add a color. I don't think we want to go in and try to click all the buttons to make something look like it's doing well. We just want to upload another.
+
+Arian Kennedy  42:43  
+Well, like for a half and half, maybe it's a half and half that we haven't done yet. I think that would be more like it would be helpful here because that's
+
+Speaker 1  42:52  
+an effect, yeah. Yeah,
+
+Arian Kennedy  42:53  
+it's a special effect, and there's like it's half and half. We're not smushing two things together. We're just lining it up. So that would be much easier to represent or something. So for the most part,
+
+Zack (MRP)  43:02  
+we will have an actual sample image, which is lower fidelity than the mockup. I think we understand.
+
+Andrew Goeken  43:10  
+Yeah, I think with the with the mockup image, I think it'll be fine for for this. The one thing that would be important is just removing, not including a center label on the picture, because the center label on all of these are overlaid to kind of perfectly be the same size across the site. So if you upload a photo, it might be a different, it might crop at a different size just depending on how it
+
+Adam Denk  43:38  
+crops out.
+
+Andrew Goeken  43:39  
+Yeah. So basically, if you took a photo of this, this would fit perfectly in there, and it would punch. If it's slight, if the hole is slightly off, it's going to punch a hole through it anyway, so it's not going to look like the hole's off. And then the label will overlay it.
+
+Lance Binder  43:53  
+Well, here's so the thing is, well, Brandon said that even ours, we put the MRP labels on there, don't we? Marty does. We take a picture like that, but he says on our website we overlay
+
+Andrew Goeken  44:05  
+zero overlay as well. Okay. So if they have them with already overlaid on the website, you can just upload them if you have the originals with them off. We can upload
+
+Speaker 1  44:18  
+them. Yeah.
+
+Andrew Goeken  44:19  
+We can. We can also talk to Marty. I'm sure
+
+Adam Denk  44:22  
+they won't talk
+
+Andrew Goeken  44:23  
+about departments.
+
+Arian Kennedy  44:23  
+I mean, usually when Marty's running stuff, it's like actual physical samples for us to have on hand, and we do put a label on those because we don't have a label. Chris is like. Oh yeah. So like for the most part, we usually do have labels on. This one's the structure for yeah. That one red.
+
+Zack (MRP)  44:40  
+Yeah.
+
+Andrew Goeken  44:44  
+Okay.
+
+Zack (MRP)  44:46  
+It's not typical that you that you you rarely. Okay. Without label, it's part of okay like structural integrity of the disc. Yeah.
+
+Andrew Goeken  44:53  
+I will. I would say we'll probably just Photoshop the labels out. That's. Pretty easy to do nowadays, and then upload them that way. And then I can talk to Bill. I'm sure we can figure out us maybe doing that if if we need to, and make sure that everything looks good for you. Might be something
+
+Lance Binder  45:11  
+that we can we can make versions of each that cropped out already. Yeah, all cropped out. Yeah, and the thing is, the things that would get uploaded mostly are really blends, aren't they? Does Barney do a bunch of effects? They're typically blends, aren't they? So I mean,
+
+Arian Kennedy  45:27  
+as far as like new stuff right now, just with our capacity that we have on the manual, like we're not doing a whole bunch of new testing for special effects. For special effects. But that doesn't mean we can't do new special effects requests. It's just our ability to test them to have a photo for reference. We're not at a place for that. So, like we're talking about the possibilities for spotter, kind of endless it seems. And if we know, maybe we haven't run a clear base with O O 3o, o2, and o2. Maybe we
+
+Lance Binder  45:56  
+could use the. It's
+
+Arian Kennedy  45:57  
+like we might not have run that before, but we know a clear base with those three opaque colors is possible, so we're gonna be like, yeah, we can do that. We just don't have a reference, but we might be able to do that here. Yeah.
+
+Adam Denk  46:09  
+Plus, someone can always use this as the sort of simplified version of this, and then add that note saying, "Hey, I kind of actually want to. This is close to what I want, but I'm looking for something like this. Yeah. And then you guys can pick up that conversation, but at least you have a base to start from. So yeah, he doesn't want to like.
+
+Andrew Goeken  46:24  
+Here's here's a you know maybe what a pink blend might look like, and maybe when we know it's got a couple of different colors in it. So maybe we use the gradient tool to add. Okay, we're gonna add a little bit of green. I think that's super easy. Yeah, well, a little bit of blue here, and you've got the pellets, and can you know?
+
+Lance Binder  46:45  
+Okay, see, I see. There's a different number that does get assigned that I can almost doesn't.
+
+Andrew Goeken  46:50  
+These are the hex numbers. So they sent us the number of the color. Yeah. Okay. So yeah, if you wanted to, you could totally play around with you know mapping this. It's called a gradient map. Your art team would probably be pretty familiar with how that works, but basically it maps to the highlights and shadows. So the image always stays the same, but it just maps. I can invert it and make the shadows.
+
+Bill Denk  47:18  
+Yeah.
+
+Brandon Seavers  47:19  
+All right. There you go. All right. Sorry, I'm here to host you guys tonight. Y'all are at Central Station, right? Yeah, yeah. All right, some great barbecue right in the corner. Yeah,
+
+Bill Denk  47:34  
+I missed last time. So where should is that the one that's down?
+
+Brandon Seavers  47:37  
+Central barbecue. Yeah, thank you. Central barbecue. It's basic, but if you go down to the lobby, California
+
+Adam Denk  47:43  
+has very few barbecue. No, Central's right. We go down to the lobby. Down in the
+
+Brandon Seavers  47:47  
+lobby, go down the stairs and go out on the main street. Take a left. You're going to go out. You're going to take a right to the Civil Rights Museum. We try to sell some public museum. Sweet. Cool.
+
+Adam Denk  47:56  
+Perfect.
+
+Bill Denk  47:56  
+So, thanks, guys. Thank you
+
+Speaker 4  48:00  
+again. Have fun.
+
+Andrew Goeken  48:03  
+Well, I guess three because you have that marking that has a number, which would be, yeah, yeah, yeah. But because it's not a big place, then you can be the first to then put it from their
+
+Lance Binder  48:34  
+etched into the the master, and that's typically what the client wants etched into the master, and that's what we use to associate with the audio. We assign another number internal to us,
+
+Lance Binder  48:50  
+but then that'll live with this audio project, even if they decide to make it in white or blue or black, because it's still the same master. So there's this ties that together, and if they choose to package, they repress them in different colors for different retailers. Again, that typically you know requires either new UPC. It's the audio stuff. Yeah. The remaster, remix, all those things. Yeah. Brand new items. Yeah. Audio wise. Got it. Okay.
+
+Bill Denk  49:39  
+So that's the other thing too. I was mentioned with Brand was to having conversation with you guys about Coda tomorrow because I I don't want to oversimplify it, but I'm thinking it might be fairly simple because it's data. Yeah, it's data. We'll pull the data and find cross reference, and then we can make sure that whatever we have on our side gets passed back to you as well.
+
+Lance Binder  50:00  
+That's we were because we were talking when you guys left about. I mean, there's the couple of paths. There's the work that, you know, hopefully you guys will send our way through the orders that you accumulate. There are certain what would be the information we would need to see so that we can generate a legit order on our side, versus what information would come out of the quote generator that we would use that would be coming directly to us. This is while it's still kind of, you know, I guess primitive or whatever. If some kind of a form, and at some point, I'll be able to do some some connectivity. So,
+
+Bill Denk  50:33  
+yeah, I'd like to. I mean, depending upon your time, maybe we'll take a look at. Like, I don't know what I need to know on your side from Kota, I'd rather map our stuff to you. And if there's anything you can provide that might be helpful for me to do that, even if there's something standard that I can have, not in a rush, but this evening, I'll take some time tonight so I can have quite a long.
+
+Lance Binder  50:55  
+Well, I know what was because you had to stop. Are you leaving in a second?
+
+Arian Kennedy  50:59  
+Yeah, I actually have to go get my kids, so I'm gonna have to leave by 4:30. That's
+
+Lance Binder  51:05  
+same with me. We've got tomorrow, but unless we want to show real quick about some of the stuff that we just went, I don't know if we can show overall mapping.
+
+Bill Denk  51:14  
+You have to show me. I mean, they've got it. They got some, but we
+
+Lance Binder  51:18  
+can definitely, yeah, we can revisit all that stuff tomorrow. Yeah,
+
+Bill Denk  51:22  
+totally. Yeah. My purpose in here the first two days was the first day was kind of show kind of all the what we've done. Yeah. And then to show that we can get an order through and so on. And then the next step is let's refine all that we have for Memphis. And I was talking to Brandon too about the way that we're doing this is because we have other presses that will to work with, but our deal with Memphis is that we want Memphis to be the exclusive kind of any new stops coming out through Memphis first, and also we have a right of refusal. So as we talk to the Orchard or talk to other people that have been looking for self-service solutions for artists, they'll come in through us through Getunes, but they'll move to Memphis as
+
+Lance Binder  52:03  
+preferred vendor. That's exactly right. So
+
+Bill Denk  52:05  
+and so the other thing we're talking about there was confusion or the lack thereof, not wanting people to wonder: Am I Good Tunes? Am I at Memphis? Yeah. So we want to make sure that we clean that up too, so that we we have no ego, and not that Memphis does. But but I always created the company from the beginning to be behind the scenes, and that's actually Go Good is the corporate name. The reason I created Goodtoons is because I knew that Spotify or Apple wouldn't say, "Oh, we'll try this as a store, or what we're doing. So I built that, but then when I saw what we could do and what artists needed, and and how some of the stuff that we could do didn't exist in Spotify and Apple. I thought let's build this to as
+
+Lance Binder  52:47  
+a service for you to show them, yeah, yeah,
+
+Bill Denk  52:49  
+how much better we can do. And then my goal is still to connect with Spotify and Apple down the road, but to be able to do it in a way we're playing well with them, and they see what we've done rather than competition with them, and so we'll even help to artists to move their stuff out to streaming. But what we're seeing is this. Can you just do one real quick? Can you go to Can you go to get goodtoons dot music slash release dot dash info. I think that's it. So scroll all the way down. Actually, yeah, sure. So so just and I can talk about this tomorrow too. I want to close you guys out. So basically, what are we
+
+Lance Binder  53:40  
+starting? And yeah, I don't know what your time is, Zach. How much stuff you have to get to that
+
+Bill Denk  53:45  
+place. So basically, with us, you know, saying get your vinyl for nothing and your clicks for free,
+
+Lance Binder  53:50  
+that's great tech. Yeah,
+
+Bill Denk  53:54  
+and everybody's online work, and that's the way we do it. Our our idea is to take all the work out from the artists because a lot of times we don't know anything about vinyl, and they discovered when they want to do vinyl, they realize all that's involved in that they know not only from making sure that the process from the beginning that they're doing it right, but they have their artwork right through all of that, and then on the other side, how do they fulfill it? You know, and and all that. So we we we've done that. But the other thing that we do is we have this thing called the Good Toons player, and we created that so that fans could actually preview before they make the purchase. So since there really wasn't another storefront out there that we kind of let you pre-place your filter on, we thought we'll do the preview and then purchase, and you could buy vinyl that way. And we give everybody this thing called you heard about a good deed yet?
+
+Arian Kennedy  54:42  
+Yeah.
+
+Bill Denk  54:43  
+So we have a thing called a good deed. The deed of your good. So everybody that buys one gets a number. So you get your personalized name on here. You get a number on number one, number two, number three. So fans have bragging rights. Who they are. It's and every everyone comes. One for free. If they can download, if they frame it, they have a QR code. The fans deliver friends, and they can see. Actually, you do are the number one. Yeah, and they can also have this this year where they can actually share that with with on online with social media and so on. They can download and share online. And we did that with Nick Carter when we did his album did his double update, which you guys printed here. We did some seven inch prior to that, and fans love. We show you some of the screens of how they brag about it. So, so we'll help with getting pre-sale page, make fashion coordination. This is all what our promise has been. You know, they get all their fan data. They don't worry about it going up to like the big boys drink, and we do the customer service, all of that. And then we found a lot of them had Shopify, and they're like, "Hey, well, I have a Shopify store because it actually connects to Spotify, and I can sell my stuff through that and my vinyl everything. And so I said, "Well, we don't, you know, our goal was to be like I said from the beginning of Go Goods from the beginning. You guys not there? We want to help you sell music. How are we going to help you get Music up to help? And really, the goal I should say is our company exists for music to win, and the only way Music will win is if artists are paid well. When artists are paid well, they can give fans a better experience. Fans have a better experience, and helps change our culture in a better way, which comes back to music learning. So, whether it's through our store where we handle everything and we set them up with the Denk side, or we have the thing with Shopify where they do that and they just plug in, then we can become on the Shopify store. They even if they have their own press that they use for their vinyl, we can become the digital part. Where okay, well, if you want your fans to hear the music right away before it goes out to streaming, if they bought it, then they'll be able to hear it on our free play. So, so we have our price tier at that, or there's direction or that Shopify. We have other people ask us about, hey, how can we do stuff for extra to get out for retail? So we're told, listen, there's going to be no fee per unit fee to get it out there. And then if you want to ever bring, you can also do that for you as well. And then here's the the good deeds. They can buy 2549, And each of these is not only signed, but also gets a holographic sticker on it that says it's authenticated, so that you know it was the actual signature from that artist. And so this is what I was going to get to. This is the traditional way of production. At least recently has been that I decide I want to hit a certain street date. So then I try and back out. One, I need to get my vinyl in production to get that. Now, what I found for most artists that I've talked to them is they're woefully short on the amount of time they think it takes. Yeah, yeah, yeah, yeah. And so, and so, the people it seems to me who really care about the street date, as far as getting their vinyl on that street date, are those who go stuff and billboard and luminate, and they want to chart because the day your albums ship, that's the day that it counts towards your your sales and your rankings. But and and the other thing too is if the fan buys, there's basically these three things.
+
+Bill Denk  58:05  
+There's the pre-sale, that's when I'm starting to sell my album, so I'm going to do that before it goes to streaming, so that my streaming doesn't whittle away because we're like I can listen to music on for free on streaming with my account. Why don't I buy my bottle, right? So we're we're saying hey, the presale goes out here, and that could only only has to be like two weeks. We did seven releases with Nick Carter, and we knew exactly how many he needed to order by the second day, every time. So based on
+
+Lance Binder  58:34  
+the presale,
+
+Bill Denk  58:35  
+yes. So rather than rather than guessing how many do I need, we're suggesting that you have your presale, right? And the thing is that fans here with traditional presales get no music until the street date, and then things get fulfilled. Well, we have this thing called Good Start. Well, Good Start, you can do go from the traditional side to you can move your street date stays the same. Your fans just won't get it for a little bit later. But the thing is, the moment that they buy it, they get instant gratification by hearing the music on the frequency player, right? And on top of that, they get the bragging rights. They're number one or number 10. They cheer up their fans, which help their friends, which helps to help to amplify the release for heroes. And so, what I've been talking to Brandon about was how long can like for example let's say that I'm an artist and I know let's say I know it's eight weeks 810 weeks like only if my street date is only going to be like whatever number of weeks away how you know six weeks away what do I do well what we can say is make a deposit tells what you think your minimum order is going to be it's going to be let's say 250. Then we get you into the we get you into production by getting your test pressings done right away, all while you're approaching a presale. So by the time you do your presale, we'll know within a week how many you're going to need, and then at that point you can bump the order up because there'll still be room within the press window to say. Okay, let's go between 50 to 500. Plus, because fans pay through Good Zooms directly, then the money's just sitting there, so it doesn't come out of the artist's pocket. So what we're saying to the artist is, listen, pay for 50% up front, get your test prices done, get yourself on the schedule. A few weeks later, you can have your presale. As soon as we get the money from the presale, we're going to pay you back for your deposit because we have all the money from the fans. So you're really kind of loaning yourself the money to give yourself the earlier date, and then it goes into production, and then it can be fulfilled. And then the last one, if someone says, "Listen, I have no money. Want to get something going? What can we recommend? And we'll say, "Let's try zero out of pocket. And what that is is you do you announce a pre-sale. You have a street date for what you want to sell when you want to release just streaming this time. So the pre-sale, there's nothing ordered. You basically go based on the first week or so that your fans order because you can put up something with your music there and get its access. And then we we end the the end of presale, whatever date could be just two weeks away, and then it goes right into bottle production, and that takes it to 10 weeks from there. But the fans have had the access to use it right away, and then and if they want the good deed to be printed, we also have a window of how it would work and how I think that Memphis could also help to fulfill that, pick up an additional revenue stream as well, so so on the front of things, you know, what we're looking at is, and as I mentioned, brand is it's the when we think about the orchard and others, the orchard came to us and said, listen, we've got 25,000 labels, and we want to do we want to offer them the ability to do self-service file, but we found the solutions for that, and we heard about you guys and would like to talk to you. So, what was them
+
+Lance Binder  1:01:48  
+doing all the back end on their side probably was kind of a loss, wasn't it? Yeah, yeah. So
+
+Bill Denk  1:01:54  
+now we're meeting with them within a couple of weeks. It's like mid-September, and so my goal is to to have us far enough along that by the time I walk to talk to walk into Zoom to talk to them to let them know, hey, since we last spoke spoken, here's where we are. We not only have the whole system that can be used for self service, but we also have Memphis who can be used as a phone partner and all the rest, and from what Brandon said, you guys did stuff with the orchard before, so this would be another way just
+
+Speaker 1  1:02:26  
+to know more about that.
+
+Bill Denk  1:02:28  
+Yeah, yeah. So, so to that end, from our perspective, we can connect in with ERP and do it in a way that saves you time. Then we'll do whatever work they have to do on our side. And I should have said that from the beginning. Our whole goal and what we're doing here is not to be an oh man, we got another platform we have to use because everybody wants you to integrate. Everybody, you know, just the way it is. And and so what we want to do is we want to make the least amount of effort on your side to make sure it's the maximum benefit from you through us, and then if you have someone else who wants a partner come in, we can plug them into the platform as well. So then everything comes in, lives in the system, and then it comes goes out the ERP, and so on. So, so, so that's kind of where we are at this point. That helps kind of give an overview. Oh, it does. It
+
+Lance Binder  1:03:21  
+does.
+
+Bill Denk  1:03:21  
+And and and the way this all came about was originally we were just going to do stuff by helping the artists with the digital side. Then I saw the opportunity with vinyl because a lot of people lost. And I built a business in 90 something. I can't remember. It was in 95. I said, and and I had with quick printers right when when the desktop publishing revolution came out. You guys are probably too young to know. I was already in the package media, and so and so what I did was I set up a company that could actually help them with when they have their oh they were called copy graphic machines they have to code everything in and then they get film printed out all that stuff I was able to help them when customers walked in the door and said I want I want I've got this floppy what do I do with it or can you design something or whatever so we we made sure all that they would come in with their dot matrix and say, "Can you print this? Like I don't think we can do this. So we would help them, but the customer never knew we existed, and we liked that. We liked the fact that we could do exclusive to trade, and so we end up when the when the web came out, talked to Mintman Press, and they were the last ones to adopt the web, and I remember sitting in a boardroom with them. And the president of their company, it was it was foggy from cigarette smoke. You know, this is the night. Back in the 90s, yeah, and my boss's office were always like that. And Bob, Bobby, who's the son of the founder, he he takes a big drag of a cigarette. What's this got to do with printing? I said it's got everything to do with printing. You've got customers bringing in all this content to you, and now you have a way to help them get that content out. And so I created a system for all 800 stores to be able to have not only their own pages, but then they could also customize it because there's always a franchisee, no matter what company, franchisee franchisor thing, where the franchisor wants control, but the franchisee wants freedom. Yeah, and so I was able to offer flexibility with them and build like one of the first order systems that existed for people to get their stuff in. It wasn't as fancy as this, but but something. So our whole goal here is for us to get out of the way and to be able to help manage regular pressing to do your business as efficiently as you can do it, and and so hopefully what will happen the two days that we spend here together that you'll find will our goal we wouldn't have done our job if we just pay multiples on the time because I know you're taking a lot of time off trying to get things done and even trying to get things done probably you have put up fires while we're here, so and I can appreciate that I've been there. So appreciate your
+
+Arian Kennedy  1:06:05  
+part of it.
+
+Speaker 1  1:06:05  
+No, this
+
+Arian Kennedy  1:06:06  
+is awesome, and just seeing it, you know, evolve in real time with some of it. Over the
+
+Lance Binder  1:06:14  
+last couple of weeks, right? Just today. Just today, yeah. This
+
+Arian Kennedy  1:06:17  
+is like I think it'll be. I think it looks really great, and I'm excited to see what we can do. I will say for tomorrow, though, I know we want to talk about Coda and what we can do there. I do want to make sure that we go over some of the rules for the setup fees, like color setup fee and stamper fee, and just if there's anything else that we need to line up with the pricing grid. I do like to muse a little bit and ask some questions, so I might have some musings for you guys tomorrow. They're tired of my musings, but just I'm really curious to see what like a dash the dashboard could look like for for what we can do for the Memphis dashboard. So and then we do want to make sure that you guys see our packaging facility tomorrow as well. Oh, that's right. You didn't
+
+Lance Binder  1:07:04  
+get to see that, and maybe the plane facility too. Yeah. So did a quick
+
+Brandon Seavers  1:07:08  
+run through the plane before we go there.
+
+Speaker 1  1:07:10  
+Yeah.
+
+Arian Kennedy  1:07:10  
+I think I think we can get it get it all done though. But we did
+
+Lance Binder  1:07:13  
+tell them we have a meeting with GZ from eight to nine, so we wouldn't be able to start tomorrow. Okay.
+
+Arian Kennedy  1:07:19  
+And then yeah, sounds good though.
+
+Lance Binder  1:07:22  
+The the tour on the Ford in Wits was the difference between the manual presses and the auto presses was had pretty yes pretty good yeah yeah it was pretty so all that special stuff special effects stuff happens with people manhandling the pucks and the splatters and the jam and puck I don't know what kind of jobs they were running yeah yeah yeah they were they looked like they were running everything. Were they running bad good? Yeah, they were in distributed blends and yeah, yeah. And we don't, we don't. Those are we don't inventory a special effect component, but we inventory compound for blends, and then all of the single opaques and the single translucence. Did he occupy the mixer where they were? I don't know if they were making it yet because that stuff that we have a set recipe for, and how many kilograms of this, how many grams of this, and we convert it from the component parts into another part number, inventory part number, which is for the blend, and then we move it to the press.
+
+Bill Denk  1:08:20  
+There were some we saw sitting on the side that he said were most likely for wholesale because they were regrinds of regrinds or something in some way. Oh, oh, so some
+
+Lance Binder  1:08:29  
+of those. What if there was some eco blend? Eco, were there some eco?
+
+Speaker 5  1:08:32  
+Yeah,
+
+Bill Denk  1:08:33  
+and and there was also I think we saw if I have the number correct, I think it was MP 001, the first blend, which was the blue. Oh, oh, that's one of the first. That's the one. The British one. Yeah, yeah, yeah, yeah, yeah, yeah. Yeah, with his with his Lowe's bucket. Yeah. Oh yeah, the
+
+Lance Binder  1:08:55  
+mad the mad scientist work. We've got the lab has improved quite a bit from what it was 10 years ago, and it was Brandon and Mark out there coming up with stuff. Sky, I don't know if that was the name of the blend. Maybe 01. Yeah. So.
+
+Bill Denk  1:09:10  
+So yeah, this is really exciting. Okay.
+
+Lance Binder  1:09:13  
+Sorry to kick you out, Rick. If this is earlier than the intent, but no, no, no, we're good.
+
+Bill Denk  1:09:17  
+But is there anything for Coda that might be helpful. Any PDF or anything that explains what the system is that we could look at overnight. If you happen to have it, and if you don't, don't even think about it. No, not at all. We
+
+Arian Kennedy  1:09:31  
+don't have that at all. Okay. Do we have
+
+Speaker 1  1:09:39  
+anything on what
+
+Unknown Speaker  1:09:42  
+you would be concerned with.
+
