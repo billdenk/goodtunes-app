@@ -468,7 +468,7 @@ export type PressPortalNav = ReturnType<typeof usePressPortalNav>;
 
 export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; isSuperAdminView: boolean }) {
   const nav = usePressPortalNav();
-  const { tab, handleTabChange } = nav;
+  const { tab, handleTabChange, createView } = nav;
 
   // `/vendor/albums/:id` opens that album's admin page embedded in this portal
   // shell (Physical tab), mirroring the artist portal. When matched we force
