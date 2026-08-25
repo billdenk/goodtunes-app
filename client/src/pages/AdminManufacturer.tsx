@@ -58,6 +58,7 @@ import { NewAlbumArtistDialog } from "@/components/admin/NewAlbumArtistDialog";
 import { NewAlbumTitleDialog } from "@/components/admin/NewAlbumTitleDialog";
 import { EntityAnalyticsTab } from "@/components/admin/EntityAnalyticsTab";
 import { CodaPricingSyncCard } from "@/components/admin/CodaPricingSyncCard";
+import { ErpPushCard } from "@/components/admin/ErpPushCard";
 import { SaveLink, CardHeader, EditPencil } from "@/components/admin/EditCardChrome";
 import { IconButton } from "@/components/ui/IconButton";
 import { PressTabBody, usePressPortalNav, type PressMe } from "@/pages/PressPortal";
@@ -776,6 +777,11 @@ export function AdminManufacturer() {
                 connection + preview/commit sync. Server routes are hard-gated
                 to super_admin/admin; the card only renders for operators. */}
             {isOperator && <CodaPricingSyncCard pressId={id} />}
+
+            {/* Task #3379 — operator-only inbound ERP pricing push (MRP's
+                Matilda ERP): key management + pending-push review. Same
+                hard server-side operator gate as the Coda card. */}
+            {isOperator && <ErpPushCard pressId={id} />}
           </>
         )}
         {tab === "contacts" && (

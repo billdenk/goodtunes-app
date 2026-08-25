@@ -3244,6 +3244,31 @@ export const pressCodaConnections = pgTable("press_coda_connections", {
 });
 export type PressCodaConnection = typeof pressCodaConnections.$inferSelect;
 
+// Task #3379 — per-press inbound ERP push credentials (MRP's Matilda ERP
+// first). Matilda has no public API we can pull from, so the press's ERP
+// POSTs pricing to us instead. Each press gets at most one ACTIVE key
+// (minting a new one revokes the old row — revoked rows are kept for
+// audit). The key is shown ONCE at mint; the secret half is envelope-
+// encrypted at rest (same AES-256-GCM envelope as the Coda token) and
+// verified with a constant-time compare. Pushed pricing NEVER writes
+// ladders directly — it lands as a "pending" run in press_pricing_syncs
+// (source "erp_push") that an operator previews and commits, identical
+// to the Coda preview→commit model.
+export const pressPushCredentials = pgTable("press_push_credentials", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pressId: varchar("press_id").notNull(),
+  // Public half of the key ("gtpush_<keyId>_<secret>") — safe to show in
+  // the admin UI so the operator can tell WHICH key is active.
+  keyId: text("key_id").notNull().unique(),
+  secretEncrypted: text("secret_encrypted").notNull(),
+  createdByUserId: varchar("created_by_user_id"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at"),
+  revokedByUserId: varchar("revoked_by_user_id"),
+  lastUsedAt: timestamp("last_used_at"),
+});
+export type PressPushCredential = typeof pressPushCredentials.$inferSelect;
+
 // Generic per-album add-on. First user: the **signed_cert** add-on (printed
 // & signed GoodDeed certificate). Future shapes (professional framing,
 // full-album-sized framed GoodDeed with QR provenance) drop in here as new

@@ -720,9 +720,6 @@ export function ManufacturingLedger({
     }
   }
 
-  // Task #3004 — the instructions modal (step id being shown, or null).
-  const [instructionsFor, setInstructionsFor] = useState<string | null>(null);
-
   // Task #3004 — bank transfer (push) is the default; card is the fallback
   // with the processing fee added and disclosed BEFORE confirming.
   async function pay(step: LedgerStep, method: "bank_transfer" | "card") {

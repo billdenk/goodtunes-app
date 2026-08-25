@@ -3973,6 +3973,252 @@ export function registerPressCatalogRoutes(
     },
   );
 
+  // ─── Task #3379 — Inbound ERP pricing push (MRP's Matilda ERP) ─────
+  //
+  // Credential mint/revoke is operator (god-view) ONLY — same boundary as
+  // the Coda routes above (requireAdmin admits all partner bearers; the
+  // explicit requireOperator check is the real gate). The inbound
+  // /api/erp/v1/* endpoints authenticate with the per-press push key in
+  // the X-API-Key header instead — no session, no cookies. A real push
+  // lands as a PENDING sync run the operator previews and commits; it can
+  // never write ladders directly.
+
+  app.get(
+    "/api/admin/manufacturers/:id/push-credential",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const erp = await import("./erpPricingPush");
+      const cred = await erp.getActivePushCredential(pressId);
+      const summary = await erp.getPushStatusSummary(pressId);
+      return res.json({ ...erp.toPublicPushCredential(cred), ...summary });
+    },
+  );
+
+  app.post(
+    "/api/admin/manufacturers/:id/push-credential",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      const erp = await import("./erpPricingPush");
+      const userId = (req as any).adminUserId ?? null;
+      const { key, credential } = await erp.mintPushCredential(pressId, userId);
+      console.log(`[erp-push] key minted by user=${userId} press=${pressId} keyId=${credential.keyId}`);
+      // The FULL key appears in this response exactly once — it is never
+      // readable again (stored envelope-encrypted).
+      return res.json({ key, ...erp.toPublicPushCredential(credential) });
+    },
+  );
+
+  app.delete(
+    "/api/admin/manufacturers/:id/push-credential",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const erp = await import("./erpPricingPush");
+      const userId = (req as any).adminUserId ?? null;
+      const revoked = await erp.revokePushCredential(pressId, userId);
+      if (revoked) console.log(`[erp-push] key revoked by user=${userId} press=${pressId}`);
+      return res.json({ ok: true, revoked });
+    },
+  );
+
+  app.get(
+    "/api/admin/manufacturers/:id/pricing-pushes",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const erp = await import("./erpPricingPush");
+      const rows = await erp.listPendingPushes(pressId);
+      return res.json(
+        rows.map((r) => ({
+          id: r.id,
+          receivedAt: r.startedAt,
+          rowsReceived: r.productsFetched,
+          rowsAccepted: r.colorsMapped,
+          errorCount: r.colorsUnmapped,
+        })),
+      );
+    },
+  );
+
+  app.post(
+    "/api/admin/manufacturers/:id/pricing-pushes/:pushId/preview",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      try {
+        const erp = await import("./erpPricingPush");
+        const proposal = await erp.buildPushPreview(pressId, String(req.params.pushId));
+        return res.json({ proposal });
+      } catch (err: any) {
+        const status = err?.kind === "not_found" ? 404 : err?.kind === "state" ? 409 : 500;
+        if (status === 500) console.error("[erp-push] preview failed:", err);
+        return res.status(status).json({ message: err?.message || "Preview failed" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/manufacturers/:id/pricing-pushes/:pushId/commit",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      try {
+        const erp = await import("./erpPricingPush");
+        const userId = (req as any).adminUserId ?? null;
+        const result = await erp.commitPush(pressId, userId, String(req.params.pushId));
+        console.log(
+          `[erp-push] commit by user=${userId} press=${pressId} push=${req.params.pushId} ` +
+            `written=${result.rungsWritten} skipped=${result.rungsSkipped} missing=${result.tiersMissing.join(",")}`,
+        );
+        return res.json(result);
+      } catch (err: any) {
+        const status = err?.kind === "not_found" ? 404 : err?.kind === "state" ? 409 : 500;
+        if (status === 500) console.error("[erp-push] commit failed:", err);
+        return res.status(status).json({ message: err?.message || "Commit failed" });
+      }
+    },
+  );
+
+  app.post(
+    "/api/admin/manufacturers/:id/pricing-pushes/:pushId/discard",
+    requireAdmin,
+    requireOperator,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      try {
+        const erp = await import("./erpPricingPush");
+        const userId = (req as any).adminUserId ?? null;
+        await erp.discardPush(pressId, userId, String(req.params.pushId));
+        console.log(`[erp-push] discard by user=${userId} press=${pressId} push=${req.params.pushId}`);
+        return res.json({ ok: true });
+      } catch (err: any) {
+        const status = err?.kind === "not_found" ? 404 : err?.kind === "state" ? 409 : 500;
+        if (status === 500) console.error("[erp-push] discard failed:", err);
+        return res.status(status).json({ message: err?.message || "Discard failed" });
+      }
+    },
+  );
+
+  // ── Inbound endpoints (API-key auth; no session) ───────────────────
+  // Shared handler plumbing: authenticate the X-API-Key, rate-limit, cap
+  // the payload, parse. `mode` decides whether anything is stored.
+  const handleInboundPush = async (req: Request, res: Response, mode: "validate" | "submit") => {
+    const erp = await import("./erpPricingPush");
+    const ip = req.ip || "unknown";
+    // Failed-auth limiter first (per IP) so key guessing is throttled.
+    if (!erp.checkPushRateLimit(`erp-auth:${ip}`, 30, 60_000)) {
+      return res.status(429).json({ error: "rate_limited", message: "Too many requests — wait a minute and retry." });
+    }
+    const presented = req.header("x-api-key");
+    const auth = await erp.verifyPushKey(presented);
+    if (!auth) {
+      return res.status(401).json({
+        error: "invalid_api_key",
+        message: "Missing, malformed, or revoked API key. Send the key you were issued in the X-API-Key header.",
+      });
+    }
+    if (!erp.checkPushRateLimit(`erp-push:${auth.credentialId}`, 60, 60_000)) {
+      return res.status(429).json({ error: "rate_limited", message: "Too many requests for this key — wait a minute and retry." });
+    }
+    // Payload size cap (the global JSON body limit is coarser).
+    let bytes = Number(req.header("content-length") ?? 0);
+    if (!Number.isFinite(bytes) || bytes <= 0) {
+      try { bytes = Buffer.byteLength(JSON.stringify(req.body ?? null)); } catch { bytes = 0; }
+    }
+    if (bytes > erp.MAX_PUSH_PAYLOAD_BYTES) {
+      return res.status(413).json({
+        error: "payload_too_large",
+        message: `Payload is ${bytes} bytes — the maximum is ${erp.MAX_PUSH_PAYLOAD_BYTES}.`,
+      });
+    }
+
+    const parsed = erp.parsePushPayload(req.body);
+    const cred = await erp.getActivePushCredential(auth.pressId);
+    const keyId = cred?.keyId ?? null;
+
+    if (mode === "validate") {
+      // Dry run: echo exactly what we parsed + structured errors. The
+      // only write is the history row — pricing data is untouched.
+      const syncId = await erp.recordValidateRun(auth.pressId, keyId, parsed);
+      return res.status(parsed.errors.length ? 422 : 200).json({
+        ok: parsed.errors.length === 0,
+        mode: "validate",
+        run_id: syncId,
+        version: parsed.version,
+        rows_received: parsed.rowsReceived,
+        rows_accepted: parsed.rows.length,
+        accepted: parsed.rows.map((r) => ({
+          index: r.index,
+          format: r.format,
+          tier: r.tierName,
+          quantity: r.qty,
+          unit_price_cents: r.unitCents,
+        })),
+        errors: parsed.errors,
+        warnings: parsed.warnings,
+      });
+    }
+
+    // Submit is strict: ANY validation error rejects the whole push (run
+    // /pricing/validate first). Partial acceptance could silently drop
+    // rows — we refuse instead.
+    if (parsed.errors.length > 0 || parsed.rows.length === 0) {
+      if (parsed.rows.length === 0 && parsed.errors.length === 0) {
+        parsed.errors.push({ index: null, field: "rows", code: "rows_empty", message: "No valid pricing rows in the payload." });
+      }
+      const syncId = await erp.recordRejectedPush(auth.pressId, keyId, parsed);
+      return res.status(422).json({
+        ok: false,
+        mode: "submit",
+        run_id: syncId,
+        rows_received: parsed.rowsReceived,
+        rows_accepted: 0,
+        errors: parsed.errors,
+        warnings: parsed.warnings,
+        message: "Push rejected — fix the errors and retry. Nothing was stored for review.",
+      });
+    }
+
+    const pushId = await erp.stagePush(auth.pressId, keyId, parsed);
+    console.log(
+      `[erp-push] staged push=${pushId} press=${auth.pressId} keyId=${keyId} rows=${parsed.rows.length}`,
+    );
+    return res.status(202).json({
+      ok: true,
+      mode: "submit",
+      push_id: pushId,
+      status: "pending_review",
+      rows_received: parsed.rowsReceived,
+      rows_accepted: parsed.rows.length,
+      warnings: parsed.warnings,
+      message: "Pricing received. A GoodTunes operator will review and apply it — nothing goes live automatically.",
+    });
+  };
+
+  app.post("/api/erp/v1/pricing/validate", (req, res) => {
+    handleInboundPush(req, res, "validate").catch((err) => {
+      console.error("[erp-push] validate crashed:", err);
+      if (!res.headersSent) res.status(500).json({ error: "internal", message: "Unexpected server error." });
+    });
+  });
+
+  app.post("/api/erp/v1/pricing/pushes", (req, res) => {
+    handleInboundPush(req, res, "submit").catch((err) => {
+      console.error("[erp-push] submit crashed:", err);
+      if (!res.headersSent) res.status(500).json({ error: "internal", message: "Unexpected server error." });
+    });
+  });
+
   app.put("/api/admin/manufacturers/:id/catalog/tiers/:tierId/jackets/:jacketId/ladder", requireAdmin, requirePressScope, requirePressEditor, async (req, res) => {
     const pressId = String(req.params.id);
     const tierId = String(req.params.tierId);

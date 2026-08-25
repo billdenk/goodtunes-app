@@ -362,11 +362,14 @@ export type LadderRung = {
 
 /** Merge synced rungs into an existing ladder. Operator-locked rungs
  *  (`lockedFromSync`) are NEVER overwritten — identical to the
- *  Hellbender sync's behavior. Returns the merged ladder + counts. */
+ *  Hellbender sync's behavior. Returns the merged ladder + counts.
+ *  `source` defaults to "coda"; the ERP push sync (Task #3379) reuses
+ *  this merge with its own provenance stamp. */
 export function mergeCodaLadder(
   existing: LadderRung[] | null | undefined,
   rungs: { qty: number; unitCents: number }[],
   syncedAt: string,
+  source: string = CODA_PRICING_SOURCE,
 ): { merged: LadderRung[]; written: number; skippedLocked: number } {
   const byQty = new Map<number, LadderRung>();
   for (const r of Array.isArray(existing) ? existing : []) byQty.set(Number(r.qty), { ...r });
@@ -381,7 +384,7 @@ export function mergeCodaLadder(
       qty: r.qty,
       unitCents: r.unitCents,
       confirmed: true,
-      source: CODA_PRICING_SOURCE,
+      source,
       syncedAt,
     });
     written++;
@@ -425,8 +428,10 @@ function requireReadyConnection(conn: PressCodaConnection | null): asserts conn 
 }
 
 /** Load this press's catalog context for the diff: active tiers keyed by
- *  (format, lowercased name) + the default jacket + existing ladders. */
-async function loadCatalogContext(pressId: string) {
+ *  (format, lowercased name) + the default jacket + existing ladders.
+ *  Exported for the ERP push sync (Task #3379), which diffs the same
+ *  default-jacket ladders. */
+export async function loadCatalogContext(pressId: string) {
   const [defaultJacket] = await db
     .select()
     .from(pressJackets)

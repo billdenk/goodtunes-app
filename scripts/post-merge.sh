@@ -5075,6 +5075,38 @@ SQL
 migrate_task_3310_coda_connections dev  "${DATABASE_URL:-}"
 migrate_task_3310_coda_connections prod "${PROD_DATABASE_URL:-}"
 
+# ── Task #3379 — Inbound ERP pricing push credentials (Matilda) ──────
+# Per-press API keys for the inbound /api/erp/v1/pricing push endpoints
+# (MRP's Matilda ERP). Secret half envelope-encrypted; revoked rows kept
+# for audit. Idempotent CREATE on both DBs so the publish dev→prod diff
+# never drops it.
+migrate_task_3379_push_credentials() {
+  local label="$1"; local url="$2"
+  [ -z "$url" ] && return 0
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL'
+CREATE TABLE IF NOT EXISTS press_push_credentials (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id            varchar NOT NULL,
+  key_id              text    NOT NULL UNIQUE,
+  secret_encrypted    text    NOT NULL,
+  created_by_user_id  varchar,
+  created_at          timestamp NOT NULL DEFAULT now(),
+  revoked_at          timestamp,
+  revoked_by_user_id  varchar,
+  last_used_at        timestamp
+);
+CREATE INDEX IF NOT EXISTS press_push_credentials_press_idx
+  ON press_push_credentials (press_id);
+SQL
+  then
+    echo "post-merge: task-3379 push credentials ok on $label"
+  else
+    echo "post-merge: WARNING — task-3379 push credentials failed on $label (continuing)"
+  fi
+}
+migrate_task_3379_push_credentials dev  "${DATABASE_URL:-}"
+migrate_task_3379_push_credentials prod "${PROD_DATABASE_URL:-}"
+
 # ── Task #727 — Reset every configured GoodDeed to $25 / 20% ─────────
 # Bill wants the Printed & Signed GoodDeed® cert upsell to start at $25
 # retail and 20% of the vinyl run. New-cert defaults are handled in the
