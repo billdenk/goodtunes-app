@@ -112,6 +112,49 @@ export function computeCropTransform(
   return mulMat(cropFrameMatrix(focus, scale, vp1HeightPt), invMat(viewportTransform));
 }
 
+// ── Raster CSS layout under an extreme view scale (Task #3374) ──────────────
+// The stage scales one frame div by viewT.s (up to ~90× for a skinny spine
+// crop). A raster <img> laid out the naive way — left/width as a % of the
+// frame — gets a TINY pre-transform layout box (a 3.5 mm spine crop is ~3.8
+// CSS px wide), and Chromium snaps the image's paint rect to whole layout
+// pixels before the ancestor scale multiplies the error: at s≈27 a ±0.5 px
+// snap becomes a ±14 px on-screen shift/squeeze (~4 mm), so the crop raster
+// visibly drifted off the (vector, unsnapped) zone overlays. Full Template
+// (s=1) never showed it — the discriminating symptom.
+//
+// Fix: give the img a FULL-SIZE layout box (frame % × viewScale) and place it
+// entirely with a transform — translate(%) of its own box plus scale(1/s).
+// Transforms go through the compositor unsnapped, so the raster stays in the
+// same template-mm coordinate frame as the overlays with sub-layout-pixel
+// registration at any view scale. Verified against MRP 12-JKTSG3D-100
+// (779.4 × 539.3 mm, 3.5 mm spine): painted dielines land exactly on the
+// overlay strokes after this layout, and were ~0.8× squeezed before.
+//
+// Pure so it can be regression-tested without a DOM.
+
+export function rasterCssLayout(
+  rectMm: { x: number; y: number; w: number; h: number },
+  tplWMm: number,
+  tplHMm: number,
+  viewScale: number,
+): { left: 0; top: 0; width: string; height: string; transform: string; transformOrigin: '0 0' } {
+  if (!(viewScale > 0)) throw new Error('viewScale must be > 0');
+  const widthPct = (rectMm.w / tplWMm) * 100 * viewScale;
+  const heightPct = (rectMm.h / tplHMm) * 100 * viewScale;
+  // translate % is relative to the element's OWN (scaled-up) box, so divide
+  // the desired frame-relative offset by the box's own frame-relative size.
+  const txPct = rectMm.w > 0 ? (rectMm.x / (rectMm.w * viewScale)) * 100 : 0;
+  const tyPct = rectMm.h > 0 ? (rectMm.y / (rectMm.h * viewScale)) * 100 : 0;
+  return {
+    left: 0,
+    top: 0,
+    width: `${widthPct.toFixed(6)}%`,
+    height: `${heightPct.toFixed(6)}%`,
+    transform: `translate(${txPct.toFixed(6)}%, ${tyPct.toFixed(6)}%) scale(${(1 / viewScale).toFixed(8)})`,
+    transformOrigin: '0 0',
+  };
+}
+
 /**
  * The mm rectangle the rendered canvas ACTUALLY covers, post integer
  * rounding of the canvas size — the viewer must stretch the raster over this

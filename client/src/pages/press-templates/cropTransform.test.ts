@@ -8,6 +8,7 @@ import {
   computeCropTransform,
   cropFrameMatrix,
   cropRenderedRectMm,
+  rasterCssLayout,
   mulMat,
   invMat,
   applyMat,
@@ -94,6 +95,110 @@ describe('computeCropTransform', () => {
     const [cx, cy] = applyMat(eff, X, Y);
     approx(cx, (xMm - focus.x) * k, 1e-6);
     approx(cy, (yMm - focus.y) * k, 1e-6);
+  });
+});
+
+describe('rasterCssLayout (Task #3374) — MRP 12-JKTSG3D-100 spine crop registration', () => {
+  // Real measured template: "12in Single 3D Jacket with Gusseted Pocket,
+  // 3.5mm Spine" — page 2209.36 × 1528.8 pt, unrotated, userUnit 1.
+  const wMm = 2209.36 * (25.4 / 72); // 779.413 mm
+  const hMm = 1528.8 * (25.4 / 72);  // 539.327 mm
+  // GT SPINE layer box + the template's own printed spine dielines (mm).
+  const spine = { x: 387.9246849907769, y: 113.99345540364581, w: 3.525280083550347, h: 311.37364052666555 };
+  const dielinesX = [384.419, 387.949, 391.438, 394.928];
+  // Spine focus rect at the viewer's 4% pad, as picked in production.
+  const focus = { x: 375.4697, y: 101.5389, w: 28.4352, h: 336.2841 };
+  const viewScale = wMm / focus.w; // zoom 1 → ~27.41: the pathological scale
+
+  const parseLayout = (l: ReturnType<typeof rasterCssLayout>) => {
+    const widthPct = parseFloat(l.width);
+    const heightPct = parseFloat(l.height);
+    const m = /translate\((-?[\d.]+)%, (-?[\d.]+)%\) scale\(([\d.e-]+)\)/.exec(l.transform)!;
+    assert.ok(m, `transform parse: ${l.transform}`);
+    const [txPct, tyPct, invS] = [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])];
+    // CSS composes translate∘scale: displayed left = translate offset
+    // (a % of the element's own LAYOUT box), displayed width = layout/s.
+    return {
+      leftFrac: (txPct / 100) * (widthPct / 100),
+      topFrac: (tyPct / 100) * (heightPct / 100) * (hMm / wMm), // top % resolves vs frame height
+      widthFrac: (widthPct / 100) * invS,
+      heightFrac: (heightPct / 100) * invS,
+      widthPct,
+      invS,
+    };
+  };
+
+  // The crop raster actually rendered for this focus (dpr 1, max zoom 4).
+  const { targetW, targetH, scale } = computeCropCanvasSize(focus.w, focus.h, 1440 * 4);
+  const rect = cropRenderedRectMm(focus, targetW, targetH, scale);
+
+  it('produces the real 346×4096 canvas for the spine focus', () => {
+    assert.equal(targetW, 346);
+    assert.equal(targetH, 4096);
+  });
+
+  it('layout box is full-size — paint snapping stays sub-layout-pixel', () => {
+    const l = parseLayout(rasterCssLayout(rect, wMm, hMm, viewScale));
+    // The regression: the naive layout box was rect.w/wMm ≈ 3.6% of the frame
+    // (~3.8 CSS px), and Chromium's whole-pixel image paint snap × the 27.4×
+    // frame scale squeezed the raster ~0.8× (a ~3.5 mm drift at the spine).
+    // The fixed layout box must be ~frame-sized so a ±0.5 px snap stays sub-mm.
+    const naivePct = (rect.w / wMm) * 100;
+    assert.ok(naivePct < 4, `precondition: naive box tiny (${naivePct}%)`);
+    assert.ok(l.widthPct > 50, `layout box must be full-size, got ${l.widthPct}%`);
+    approx(l.widthPct, naivePct * viewScale, 1e-3);
+    approx(l.invS, 1 / viewScale, 1e-7); // scale() serialized at 8 decimals
+  });
+
+  it('composed CSS placement reproduces the exact rectMm frame fractions', () => {
+    const l = parseLayout(rasterCssLayout(rect, wMm, hMm, viewScale));
+    approx(l.leftFrac, rect.x / wMm, 1e-7);
+    approx(l.topFrac, (rect.y / hMm) * (hMm / wMm), 1e-7);
+    approx(l.widthFrac, rect.w / wMm, 1e-7);
+    approx(l.heightFrac, rect.h / hMm, 1e-7);
+  });
+
+  it('every printed spine dieline maps through canvas + CSS onto its overlay position', () => {
+    const l = parseLayout(rasterCssLayout(rect, wMm, hMm, viewScale));
+    const k = PT_PER_MM * scale;
+    for (const mmX of dielinesX) {
+      // Painted position: canvas px → fraction of the raster → frame fraction.
+      const canvasPx = (mmX - rect.x) * k;
+      const frameFrac = l.leftFrac + (canvasPx / targetW) * l.widthFrac;
+      // Overlay position: the SVG draws at mm/wMm of the same frame.
+      const errMm = Math.abs(frameFrac - mmX / wMm) * wMm;
+      assert.ok(errMm < 0.01, `dieline at ${mmX} mm drifts ${errMm} mm`);
+    }
+    // Sanity: the GT spine box edges register the same way.
+    for (const mmX of [spine.x, spine.x + spine.w]) {
+      const frameFrac = l.leftFrac + (((mmX - rect.x) * k) / targetW) * l.widthFrac;
+      assert.ok(Math.abs(frameFrac - mmX / wMm) * wMm < 0.01);
+    }
+  });
+
+  it('wide-panel (Front/Back) crops keep the same registration', () => {
+    // Representative 12" front panel on this template: ~313 mm square + 4% pad.
+    const front = { x: 58.2, y: 101.5389, w: 338.25, h: 336.2841 };
+    const s = wMm / front.w; // ~2.3
+    const dims = computeCropCanvasSize(front.w, front.h, 1440 * 4);
+    const r = cropRenderedRectMm(front, dims.targetW, dims.targetH, dims.scale);
+    const l = parseLayout(rasterCssLayout(r, wMm, hMm, s));
+    approx(l.leftFrac, r.x / wMm, 1e-7);
+    approx(l.widthFrac, r.w / wMm, 1e-7);
+    const k = PT_PER_MM * dims.scale;
+    for (const mmX of [front.x + 12.5, front.x + front.w / 2, front.x + front.w - 12.5]) {
+      const frameFrac = l.leftFrac + (((mmX - r.x) * k) / dims.targetW) * l.widthFrac;
+      assert.ok(Math.abs(frameFrac - mmX / wMm) * wMm < 0.01);
+    }
+  });
+
+  it('full-view rasters (whole template, s=1..4) stay identity-registered', () => {
+    for (const s of [1, 2, 4]) {
+      const l = parseLayout(rasterCssLayout({ x: 0, y: 0, w: wMm, h: hMm }, wMm, hMm, s));
+      approx(l.leftFrac, 0, 1e-9);
+      approx(l.widthFrac, 1, 1e-7);
+      approx(l.heightFrac, 1, 1e-7);
+    }
   });
 });
 

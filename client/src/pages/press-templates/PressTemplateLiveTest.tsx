@@ -56,7 +56,7 @@ import { uploadAdminDoc, uploadAdminDocWithProgress } from '@/lib/adminUpload';
 import { saveLiveTestDraft, loadLiveTestDraft, clearLiveTestDraft, type LiveTestDraft } from './draftStore';
 import { templateTestPath } from './apiPaths';
 import { useAdminDark } from '@/lib/adminAppearance';
-import { computeCropCanvasSize } from './cropDimensions';
+import { computeCropCanvasSize, rasterCssLayout } from './cropDimensions';
 import { computePdfArtRect, computeRasterArtRect } from './artPlacement';
 // ZONE_ORDER/zoneSort + side grouping live in sidePillGroups.ts (Task #3163)
 // so the consolidation rule is testable without jsdom.
@@ -2539,33 +2539,46 @@ export default function PressTemplateLiveTest({
                     transformOrigin: '0 0',
                   }}
                  >
+                  {/* Task #3374 — every RASTER in this frame is laid out via
+                      rasterCssLayout: full-size layout box + transform
+                      placement, so Chromium's whole-pixel paint snapping can't
+                      shift/squeeze the bitmap under the frame's huge crop
+                      scale (vector overlays are immune and stay put; the
+                      rasters must match them). */}
                   {(!art || showTemplate) && (
-                    <img src={template.img} alt="Template" className="absolute inset-0 w-full h-full" draggable={false} />
+                    <img
+                      src={template.img}
+                      alt="Template"
+                      className="absolute"
+                      style={rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s)}
+                      draggable={false}
+                    />
                   )}
                   {/* Sharp Full-Template raster (Task #3212): overlays the base
                       1400px render once the zoom-sized re-render lands, so
                       200–400% zoom shows print detail instead of a CSS upscale. */}
                   {(!art || showTemplate) && fullImg && viewArea === 'full' && zoom > 1 && (
-                    <img src={fullImg} alt="" draggable={false} className="absolute inset-0 w-full h-full pointer-events-none" data-testid="img-full-sharp" />
+                    <img
+                      src={fullImg}
+                      alt=""
+                      draggable={false}
+                      className="absolute pointer-events-none"
+                      style={rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s)}
+                      data-testid="img-full-sharp"
+                    />
                   )}
                   {/* High-DPI crop raster (Task #3162): overlays the low-res base image
-                      only inside the focus region so the crop view is sharp. Positioned
-                      as a % of the world div so it covers exactly the focus rectangle. */}
+                      only inside the focus region so the crop view is sharp. */}
                   {(!art || showTemplate) && cropImg && focus && viewArea !== 'full' && (
                     <img
                       src={cropImg.img}
                       alt=""
                       draggable={false}
                       className="absolute pointer-events-none"
-                      style={{
-                        // Task #3290 — stretch over the EXACT rect the raster
-                        // covers (post canvas-size rounding), so raster and
-                        // overlay share one coordinate frame and can't diverge.
-                        left: pct(cropImg.rectMm.x, template.wMm),
-                        top: pct(cropImg.rectMm.y, template.hMm),
-                        width: pct(cropImg.rectMm.w, template.wMm),
-                        height: pct(cropImg.rectMm.h, template.hMm),
-                      }}
+                      // Task #3290 — stretch over the EXACT rect the raster
+                      // covers (post canvas-size rounding), so raster and
+                      // overlay share one coordinate frame and can't diverge.
+                      style={rasterCssLayout(cropImg.rectMm, template.wMm, template.hMm, viewT.s)}
                     />
                   )}
                   {art && artRect && art.img && (
@@ -2575,10 +2588,7 @@ export default function PressTemplateLiveTest({
                       draggable={false}
                       className="absolute"
                       style={{
-                        left: pct(artRect.xMm, template.wMm),
-                        top: pct(artRect.yMm, template.hMm),
-                        width: pct(artRect.wMm, template.wMm),
-                        height: pct(artRect.hMm, template.hMm),
+                        ...rasterCssLayout({ x: artRect.xMm, y: artRect.yMm, w: artRect.wMm, h: artRect.hMm }, template.wMm, template.hMm, viewT.s),
                         opacity: artOpacity,
                       }}
                       data-testid="img-art-overlay"

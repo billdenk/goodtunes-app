@@ -16,7 +16,7 @@ import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
 import type * as pdfjs from 'pdfjs-dist';
 import { zoneColor, shapePath, renderPage, type GtLayer } from './gtOverlayEngine';
 import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, type SideName, type FamilyGroup } from './sidePillGroups';
-import { computeCropCanvasSize } from './cropDimensions';
+import { computeCropCanvasSize, rasterCssLayout } from './cropDimensions';
 import { createFullSharpController } from './fullSharpRender';
 // Bounded-retry hi-DPI crop render (Task #3213) — never strands the viewer on
 // the blurry base raster silently.
@@ -860,13 +860,31 @@ export function TemplateArtViewer({
               transformOrigin: '0 0',
             }}
           >
+            {/* Task #3374 — every RASTER in this frame is laid out via
+                rasterCssLayout: full-size layout box + transform placement, so
+                Chromium's whole-pixel paint snapping can't shift/squeeze the
+                bitmap under the frame's huge crop scale (vector overlays are
+                immune and stay put; the rasters must match them). */}
             {(!art || showTemplate) && (
-              <img src={template.img} alt="Template" className="absolute inset-0 w-full h-full" draggable={false} />
+              <img
+                src={template.img}
+                alt="Template"
+                className="absolute"
+                style={rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s)}
+                draggable={false}
+              />
             )}
             {/* Sharp Full-Template raster (Task #3212): overlays the base render
                 once the zoom-sized re-render lands — crisp 200–400% zoom. */}
             {(!art || showTemplate) && fullImg && viewArea === 'full' && zoom > 1 && (
-              <img src={fullImg} alt="" draggable={false} className="absolute inset-0 w-full h-full pointer-events-none" data-testid="img-full-sharp" />
+              <img
+                src={fullImg}
+                alt=""
+                draggable={false}
+                className="absolute pointer-events-none"
+                style={rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s)}
+                data-testid="img-full-sharp"
+              />
             )}
             {(!art || showTemplate) && cropImg && focus && viewArea !== 'full' && (
               <img
@@ -874,15 +892,10 @@ export function TemplateArtViewer({
                 alt=""
                 draggable={false}
                 className="absolute pointer-events-none"
-                style={{
-                  // Task #3290 — stretch over the EXACT rect the raster covers
-                  // (post canvas-size rounding), so raster and overlay share
-                  // one coordinate frame and cannot diverge.
-                  left: pct(cropImg.rectMm.x, template.wMm),
-                  top: pct(cropImg.rectMm.y, template.hMm),
-                  width: pct(cropImg.rectMm.w, template.wMm),
-                  height: pct(cropImg.rectMm.h, template.hMm),
-                }}
+                // Task #3290 — stretch over the EXACT rect the raster covers
+                // (post canvas-size rounding), so raster and overlay share
+                // one coordinate frame and cannot diverge.
+                style={rasterCssLayout(cropImg.rectMm, template.wMm, template.hMm, viewT.s)}
               />
             )}
             {art && artRect && art.img && (
@@ -892,10 +905,7 @@ export function TemplateArtViewer({
                 draggable={false}
                 className="absolute"
                 style={{
-                  left: pct(artRect.xMm, template.wMm),
-                  top: pct(artRect.yMm, template.hMm),
-                  width: pct(artRect.wMm, template.wMm),
-                  height: pct(artRect.hMm, template.hMm),
+                  ...rasterCssLayout({ x: artRect.xMm, y: artRect.yMm, w: artRect.wMm, h: artRect.hMm }, template.wMm, template.hMm, viewT.s),
                   opacity: artOpacity,
                 }}
                 data-testid="img-art-overlay"
