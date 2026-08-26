@@ -3751,7 +3751,7 @@ export function PressPackageBuilder() {
               <>
                 <StepHeading lead="Pick a jacket." rest="How it&rsquo;s built." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
-                  {jacketOptions.length} styles available from {PARTNER_NAME} for {sizeLabel} records.
+                  {jacketOptions.length} types available from {PARTNER_NAME} for {sizeLabel} records.
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {jacketOptions.map((j) => (
@@ -3799,7 +3799,7 @@ export function PressPackageBuilder() {
               <>
                 <StepHeading lead="Pick an inner sleeve." rest="Printed, unprinted, or polylined." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
-                  {SLEEVE_OPTIONS.length} inner sleeve styles available from {PARTNER_NAME}.
+                  {SLEEVE_OPTIONS.length} inner sleeve types available from {PARTNER_NAME}.
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {SLEEVE_OPTIONS.map((s) => (
@@ -3880,7 +3880,7 @@ export function PressPackageBuilder() {
                 )}
                 <Gate on={canDo('label')}>
                 <section>
-                  <StepHeading lead="Pick a type." rest="Which label style?" />
+                  <StepHeading lead="Pick a type." rest="Which label type?" />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Printed before pressing — the label becomes part of the record.
                   </p>
@@ -3933,8 +3933,8 @@ export function PressPackageBuilder() {
                 <StepHeading lead="Add an insert." rest="Optional — or skip it." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {insertsAvailable
-                    ? `${visibleInserts.length - 1} insert styles available from ${PARTNER_NAME} — or skip it.`
-                    : 'No insert styles press for 7" — this record ships without one.'}
+                    ? `${visibleInserts.length - 1} insert types available from ${PARTNER_NAME} — or skip it.`
+                    : 'No insert types press for 7" — this record ships without one.'}
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {visibleInserts.map((s) => (
@@ -4730,11 +4730,18 @@ export function PressPackageBuilder() {
               ) : (
                 <>
                   <p className="text-[11.5px] text-right" style={{ color: '#a1a1a6' }}>
-                    Packages skip quantity and price — artists pick their quantity later.
+                    {(cardName.trim() || pkgName)
+                      ? 'Packages skip quantity and price — artists pick their quantity later.'
+                      : 'Name your package above — the name is what artists see.'}
                   </p>
+                  {/* Confirm earns its blue (Bill, Aug 26 2026): no name, no save —
+                      quiet outline until the package has a real name. */}
                   <Button
                     className="rounded-full px-7"
-                    style={{ background: BLUE, color: '#fff', height: 44, fontSize: 14.5 }}
+                    disabled={!(cardName.trim() || pkgName)}
+                    style={(cardName.trim() || pkgName)
+                      ? { background: BLUE, color: '#fff', height: 44, fontSize: 14.5 }
+                      : { background: 'transparent', color: '#6e6e73', border: '1px solid #6e6e73', height: 44, fontSize: 14.5, cursor: 'default' }}
                     onClick={finishSave}
                     data-testid="button-save-as-package"
                   >
