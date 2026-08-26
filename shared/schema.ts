@@ -2663,6 +2663,15 @@ export const pressColorTiers = pgTable("press_color_tiers", {
   // SKU snapshots (which resolve by name/id) keep working. Never hard-delete
   // a tier that pressed records reference.
   archivedAt: timestamp("archived_at"),
+  // Task #3394 — canonical spec dictionary. Press-neutral attributes for the
+  // cross-press project import: each press keeps its own tier NAMES, but a
+  // tier can be tagged with a canonical effect family (black / opaque /
+  // translucent / splatter / …) so a project built at Press A can be
+  // re-projected into Press B's vocabulary. Null = fall back to the
+  // name-derivation heuristics in shared/crossPressImport.ts; `confirmed`
+  // marks an operator-reviewed mapping (god-view surface). NEVER carries
+  // pricing.
+  canonicalAttrs: jsonb("canonical_attrs").$type<{ effectFamily?: string; confirmed?: boolean }>(),
   // Task #2998 — optional operator-uploaded preview image for the type tile
   // disc (disc-masked upload). Null = the tile falls back to the type's
   // first color swatch.
@@ -2742,6 +2751,10 @@ export const pressColors = pgTable("press_colors", {
   // archiving a tier cascades onto its colors. Existing SKU snapshots keep
   // resolving archived colors by name.
   archivedAt: timestamp("archived_at"),
+  // Task #3394 — canonical spec dictionary (see press_color_tiers). Colour
+  // family tag (red / blue / clear / multi / …) for cross-press closest-match
+  // ranking. Null = derive from name/hex at read time.
+  canonicalAttrs: jsonb("canonical_attrs").$type<{ colorFamily?: string; confirmed?: boolean }>(),
 });
 export type PressColor = typeof pressColors.$inferSelect;
 
@@ -2764,6 +2777,10 @@ export const pressJackets = pgTable(
     // (back-compat default). A non-null array lists the AlbumFormat keys
     // this jacket is valid for; admin UI filters jacket pickers per-format.
     applicableFormats: jsonb("applicable_formats").$type<string[]>(),
+    // Task #3394 — canonical spec dictionary (see press_color_tiers).
+    // Jacket construction tag (single_pocket / gatefold / …) for
+    // cross-press matching. Null = derive from name at read time.
+    canonicalAttrs: jsonb("canonical_attrs").$type<{ construction?: string; confirmed?: boolean }>(),
   },
   (t) => ({
     pressJacketNameUniq: unique("press_jackets_press_name_uniq").on(t.pressId, t.name),
@@ -5224,6 +5241,14 @@ export const manufacturers = pgTable("manufacturers", {
   // public white-label host branding route are NOT gated by this — those
   // serve fans/recipients, not press users.
   estimatesWhiteLabelEnabled: boolean("estimates_white_label_enabled").notNull().default(false),
+  // Task #3394 — per-press opt-in for the customer-initiated cross-press
+  // project import entry point on this press's white-label client portal.
+  // OFF by default for every press (built and wired, deliberately held —
+  // Bill). When on, a signed-in customer with saved project specs elsewhere
+  // on their account sees a one-time dismissible "start a project here from
+  // your saved specs" prompt. The press itself never learns where specs
+  // came from; flipping this on reveals a surface to the CUSTOMER only.
+  crossPressImportEnabled: boolean("cross_press_import_enabled").notNull().default(false),
   // Typical lead-time the plant quotes for a standard 12" LP press run,
   // in calendar days. Admin-entered; surfaces on the RFQ comparison
   // table so the operator can sort by turnaround. Nullable while the
@@ -6157,6 +6182,26 @@ export const pressEstimates = pgTable("press_estimates", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const mastersReleaseRequests = pgTable("masters_release_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // The SOURCE press (manufacturers.id) — the press being asked to release.
+  pressId: varchar("press_id").notNull(),
+  // customer_users.id (loose FK by house convention).
+  customerUserId: varchar("customer_user_id").notNull(),
+  // Customer-visible label for the project ("Californialand — 12″ LP").
+  projectTitle: text("project_title"),
+  // Opaque pointer to the customer's own record at THIS press
+  // ({kind:"estimate"|"album_sku", id}). Never references another press.
+  sourceRef: jsonb("source_ref").$type<{ kind: string; id: string }>(),
+  note: text("note"),
+  // requested → acknowledged → released | declined (shared/crossPressImport.ts).
+  status: text("status").notNull().default("requested"),
+  // PLACEHOLDER — see header. Null everywhere until Bill rules on charging.
+  releaseFeeCents: integer("release_fee_cents"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  decidedAt: timestamp("decided_at"),
+});
 export const partnerFeedback = pgTable("partner_feedback", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   submitterUserId: varchar("submitter_user_id").notNull(),
@@ -7027,3 +7072,20 @@ export type CheckoutFailureEvent = typeof checkoutFailureEvents.$inferSelect;
 export type InsertPaymentRequest = z.infer<typeof insertPaymentRequestSchema>;
 
 export type PressComponentPriceLink = typeof pressComponentPriceLinks.$inferSelect;
+
+export const crossPressImportDismissals = pgTable(
+  "cross_press_import_dismissals",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    customerUserId: varchar("customer_user_id").notNull(),
+    pressId: varchar("press_id").notNull(),
+    dismissedAt: timestamp("dismissed_at").defaultNow().notNull(),
+  },
+  (t) => ({
+    crossPressDismissUniq: unique("cross_press_import_dismissals_uniq").on(t.customerUserId, t.pressId),
+  }),
+);
+
+export type MastersReleaseRequest = typeof mastersReleaseRequests.$inferSelect;
+
+export type CrossPressImportDismissal = typeof crossPressImportDismissals.$inferSelect;

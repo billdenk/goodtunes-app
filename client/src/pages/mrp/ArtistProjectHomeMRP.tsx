@@ -15,7 +15,7 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { setAuthToken } from '@/lib/queryClient';
+import { setAuthToken, authHeaders } from '@/lib/queryClient';
 import { useLocation } from 'wouter';
 import mrpLogoAsset from './assets/mrp-logo.svg';
 import goodtunesLogo from './assets/goodtunes-logo.png';
@@ -339,6 +339,29 @@ export default function ArtistProjectHomeMRP() {
   const font = "'Poppins', -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif";
 
   const { data: portal } = useQuery<PortalData>({ queryKey: [wlParam('/api/press-client/portal')], retry: false });
+  // Task #3394 — cross-press import entry point (flag-gated per press, OFF
+  // by default). While held, the eligibility endpoint 404s like every other
+  // import route, the query errors quietly, and no card renders — the
+  // feature is invisible. One-time, dismissible; copy never names any other
+  // press ("saved project specs on your account").
+  const { data: importElig } = useQuery<{ enabled: boolean; eligibleCount: number; dismissed: boolean }>({
+    queryKey: [wlParam('/api/press-client/import/eligibility')],
+    retry: false,
+  });
+  const [importCardHidden, setImportCardHidden] = useState(false);
+  const showImportCard =
+    !importCardHidden &&
+    importElig?.enabled === true &&
+    (importElig?.eligibleCount ?? 0) > 0 &&
+    importElig?.dismissed !== true;
+  const dismissImportCard = async () => {
+    setImportCardHidden(true);
+    await fetch(wlParam('/api/press-client/import/dismiss'), {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    }).catch(() => {});
+  };
   const project: PortalEstimate | null = useMemo(() => {
     const list = portal?.estimates ?? [];
     return list.find((e) => e.status === 'Converted') ?? list[0] ?? null;
@@ -442,6 +465,39 @@ export default function ArtistProjectHomeMRP() {
               {qtyLabel && unitLabel ? <> — {qtyLabel} at {unitLabel}</> : null}
               {totalLabel ? <> · {totalLabel}</> : null} · Estimate <span style={{ fontWeight: 600, color: INK }}>{estimateNo}</span>
             </p>
+
+            {/* ── Cross-press import entry (Task #3394, held OFF) ── */}
+            {showImportCard && (
+              <div
+                data-testid="card-import-entry"
+                style={{ marginTop: 22, display: 'flex', alignItems: 'flex-start', gap: 14, border: `1px solid ${HAIRLINE}`, background: CARD_RAISED, padding: '16px 18px' }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>You have saved project specs on your account.</div>
+                  <p style={{ fontSize: 12.5, color: SUBINK, margin: '4px 0 0', lineHeight: 1.55 }}>
+                    Start a project here from them? Your specs carry over — format, color, jacket
+                    and quantity — and you confirm every choice before anything is set.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-testid="button-import-start"
+                  onClick={() => navigate('/projects/import')}
+                  style={{ padding: '8px 16px', borderRadius: 0, border: `1px solid rgba(0,0,0,0.28)`, background: 'transparent', color: INK, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                >
+                  Start from saved specs
+                </button>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  data-testid="button-import-dismiss"
+                  onClick={dismissImportCard}
+                  style={{ width: 26, height: 26, borderRadius: 0, border: 'none', background: 'transparent', color: SUBINK, fontSize: 15, cursor: 'pointer', lineHeight: 1 }}
+                >
+                  &times;
+                </button>
+              </div>
+            )}
 
             {/* ── Albums ── */}
             <section style={{ marginTop: 30 }}>

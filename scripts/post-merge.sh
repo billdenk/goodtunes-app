@@ -13327,3 +13327,82 @@ SQL
 }
 migrate_partner_feedback_highlights dev  "${DATABASE_URL:-}"
 migrate_partner_feedback_highlights prod "${PROD_DATABASE_URL:-}"
+
+# Task #3394 — cross-press project import (wired, held OFF). Canonical spec
+# dictionary columns on the press catalog tables (press-neutral attribute
+# tags beside per-press names, NEVER pricing), the per-press opt-in flag
+# (default false — Bill wants this built but held), the customer masters-
+# release request table (NO destination column by design — the source press
+# sees only an inbound request from its own customer; release_fee_cents is
+# a clearly-marked placeholder, unread until Bill rules on charging), and
+# the per-(customer,press) one-time entry-point dismissal table. Idempotent,
+# dev + prod, per the schema-drift conventions.
+migrate_cross_press_import_task_3394() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping cross-press import migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE press_color_tiers ADD COLUMN IF NOT EXISTS canonical_attrs jsonb;
+ALTER TABLE press_colors      ADD COLUMN IF NOT EXISTS canonical_attrs jsonb;
+ALTER TABLE press_jackets     ADD COLUMN IF NOT EXISTS canonical_attrs jsonb;
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS cross_press_import_enabled boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS masters_release_requests (
+  id               varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id         varchar NOT NULL,
+  customer_user_id varchar NOT NULL,
+  project_title    text,
+  source_ref       jsonb,
+  note             text,
+  status           text NOT NULL DEFAULT 'requested',
+  release_fee_cents integer,
+  created_at       timestamp NOT NULL DEFAULT now(),
+  updated_at       timestamp NOT NULL DEFAULT now(),
+  decided_at       timestamp
+);
+CREATE INDEX IF NOT EXISTS masters_release_requests_press_idx
+  ON masters_release_requests (press_id, status);
+CREATE INDEX IF NOT EXISTS masters_release_requests_customer_idx
+  ON masters_release_requests (customer_user_id);
+CREATE TABLE IF NOT EXISTS cross_press_import_dismissals (
+  id               varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_user_id varchar NOT NULL,
+  press_id         varchar NOT NULL,
+  dismissed_at     timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT cross_press_import_dismissals_uniq UNIQUE (customer_user_id, press_id)
+);
+COMMIT;
+SQL
+  then
+    echo "post-merge: cross-press import migration ok on $label"
+  else
+    echo "post-merge: WARNING — cross-press import migration failed on $label (continuing)"
+  fi
+}
+migrate_cross_press_import_task_3394 dev  "${DATABASE_URL:-}"
+migrate_cross_press_import_task_3394 prod "${PROD_DATABASE_URL:-}"
+
+# Task #3394 — seed canonical spec tags for the currently onboarded presses'
+# vinyl catalogs (fills ONLY NULL canonical_attrs with name-derived values;
+# operator-confirmed rows are never touched). Idempotent by construction —
+# safe to run every merge; long-tail cleanup is operator work in god-view.
+seed_canonical_spec_tags_task_3394() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping canonical spec tag seed on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/seed-canonical-spec-tags.ts 2>&1); then
+    echo "post-merge: canonical spec tag seed ok on $label"
+    echo "$out" | tail -3
+  else
+    echo "post-merge: WARNING — canonical spec tag seed failed on $label (continuing)"
+    echo "$out" | tail -5
+  fi
+}
+seed_canonical_spec_tags_task_3394 dev  "${DATABASE_URL:-}"
+seed_canonical_spec_tags_task_3394 prod "${PROD_DATABASE_URL:-}"

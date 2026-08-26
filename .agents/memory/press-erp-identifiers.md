@@ -1,13 +1,10 @@
 ---
 name: Press ERP identifiers + customer profile
-description: Boundaries for press-ERP reference fields on pressing orders and the press-scoped customer profile — generic fields with per-press labels, operator-only classification.
+description: Boundaries for press-ERP reference fields on pressing orders and the press-scoped customer profile.
 ---
 
-**The rule:** order↔ERP matching fields are press-GENERIC columns with per-press display labels (resolved via `shared/pressErp.ts`) — never press-specific columns. The press assigns the numbers out-of-band, so blank is normal and operators may enter them in ANY status.
+# Press ERP identifiers + customer profile — boundaries
 
-**Why:** every white-label press runs a different ERP (MRP→Coda, Hellbender→Odoo, Viryl/PMP→spreadsheets); improvements must land for all presses at once, with only labels/values varying.
-
-**How to apply:**
-- Any surface showing these numbers must resolve labels per-press: snapshot pressId first, else the album's `album_skus.press_id`, else generic defaults (older order snapshots have a null pressId — the fallback is what makes labels work for them).
-- The press customer profile (category/tier/terms) is INTERNAL ops data — how the press's own ERP classifies us. Operator-only (super_admin): a press must never read/write its own classification of GoodTunes from our side.
-- Category/tier stay loose short strings seeded with one press's vocabulary — don't tighten to enums, another press's scheme must fit without schema change.
+- **ERP reference fields are press-GENERIC columns with per-press display labels, never press-specific columns.** Every white-label press runs a different ERP; improvements must land for all presses at once with only labels/values varying. Resolve labels per-press (snapshot press first, album's press as fallback, generic defaults last). Presses assign these numbers out-of-band, so blank is normal and operators may enter them at ANY status.
+- **The press customer profile (category/tier/payment terms) is internal ops data — how the press's ERP classifies us.** Operator-only (super_admin): a press must never read or write its own classification of GoodTunes from our side.
+- **Keep classification fields loose text seeded with vocabulary, not enums**, so another press's scheme fits without schema change.

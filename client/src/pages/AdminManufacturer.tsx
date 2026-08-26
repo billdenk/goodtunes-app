@@ -760,6 +760,7 @@ export function AdminManufacturer() {
             />
 
             {isSuperAdmin && <PressUnveilCard m={m} onSave={(patch) => save.mutate(patch)} saving={save.isPending} />}
+            {isSuperAdmin && <CrossPressImportCard m={m} onSave={(patch) => save.mutate(patch)} saving={save.isPending} />}
 
             {isSuperAdmin && <PressAutoTriggerConsentPanel m={m} />}
 
@@ -961,10 +962,47 @@ function PressUnveilCard({
   );
 }
 
-// Task #2670 — unified fulfillment destination picker reused on
-// PartnerProfileForm (press default) and, via export, on AdminAlbum
-// split rows. Loads from /api/fulfillment-destinations which merges
-// partners + self-fulfilling presses + ad-hoc custom addresses.
+function CrossPressImportCard({
+  m,
+  onSave,
+  saving,
+}: {
+  m: Manufacturer;
+  onSave: (patch: Partial<Manufacturer>) => void;
+  saving: boolean;
+}) {
+  const enabled = (m as any).crossPressImportEnabled === true;
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-semibold text-slate-900">Cross-press project import</div>
+          <p className="mt-1 text-sm text-slate-500 max-w-xl">
+            Held OFF platform-wide for now. On = signed-in customers of this press who have
+            saved project specs elsewhere on their account see a one-time &ldquo;start a project
+            here from your saved specs&rdquo; prompt on this press's portal. Specs only — no
+            pricing ever travels, and no press is named to anyone.
+          </p>
+          <p className="mt-2">
+            <a
+              className="text-sm text-blue-600 hover:underline"
+              href={`/admin/manufacturers/${m.id}/spec-mappings`}
+              data-testid="link-spec-mappings"
+            >
+              Review canonical spec mappings
+            </a>
+          </p>
+        </div>
+        <Switch
+          checked={enabled}
+          disabled={saving}
+          onCheckedChange={(next) => onSave({ crossPressImportEnabled: next } as Partial<Manufacturer>)}
+          data-testid="switch-cross-press-import"
+        />
+      </div>
+    </div>
+  );
+}
 interface UnifiedFulfillmentDest {
   id: string;
   kind: "partner" | "manufacturer" | "custom";

@@ -42,6 +42,7 @@ import { stripAppleMusicBoilerplate } from "@shared/appleMusicBio";
 import { computeQuotePendingIds, invalidQuoteBuilderState, computeQuoteEmailBreakdown } from "@shared/quotePricing";
 import { registerPressTemplateFlowRoutes } from "./pressTemplatesPortal";
 import { registerPressComponentRoutes } from "./pressComponents";
+import { registerCrossPressImportRoutes } from "./crossPressImport";
 import {
   isValidWhitelabelSlug,
   whitelabelOriginForSlug,
@@ -990,6 +991,12 @@ export function registerPressPortalRoutes(
   // Press Components (Ruby handoff) — Vinyl / Center Labels / Stickers /
   // component Pricing setup surfaces, in their own module.
   registerPressComponentRoutes(app, requireAdmin, requirePressScope, requirePressEditor);
+
+  // Task #3394 — cross-press project import (wired, held OFF behind
+  // manufacturers.cross_press_import_enabled + a compile-time flag for the
+  // GoodTunes "My projects" view). Customer-initiated only; specs travel,
+  // never commerce; no signal ever reaches the source press.
+  registerCrossPressImportRoutes(app, requireAdmin, requirePressScope);
 
   // GET /api/press/:id/me — header payload (name + logo + is_maker flag).
   app.get("/api/press/:id/me", requireAdmin, requirePressScope, async (req, res) => {

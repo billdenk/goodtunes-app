@@ -30,6 +30,8 @@ export const RESERVED_SLUGS: ReadonlySet<string> = new Set([
   "next-steps",
   "dashboard",
   "projects",
+  // Task #3394 — GoodTunes cross-press "My projects" view (flag-gated, OFF).
+  "my-projects",
   ".well-known",
   // auth + account routes
   "login",

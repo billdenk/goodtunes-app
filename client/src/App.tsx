@@ -118,6 +118,11 @@ import ArtistDashboardMRP from "@/pages/mrp/ArtistDashboardMRP";
 import ArtistDashboardNextStepsMRP from "@/pages/mrp/ArtistDashboardNextStepsMRP";
 import ArtistProjectHomeMRP from "@/pages/mrp/ArtistProjectHomeMRP";
 import MrpSkinGate from "@/pages/mrp/MrpSkinGate";
+// Task #3394 — cross-press project import (wired, held OFF).
+import PressClientImportMRP from "@/pages/mrp/PressClientImportMRP";
+import MyProjects from "@/pages/MyProjects";
+import AdminPressSpecMappings from "@/pages/AdminPressSpecMappings";
+import { CROSS_PRESS_MY_PROJECTS_ENABLED } from "@shared/crossPressImport";
 import JoinReferralLink from "@/pages/JoinReferralLink";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
@@ -907,9 +912,27 @@ function Router() {
             <MrpSkinGate><ArtistDashboardMRP /></MrpSkinGate>
           </Route>
         )}
+        {/* Task #3394 — cross-press import wizard. White-label hosts only,
+            registered ABOVE /projects; the entry point itself only renders
+            when the press's cross_press_import_enabled flag is ON (held
+            OFF platform-wide — the API answers 404 while held). */}
+        {onWhitelabelHost() && (
+          <Route path="/projects/import">
+            <MrpSkinGate><PressClientImportMRP /></MrpSkinGate>
+          </Route>
+        )}
         {onWhitelabelHost() && (
           <Route path="/projects">
             <MrpSkinGate><ArtistProjectHomeMRP /></MrpSkinGate>
+          </Route>
+        )}
+        {/* Task #3394 — GoodTunes-side cross-press "My projects" view.
+            Compile-time flag is FALSE (held): the route never registers,
+            so no new surface exists anywhere. When it flips on it still
+            must never render on white-label hosts. */}
+        {CROSS_PRESS_MY_PROJECTS_ENABLED && !onWhitelabelHost() && (
+          <Route path="/my-projects">
+            <ProtectedRoute component={MyProjects} />
           </Route>
         )}
         {/* Task #49 — Shopify redemption landing. Public; the page itself
@@ -1194,6 +1217,11 @@ function Router() {
         </Route>
         <Route path="/admin/managers">
           <ProtectedRoute component={AdminManagers} />
+        </Route>
+        {/* Task #3394 — canonical spec mapping review (cross-press import).
+            Registered above the :id route so the extra segment resolves. */}
+        <Route path="/admin/manufacturers/:id/spec-mappings">
+          <ProtectedRoute component={AdminPressSpecMappings} />
         </Route>
         <Route path="/admin/manufacturers/:id">
           <ProtectedRoute component={AdminManufacturer} />

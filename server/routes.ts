@@ -20280,6 +20280,23 @@ export async function registerRoutes(
       }
       u.estimatesWhiteLabelEnabled = Boolean(b.estimatesWhiteLabelEnabled);
     }
+    // Task #3394 — per-press opt-in for the customer cross-press import
+    // entry point. Same staff-only rule as the unveil flag above: a press
+    // must never self-toggle it, and it defaults OFF everywhere (built and
+    // wired, deliberately held — Bill).
+    if (b.crossPressImportEnabled !== undefined) {
+      const callerId =
+        (req.session?.userId as string | undefined) ??
+        ((req as any).adminUserId as string | undefined);
+      const roleRow = callerId
+        ? await db.execute<any>(sql`SELECT role FROM users WHERE id = ${callerId} LIMIT 1`)
+        : null;
+      const callerRole = roleRow ? ((roleRow as any).rows ?? [])[0]?.role : null;
+      if (callerRole !== "super_admin" && callerRole !== "admin") {
+        return res.status(403).json({ message: "Only GoodTunes staff can change feature unveiling." });
+      }
+      u.crossPressImportEnabled = Boolean(b.crossPressImportEnabled);
+    }
     // Task #3254 — same publish-on-save ACL handling as the press-portal
     // profile PATCH: any `/objects/uploads/...` image URL being persisted
     // must be publicly readable BEFORE we store it, or god-view Details
