@@ -489,6 +489,12 @@ export type PressPrintRules = {
   minPpi?: number | null;
   /** Second PPI floor for 1-bit / bitmap / line-art images. */
   minPpiBitmap?: number | null;
+  /** Task #3388 — minimum live-text point size. Unset = no check at all
+   * (no invented default; the press supplies the real threshold). */
+  minTextPointSize?: number | null;
+  /** Task #3388 — when true, below-minimum text FAILS instead of warning.
+   * Default (absent/false) keeps the check advisory/warn-only. */
+  minTextPointSizeBlocking?: boolean | null;
   /** This piece must be grayscale-only (B/W-required piece). */
   grayscaleRequired?: boolean | null;
   /** Spot colors must be official Pantone (PANTONE/PMS-named) inks. */
@@ -984,6 +990,8 @@ export function sanitizePrintRules(raw: unknown): PressPrintRules | null {
     safetyMarginInches: num(r.safetyMarginInches),
     minPpi: num(r.minPpi),
     minPpiBitmap: num(r.minPpiBitmap),
+    minTextPointSize: num(r.minTextPointSize),
+    minTextPointSizeBlocking: bool(r.minTextPointSizeBlocking),
     grayscaleRequired: bool(r.grayscaleRequired),
     pantoneOnly: bool(r.pantoneOnly),
     placedImageRule: str(r.placedImageRule),

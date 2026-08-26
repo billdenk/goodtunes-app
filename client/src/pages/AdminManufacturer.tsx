@@ -3745,6 +3745,10 @@ type PressPrintRulesDraftShape = {
   safetyMarginInches?: number | null;
   minPpi?: number | null;
   minPpiBitmap?: number | null;
+  // Task #3388 — minimum live-text point size (blank = no check at all);
+  // blocking flips the below-minimum verdict from warn to fail.
+  minTextPointSize?: number | null;
+  minTextPointSizeBlocking?: boolean | null;
   grayscaleRequired?: boolean | null;
   pantoneOnly?: boolean | null;
   placedImageRule?: string | null;
@@ -3880,6 +3884,8 @@ export function PressPrintRulesCard({ pressId }: { pressId: string }) {
   const [safety, setSafety] = useState("");
   const [minPpi, setMinPpi] = useState("");
   const [bitmapPpi, setBitmapPpi] = useState("");
+  const [minText, setMinText] = useState("");
+  const [minTextBlocking, setMinTextBlocking] = useState(false);
   const [grayscale, setGrayscale] = useState(false);
   const [pantone, setPantone] = useState(false);
   const [placedRule, setPlacedRule] = useState("");
@@ -3900,6 +3906,8 @@ export function PressPrintRulesCard({ pressId }: { pressId: string }) {
     setSafety(numOrEmpty(rules?.safetyMarginInches));
     setMinPpi(numOrEmpty(rules?.minPpi));
     setBitmapPpi(numOrEmpty(rules?.minPpiBitmap));
+    setMinText(numOrEmpty(rules?.minTextPointSize));
+    setMinTextBlocking(!!rules?.minTextPointSizeBlocking);
     setGrayscale(!!rules?.grayscaleRequired);
     setPantone(!!rules?.pantoneOnly);
     setPlacedRule(rules?.placedImageRule ?? "");
@@ -3926,6 +3934,9 @@ export function PressPrintRulesCard({ pressId }: { pressId: string }) {
       safetyMarginInches: num(safety),
       minPpi: num(minPpi) != null ? Math.round(num(minPpi)!) : null,
       minPpiBitmap: num(bitmapPpi) != null ? Math.round(num(bitmapPpi)!) : null,
+      minTextPointSize: num(minText),
+      // Only meaningful alongside a threshold — never saved on its own.
+      minTextPointSizeBlocking: num(minText) != null && minTextBlocking ? true : null,
       grayscaleRequired: grayscale || null,
       pantoneOnly: pantone || null,
       placedImageRule: placedRule.trim() || null,
@@ -3937,7 +3948,7 @@ export function PressPrintRulesCard({ pressId }: { pressId: string }) {
       preflightProfileUrl: a.preflightProfileUrl,
       preflightProfileName: a.preflightProfileName,
     };
-    const bad = [body.bleedMinInches, body.bleedRecommendedInches, body.safetyMarginInches, body.minPpi, body.minPpiBitmap].some(
+    const bad = [body.bleedMinInches, body.bleedRecommendedInches, body.safetyMarginInches, body.minPpi, body.minPpiBitmap, body.minTextPointSize].some(
       (n) => n != null && !Number.isFinite(n),
     );
     if (bad) {
@@ -4054,12 +4065,13 @@ export function PressPrintRulesCard({ pressId }: { pressId: string }) {
         rows in the product specs above can override any value per piece.
       </p>
 
-      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-6">
         <input value={bleedMin} onChange={(e) => setBleedMin(e.target.value)} inputMode="decimal" placeholder="Bleed min (in)" title="Minimum bleed beyond the trim line, inches — fails below this." className={INPUT} disabled={busy} data-testid="input-print-bleed-min" />
         <input value={bleedRec} onChange={(e) => setBleedRec(e.target.value)} inputMode="decimal" placeholder="Bleed rec (in)" title="Recommended bleed, inches — warns below this." className={INPUT} disabled={busy} data-testid="input-print-bleed-rec" />
         <input value={safety} onChange={(e) => setSafety(e.target.value)} inputMode="decimal" placeholder="Safety (in)" title="Safety margin from the cut line, inches — advisory only." className={INPUT} disabled={busy} data-testid="input-print-safety" />
         <input value={minPpi} onChange={(e) => setMinPpi(e.target.value)} inputMode="numeric" placeholder="Min PPI" title="PPI floor for standard placed images (component Min PPI wins when both are set)." className={INPUT} disabled={busy} data-testid="input-print-min-ppi" />
         <input value={bitmapPpi} onChange={(e) => setBitmapPpi(e.target.value)} inputMode="numeric" placeholder="Bitmap PPI" title="Second PPI floor for 1-bit / bitmap / line-art images." className={INPUT} disabled={busy} data-testid="input-print-bitmap-ppi" />
+        <input value={minText} onChange={(e) => setMinText(e.target.value)} inputMode="decimal" placeholder="Min text (pt)" title="Minimum live-text point size. Blank = no check (Gavin supplies the threshold). Warn-only unless the blocking box is ticked." className={INPUT} disabled={busy} data-testid="input-print-min-text" />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
         <label className="flex items-center gap-1.5 text-xs text-slate-600">
@@ -4071,6 +4083,16 @@ export function PressPrintRulesCard({ pressId }: { pressId: string }) {
             data-testid="checkbox-print-grayscale"
           />
           Grayscale required for B/W pieces
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-slate-600">
+          <input
+            type="checkbox"
+            checked={minTextBlocking}
+            onChange={(e) => setMinTextBlocking(e.target.checked)}
+            disabled={busy || minText.trim() === ""}
+            data-testid="checkbox-print-min-text-blocking"
+          />
+          Below-minimum text blocks (off = warn-only)
         </label>
         <label className="flex items-center gap-1.5 text-xs text-slate-600">
           <input
@@ -4590,6 +4612,8 @@ function TemplateComponentRow({
   const [bleedRecDraft, setBleedRecDraft] = useState(numOrEmpty(pr?.bleedRecommendedInches));
   const [safetyDraft, setSafetyDraft] = useState(numOrEmpty(pr?.safetyMarginInches));
   const [bitmapPpiDraft, setBitmapPpiDraft] = useState(numOrEmpty(pr?.minPpiBitmap));
+  const [minTextDraft, setMinTextDraft] = useState(numOrEmpty(pr?.minTextPointSize));
+  const [minTextBlockingDraft, setMinTextBlockingDraft] = useState(!!pr?.minTextPointSizeBlocking);
   const [grayscaleDraft, setGrayscaleDraft] = useState(!!pr?.grayscaleRequired);
   const [pantoneDraft, setPantoneDraft] = useState(!!pr?.pantoneOnly);
   const [placedRuleDraft, setPlacedRuleDraft] = useState(pr?.placedImageRule ?? "");
@@ -4606,6 +4630,8 @@ function TemplateComponentRow({
     setBleedRecDraft(numOrEmpty(rules?.bleedRecommendedInches));
     setSafetyDraft(numOrEmpty(rules?.safetyMarginInches));
     setBitmapPpiDraft(numOrEmpty(rules?.minPpiBitmap));
+    setMinTextDraft(numOrEmpty(rules?.minTextPointSize));
+    setMinTextBlockingDraft(!!rules?.minTextPointSizeBlocking);
     setGrayscaleDraft(!!rules?.grayscaleRequired);
     setPantoneDraft(!!rules?.pantoneOnly);
     setPlacedRuleDraft(rules?.placedImageRule ?? "");
@@ -4624,6 +4650,8 @@ function TemplateComponentRow({
     bleedRecDraft !== numOrEmpty(pr?.bleedRecommendedInches) ||
     safetyDraft !== numOrEmpty(pr?.safetyMarginInches) ||
     bitmapPpiDraft !== numOrEmpty(pr?.minPpiBitmap) ||
+    minTextDraft !== numOrEmpty(pr?.minTextPointSize) ||
+    minTextBlockingDraft !== !!pr?.minTextPointSizeBlocking ||
     grayscaleDraft !== !!pr?.grayscaleRequired ||
     pantoneDraft !== !!pr?.pantoneOnly ||
     placedRuleDraft !== (pr?.placedImageRule ?? "") ||
@@ -4639,7 +4667,8 @@ function TemplateComponentRow({
     const bleedRec = bleedRecDraft.trim() === "" ? null : Number(bleedRecDraft);
     const safety = safetyDraft.trim() === "" ? null : Number(safetyDraft);
     const bitmapPpi = bitmapPpiDraft.trim() === "" ? null : Number(bitmapPpiDraft);
-    const nums = [w, h, pages, minPpi, bleedLine, bleedMin, bleedRec, safety, bitmapPpi];
+    const minText = minTextDraft.trim() === "" ? null : Number(minTextDraft);
+    const nums = [w, h, pages, minPpi, bleedLine, bleedMin, bleedRec, safety, bitmapPpi, minText];
     if (nums.some((n) => n != null && !Number.isFinite(n))) {
       toast({ title: "Enter valid numbers for the check dimensions.", variant: "destructive" });
       return;
@@ -4670,6 +4699,8 @@ function TemplateComponentRow({
       bleedRecommendedInches: bleedRec,
       safetyMarginInches: safety,
       minPpiBitmap: bitmapPpi != null ? Math.round(bitmapPpi) : null,
+      minTextPointSize: minText,
+      minTextPointSizeBlocking: minText != null && minTextBlockingDraft ? true : null,
       grayscaleRequired: grayscaleDraft || null,
       pantoneOnly: pantoneDraft || null,
       placedImageRule: placedRuleDraft.trim() || null,
@@ -5038,6 +5069,16 @@ function TemplateComponentRow({
             disabled={busy}
             data-testid={`input-template-bitmap-ppi-${label.toLowerCase().replace(/\s+/g, "-")}`}
           />
+          <input
+            value={minTextDraft}
+            onChange={(e) => setMinTextDraft(e.target.value)}
+            inputMode="decimal"
+            placeholder="Min text (pt)"
+            title="Minimum live-text point size for this piece (blank = inherit the press default; no value anywhere = no check)."
+            className={INPUT}
+            disabled={busy}
+            data-testid={`input-template-min-text-${label.toLowerCase().replace(/\s+/g, "-")}`}
+          />
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-4">
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
@@ -5049,6 +5090,16 @@ function TemplateComponentRow({
               data-testid={`checkbox-template-grayscale-${label.toLowerCase().replace(/\s+/g, "-")}`}
             />
             Grayscale required (B/W piece)
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              checked={minTextBlockingDraft}
+              onChange={(e) => setMinTextBlockingDraft(e.target.checked)}
+              disabled={busy || minTextDraft.trim() === ""}
+              data-testid={`checkbox-template-min-text-blocking-${label.toLowerCase().replace(/\s+/g, "-")}`}
+            />
+            Below-minimum text blocks
           </label>
           <label className="flex items-center gap-1.5 text-xs text-slate-600">
             <input

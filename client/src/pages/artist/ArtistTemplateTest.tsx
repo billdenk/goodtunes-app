@@ -58,7 +58,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { queryClient, apiRequest } from '@/lib/queryClient';
-import { uploadAdminDocWithProgress } from '@/lib/adminUpload';
+import { uploadAdminDocWithProgress, FONT_UPLOAD_ACCEPT } from '@/lib/adminUpload';
 import { loadPdfjs, renderPage, extractGtLayers, isGtEligibleLayer } from '@/pages/press-templates/gtOverlayEngine';
 import { TemplateArtViewer, type ViewerTemplate, type ViewerArt } from '@/pages/press-templates/TemplateArtViewer';
 import { useToast } from '@/hooks/use-toast';
@@ -264,6 +264,46 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
     }
   };
 
+  // Task #3388 — font upload slot: when the fonts check fails (live text
+  // with no embedded font program), the artist can attach the font files
+  // alongside the art instead of re-exporting. Stored on the component row,
+  // surfaced to operators/prepress next to the art.
+  const [fontBusy, setFontBusy] = useState(false);
+  const attachFonts = async (list: FileList | File[] | null | undefined) => {
+    const files = Array.from(list ?? []);
+    if (files.length === 0 || fontBusy) return;
+    setFontBusy(true);
+    try {
+      const uploaded: { url: string; fileName: string }[] = [];
+      for (const f of files) {
+        const url = await uploadAdminDocWithProgress(f, () => {}, { private: true });
+        uploaded.push({ url, fileName: f.name });
+      }
+      const r = await apiRequest('POST', `/api/admin/albums/${albumId}/completed-template/fonts`, {
+        componentId,
+        files: uploaded,
+      });
+      queryClient.setQueryData(['/api/admin/albums', albumId, 'completed-template'], await r.json());
+      toast({ title: 'Fonts attached', description: `${uploaded.length === 1 ? 'The font file is' : `${uploaded.length} font files are`} stored with this art for the prepress team.` });
+    } catch (e: any) {
+      toast({ title: "Couldn't attach the fonts", description: e?.message, variant: 'destructive' });
+    } finally {
+      setFontBusy(false);
+    }
+  };
+  const removeFont = async (url: string) => {
+    if (fontBusy) return;
+    setFontBusy(true);
+    try {
+      const r = await apiRequest('POST', `/api/admin/albums/${albumId}/completed-template/fonts/remove`, { componentId, url });
+      queryClient.setQueryData(['/api/admin/albums', albumId, 'completed-template'], await r.json());
+    } catch (e: any) {
+      toast({ title: "Couldn't remove the font", description: e?.message, variant: 'destructive' });
+    } finally {
+      setFontBusy(false);
+    }
+  };
+
   // Item 3 — production lock, derived server-side from the press-download
   // audit trail (never client-claimed).
   const lock: LockState = scan.data?.locks?.[componentId] ?? { locked: false, pressName: null, downloadedAt: null };
@@ -460,6 +500,11 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
     detail: c.message,
   }));
   const allPass = CHECKS.length > 0 && CHECKS.every((r) => r.tone === 'pass' || r.word === 'Advisory');
+
+  // Task #3388 — the missing-font prompt shows whenever the fonts check
+  // flagged live, non-embedded type (or fonts are already attached).
+  const fontsFailed = (component?.checks ?? []).some((c) => c.key === 'tmpl.fonts' && c.status === 'fail');
+  const fontFiles = component?.fontFiles ?? [];
 
   // Loading / error / unknown-slot states are explicit. A KNOWN slot with no
   // upload yet renders the full page in its "Pending — not tested yet" state
@@ -734,6 +779,60 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             }}
           />
 
+        {/* Task #3388 — missing-font prompt + upload slot. Shown when the
+            fonts check flagged live, non-embedded type (or fonts are already
+            attached). Fonts are additive — the production lock never blocks
+            them. Explicitly no auto outline conversion. */}
+        {(fontsFailed || fontFiles.length > 0) && (
+          <div className="rounded-2xl" style={{ marginTop: 12, padding: '16px 20px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="font-files-card">
+            <div className="text-sm font-semibold" style={{ color: t.ink }}>Fonts for this piece</div>
+            {fontsFailed && (
+              <p className="text-xs" style={{ marginTop: 4, color: t.subink, lineHeight: 1.5 }}>
+                This file has live text whose fonts aren&rsquo;t embedded. Either outline the type in your
+                design app and re-upload the art, or upload the font files here (OTF/TTF) so the prepress
+                team can install them.
+              </p>
+            )}
+            {fontFiles.length > 0 && (
+              <ul style={{ marginTop: 10 }} data-testid="font-files-list">
+                {fontFiles.map((f, i) => (
+                  <li key={f.url} className="flex items-center gap-3" style={{ padding: '8px 0', borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }} data-testid={`font-file-row-${i}`}>
+                    <span className="min-w-0 flex-1 truncate text-sm" style={{ color: t.ink }}>{f.fileName ?? f.url.split('/').pop()}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeFont(f.url)}
+                      disabled={fontBusy}
+                      className="text-xs font-medium transition-opacity hover:opacity-80"
+                      style={{ color: t.subink }}
+                      data-testid={`button-remove-font-${i}`}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <input
+              type="file"
+              multiple
+              accept={FONT_UPLOAD_ACCEPT}
+              className="hidden"
+              id="font-upload-input"
+              onChange={(e) => { void attachFonts(e.target.files); e.target.value = ''; }}
+              data-testid="input-font-files"
+            />
+            <label
+              htmlFor="font-upload-input"
+              className="inline-flex items-center gap-1.5 rounded-full text-sm font-medium cursor-pointer transition-opacity hover:opacity-80"
+              style={{ marginTop: 12, padding: '7px 14px', border: `1px solid ${t.hairline}`, color: t.subink, opacity: fontBusy ? 0.5 : undefined, pointerEvents: fontBusy ? 'none' : undefined }}
+              data-testid="button-upload-fonts"
+            >
+              <UploadCloud className="w-4 h-4 flex-shrink-0" aria-hidden />
+              {fontBusy ? 'Uploading\u2026' : fontFiles.length > 0 ? 'Add more font files' : 'Upload font files'}
+            </label>
+          </div>
+        )}
+
         {/* File history is no longer a standing card — it's revealed from the
             toolbar History icon in the viewer toolbar (Ruby's Aug 18 handoff). */}
 
@@ -773,7 +872,7 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             )}
             <span className="text-[13px]" style={{ color: t.faint }}>{TEMPLATE.certifiedDate}</span>
           </div>
-          <p className="text-[12.5px]" style={{ marginTop: 6, color: t.faint }}>
+          <p className="text-xs" style={{ marginTop: 6, color: t.faint }}>
             {TEMPLATE.size ? <>{TEMPLATE.size} &middot; </> : null}{TEMPLATE.uploaded}{TEMPLATE.artFilename ? <> &middot; art: {TEMPLATE.artFilename}</> : null}
           </p>
         </div>
@@ -935,7 +1034,7 @@ function UploadCard({
           ? <CheckCircle2 className="w-5 h-5 flex-shrink-0" style={{ color: t.ready }} aria-hidden />
           : <MinusCircle className="w-5 h-5 flex-shrink-0" style={{ color: t.faint }} aria-hidden />}
         <span className="min-w-0 flex-1">
-          <span className="text-[14px] font-semibold" style={{ color: t.ink }}>
+          <span className="text-sm font-semibold" style={{ color: t.ink }}>
             {allPass ? 'Pass! All measured checks passed ' : 'Checks need attention '}
           </span>
           <span className="text-[13px]" style={{ color: t.subink }}>{passed} of {rows.length} passed</span>
@@ -971,7 +1070,7 @@ function UploadCard({
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ padding: '14px 20px', borderTop: `1px solid ${t.hairline}` }} data-testid="locked-banner">
               <div className="flex items-start gap-2.5 min-w-0">
                 <Lock className="w-4 h-4 flex-shrink-0" style={{ color: t.subink, marginTop: 1 }} aria-hidden />
-                <p className="text-[12.5px]" style={{ color: t.subink, lineHeight: 1.5 }}>
+                <p className="text-xs" style={{ color: t.subink, lineHeight: 1.5 }}>
                   <span className="font-semibold" style={{ color: t.ink }}>Locked for production</span>
                   {' \u2014 '}{lock.pressName ?? 'The press'} downloaded this file {fmtWhen(lock.downloadedAt)}. Ask them to unlock it if you need to replace it.
                 </p>
@@ -1635,7 +1734,7 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
           <div className="text-[15px] font-semibold" style={{ marginTop: 12, color: t.ink, letterSpacing: '-0.01em' }}>
             Looks right. Not yet measured.
           </div>
-          <p className="text-[12.5px]" style={{ marginTop: 4, color: t.subink, maxWidth: 560, lineHeight: 1.55 }}>
+          <p className="text-xs" style={{ marginTop: 4, color: t.subink, maxWidth: 560, lineHeight: 1.55 }}>
             Measured checks run on a single print-ready template file. Your panels are seated visually &mdash; the press will run the full check when your proof is made.
           </p>
           <div className="text-[12.5px]" style={{ marginTop: 12, color: t.faint, lineHeight: 1.55 }}>
@@ -1661,7 +1760,7 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
               <span className="flex-shrink-0 rounded-full" style={{ width: 18, height: 18, border: `2px solid ${t.dot}` }} aria-hidden />
             )}
             <div className="min-w-0 flex-1">
-              <div className="text-[14px] font-semibold" style={{ color: t.ink }}>
+              <div className="text-sm font-semibold" style={{ color: t.ink }}>
                 {anyPanelArt ? 'Art started \u2014 some panels still pending' : 'Pending \u2014 no art uploaded yet'}
               </div>
               <div className="text-[12.5px]" style={{ marginTop: 2, color: t.faint }}>{specLine}</div>
@@ -1705,7 +1804,7 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
             </>
           )}
         </div>
-        <p className="text-[12.5px]" style={{ marginTop: 6, color: t.faint }}>
+        <p className="text-xs" style={{ marginTop: 6, color: t.faint }}>
           {templateName} &middot; {panelComplete ? 'panels seated \u2014 measured checks run on one template file' : 'drop art to run the measured checks'}
         </p>
       </div>

@@ -5146,6 +5146,13 @@ export async function registerRoutes(
     // Press label-logo dropzone is SVG-only (recolorable vector marks).
     // Admin-bearer-gated route, same trust level as the other doc types.
     "image/svg+xml": ".svg",
+    // Task #3388 — font files uploaded alongside art submissions (missing-
+    // font prompt): stored with the art for the prepress team.
+    "font/otf": ".otf",
+    "font/ttf": ".ttf",
+    "font/collection": ".ttc",
+    "font/woff": ".woff",
+    "font/woff2": ".woff2",
   };
   const DOC_MIME_BY_EXT: Record<string, string> = {
     ".pdf": "application/pdf",
@@ -5165,7 +5172,7 @@ export async function registerRoutes(
       if (!(contentType in DOC_MIME_TO_EXT)) {
         return res
           .status(400)
-          .json({ message: "Only PDF, AI/EPS, ZIP, PNG, JPEG, TIFF, or PSD files are allowed" });
+          .json({ message: "Only PDF, AI/EPS, ZIP, PNG, JPEG, TIFF, PSD, or font (OTF/TTF/WOFF) files are allowed" });
       }
       const id = `${randomUUID()}${DOC_MIME_TO_EXT[contentType]}`;
       const { bucketName, objectName } = uploadDestination(id);
@@ -5214,7 +5221,12 @@ export async function registerRoutes(
           console.warn(`[upload-doc/finalize] setMetadata failed for ${finalPath}`, e);
         }
       }
-      await setObjectAclPolicy(file, { owner: "admin", visibility: "public" });
+      // Task #3388 — font files attached to an art submission are customer
+      // assets (often licensed binaries), so the uploader can ask for a
+      // PRIVATE object: never readable at its raw /objects URL, served only
+      // through the authed, album-scoped font-file download route.
+      const wantsPrivate = req.body?.private === true;
+      await setObjectAclPolicy(file, { owner: "admin", visibility: wantsPrivate ? "private" : "public" });
       return res.json({ url: finalPath });
     } catch (err) {
       if (err instanceof ObjectNotFoundError) {
@@ -35998,6 +36010,13 @@ export async function registerRoutes(
       // acknowledgment of an Unverified result (the file may have changed).
       unverifiedAck: null,
     };
+    // Task #3388 — font files uploaded alongside the art survive a re-check
+    // (the component object is rebuilt from scratch here; the fonts belong
+    // to the submission, not to one check run).
+    const priorComponent = ((ctx.row?.components ?? []) as CompletedTemplateComponent[]).find(
+      (c) => c.componentId === component.componentId,
+    );
+    if (priorComponent?.fontFiles?.length) component.fontFiles = priorComponent.fontFiles;
     const merged = ((ctx.row?.components ?? []) as CompletedTemplateComponent[]).filter(
       (c) => c.componentId !== component.componentId,
     );
@@ -36152,6 +36171,142 @@ export async function registerRoutes(
     res.json(await completedTemplatePayload(req.params.id));
   });
 
+  // Task #3388 — attach font files to an art submission (the "outline or
+  // upload fonts" prompt when live text uses non-embedded fonts). Fonts are
+  // stored on the component row alongside the art and survive re-checks;
+  // same access as the check itself (operator, the album's press, or the
+  // album's own partners). Files must already live in OUR object storage
+  // (uploaded via the doc-upload flow) — never an external URL.
+  app.post("/api/admin/albums/:id/completed-template/fonts", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const body = z
+      .object({
+        componentId: z.string().trim().min(1),
+        files: z
+          .array(
+            z.object({
+              url: z.string().trim().regex(/^\/objects\/uploads\/[a-zA-Z0-9._-]+$/, "Font files must be uploaded, not linked"),
+              fileName: z.string().trim().max(300).nullable().optional(),
+            }),
+          )
+          .min(1)
+          .max(12),
+      })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: body.error.message });
+    const ctx = await resolveCompletedContext(req.params.id);
+    if (!ctx || !ctx.row) return res.status(404).json({ message: "Upload the art file first — fonts attach to a checked file." });
+    const components = (ctx.row.components ?? []) as CompletedTemplateComponent[];
+    const target = components.find((c) => c.componentId === body.data.componentId);
+    if (!target) return res.status(404).json({ message: "Upload the art file first — fonts attach to a checked file." });
+    // Font binaries are customer assets (often licensed), so before
+    // persisting a reference: (a) the object must actually exist and carry a
+    // font (or zipped-fonts) extension — no smuggling an arbitrary upload in
+    // as a "font"; (b) it is forced PRIVATE, so its raw /objects URL never
+    // serves. Reads go through the authed font-file download route only.
+    const FONT_FILE_EXT_RE = /\.(otf|ttf|ttc|woff2?|zip)$/i;
+    for (const f of body.data.files) {
+      if (!FONT_FILE_EXT_RE.test(f.url)) {
+        return res.status(400).json({ message: "Fonts must be OTF, TTF, TTC, WOFF/WOFF2 files, or a ZIP of font files." });
+      }
+      try {
+        const file = await objectStorage.getObjectEntityFile(f.url);
+        await setObjectAclPolicy(file, { owner: "admin", visibility: "private" });
+      } catch (e) {
+        if (e instanceof ObjectNotFoundError) {
+          return res.status(400).json({ message: "One of the font uploads didn't finish — try attaching it again." });
+        }
+        throw e;
+      }
+    }
+    const existing = target.fontFiles ?? [];
+    const now = new Date().toISOString();
+    const merged = [...existing];
+    for (const f of body.data.files) {
+      if (merged.some((e) => e.url === f.url)) continue; // dedupe by object
+      merged.push({ url: f.url, fileName: f.fileName ?? null, uploadedAt: now });
+    }
+    if (merged.length > 12) {
+      return res.status(400).json({ message: "Up to 12 font files per piece — remove one before adding more." });
+    }
+    target.fontFiles = merged;
+    const { vendorId, config } = ctx;
+    const required = await resolveRequired(vendorId, config);
+    const { components: retagged, status } = retagCompleted(components, required.map((r) => r.id));
+    await storage.saveCompletedTemplateCheck({ albumId: req.params.id, vendorId, config, components: retagged, status });
+    res.json(await completedTemplatePayload(req.params.id));
+  });
+
+  // Task #3388 — detach a font file from an art submission (same access as
+  // attaching; the fonts belong to the submission's uploader flow).
+  app.post("/api/admin/albums/:id/completed-template/fonts/remove", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const body = z
+      .object({ componentId: z.string().trim().min(1), url: z.string().trim().min(1) })
+      .safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: body.error.message });
+    const ctx = await resolveCompletedContext(req.params.id);
+    if (!ctx || !ctx.row) return res.status(404).json({ message: "Nothing to remove." });
+    const components = (ctx.row.components ?? []) as CompletedTemplateComponent[];
+    const target = components.find((c) => c.componentId === body.data.componentId);
+    if (!target) return res.status(404).json({ message: "Nothing to remove." });
+    target.fontFiles = (target.fontFiles ?? []).filter((f) => f.url !== body.data.url);
+    if (target.fontFiles.length === 0) target.fontFiles = null;
+    const { vendorId, config } = ctx;
+    const required = await resolveRequired(vendorId, config);
+    const { components: retagged, status } = retagCompleted(components, required.map((r) => r.id));
+    await storage.saveCompletedTemplateCheck({ albumId: req.params.id, vendorId, config, components: retagged, status });
+    res.json(await completedTemplatePayload(req.params.id));
+  });
+
+  // Task #3388 — authed download for an attached font file. Fonts are stored
+  // PRIVATE (their raw /objects URL 404s), so the only read path is this
+  // route, gated exactly like the art file itself (operator, the album's
+  // press, or the album's own partners). Streams the bytes directly — a
+  // redirect to the private object would 404 at the /objects gate.
+  app.get("/api/admin/albums/:id/completed-template/font-file/:componentId/:index", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
+    const componentId = decodeURIComponent(req.params.componentId);
+    const idx = Number.parseInt(req.params.index, 10);
+    const ctx = await resolveCompletedContext(req.params.id);
+    const component = ((ctx?.row?.components ?? []) as CompletedTemplateComponent[]).find(
+      (c) => c.componentId === componentId,
+    );
+    const entry = Number.isInteger(idx) && idx >= 0 ? (component?.fontFiles ?? [])[idx] : undefined;
+    if (!entry) return res.status(404).json({ message: "No font file at that slot." });
+    try {
+      const file = await objectStorage.getObjectEntityFile(entry.url);
+      const [meta] = await file.getMetadata();
+      const FONT_CT_BY_EXT: Record<string, string> = {
+        ".otf": "font/otf",
+        ".ttf": "font/ttf",
+        ".ttc": "font/collection",
+        ".woff": "font/woff",
+        ".woff2": "font/woff2",
+        ".zip": "application/zip",
+      };
+      const extMatch = entry.url.toLowerCase().match(/\.[a-z0-9]+$/);
+      const contentType = (extMatch && FONT_CT_BY_EXT[extMatch[0]]) || String(meta.contentType || "application/octet-stream");
+      const safeName = (entry.fileName ?? entry.url.split("/").pop() ?? "font").replace(/[^\w. ()\[\]-]+/g, "_");
+      res.setHeader("Content-Type", contentType);
+      if (meta.size) res.setHeader("Content-Length", String(meta.size));
+      res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+      res.setHeader("Cache-Control", "private, max-age=0, no-store");
+      file.createReadStream()
+        .on("error", (e) => {
+          console.error("[completed-art] font-file stream failed", e);
+          if (!res.headersSent) res.status(500).json({ message: "Could not read the font file." });
+          else res.destroy();
+        })
+        .pipe(res);
+    } catch (e) {
+      if (e instanceof ObjectNotFoundError) {
+        return res.status(404).json({ message: "That font file is no longer in storage." });
+      }
+      throw e;
+    }
+  });
+
   // Task #3030 — operator acknowledgment of an UNVERIFIED bleed result
   // (measured against the file's own PDF bleed box because no certified
   // template line exists). Stamps who + when onto the component; the
@@ -36249,6 +36404,9 @@ export async function registerRoutes(
         safetyMarginInches: z.number().min(0).max(2).nullable().optional(),
         minPpi: z.number().int().min(72).max(4800).nullable().optional(),
         minPpiBitmap: z.number().int().min(72).max(4800).nullable().optional(),
+        // Task #3388 — per-component minimum live-text point size override.
+        minTextPointSize: z.number().min(1).max(72).nullable().optional(),
+        minTextPointSizeBlocking: z.boolean().nullable().optional(),
         grayscaleRequired: z.boolean().nullable().optional(),
         pantoneOnly: z.boolean().nullable().optional(),
         placedImageRule: z.string().trim().max(300).nullable().optional(),
@@ -36270,6 +36428,10 @@ export async function registerRoutes(
       safetyMarginInches: z.number().min(0).max(2).nullable().optional(),
       minPpi: z.number().int().min(72).max(4800).nullable().optional(),
       minPpiBitmap: z.number().int().min(72).max(4800).nullable().optional(),
+      // Task #3388 — press-level minimum live-text point size (unset = no
+      // check; the check stays advisory unless the blocking flag is set).
+      minTextPointSize: z.number().min(1).max(72).nullable().optional(),
+      minTextPointSizeBlocking: z.boolean().nullable().optional(),
       grayscaleRequired: z.boolean().nullable().optional(),
       pantoneOnly: z.boolean().nullable().optional(),
       placedImageRule: z.string().trim().max(300).nullable().optional(),

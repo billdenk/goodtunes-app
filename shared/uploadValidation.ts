@@ -132,6 +132,22 @@ export type CompletedTemplateComponent = {
    * check against a (possibly changed) file resets this to null.
    */
   unverifiedAck?: UnverifiedAck | null;
+  /**
+   * Task #3388 — font files uploaded alongside the art when live text uses
+   * fonts that aren't embedded (the "outline or upload fonts" prompt).
+   * Stored with the submission and surfaced to operators/prepress next to
+   * the art. Survives re-checks; cleared only by explicit removal.
+   */
+  fontFiles?: CompletedFontFile[] | null;
+};
+
+/** Task #3388 — a font file attached to an art submission. */
+export type CompletedFontFile = {
+  /** Our own /objects/uploads/… path (uploaded via the doc-upload flow). */
+  url: string;
+  fileName: string | null;
+  /** ISO timestamp of the attach. */
+  uploadedAt: string;
 };
 
 /** Task #3030 — who acknowledged an Unverified result, and when. */

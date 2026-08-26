@@ -105,9 +105,32 @@ const DOC_CONTENT_TYPES: Record<string, string> = {
   // any surface). Some OSes leave file.type empty for .svg — the ext
   // fallback below covers that.
   svg: "image/svg+xml",
+  // Task #3388 — font files uploaded alongside art submissions (missing-
+  // font prompt). Browsers report wildly inconsistent MIME types for fonts
+  // (often empty or "application/x-font-ttf"), so the extension map is the
+  // source of truth (`docContentType` prefers it below).
+  otf: "font/otf",
+  ttf: "font/ttf",
+  ttc: "font/collection",
+  woff: "font/woff",
+  woff2: "font/woff2",
 };
 
 export const DOC_UPLOAD_ACCEPT = ".pdf,.zip,.ai,.png,.jpg,.jpeg,.tif,.tiff";
+// Task #3388 — the font-upload slot on art submissions (ZIP for foundry
+// bundles).
+export const FONT_UPLOAD_ACCEPT = ".otf,.ttf,.ttc,.woff,.woff2,.zip";
+
+// The extension map wins over the browser-reported MIME type (curated and
+// matched to the server's whitelist; browsers misreport fonts and leave
+// file.type empty for several of these). Falls back to file.type so a
+// correctly-typed file with an unusual name still uploads.
+function docContentType(file: File): string | undefined {
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  const mapped = DOC_CONTENT_TYPES[ext];
+  if (mapped) return mapped;
+  return file.type && Object.values(DOC_CONTENT_TYPES).includes(file.type) ? file.type : undefined;
+}
 
 // Task #3184 — progress-reporting variant of `uploadAdminDoc` for surfaces
 // that show the Apple-canon thin determinate bar while the bytes stream up
@@ -142,15 +165,18 @@ const UPLOAD_STEP_TIMEOUT_MS = 30_000;
 export async function uploadAdminDocWithProgress(
   file: File,
   onProgress: (fraction: number) => void,
+  // Task #3388 — font files attached to an art submission finalize as
+  // PRIVATE objects (raw /objects URL never serves; reads go through the
+  // authed album-scoped download route).
+  opts?: { private?: boolean },
 ): Promise<string> {
   const token = getAuthToken();
   if (!token) {
     throw new Error("Sign out and back in — your session token is missing.");
   }
-  const ext = (file.name.split(".").pop() || "").toLowerCase();
-  const contentType = file.type || DOC_CONTENT_TYPES[ext];
-  if (!contentType || !Object.values(DOC_CONTENT_TYPES).includes(contentType)) {
-    throw new Error("Use a PDF, AI/EPS, ZIP, PNG, JPEG, or TIFF file.");
+  const contentType = docContentType(file);
+  if (!contentType) {
+    throw new Error("Use a PDF, AI/EPS, ZIP, PNG, JPEG, TIFF, or font (OTF/TTF/WOFF) file.");
   }
 
   let signRes: Response;
@@ -204,7 +230,7 @@ export async function uploadAdminDocWithProgress(
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
       credentials: "include",
-      body: JSON.stringify({ finalPath }),
+      body: JSON.stringify({ finalPath, ...(opts?.private ? { private: true } : {}) }),
     },
     UPLOAD_STEP_TIMEOUT_MS,
     "finishing the upload",
@@ -224,10 +250,9 @@ export async function uploadAdminDoc(file: File): Promise<string> {
   if (!token) {
     throw new Error("Sign out and back in — your session token is missing.");
   }
-  const ext = (file.name.split(".").pop() || "").toLowerCase();
-  const contentType = file.type || DOC_CONTENT_TYPES[ext];
-  if (!contentType || !Object.values(DOC_CONTENT_TYPES).includes(contentType)) {
-    throw new Error("Use a PDF, AI/EPS, ZIP, PNG, JPEG, or TIFF file.");
+  const contentType = docContentType(file);
+  if (!contentType) {
+    throw new Error("Use a PDF, AI/EPS, ZIP, PNG, JPEG, TIFF, or font (OTF/TTF/WOFF) file.");
   }
 
   let signRes: Response;

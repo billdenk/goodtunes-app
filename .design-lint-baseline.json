@@ -21507,11 +21507,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 6, color: t.faint }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<p className=\"text-[13px]\" style={{ marginTop: 20, color: t.faint }} data-testid=\"template-loading\">"
   },
   {
@@ -21552,11 +21547,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<span className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<span className=\"text-[13px]\" style={{ color: t.subink }}>{passed} of {rows.length} passed</span>"
   },
   {
@@ -21573,11 +21563,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<div className=\"text-[12.5px]\" style={{ marginTop: 2, color: t.subink }}>{r.detail}</div>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<p className=\"text-[12.5px]\" style={{ color: t.subink, lineHeight: 1.5 }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -21772,17 +21757,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 4, color: t.subink, maxWidth: 560, lineHeight: 1.55 }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
     "snippet": "<div className=\"text-[12.5px]\" style={{ marginTop: 12, color: t.faint, lineHeight: 1.55 }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/artist/ArtistTemplateTest.tsx",
-    "snippet": "<div className=\"text-[14px] font-semibold\" style={{ color: t.ink }}>"
   },
   {
     "rule": "hardcoded-font-size",

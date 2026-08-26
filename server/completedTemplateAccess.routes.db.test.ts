@@ -530,6 +530,64 @@ test("stale backfill write never clobbers a concurrent re-check/replace", async 
   assert.equal(jacket2.fullPreviewWMm, 320);
 });
 
+// ─── Task #3388 — attached font files are PRIVATE customer assets ────────
+// Raw /objects URLs never serve them (the /objects gate 404s non-public
+// ACLs); the only read path is the authed album-scoped font-file route,
+// gated like the art file (operator / own press / own partners). The attach
+// route must refuse non-font uploads and dangling object references.
+
+test("fonts attach: non-font extension 400, dangling object 400, cross-press 403, anon 401", async () => {
+  await seedJacket("/objects/uploads/t3388-art.pdf");
+
+  const notFont = await req("POST", `${getPath(albumId)}/fonts`, adminToken, {
+    componentId: "jacket",
+    files: [{ url: "/objects/uploads/t3388-not-a-font.pdf", fileName: "sneaky.pdf" }],
+  });
+  assert.equal(notFont.status, 400, "a non-font extension must be refused");
+
+  // A well-formed font URL whose object never finished uploading: the
+  // existence + private-ACL enforcement runs before anything persists.
+  const dangling = await req("POST", `${getPath(albumId)}/fonts`, adminToken, {
+    componentId: "jacket",
+    files: [{ url: `/objects/uploads/t3388-missing-${randomUUID()}.otf`, fileName: "Ghost.otf" }],
+  });
+  assert.equal(dangling.status, 400, "a dangling object reference must be refused");
+
+  const cross = await req("POST", `${getPath(albumId)}/fonts`, otherPressToken, {
+    componentId: "jacket",
+    files: [{ url: "/objects/uploads/t3388-a.otf", fileName: "A.otf" }],
+  });
+  assert.equal(cross.status, 403, "cross-press font attach must fail");
+
+  const anon = await req("POST", `${getPath(albumId)}/fonts`, null, {
+    componentId: "jacket",
+    files: [{ url: "/objects/uploads/t3388-a.otf", fileName: "A.otf" }],
+  });
+  assert.equal(anon.status, 401);
+});
+
+test("font-file download: authed route only — cross-press 403, anon 401, bad slot 404, gone object 404", async () => {
+  await seedJacket("/objects/uploads/t3388-art.pdf", {
+    fontFiles: [
+      { url: `/objects/uploads/t3388-gone-${randomUUID()}.otf`, fileName: "Gone.otf", uploadedAt: new Date().toISOString() },
+    ],
+  });
+
+  const cross = await req("GET", `${getPath(albumId)}/font-file/jacket/0`, otherPressToken);
+  assert.equal(cross.status, 403, "cross-press font download must fail");
+
+  const anon = await req("GET", `${getPath(albumId)}/font-file/jacket/0`, null);
+  assert.equal(anon.status, 401);
+
+  const badSlot = await req("GET", `${getPath(albumId)}/font-file/jacket/7`, adminToken);
+  assert.equal(badSlot.status, 404, "no font at that index → 404");
+
+  // Entry exists on the row but the object is gone from storage → honest 404
+  // (proves the route resolves through storage, never redirects to a raw URL).
+  const gone = await req("GET", `${getPath(albumId)}/font-file/jacket/0`, adminToken);
+  assert.equal(gone.status, 404, "missing object → 404, not a redirect");
+});
+
 after(async () => {
   for (const id of created.specs) await exec(sql`DELETE FROM press_template_specs WHERE id = ${id}`);
   for (const id of created.skus) await exec(sql`DELETE FROM album_skus WHERE id = ${id}`);

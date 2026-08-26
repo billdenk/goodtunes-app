@@ -11,6 +11,7 @@ import {
   contentBleedFromRaster,
   type ContentBleedMeasurement,
 } from "./completedTemplate";
+import { validateArt } from "./preflight";
 import {
   requiredFinishedComponents,
   resolveFinishedComponents,
@@ -1645,5 +1646,238 @@ describe("Task #3097 — CTM composition (PDF cm semantics)", () => {
     assert.ok(Math.abs(g.cut!.left - 221.3 / 72) < 0.01, `cut.left ${g.cut!.left}`);
     assert.ok(Math.abs(g.cut!.top - (1377.04 - 1155.8) / 72) < 0.01, `cut.top ${g.cut!.top}`);
     assert.ok(Math.abs(g.safety!.left - 230.4 / 72) < 0.01, `safety.left ${g.safety!.left}`);
+  });
+});
+
+// ─── Task #3388 — missing-font names + minimum text point size ────────────
+
+describe("Task #3388 — font-name extraction", () => {
+  test("scanner collects decoded /BaseFont names, subset prefixes stripped", () => {
+    const buf = Buffer.from(
+      "%PDF-1.6\n/Type /Page /MediaBox [ 0 0 918 918 ]\n/DeviceCMYK\n" +
+        "/Type /Font /BaseFont /ABCDEF+Futura#20Bold\n" +
+        "/Type /Font /BaseFont /Helvetica\n%%EOF",
+      "latin1",
+    );
+    const scan = scanBuffer(buf);
+    assert.deepEqual(scan.fontNames, ["Futura Bold", "Helvetica"]);
+  });
+
+  test("fonts fail names the missing fonts and prompts outline-or-upload", () => {
+    const buf = Buffer.from(
+      "%PDF-1.6\n/Type /Page /MediaBox [ 0 0 1962 1944 ]\n/DeviceCMYK\n" +
+        "/Type /Font /BaseFont /ABCDEF+Futura#20Bold\n%%EOF",
+      "latin1",
+    );
+    const c = find(validateCompletedComponent(scanBuffer(buf), SPECS["jacket"]), "tmpl.fonts");
+    assert.equal(c.status, "fail");
+    assert.match(c.message, /Futura Bold/);
+    assert.match(c.message, /[Oo]utline the type/);
+    assert.match(c.message, /upload the font files/);
+  });
+
+  // Realistic mixed-font fixture: BOTH fonts have FontDescriptor dicts as
+  // adjacent numbered objects — only GoodFont's carries /FontFile2. The
+  // per-font association must NOT credit GoodFont's embedded program to the
+  // neighbouring BadFont descriptor, in either object order.
+  const mixedPdf = (embeddedFirst: boolean) => {
+    const good =
+      "5 0 obj\n<< /Type /FontDescriptor /FontName /ABCDEF+GoodFont /Flags 4 /FontFile2 9 0 R >>\nendobj\n";
+    const bad =
+      "6 0 obj\n<< /Type /FontDescriptor /FontName /BadFont /Flags 4 >>\nendobj\n";
+    return Buffer.from(
+      "%PDF-1.6\n/Type /Page /MediaBox [ 0 0 1962 1944 ]\n/DeviceCMYK\n" +
+        "3 0 obj\n<< /Type /Font /BaseFont /ABCDEF+GoodFont /FontDescriptor 5 0 R >>\nendobj\n" +
+        "4 0 obj\n<< /Type /Font /BaseFont /BadFont /FontDescriptor 6 0 R >>\nendobj\n" +
+        (embeddedFirst ? good + bad : bad + good) +
+        "%%EOF",
+      "latin1",
+    );
+  };
+
+  for (const embeddedFirst of [true, false]) {
+    test(`MIXED file (embedded descriptor ${embeddedFirst ? "before" : "after"} the unembedded one) fails naming only the missing font`, () => {
+      const scan = scanBuffer(mixedPdf(embeddedFirst));
+      assert.equal(scan.hasEmbeddedFonts, true);
+      assert.deepEqual(scan.unembeddedFontNames, ["BadFont"]);
+      const c = find(validateCompletedComponent(scan, SPECS["jacket"]), "tmpl.fonts");
+      assert.equal(c.status, "fail");
+      assert.match(c.message, /BadFont/);
+      assert.doesNotMatch(c.message, /GoodFont/);
+      assert.doesNotMatch(c.message, /fonts are embedded/);
+    });
+  }
+
+  test("adjacent descriptors WITHOUT object headers still associate per-descriptor", () => {
+    // Header-less token soup: the /Type /FontDescriptor boundary alone must
+    // keep BadFont's segment from reaching back into GoodFont's dict.
+    const buf = Buffer.from(
+      "%PDF-1.6\n/Type /Page /MediaBox [ 0 0 1962 1944 ]\n/DeviceCMYK\n" +
+        "/Type /Font /BaseFont /ABCDEF+GoodFont\n" +
+        "/Type /Font /BaseFont /BadFont\n" +
+        "/Type /FontDescriptor /FontName /ABCDEF+GoodFont /FontFile2 9 0 R\n" +
+        "/Type /FontDescriptor /FontName /BadFont /Flags 4\n%%EOF",
+      "latin1",
+    );
+    const scan = scanBuffer(buf);
+    assert.deepEqual(scan.unembeddedFontNames, ["BadFont"]);
+  });
+
+  test("generic art preflight (validateArt) fails a MIXED file naming only the missing font", () => {
+    const checks = validateArt(mixedPdf(true), {
+      vendorId: "generic",
+      templateId: "12_single_jacket",
+      fileName: "jacket.pdf",
+    });
+    const c = checks.find((x) => x.key === "art.fonts")!;
+    assert.equal(c.status, "fail");
+    assert.match(c.message, /BadFont/);
+    assert.doesNotMatch(c.message, /GoodFont/);
+    assert.match(c.message, /upload the font files/);
+  });
+
+  test("generic art preflight passes when every font is embedded (association present)", () => {
+    const buf = Buffer.from(
+      "%PDF-1.6\n/Type /Page /MediaBox [ 0 0 1962 1944 ]\n/DeviceCMYK\n" +
+        "3 0 obj\n<< /Type /Font /BaseFont /ABCDEF+GoodFont /FontDescriptor 5 0 R >>\nendobj\n" +
+        "5 0 obj\n<< /Type /FontDescriptor /FontName /ABCDEF+GoodFont /FontFile2 9 0 R >>\nendobj\n%%EOF",
+      "latin1",
+    );
+    const checks = validateArt(buf, {
+      vendorId: "generic",
+      templateId: "12_single_jacket",
+      fileName: "jacket.pdf",
+    });
+    assert.equal(checks.find((x) => x.key === "art.fonts")!.status, "pass");
+  });
+
+  test("all fonts embedded WITH per-font association stays a warn (outline reminder)", () => {
+    const buf = Buffer.from(
+      "%PDF-1.6\n/Type /Page /MediaBox [ 0 0 1962 1944 ]\n/DeviceCMYK\n" +
+        "/Type /Font /BaseFont /ABCDEF+GoodFont\n" +
+        "/Type /FontDescriptor /FontName /ABCDEF+GoodFont /FontFile2 9 0 R\n%%EOF",
+      "latin1",
+    );
+    const scan = scanBuffer(buf);
+    assert.deepEqual(scan.unembeddedFontNames, []);
+    const c = find(validateCompletedComponent(scan, SPECS["jacket"]), "tmpl.fonts");
+    assert.equal(c.status, "warn");
+  });
+
+  test("fallback: /FontFile present but no readable /FontName keeps legacy behavior", () => {
+    // Descriptors compressed away (no association possible) must NOT start
+    // false-failing files that previously passed on the file-wide boolean.
+    const scan = scanBuffer(fakePdf({ pages: 1, wIn: 27.25, hIn: 27.0, color: "cmyk", fonts: "embedded" }));
+    assert.deepEqual(scan.unembeddedFontNames, []);
+    const c = find(validateCompletedComponent(scan, SPECS["jacket"]), "tmpl.fonts");
+    assert.equal(c.status, "warn");
+  });
+
+  test("legacy scans without fontNames still produce the fail (no names part)", () => {
+    const scan = scanBuffer(fakePdf({ pages: 1, wIn: 27.25, hIn: 27.0, color: "cmyk", fonts: "live-unembedded" }));
+    delete (scan as any).fontNames; // simulate a stored pre-#3388 scan
+    const c = find(validateCompletedComponent(scan, SPECS["jacket"]), "tmpl.fonts");
+    assert.equal(c.status, "fail");
+    assert.doesNotMatch(c.message, /Missing font/);
+  });
+});
+
+describe("Task #3388 — minTextSizePt measurement", () => {
+  const textPdf = (ops: string) =>
+    scanBuffer(
+      Buffer.from(
+        "%PDF-1.6\n/Type /Page /MediaBox [ 0 0 918 918 ]\n/DeviceCMYK\n" +
+          "/Type /Font /BaseFont /Helvetica\n" +
+          `<< /Length ${ops.length} >>\nstream\n${ops}\nendstream\n%%EOF`,
+        "latin1",
+      ),
+    );
+
+  test("plain Tf size", () => {
+    const scan = textPdf("BT /F1 12 Tf (Hi) Tj ET");
+    assert.ok(scan.minTextSizePt != null && Math.abs(scan.minTextSizePt - 12) < 0.01);
+  });
+
+  test("Illustrator 1-pt Tf scaled by Tm", () => {
+    const scan = textPdf("BT /F1 1 Tf 8 0 0 8 100 100 Tm (x) Tj ET");
+    assert.ok(scan.minTextSizePt != null && Math.abs(scan.minTextSizePt - 8) < 0.01);
+  });
+
+  test("cm scaling composes with the text matrix", () => {
+    const scan = textPdf("q 0.5 0 0 0.5 0 0 cm BT /F1 12 Tf (x) Tj ET Q");
+    assert.ok(scan.minTextSizePt != null && Math.abs(scan.minTextSizePt - 6) < 0.01);
+  });
+
+  test("keeps the smallest across multiple shows", () => {
+    const scan = textPdf("BT /F1 12 Tf (a) Tj /F1 5.5 Tf (b) Tj ET");
+    assert.ok(scan.minTextSizePt != null && Math.abs(scan.minTextSizePt - 5.5) < 0.01);
+  });
+
+  test("invisible text (Tr 3) is ignored → null", () => {
+    const scan = textPdf("BT 3 Tr /F1 12 Tf (x) Tj ET");
+    assert.equal(scan.minTextSizePt, null);
+  });
+});
+
+describe("Task #3388 — tmpl.text_size check gating", () => {
+  // NOTE: the content stream comes BEFORE the font dict — a stream window
+  // that recently saw /FontFile2 is (correctly) classified as a font
+  // program and skipped by the content-stream capture.
+  const textPdfBuf = (ops: string, fonts: boolean) =>
+    Buffer.from(
+      "%PDF-1.6\n/Type /Page /MediaBox [ 0 0 1962 1944 ]\n/DeviceCMYK\n" +
+        (ops ? `<< /Length ${ops.length} >>\nstream\n${ops}\nendstream\n` : "") +
+        (fonts ? "/Type /Font /BaseFont /Helvetica /FontFile2 9\n" : "") +
+        "%%EOF",
+      "latin1",
+    );
+  const specWith = (extra: Record<string, unknown>) =>
+    ({ ...SPECS["jacket"], printRules: { ...extra }, pressName: "MRP" }) as any;
+
+  test("no threshold configured ⇒ no tmpl.text_size row (byte-identical)", () => {
+    const scan = scanBuffer(textPdfBuf("BT /F1 4 Tf (x) Tj ET", true));
+    const withRules = validateCompletedComponent(scan, { ...SPECS["jacket"], printRules: {} } as any);
+    assert.equal(find(withRules, "tmpl.text_size"), undefined);
+    // Baseline spec (no printRules at all) is identical too.
+    const baseline = validateCompletedComponent(scan, SPECS["jacket"]);
+    assert.deepEqual(withRules, baseline);
+  });
+
+  test("meets the floor ⇒ pass with the estimate", () => {
+    const scan = scanBuffer(textPdfBuf("BT /F1 8 Tf (x) Tj ET", true));
+    const c = find(validateCompletedComponent(scan, specWith({ minTextPointSize: 6 })), "tmpl.text_size");
+    assert.equal(c.status, "pass");
+    assert.match(c.message, /≈8 pt/);
+  });
+
+  test("below the floor ⇒ warn by default (advisory-first)", () => {
+    const scan = scanBuffer(textPdfBuf("BT /F1 4 Tf (x) Tj ET", true));
+    const c = find(validateCompletedComponent(scan, specWith({ minTextPointSize: 6 })), "tmpl.text_size");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /advisory for now/);
+  });
+
+  test("below the floor + blocking flag ⇒ fail", () => {
+    const scan = scanBuffer(textPdfBuf("BT /F1 4 Tf (x) Tj ET", true));
+    const c = find(
+      validateCompletedComponent(scan, specWith({ minTextPointSize: 6, minTextPointSizeBlocking: true })),
+      "tmpl.text_size",
+    );
+    assert.equal(c.status, "fail");
+  });
+
+  test("live text present but unmeasurable ⇒ honest warn", () => {
+    const scan = scanBuffer(textPdfBuf("", true)); // font dicts, no content stream
+    const c = find(validateCompletedComponent(scan, specWith({ minTextPointSize: 6 })), "tmpl.text_size");
+    assert.equal(c.status, "warn");
+    assert.match(c.message, /couldn't be measured/);
+  });
+
+  test("outlined type (no font dicts) ⇒ advisory pass", () => {
+    const scan = scanBuffer(textPdfBuf("", false));
+    const c = find(validateCompletedComponent(scan, specWith({ minTextPointSize: 6 })), "tmpl.text_size");
+    assert.equal(c.status, "pass");
+    assert.equal(c.tier, "advisory");
+    assert.match(c.message, /outlined type isn't measured/i);
   });
 });

@@ -73,6 +73,30 @@ export type CompletedPdfScan = {
   hasFontDicts: boolean;
   /** Embedded font program present (/FontFile, /FontFile2, /FontFile3). */
   hasEmbeddedFonts: boolean;
+  /**
+   * Task #3388 — decoded `/BaseFont` names (unique, capped, subset prefixes
+   * like `ABCDEF+` stripped). When live text has NO embedded font program,
+   * these are the fonts the prepress team is missing — named in the failure
+   * copy so the customer knows exactly what to outline or upload.
+   */
+  fontNames: string[];
+  /**
+   * Task #3388 — base-font names with NO matching embedded font program
+   * (per-font association via FontDescriptor /FontName ↔ /FontFile
+   * proximity). Empty when everything is embedded OR when no per-font
+   * association could be made (descriptors compressed away) — in that
+   * fallback the file-wide `hasEmbeddedFonts` boolean governs, as before.
+   */
+  unembeddedFontNames: string[];
+  /**
+   * Task #3388 — smallest effective live-text size (points) measured from
+   * decoded content streams: `Tf` size scaled through the text matrix (`Tm`)
+   * and CTM (`q`/`cm`). Null when no text-showing operator could be measured
+   * (outlined type, encrypted/exotic streams, invisible-text-only). Best
+   * effort — Form-XObject placement scaling isn't threaded, so treat as an
+   * estimate, never a hard measurement.
+   */
+  minTextSizePt: number | null;
   /** A dieline / template / "do not print" token appears anywhere. */
   hasDieline: boolean;
   /**
@@ -152,6 +176,80 @@ const MAX_IMAGE_DIMS = 2000;
 // [/Separation /Name /AltSpace ...] array form.
 const SEPARATION_NAME_RE = /\/Separation\s*\/([^\s/\[\]<>()]+)/g;
 const MAX_SPOT_NAMES = 60;
+// Task #3388 — /BaseFont name collection (missing-font enumeration).
+const BASEFONT_NAME_RE = /\/BaseFont\s*\/([^\s/\[\]<>()]+)/g;
+const MAX_FONT_NAMES = 40;
+// Task #3388 — per-font embedding association. A font's embedded program
+// (/FontFile, /FontFile2, /FontFile3) lives in its FontDescriptor dict next
+// to /FontName; a /FontName with a /FontFile token nearby is an EMBEDDED
+// font. Radius must stay < CARRY so a descriptor straddling a window
+// boundary is fully present in the carried overlap.
+const FONTNAME_NAME_RE = /\/FontName\s*\/([^\s/\[\]<>()]+)/g;
+const FONT_DESC_RADIUS = 900;
+const FONTFILE_RE = /\/FontFile[23]?\b/;
+
+/** Normalize a raw PDF font name token: decode #xx escapes, strip the
+ * six-letter subset prefix ("ABCDEF+Helvetica" → "Helvetica"). */
+export function normalizeFontName(raw: string): string {
+  return decodePdfName(raw).replace(/^[A-Z]{6}\+/, "").trim();
+}
+
+// Structural boundaries that end one FontDescriptor's territory and start
+// the next: object headers/footers, another descriptor's /Type, another
+// /FontName. Bounding each /FontName's /FontFile search by the NEAREST
+// boundary on each side keeps an adjacent descriptor's embedded program
+// from being credited to the wrong font (adjacent dicts in either order).
+const FONT_SEG_BOUNDARY_RE = /\d+\s+\d+\s+obj\b|\bendobj\b|\/Type\s*\/FontDescriptor\b|\/FontName\b/g;
+
+/** Collect the normalized /FontName values whose OWN FontDescriptor dict
+ * carries a /FontFile token (= fonts with an embedded program). Shared by
+ * the streaming completed-art scanner and the generic art preflight. */
+export function collectEmbeddedFontNames(s: string, into: Set<string>, commit = Infinity): void {
+  // Precompute boundary positions once per window.
+  const bounds: number[] = [];
+  FONT_SEG_BOUNDARY_RE.lastIndex = 0;
+  let b: RegExpExecArray | null;
+  while ((b = FONT_SEG_BOUNDARY_RE.exec(s)) !== null) {
+    bounds.push(b.index);
+    if (b.index === FONT_SEG_BOUNDARY_RE.lastIndex) FONT_SEG_BOUNDARY_RE.lastIndex++;
+  }
+  FONTNAME_NAME_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = FONTNAME_NAME_RE.exec(s)) !== null) {
+    if (m.index < commit && into.size < MAX_FONT_NAMES) {
+      // Segment = from the nearest boundary strictly before this /FontName
+      // (its own dict's /Type /FontDescriptor or object header) to the
+      // nearest boundary strictly after it — capped at FONT_DESC_RADIUS.
+      let lo = Math.max(0, m.index - FONT_DESC_RADIUS);
+      let hi = Math.min(s.length, m.index + FONT_DESC_RADIUS);
+      for (const p of bounds) {
+        if (p < m.index && p > lo) lo = p;
+        if (p > m.index && p < hi) { hi = p; break; }
+      }
+      if (FONTFILE_RE.test(s.slice(lo, hi))) {
+        const nm = normalizeFontName(m[1]);
+        if (nm) into.add(nm);
+      }
+    }
+    if (m.index === FONTNAME_NAME_RE.lastIndex) FONTNAME_NAME_RE.lastIndex++;
+  }
+}
+
+/** Base-font names with NO matching embedded program. Conservative: returns
+ * [] unless at least one embedded font was positively associated by name —
+ * files whose descriptors are unreadable (ObjStm etc.) keep the legacy
+ * file-wide-boolean behavior instead of false-failing. */
+export function unembeddedFromSets(
+  baseFonts: ReadonlySet<string>,
+  embeddedNames: ReadonlySet<string>,
+  hasAnyFontFile: boolean,
+): string[] {
+  if (!hasAnyFontFile || embeddedNames.size === 0) return [];
+  const stripEnc = (n: string) => n.replace(/-Identity-[HV]$/, "");
+  return Array.from(baseFonts)
+    .filter((n) => !embeddedNames.has(n) && !embeddedNames.has(stripEnc(n)))
+    .sort();
+}
 
 const OBJ_HEADER_RE = /(\d+)\s+\d+\s+obj\b/g;
 function decodePdfName(raw: string): string {
@@ -181,6 +279,13 @@ export class CompletedPdfScanner {
   private smaskImages = 0;
   private gray = false;
   private readonly spotNames = new Set<string>();
+  // Task #3388 — decoded /BaseFont names (subset prefixes stripped) + the
+  // smallest effective live-text size measured off decoded content streams.
+  private readonly baseFontNames = new Set<string>();
+  // Task #3388 — /FontName values whose descriptor carries a /FontFile
+  // (fonts with an embedded program), for per-font missing-font detection.
+  private readonly embeddedFontNames = new Set<string>();
+  private minTextSize: number | null = null;
 
   // Task #3069 — spot-usage state.
   private pend = ""; // unprocessed committed text for the stream machine
@@ -418,6 +523,9 @@ export class CompletedPdfScanner {
       spotUsageAttribution,
       usedSpotColorNames: Array.from(usedNames),
       dielineGuides,
+      fontNames: Array.from(this.baseFontNames).sort(),
+      unembeddedFontNames: unembeddedFromSets(this.baseFontNames, this.embeddedFontNames, this.embedded),
+      minTextSizePt: this.minTextSize,
     };
   }
 
@@ -434,6 +542,24 @@ export class CompletedPdfScanner {
     if (!this.spot && (/\/Separation\b/.test(s) || /\/DeviceN\b/.test(s))) this.spot = true;
     if (!this.fontDicts && (/\/Type\s*\/Font\b/.test(s) || /\/BaseFont\b/.test(s))) this.fontDicts = true;
     if (!this.embedded && /\/FontFile[23]?\b/.test(s)) this.embedded = true;
+    // Task #3388 — collect decoded /BaseFont names (commit-gated so the
+    // carry overlap can't double-count; the set dedupes regardless). Subset
+    // prefixes ("ABCDEF+Helvetica") are stripped — the customer knows the
+    // font as "Helvetica", not the subset tag.
+    BASEFONT_NAME_RE.lastIndex = 0;
+    let fm: RegExpExecArray | null;
+    while ((fm = BASEFONT_NAME_RE.exec(s)) !== null) {
+      if (fm.index < commit && this.baseFontNames.size < MAX_FONT_NAMES) {
+        const nm = decodePdfName(fm[1]).replace(/^[A-Z]{6}\+/, "").trim();
+        if (nm) this.baseFontNames.add(nm);
+      }
+      if (fm.index === BASEFONT_NAME_RE.lastIndex) BASEFONT_NAME_RE.lastIndex++;
+    }
+    // Task #3388 — associate each /FontName with a nearby /FontFile so a
+    // MIXED file (one font embedded, another not) can name only the missing
+    // ones. Proximity is checked over the whole window; the commit gate only
+    // prevents double-processing across the carry overlap.
+    collectEmbeddedFontNames(s, this.embeddedFontNames, commit);
     if (!this.gray && /\/(DeviceGray|CalGray)\b/.test(s)) this.gray = true;
     if (!this.dieline && /(dieline|die[\s_-]?cut|do[\s_-]?not[\s_-]?print|template)/i.test(s)) this.dieline = true;
     // Task #3069 — structure flags for the spot-usage fallback reasons.
@@ -721,6 +847,8 @@ export class CompletedPdfScanner {
       this.contentCsNames.add(decodePdfName(m[1]));
       if (m.index === CONTENT_CS_RE.lastIndex) CONTENT_CS_RE.lastIndex++;
     }
+    // Task #3388 — measure live-text sizes when the stream shows text.
+    if (/\bBT\b/.test(code)) this.measureTextSizes(code);
     // Task #3097 — retain path-bearing content code for guide extraction at
     // finish() (resources routinely appear AFTER the content stream). Bounded;
     // overflow disables guide extraction rather than trusting a partial view.
@@ -731,6 +859,91 @@ export class CompletedPdfScanner {
         this.guideCode.push(code);
         this.guideCodeBytes += code.length;
       }
+    }
+  }
+
+  // Task #3388 — best-effort minimum live-text size, in points. Walks the
+  // (string-stripped) content code tracking the graphics-state CTM (q/Q/cm)
+  // and the text matrix (Tm, reset at BT), and on every text-showing
+  // operator (Tj/TJ/'/") records `Tf size × vertical scale of Tm·CTM`.
+  // Invisible text (Tr 3 — OCR layers) is skipped. Form-XObject placement
+  // scaling is NOT threaded through (each stream starts at identity), so
+  // the result is an estimate — callers must word it as "≈" and never fail
+  // solely off this number.
+  private measureTextSizes(code: string): void {
+    type Mat = [number, number, number, number]; // a b c d (e/f irrelevant)
+    const mul = (m: Mat, n: Mat): Mat => [
+      m[0] * n[0] + m[1] * n[2],
+      m[0] * n[1] + m[1] * n[3],
+      m[2] * n[0] + m[3] * n[2],
+      m[2] * n[1] + m[3] * n[3],
+    ];
+    const I: Mat = [1, 0, 0, 1];
+    let ctm: Mat = I;
+    const stack: Mat[] = [];
+    let tm: Mat = I;
+    let tf = 0; // current font size (Tf operand)
+    let tr = 0; // text-rendering mode (3 = invisible)
+    // Tokenize: numbers, names, brackets and operator words. Strings are
+    // already stripped by stripPdfStringsAndComments so `(text) Tj` arrives
+    // as ` Tj`.
+    const toks = code.match(/\/[^\s/\[\]<>()]*|[-+.\d][-+.\deE]*|[A-Za-z'"*]+|\[|\]/g);
+    if (!toks) return;
+    const nums: number[] = [];
+    const num = (i: number): number => (nums.length > i ? nums[nums.length - 1 - i] : 0);
+    let ops = 0;
+    for (const t of toks) {
+      if (ops++ > 2_000_000) return; // hard bound — never let a pathological stream spin
+      const c = t.charCodeAt(0);
+      if ((c >= 48 && c <= 57) || c === 43 || c === 45 || c === 46) {
+        const v = parseFloat(t);
+        if (Number.isFinite(v)) {
+          nums.push(v);
+          if (nums.length > 8) nums.shift();
+        }
+        continue;
+      }
+      if (c === 47 || t === "[" || t === "]") continue; // names/brackets: not operands we track
+      switch (t) {
+        case "q":
+          if (stack.length < 256) stack.push(ctm);
+          break;
+        case "Q":
+          ctm = stack.pop() ?? I;
+          break;
+        case "cm":
+          ctm = mul([num(5), num(4), num(3), num(2)], ctm);
+          break;
+        case "BT":
+          tm = I;
+          break;
+        case "Tm":
+          tm = [num(5), num(4), num(3), num(2)];
+          break;
+        case "Tf":
+          tf = num(0);
+          break;
+        case "Tr":
+          tr = Math.round(num(0));
+          break;
+        case "Tj":
+        case "TJ":
+        case "'":
+        case '"': {
+          if (tr !== 3 && tf > 0) {
+            const m = mul(tm, ctm);
+            const vScale = Math.hypot(m[2], m[3]); // vertical text axis through the composed matrix
+            const eff = tf * vScale;
+            if (Number.isFinite(eff) && eff > 0.01) {
+              if (this.minTextSize == null || eff < this.minTextSize) this.minTextSize = eff;
+            }
+          }
+          break;
+        }
+        default:
+          break;
+      }
+      nums.length = 0; // operators consume their operands
     }
   }
 
@@ -1835,7 +2048,7 @@ export function validateCompletedComponent(
       status: "pass",
       message: "No live text detected — type appears outlined.",
     });
-  } else if (scan.hasEmbeddedFonts) {
+  } else if (scan.hasEmbeddedFonts && (scan.unembeddedFontNames ?? []).length === 0) {
     checks.push({
       key: "tmpl.fonts",
       label: "Fonts",
@@ -1843,11 +2056,22 @@ export function validateCompletedComponent(
       message: "Live text detected (fonts are embedded) — outline all type before sending final print files.",
     });
   } else {
+    // Task #3388 — name the missing fonts where the file exposes them, and
+    // make the fix actionable: outline OR upload the font files with the art
+    // (no auto-outlining — MRP explicitly rejected converting type for the
+    // customer). A MIXED file (some fonts embedded, some not) fails naming
+    // only the unembedded ones.
+    const mixed = scan.hasEmbeddedFonts === true;
+    const missing = (mixed ? (scan.unembeddedFontNames ?? []) : (scan.fontNames ?? [])).filter(Boolean);
+    const namesPart =
+      missing.length > 0
+        ? ` Missing font${missing.length > 1 ? "s" : ""}: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? ` (+${missing.length - 8} more)` : ""}.`
+        : "";
     checks.push({
       key: "tmpl.fonts",
       label: "Fonts",
       status: "fail",
-      message: "Live text with no embedded font program — outline the type or embed all fonts before sending.",
+      message: `${mixed ? "Some live text uses fonts with no embedded font program." : "Live text with no embedded font program."}${namesPart} Outline the type in your design app, or upload the font files (OTF/TTF) alongside this art so the prepress team can install them.`,
     });
   }
 
@@ -2122,6 +2346,46 @@ export function validateCompletedComponent(
           best >= floor
             ? `Largest 1-bit image ≈${rounded} PPI at full-artboard placement — meets ${pressWord}'s ${floor} PPI line-art minimum (estimate only).`
             : `Largest 1-bit image ≈${rounded} PPI if placed full-artboard — below ${pressWord}'s ${floor} PPI line-art minimum. Placement isn't measured, so verify the actual placed resolution.`,
+      });
+    }
+  }
+
+  // 8b. Minimum live-text point size — Task #3388 (MRP 18.2 / 7.4).
+  // Entirely gated on a configured per-press threshold: no threshold, no
+  // row, byte-identical verdicts (Gavin supplies the real number later).
+  // Advisory-first — below-threshold text WARNS unless the press explicitly
+  // flips minTextPointSizeBlocking. The measurement is an estimate (Form-
+  // XObject placement scaling isn't threaded), so copy words it as "≈".
+  if (rules?.minTextPointSize != null && rules.minTextPointSize > 0) {
+    const floor = rules.minTextPointSize;
+    const blocking = rules.minTextPointSizeBlocking === true;
+    const label = `Text size (min ${floor} pt)`;
+    const measured = scan.minTextSizePt ?? null;
+    if (!scan.hasFontDicts) {
+      checks.push({
+        key: "tmpl.text_size",
+        label,
+        status: "pass",
+        tier: "advisory",
+        message: `No live text detected — outlined type isn't measured. Keep all type at least ${floor} pt (${pressWord} minimum) when designing.`,
+      });
+    } else if (measured == null) {
+      checks.push({
+        key: "tmpl.text_size",
+        label,
+        status: "warn",
+        message: `Live text is present but its size couldn't be measured from this file — verify no type is below ${pressWord}'s ${floor} pt minimum.`,
+      });
+    } else {
+      const rounded = Math.round(measured * 10) / 10;
+      const meets = measured >= floor - 0.05; // tolerance for float noise
+      checks.push({
+        key: "tmpl.text_size",
+        label,
+        status: meets ? "pass" : blocking ? "fail" : "warn",
+        message: meets
+          ? `Smallest live text ≈${rounded} pt — meets ${pressWord}'s ${floor} pt minimum (estimate).`
+          : `Smallest live text ≈${rounded} pt — below ${pressWord}'s ${floor} pt minimum. Enlarge the smallest type${blocking ? "" : " (advisory for now)"}.`,
       });
     }
   }

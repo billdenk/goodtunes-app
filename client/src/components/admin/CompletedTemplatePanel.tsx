@@ -65,6 +65,28 @@ export async function templateFileDownload(
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
 
+// Task #3388 — attached font files are PRIVATE objects (their raw /objects
+// URL 404s by design: licensed customer assets). Download through the authed
+// album-scoped font-file route via fetchBlob → object URL.
+export async function downloadFontFile(
+  albumId: string,
+  componentId: string,
+  index: number,
+  fileName: string | null | undefined,
+) {
+  const blob = await fetchBlob(
+    `/api/admin/albums/${albumId}/completed-template/font-file/${encodeURIComponent(componentId)}/${index}`,
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName ?? "";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
 // Tracked download (Ruby handoff Aug 2026): the POST carries the caller's
 // auth (bearer + cookie — a bare <a href> can't), logs a press download to
 // the file history (which LOCKS the slot against artist replacement; the
@@ -1096,6 +1118,35 @@ export function PreviewArtDialog({
             <div className="text-xs text-slate-500">No checks recorded for this file.</div>
           )}
         </div>
+
+        {/* Task #3388 — font files the uploader attached alongside the art
+            (the "outline or upload fonts" prompt). Read-only here: the
+            prepress team downloads them next to the art file. */}
+        {(component.fontFiles?.length ?? 0) > 0 && (
+          <div
+            className="rounded-md bg-slate-50 border border-slate-100 p-2 text-xs text-slate-700"
+            data-testid={`font-files-${componentId}`}
+          >
+            <div className="font-semibold mb-1">Uploaded fonts</div>
+            <ul className="space-y-0.5">
+              {component.fontFiles!.map((f, i) => (
+                <li key={f.url}>
+                  {/* Fonts are PRIVATE objects — the raw URL 404s. Download
+                      through the authed album-scoped route (a bare <a href>
+                      would drop the bearer header). */}
+                  <button
+                    type="button"
+                    onClick={() => void downloadFontFile(albumId, componentId, i, f.fileName)}
+                    className="text-blue-600 hover:underline"
+                    data-testid={`link-font-file-${componentId}-${i}`}
+                  >
+                    {f.fileName ?? f.url.split("/").pop()}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {component.override && (
           <div className="rounded-md bg-violet-50 border border-violet-100 p-2 text-xs text-violet-800">

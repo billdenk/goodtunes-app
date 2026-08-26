@@ -19,6 +19,8 @@
 
 import type { CheckResult } from "@shared/uploadValidation";
 import { rollupStatus } from "@shared/uploadValidation";
+// Task #3388 — shared per-font embedding association (mixed-font detection).
+import { normalizeFontName, collectEmbeddedFontNames, unembeddedFromSets } from "./completedTemplate";
 import {
   getVendorSpec,
   getTemplate,
@@ -107,11 +109,36 @@ function sniffPdfColorSpace(buf: Buffer): ColorSpace {
 // fonts contains "/FontFile" or "/FontFile2" or "/FontFile3" stream
 // references. Outlined text (no fonts at all) is fine too — that case
 // has no /Font dictionaries to flag.
-function sniffPdfFonts(buf: Buffer): { hasFontDicts: boolean; hasEmbeddedFonts: boolean } {
+function sniffPdfFonts(buf: Buffer): {
+  hasFontDicts: boolean;
+  hasEmbeddedFonts: boolean;
+  fontNames: string[];
+  unembeddedFontNames: string[];
+} {
   const slice = buf.slice(0, Math.min(buf.length, 2 * 1024 * 1024)).toString("latin1");
   const hasFontDicts = /\/Type\s*\/Font\b/.test(slice) || /\/BaseFont\b/.test(slice);
   const hasEmbeddedFonts = /\/FontFile[23]?\b/.test(slice);
-  return { hasFontDicts, hasEmbeddedFonts };
+  // Task #3388 — enumerate /BaseFont names (decoded, subset prefixes like
+  // "ABCDEF+" stripped) so a missing-font failure can NAME the offenders,
+  // and associate each font with its own embedded program (FontDescriptor
+  // /FontName ↔ /FontFile proximity) so MIXED files fail on just the
+  // unembedded fonts. Helpers shared with the completed-art scanner.
+  const names = new Set<string>();
+  const re = /\/BaseFont\s*\/([^\s/\[\]<>()]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(slice)) !== null && names.size < 40) {
+    const decoded = normalizeFontName(m[1]);
+    if (decoded) names.add(decoded);
+    if (m.index === re.lastIndex) re.lastIndex++;
+  }
+  const embeddedNames = new Set<string>();
+  collectEmbeddedFontNames(slice, embeddedNames);
+  return {
+    hasFontDicts,
+    hasEmbeddedFonts,
+    fontNames: Array.from(names).sort(),
+    unembeddedFontNames: unembeddedFromSets(names, embeddedNames, hasEmbeddedFonts),
+  };
 }
 
 // PDF page dimensions in points (1pt = 1/72 inch). Looks at the first
@@ -243,12 +270,19 @@ export function validateArt(buf: Buffer, opts: ValidateArtOpts): CheckResult[] {
       if (!f.hasFontDicts) {
         checks.push({ key: "art.fonts", label: "Fonts", status: "pass",
           message: "No live text detected — type appears outlined." });
-      } else if (f.hasEmbeddedFonts) {
+      } else if (f.hasEmbeddedFonts && f.unembeddedFontNames.length === 0) {
         checks.push({ key: "art.fonts", label: "Fonts", status: "pass",
           message: "All fonts embedded." });
       } else {
+        // Task #3388 — name the missing fonts where extractable, and make
+        // the fix actionable: outline the type or upload the font files.
+        // Mixed files (some embedded, some not) name only the missing ones.
+        const missing = f.hasEmbeddedFonts ? f.unembeddedFontNames : f.fontNames;
+        const namesPart = missing.length > 0
+          ? ` Missing font${missing.length > 1 ? "s" : ""}: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? ` (+${missing.length - 8} more)` : ""}.`
+          : "";
         checks.push({ key: "art.fonts", label: "Fonts", status: "fail",
-          message: `${pressName} requires fonts to be embedded or outlined.${genericNote}` });
+          message: `${pressName} requires fonts to be embedded or outlined.${namesPart} Outline the type in your design app, or upload the font files (OTF/TTF) alongside this art.${genericNote}` });
       }
     }
 
