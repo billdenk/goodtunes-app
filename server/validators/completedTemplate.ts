@@ -351,6 +351,10 @@ export class CompletedPdfScanner {
   private readonly csSelPlain = new Set<string>(); // cs/CS selections seen outside /OC blocks
   private readonly csSelOcContexts = new Map<string, string[][]>(); // cs selections under /OC
   private readonly ocgObjIds = new Set<string>(); // obj ids with /Type /OCG
+  // Obj ids DEFINING an RGB colorspace (e.g. `[ /DeviceRGB ]` referenced from
+  // a /ColorSpace resource dict). Objects that are Separation/DeviceN with an
+  // RGB *alternate* are excluded — selecting those paints spot ink, not RGB.
+  private readonly rgbCsObjIds = new Set<string>();
   private readonly ocgPrintOff = new Set<string>(); // OCG obj ids whose /Usage marks /PrintState /OFF
   private readonly ocgOffIds = new Set<string>(); // obj ids listed in a default-config /OFF [ … ] array
   private readonly propEntries = new Map<string, string>(); // /Properties resource name → obj id
@@ -497,11 +501,33 @@ export class CompletedPdfScanner {
       const paintPrintable =
         this.rgbPaintPlain || this.rgbPaintOcContexts.some((ctx) => !ocOff(ctx));
       let csPrintable = false;
+      let unresolvedRgbSel = false;
       for (const n of Array.from(this.contentCsNames)) {
-        if (!this.csRgbAlias.has(n) || this.csAmbiguous.has(n)) continue;
+        // A selection is RGB when the name IS a device RGB space (`/DeviceRGB
+        // cs` takes it directly), aliases one in a /ColorSpace dict, or
+        // resolves by ref to an object defining one.
+        const direct = n === "DeviceRGB" || n === "CalRGB";
+        const refId = this.csRefEntries.get(n);
+        const rgbTarget =
+          direct ||
+          this.csRgbAlias.has(n) ||
+          (refId !== undefined && this.rgbCsObjIds.has(refId));
+        if (!rgbTarget) continue;
+        if (!direct && this.csAmbiguous.has(n)) {
+          // Maybe-RGB (same name maps to conflicting targets) — not proof of
+          // painted RGB, but can never certify "unused" either.
+          unresolvedRgbSel = true;
+          continue;
+        }
         if (this.csSelPlain.has(n)) { csPrintable = true; break; }
         const ctxs = this.csSelOcContexts.get(n);
-        if (ctxs && ctxs.some((c) => !ocOff(c))) { csPrintable = true; break; }
+        if (ctxs === undefined) {
+          // Selected (it's in contentCsNames) but the OC walk never recorded
+          // it — fail-closed, treat as plainly painted.
+          csPrintable = true;
+          break;
+        }
+        if (ctxs.some((c) => !ocOff(c))) { csPrintable = true; break; }
       }
       if (paintPrintable || csPrintable || this.rgbImage) {
         rgbUsage = "used";
@@ -510,7 +536,7 @@ export class CompletedPdfScanner {
           this.encrypted || this.zlibFailed || this.lzwContent || this.capHit ||
           this._truncated || this.objStm || this.otherFilterContent ||
           this.decodedStreams === 0;
-        rgbUsage = parseUntrusted ? "unknown" : "unused";
+        rgbUsage = parseUntrusted || unresolvedRgbSel ? "unknown" : "unused";
       }
     }
 
@@ -671,6 +697,12 @@ export class CompletedPdfScanner {
             const nm = decodePdfName(nameM[1]).trim();
             if (nm) this.sepObjName.set(id, nm);
           }
+        } else if (/\/(DeviceRGB|CalRGB)\b/.test(ahead)) {
+          // RGB usage discipline — an object defining/carrying an RGB space
+          // (spot-with-RGB-alternate handled above). A content `cs` selection
+          // resolving here by ref counts as painted RGB.
+          if (this.rgbCsObjIds.size < this.capEntries) this.rgbCsObjIds.add(om[1]);
+          else if (!this.rgbCsObjIds.has(om[1])) this.capHit = true;
         }
         // RGB usage discipline — optional-content group (layer) objects.
         // /Usage << /Print << /PrintState /OFF >> >> marks a layer the
@@ -1024,6 +1056,9 @@ export class CompletedPdfScanner {
       } else if (m[5] !== undefined) {
         // cs/CS selection.
         const res = decodePdfName(m[5]);
+        // Direct device-RGB selection may live ONLY inside a compressed
+        // stream, where the raw-token /DeviceRGB check never sees it.
+        if (res === "DeviceRGB" || res === "CalRGB") this.rgb = true;
         const names = stack.filter((n): n is string => n !== null);
         if (names.length === 0) this.csSelPlain.add(res);
         else {

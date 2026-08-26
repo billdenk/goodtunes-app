@@ -1199,6 +1199,61 @@ describe("RGB usage discipline — non-printing RGB never fails the color check"
     assert.equal(scan.rgbUsage, "used");
   });
 
+  test("direct /DeviceRGB cs selection inside a compressed-only stream context → used", () => {
+    // Reviewer repro 1: `/DeviceRGB cs 1 0 0 sc …` — no rg/RG operator, no
+    // alias, the device space is taken directly by name.
+    const s =
+      pageHead() +
+      "<< /Length 44 >>\nstream\n/DeviceRGB cs 1 0 0 sc 0 0 10 10 re f\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.equal(scan.hasRGB, true);
+    assert.equal(scan.rgbUsage, "used");
+    const checks = validateCompletedComponent(scan as any, { ...SPECS["jacket"], expectedPages: 0 } as any);
+    assert.equal(find(checks, "tmpl.color").status, "fail");
+  });
+
+  test("indirect /ColorSpace ref resolving to an RGB object → used", () => {
+    // Reviewer repro 2: `/CS0 50 0 R` where obj 50 defines [ /DeviceRGB ].
+    const s =
+      pageHead() +
+      "50 0 obj [ /DeviceRGB ] endobj\n" +
+      "/Resources << /ColorSpace << /CS0 50 0 R >> >>\n" +
+      "<< /Length 36 >>\nstream\n/CS0 cs 1 0 0 sc 0 0 10 10 re f\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.equal(scan.hasRGB, true);
+    assert.equal(scan.rgbUsage, "used");
+    const checks = validateCompletedComponent(scan as any, { ...SPECS["jacket"], expectedPages: 0 } as any);
+    assert.equal(find(checks, "tmpl.color").status, "fail");
+  });
+
+  test("Separation with an RGB ALTERNATE stays spot, not painted RGB", () => {
+    // Selecting a spot whose alternate space is DeviceRGB paints spot ink;
+    // the RGB token in that object must not flip the verdict to used.
+    const s =
+      pageHead() +
+      "50 0 obj [ /Separation /PANTONE#20186#20C /DeviceRGB 51 0 R ] endobj\n" +
+      "/Resources << /ColorSpace << /CS0 50 0 R >> >>\n" +
+      "<< /Length 34 >>\nstream\n/CS0 cs 1 scn 0 0 10 10 re f\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.equal(scan.hasRGB, true);
+    assert.equal(scan.rgbUsage, "unused");
+  });
+
+  test("conflicting maybe-RGB alias selection → never certifies unused (fail-closed)", () => {
+    // /CSA maps to DeviceRGB in one dict and DeviceCMYK in another — the
+    // selection MIGHT be RGB. Direct-alias conflicts keep the RGB alias
+    // (fail-closed as painted), so the check still fails like legacy.
+    const s =
+      pageHead() +
+      "/Resources << /ColorSpace << /CSA /DeviceRGB >> >>\n" +
+      "/Resources << /ColorSpace << /CSA /CalGray >> >>\n" +
+      "<< /Length 34 >>\nstream\n/CSA cs 1 0 0 sc 0 0 10 10 re f\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.notEqual(scan.rgbUsage, "unused");
+    const checks = validateCompletedComponent(scan as any, { ...SPECS["jacket"], expectedPages: 0 } as any);
+    assert.equal(find(checks, "tmpl.color").status, "fail"); // legacy fail-closed
+  });
+
   test("RGB-alias cs selection outside layers → used", () => {
     const s =
       pageHead() +
