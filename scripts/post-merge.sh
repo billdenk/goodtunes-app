@@ -12896,6 +12896,29 @@ seed_component_price_links() {
 seed_component_price_links dev  "${DATABASE_URL:-}"
 seed_component_price_links prod "${PROD_DATABASE_URL:-}"
 
+# ── PMP component pricing from the 2026 sheet (Aug 26 2026, gogoods) ───────
+# Marker-guarded (pmp_component_pricing_2026_v1) + per-row guarded; ladders,
+# service items, and price links for PMP only. Fresh clones need it; dev+prod
+# already stamped by hand Aug 26 2026.
+seed_pmp_component_pricing() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping PMP component-pricing seed on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/seed-pmp-component-pricing.ts 2>&1); then
+    echo "post-merge: PMP component-pricing seed ok on $label"
+    echo "$out" | tail -4
+  else
+    echo "post-merge: WARNING — PMP component-pricing seed failed on $label (continuing, fingerprint withheld so next merge retries)"
+    echo "$out" | tail -10
+    PM_COMPONENT_LINKS_FAILED=1
+  fi
+}
+seed_pmp_component_pricing dev  "${DATABASE_URL:-}"
+seed_pmp_component_pricing prod "${PROD_DATABASE_URL:-}"
+
 # ── Stamp the full-run fingerprint (see the skip block at the top) ─────────
 # Reached only on a full pass that survived to here; from now on, merges that
 # don't touch this script skip straight to the mirror sync below.
