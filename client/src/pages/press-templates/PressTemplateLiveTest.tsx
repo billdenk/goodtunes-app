@@ -47,7 +47,7 @@ export const freshLiveSave = { flag: false };
 
 export type SavedTest = { art: string; at: string; verdict: string };
 import {
-  CheckCircle2, XCircle, MinusCircle, FileText, ChevronRight, Upload, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck,
+  CheckCircle2, XCircle, MinusCircle, AlertTriangle, FileText, ChevronRight, Upload, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -74,7 +74,7 @@ import { renderCropOnce, runWithRetry, type CropRender } from './cropSharpRender
 type Theme = {
   canvas: string; rail: string; card: string; soft: string; hairline: string;
   ink: string; subink: string; faint: string; blue: string;
-  ready: string; crit: string; readyWash: string; critWash: string; neutralWash: string;
+  ready: string; crit: string; warn: string; readyWash: string; critWash: string; warnWash: string; neutralWash: string;
   navShadow: string; headerBg: string; searchPlaceholder: string; avatarRing: string;
   hoverWash: string; hoverInk: string; logoFilter?: string;
 };
@@ -83,7 +83,7 @@ const THEMES: Record<'light' | 'dark', Theme> = {
   light: {
     canvas: '#f5f5f7', rail: '#f5f5f7', card: '#ffffff', soft: '#f0f0f2', hairline: '#e6e6ea',
     ink: '#1d1d1f', subink: '#6e6e73', faint: '#a1a1a6', blue: '#319ED8',
-    ready: '#1c8a5b', crit: '#e0245e', readyWash: 'rgba(28,138,91,0.10)', critWash: 'rgba(224,36,94,0.10)', neutralWash: 'rgba(0,0,0,0.05)',
+    ready: '#1c8a5b', crit: '#e0245e', warn: '#b45309', readyWash: 'rgba(28,138,91,0.10)', critWash: 'rgba(224,36,94,0.10)', warnWash: 'rgba(245,158,11,0.12)', neutralWash: 'rgba(0,0,0,0.05)',
     navShadow: '0 1px 3px rgba(0,0,0,0.08), 0 0 0 0.5px rgba(0,0,0,0.04)',
     headerBg: 'rgba(255,255,255,0.72)', searchPlaceholder: 'placeholder:text-black/30', avatarRing: 'ring-black/10',
     hoverWash: 'hover:bg-black/5', hoverInk: 'hover:text-black', logoFilter: undefined,
@@ -91,7 +91,7 @@ const THEMES: Record<'light' | 'dark', Theme> = {
   dark: {
     canvas: '#161617', rail: '#1c1c1e', card: '#1e1e20', soft: '#26262a', hairline: 'rgba(255,255,255,0.10)',
     ink: '#f5f5f7', subink: '#98989d', faint: '#6e6e73', blue: '#319ED8',
-    ready: '#34c98e', crit: '#ff5d8f', readyWash: 'rgba(52,201,142,0.12)', critWash: 'rgba(255,93,143,0.12)', neutralWash: 'rgba(255,255,255,0.06)',
+    ready: '#34c98e', crit: '#ff5d8f', warn: '#f5b041', readyWash: 'rgba(52,201,142,0.12)', critWash: 'rgba(255,93,143,0.12)', warnWash: 'rgba(245,158,11,0.14)', neutralWash: 'rgba(255,255,255,0.06)',
     navShadow: '0 1px 2px rgba(0,0,0,0.4), 0 0 0 0.5px rgba(255,255,255,0.06)',
     headerBg: 'rgba(22,22,23,0.72)', searchPlaceholder: 'placeholder:text-white/30', avatarRing: 'ring-white/15',
     hoverWash: 'hover:bg-white/5', hoverInk: 'hover:text-white', logoFilter: 'invert(1) brightness(1.8)',
@@ -118,18 +118,20 @@ function ThinProgress({ label, t, testid }: { label: string; t: Theme; testid: s
 function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
 }
-type CheckRow = { param: string; tone: 'pass' | 'fail' | 'na'; detail: string };
+// 'warn' (Task #3400) = the certification test's advisory tier — measured,
+// noted, but never a Fail (e.g. live text with embedded fonts).
+type CheckRow = { param: string; tone: 'pass' | 'warn' | 'fail' | 'na'; detail: string };
 
 function CheckLine({ row, t }: { row: CheckRow; t: Theme }) {
-  const color = row.tone === 'pass' ? t.ready : row.tone === 'fail' ? t.crit : t.faint;
-  const Icon = row.tone === 'pass' ? CheckCircle2 : row.tone === 'fail' ? XCircle : MinusCircle;
+  const color = row.tone === 'pass' ? t.ready : row.tone === 'fail' ? t.crit : row.tone === 'warn' ? t.warn : t.faint;
+  const Icon = row.tone === 'pass' ? CheckCircle2 : row.tone === 'fail' ? XCircle : row.tone === 'warn' ? AlertTriangle : MinusCircle;
   return (
     <div className="flex items-start gap-2.5 py-3" style={{ borderBottom: `1px solid ${t.hairline}` }} data-testid={`check-${row.param.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
       <Icon className="w-4 h-4 flex-shrink-0" style={{ color, marginTop: 2 }} />
       <div className="min-w-0">
         <div className="text-[12.5px] font-semibold" style={{ color: t.ink }}>
           {row.param}
-          <span className="ml-2 font-semibold" style={{ color }}>{row.tone === 'pass' ? 'Pass' : row.tone === 'fail' ? 'Fail' : 'Not measured'}</span>
+          <span className="ml-2 font-semibold" style={{ color }}>{row.tone === 'pass' ? 'Pass' : row.tone === 'fail' ? 'Fail' : row.tone === 'warn' ? 'Advisory' : 'Not measured'}</span>
         </div>
         <div className="text-[12.5px] mt-0.5" style={{ color: t.subink }}>{row.detail}</div>
       </div>
@@ -936,7 +938,13 @@ export default function PressTemplateLiveTest({
   // A failed measurement must never let the header claim a clean pass —
   // for a raster nothing real was measured yet (gogoods, Aug 16 2026).
   const inkFailed = inkChecks === 'error';
+  // Task #3400 — 'warn' rows (the certification test's advisory tier, e.g.
+  // live text with embedded fonts) are measured but must never flip the
+  // header to Fail: fail beats warn, warn beats a clean pass.
+  const anyFail = measured.some((c) => c.tone === 'fail');
+  const anyWarn = measured.some((c) => c.tone === 'warn');
   const allPass = !inkPending && !inkFailed && measured.length > 0 && measured.every((c) => c.tone === 'pass');
+  const passWithAdvisory = !inkPending && !inkFailed && measured.length > 0 && !anyFail && anyWarn;
   // New result → banner folds itself on a clean pass, opens on anything else.
   // A new file opens the detail rows; a finished measurement KEEPS them open —
   // the auto-fold on a clean pass yanked the list away mid-read (gogoods,
@@ -949,7 +957,7 @@ export default function PressTemplateLiveTest({
     if (wasPending.current && !inkPending && inkChecks !== null) setDonePulse((p) => p + 1);
     wasPending.current = inkPending;
   }, [inkPending, inkChecks]);
-  const verdictWord = inkPending ? 'Checking…' : inkFailed ? 'Incomplete' : allPass ? 'Pass' : measured.some((c) => c.tone === 'fail') ? 'Flagged' : 'Visual only';
+  const verdictWord = inkPending ? 'Checking…' : inkFailed ? 'Incomplete' : allPass ? 'Pass' : anyFail ? 'Flagged' : passWithAdvisory ? 'Advisory' : 'Visual only';
 
   // Re-run the server measurement on the SAME file — a network hiccup must
   // not force a page refresh + re-pick (gogoods, Aug 16 2026).
@@ -1679,9 +1687,11 @@ export default function PressTemplateLiveTest({
                       ? 'rgba(120,120,128,0.25)'
                       : allPass
                         ? 'rgba(48,164,108,0.35)'
-                        : measured.some((c) => c.tone === 'fail')
+                        : anyFail
                           ? 'rgba(229,72,77,0.35)'
-                          : 'rgba(120,120,128,0.25)',
+                          : passWithAdvisory
+                            ? 'rgba(245,158,11,0.35)'
+                            : 'rgba(120,120,128,0.25)',
                     animation: 'gt-verdict-arrive 0.45s cubic-bezier(0.22,1,0.36,1) both, gt-verdict-ring 1.1s ease-out 0.45s 1',
                   }}
                 >
@@ -1695,14 +1705,16 @@ export default function PressTemplateLiveTest({
                     style={{ borderBottom: checksOpen ? `1px solid ${t.hairline}` : 'none' }}
                     data-testid="button-toggle-checks"
                   >
-                    <span className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: !inkPending && allPass ? t.readyWash : !inkPending && measured.some((c) => c.tone === 'fail') ? t.critWash : t.neutralWash }}>
+                    <span className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: !inkPending && allPass ? t.readyWash : !inkPending && anyFail ? t.critWash : !inkPending && passWithAdvisory ? t.warnWash : t.neutralWash }}>
                       {inkPending
                         ? <History style={{ color: t.faint, width: 18, height: 18 }} />
                         : allPass
                           ? <CheckCircle2 className="w-4.5 h-4.5" style={{ color: t.ready, width: 18, height: 18 }} />
-                          : measured.some((c) => c.tone === 'fail')
+                          : anyFail
                             ? <XCircle style={{ color: t.crit, width: 18, height: 18 }} />
-                            : <MinusCircle style={{ color: t.faint, width: 18, height: 18 }} />}
+                            : passWithAdvisory
+                              ? <AlertTriangle style={{ color: t.warn, width: 18, height: 18 }} />
+                              : <MinusCircle style={{ color: t.faint, width: 18, height: 18 }} />}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="text-[13.5px] font-semibold" style={{ color: t.ink }} data-testid="text-verdict">
@@ -1711,7 +1723,7 @@ export default function PressTemplateLiveTest({
                               ? `Uploading art for ink & resolution check… ${Math.round(inkProgress * 100)}%`
                               : 'Measuring ink & resolution…')
                           : inkFailed ? (inkErrorMsg ?? 'Measurement didn’t finish — re-run the ink & resolution check')
-                          : allPass ? 'Pass! All measured checks passed' : measured.some((c) => c.tone === 'fail') ? 'Fail! Measured checks flag issues' : 'Visual only — nothing to measure'}
+                          : allPass ? 'Pass! All measured checks passed' : anyFail ? 'Fail! Measured checks flag issues' : passWithAdvisory ? 'Pass — with an advisory to review' : 'Visual only — nothing to measure'}
                         <span className="ml-2 font-normal" style={{ color: t.subink }}>
                           {!inkPending && measured.length > 0 ? `${measured.filter((c) => c.tone === 'pass').length} of ${measured.length} passed` : ''}
                         </span>

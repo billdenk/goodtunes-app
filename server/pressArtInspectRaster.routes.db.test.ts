@@ -28,6 +28,7 @@ import { db, pool } from "./db";
 import { storage } from "./storage";
 import { authKindMiddleware } from "./auth/host";
 import { registerRoutes } from "./routes";
+import { scanBuffer, fontsCheckVerdict } from "./validators/completedTemplate";
 
 const run = promisify(execFile);
 const exec = (q: any) => db.execute(q);
@@ -41,7 +42,7 @@ let fixturesDir = "";
 
 const fixtures: Record<string, Buffer> = {};
 
-type CheckRow = { param: string; tone: "pass" | "fail" | "na"; detail: string };
+type CheckRow = { param: string; tone: "pass" | "warn" | "fail" | "na"; detail: string };
 
 before(async () => {
   // Generate raster fixtures with ImageMagick (300 PPI so the resolution
@@ -152,6 +153,75 @@ test("PNG → Color fails with the explicit can't-carry-CMYK message", async () 
   assert.equal(color?.tone, "fail");
   assert.match(color!.detail, /PNG is an RGB format/);
   assert.match(color!.detail, /CMYK TIFF/);
+});
+
+// Task #3400 — the live banner's Fonts row, PDF-only, sharing the exact
+// certification-test verdict (fontsCheckVerdict) so the two surfaces can't
+// diverge. Three canon outcomes: outlined pass, embedded-live-text advisory
+// (warn), non-embedded fail naming the missing fonts.
+const fontsPdf = (fonts: "none" | "embedded" | "unembedded"): Buffer =>
+  Buffer.from(
+    "%PDF-1.6\n/Type /Page /MediaBox [ 0 0 918 918 ]\n/DeviceCMYK\n" +
+      (fonts === "embedded"
+        ? "/Type /Font /BaseFont /Helvetica\n/Type /FontDescriptor /FontName /Helvetica /FontFile2 9 0 R\n"
+        : fonts === "unembedded"
+        ? "/Type /Font /BaseFont /ABCDEF+Futura#20Bold\n"
+        : "") +
+      "%%EOF",
+    "latin1",
+  );
+
+const fontsRow = (checks: CheckRow[]) => checks.find((c) => c.param === "Fonts");
+
+test("PDF with no live text → Fonts passes (outlined), matching the certification verdict", async () => {
+  const pdf = fontsPdf("none");
+  const res = await inspect(pdf, "application/pdf");
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { checks: CheckRow[] };
+  const row = fontsRow(body.checks);
+  assert.equal(row?.tone, "pass");
+  assert.match(row!.detail, /No live text detected/);
+  assert.match(row!.detail, /outlined/);
+  // Lockstep: the live row IS the certification validator's verdict.
+  const verdict = fontsCheckVerdict(scanBuffer(pdf));
+  assert.equal(row!.tone, verdict.status);
+  assert.equal(row!.detail, verdict.message);
+});
+
+test("PDF live text with embedded fonts → Fonts advisory (warn), matching certification", async () => {
+  const pdf = fontsPdf("embedded");
+  const res = await inspect(pdf, "application/pdf");
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { checks: CheckRow[] };
+  const row = fontsRow(body.checks);
+  assert.equal(row?.tone, "warn", "embedded live text is the certification test's advisory tier — never a fail");
+  assert.match(row!.detail, /fonts are embedded/);
+  const verdict = fontsCheckVerdict(scanBuffer(pdf));
+  assert.equal(verdict.status, "warn", "fixture must scan as embedded live text");
+  assert.equal(row!.tone, verdict.status);
+  assert.equal(row!.detail, verdict.message);
+});
+
+test("PDF live text with NO embedded fonts → Fonts fails naming the missing font", async () => {
+  const pdf = fontsPdf("unembedded");
+  const res = await inspect(pdf, "application/pdf");
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { checks: CheckRow[] };
+  const row = fontsRow(body.checks);
+  assert.equal(row?.tone, "fail");
+  assert.match(row!.detail, /no embedded font program/);
+  assert.match(row!.detail, /Futura Bold/, "missing fonts are named when the file exposes them");
+  const verdict = fontsCheckVerdict(scanBuffer(pdf));
+  assert.equal(verdict.status, "fail", "fixture must scan as unembedded live text");
+  assert.equal(row!.tone, verdict.status);
+  assert.equal(row!.detail, verdict.message);
+});
+
+test("raster art gets NO Fonts row — pixels can't carry live text", async () => {
+  const res = await inspect(fixtures["cmyk.tif"], "image/tiff");
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { checks: CheckRow[] };
+  assert.equal(fontsRow(body.checks), undefined);
 });
 
 test("signed-upload whitelist accepts the PSD content type", async () => {

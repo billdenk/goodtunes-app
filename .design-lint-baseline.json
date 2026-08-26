@@ -13890,6 +13890,11 @@
     "snippet": "<span className=\"w-1.5 h-1.5 rounded-full bg-[color:var(--apple-ready)]\" aria-hidden />"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/components/operator/FeedbackLauncher.tsx",
+    "snippet": "const BLUE = '#319ED8';"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/components/operator/OperatorShell.tsx",
     "snippet": "<span className=\"text-[15px] font-semibold text-slate-800 truncate\" data-testid=\"text-operator-topbar-name\">{name}</span>"
@@ -17655,6 +17660,16 @@
     "snippet": "<div className=\"text-[12.5px] text-[var(--apple-subink)] text-right tabular-nums\">"
   },
   {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/AdminFeedback.tsx",
+    "snippet": "className=\"absolute rounded-lg border-2 border-[#319ED8] bg-[#319ED8]/10\""
+  },
+  {
+    "rule": "brand-hex-literal",
+    "file": "client/src/pages/AdminFeedback.tsx",
+    "snippet": "<span className=\"absolute -left-2.5 -top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#319ED8] text-[11px] font-bold text-white shadow ring-2 ring-white\">"
+  },
+  {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFeedback.tsx",
     "snippet": "<div className=\"flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">"
@@ -17688,6 +17703,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/AdminFeedback.tsx",
     "snippet": "<Label className=\"text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]\">Screenshot</Label>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/AdminFeedback.tsx",
+    "snippet": "<span className=\"absolute -left-2.5 -top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#319ED8] text-[11px] font-bold text-white shadow ring-2 ring-white\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -27447,7 +27467,7 @@
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
-    "snippet": "<span className=\"w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0\" style={{ backgroundColor: !inkPending && allPass ? t.readyWash : !inkPending && measured.some((c) => c.tone === 'f"
+    "snippet": "<span className=\"w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0\" style={{ backgroundColor: !inkPending && allPass ? t.readyWash : !inkPending && anyFail ? t.critWash : !inkPending"
   },
   {
     "rule": "player-touch-target-too-small",

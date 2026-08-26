@@ -2062,6 +2062,44 @@ export function logSpotUsageFallback(
     `[completed-scan] spot-usage fallback reason=${scan.spotUsageReason} attribution=${scan.spotUsageAttribution} file=${ctx.fileName ?? "?"} source=${source} bytes=${scan.bytes} truncated=${scan.truncated}`,
   );
 }
+
+/**
+ * Task #3400 — the ONE fonts verdict, shared by the certification test
+ * (validateCompletedComponent check #4) and the live art-inspect banner so
+ * the two surfaces can never diverge (the same live-vs-server split that
+ * previously bit the Bleed check). Canon:
+ *   • no live text → pass (type appears outlined)
+ *   • live text, all fonts embedded → warn/advisory (outline before final)
+ *   • live text with unembedded fonts → fail, naming the missing fonts.
+ * Task #3388 — name the missing fonts where the file exposes them, and make
+ * the fix actionable: outline OR upload the font files with the art (no
+ * auto-outlining — MRP explicitly rejected converting type for the
+ * customer). A MIXED file (some fonts embedded, some not) fails naming only
+ * the unembedded ones.
+ */
+export function fontsCheckVerdict(
+  scan: Pick<CompletedPdfScan, "hasFontDicts" | "hasEmbeddedFonts" | "unembeddedFontNames" | "fontNames">,
+): { status: "pass" | "warn" | "fail"; message: string } {
+  if (!scan.hasFontDicts) {
+    return { status: "pass", message: "No live text detected — type appears outlined." };
+  }
+  if (scan.hasEmbeddedFonts && (scan.unembeddedFontNames ?? []).length === 0) {
+    return {
+      status: "warn",
+      message: "Live text detected (fonts are embedded) — outline all type before sending final print files.",
+    };
+  }
+  const mixed = scan.hasEmbeddedFonts === true;
+  const missing = (mixed ? (scan.unembeddedFontNames ?? []) : (scan.fontNames ?? [])).filter(Boolean);
+  const namesPart =
+    missing.length > 0
+      ? ` Missing font${missing.length > 1 ? "s" : ""}: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? ` (+${missing.length - 8} more)` : ""}.`
+      : "";
+  return {
+    status: "fail",
+    message: `${mixed ? "Some live text uses fonts with no embedded font program." : "Live text with no embedded font program."}${namesPart} Outline the type in your design app, or upload the font files (OTF/TTF) alongside this art so the prepress team can install them.`,
+  };
+}
 export function validateCompletedComponent(
   scan: CompletedPdfScan,
   spec: FinishedComponentSpec,
@@ -2263,38 +2301,16 @@ export function validateCompletedComponent(
     }
   }
 
-  // 4. Fonts — embedded or fully outlined.
-  if (!scan.hasFontDicts) {
+  // 4. Fonts — embedded or fully outlined. Verdict logic shared with the
+  // live art-inspect banner via fontsCheckVerdict (Task #3400) so the two
+  // surfaces can never diverge.
+  {
+    const fonts = fontsCheckVerdict(scan);
     checks.push({
       key: "tmpl.fonts",
       label: "Fonts",
-      status: "pass",
-      message: "No live text detected — type appears outlined.",
-    });
-  } else if (scan.hasEmbeddedFonts && (scan.unembeddedFontNames ?? []).length === 0) {
-    checks.push({
-      key: "tmpl.fonts",
-      label: "Fonts",
-      status: "warn",
-      message: "Live text detected (fonts are embedded) — outline all type before sending final print files.",
-    });
-  } else {
-    // Task #3388 — name the missing fonts where the file exposes them, and
-    // make the fix actionable: outline OR upload the font files with the art
-    // (no auto-outlining — MRP explicitly rejected converting type for the
-    // customer). A MIXED file (some fonts embedded, some not) fails naming
-    // only the unembedded ones.
-    const mixed = scan.hasEmbeddedFonts === true;
-    const missing = (mixed ? (scan.unembeddedFontNames ?? []) : (scan.fontNames ?? [])).filter(Boolean);
-    const namesPart =
-      missing.length > 0
-        ? ` Missing font${missing.length > 1 ? "s" : ""}: ${missing.slice(0, 8).join(", ")}${missing.length > 8 ? ` (+${missing.length - 8} more)` : ""}.`
-        : "";
-    checks.push({
-      key: "tmpl.fonts",
-      label: "Fonts",
-      status: "fail",
-      message: `${mixed ? "Some live text uses fonts with no embedded font program." : "Live text with no embedded font program."}${namesPart} Outline the type in your design app, or upload the font files (OTF/TTF) alongside this art so the prepress team can install them.`,
+      status: fonts.status,
+      message: fonts.message,
     });
   }
 

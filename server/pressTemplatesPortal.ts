@@ -23,7 +23,7 @@ import {
   type JacketKind,
 } from "@shared/vendorSpecs";
 import { rollupStatus, type CheckResult } from "@shared/uploadValidation";
-import { validateCompletedComponent, logSpotUsageFallback, measuredBleedInches, hasTrustworthyBleedBoxes } from "./validators/completedTemplate";
+import { validateCompletedComponent, logSpotUsageFallback, measuredBleedInches, hasTrustworthyBleedBoxes, fontsCheckVerdict } from "./validators/completedTemplate";
 import {
   measureTemplateSpecRow,
   clearTemplateSpecMeasurements,
@@ -1850,7 +1850,7 @@ export function registerPressTemplateFlowRoutes(
           // A partial scan must not report measured rows as authoritative.
           return res.status(422).json({ message: "Couldn't read the whole file — ink + PPI will be verified at prepress." });
         }
-        const rows: Array<{ param: string; tone: "pass" | "fail" | "na"; detail: string }> = [];
+        const rows: Array<{ param: string; tone: "pass" | "warn" | "fail" | "na"; detail: string }> = [];
         // Ink — same canon as the certification test's cmyk-or-pms branch.
         const spotUsage = (scan as any).spotUsage ?? (scan.hasSpot ? "unknown" : "none");
         const spotInUse = scan.hasSpot && spotUsage !== "unused";
@@ -1988,6 +1988,16 @@ export function registerPressTemplateFlowRoutes(
           } else if (measured != null) {
             rows.push({ param: "Bleed", tone: "na", detail: `Measured ≈${r3(measured)}" bleed from the file's own boxes — no certified template bleed line on this slot to compare against.` });
           }
+        }
+        // Fonts / live text — live, same canon as the full test (Task #3400:
+        // the banner claimed Pass on files the certification run flags for
+        // live text — the same live-vs-server divergence that bit Bleed).
+        // ONE shared verdict (fontsCheckVerdict) so the surfaces can't drift.
+        // PDF-only by construction: rasters returned above (pixels can't
+        // carry live text).
+        {
+          const fonts = fontsCheckVerdict(scan);
+          rows.push({ param: "Fonts", tone: fonts.status, detail: fonts.message });
         }
         res.json({ checks: rows });
       } catch (e: any) {
