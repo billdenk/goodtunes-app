@@ -245,8 +245,102 @@ export const pricingRowSchema = z.object({
 });
 export type PricingRow = z.infer<typeof pricingRowSchema>;
 
+// ── Per-press setup-fee rules engine (Task #3387) ───────────────────────
+// A press-generic rule vocabulary for the one-time setup lines the quote
+// builder shows (stampers, color setup, press setup) plus the poly-bag
+// packaging line. MRP's Day-2 numbers are the FIRST configuration of these
+// rules — never hardcoded logic. A press with no `setupRules` on its pricing
+// config keeps today's manual row-based behavior byte-for-byte (honest
+// pricing: no invented defaults). Values are cents; matching is
+// case-insensitive substring over the build's color tier/kind names.
+const centsSchema = z.number().int().min(0).max(100_000_000);
+const matchListSchema = z.array(z.string().min(1).max(64)).max(24);
+
+// One stamper pricing rule. Rules are evaluated IN ORDER; the first rule
+// whose present matchers all match the build wins. `freeUnits` is the
+// new-audio allowance (units of the run that pay nothing); absent = every
+// unit pays. Reorders pay at all quantities when the group's
+// `reordersAlwaysPay` is on (MRP 16.1).
+export const stamperRuleSchema = z.object({
+  /** Match record sizes ("7" | "10" | "12"). Absent = any size. */
+  sizes: z.array(z.string().max(8)).max(8).optional(),
+  /** Match vinyl weights ("140" | "180"). Absent = any weight. */
+  weights: z.array(z.string().max(8)).max(8).optional(),
+  /** Substring match against the color tier + kind (e.g. "picture",
+   * "glitter"). Absent = any color. */
+  tierMatch: matchListSchema.optional(),
+  /** Per-record fee in cents on chargeable units. */
+  perUnitCents: centsSchema,
+  /** New-audio free allowance in units; absent = pays at all quantities. */
+  freeUnits: z.number().int().min(0).max(1_000_000).optional(),
+  /** Optional human label for the derivation note. */
+  label: z.string().max(120).optional(),
+});
+export type StamperRule = z.infer<typeof stamperRuleSchema>;
+
+export const setupFeeRulesSchema = z.object({
+  /** Provenance stamp (e.g. "mrp-day2-2026"). */
+  source: z.string().max(120).optional(),
+  stamper: z
+    .object({
+      rules: z.array(stamperRuleSchema).max(24),
+      /** Reorders lose the free allowance and pay at all quantities. */
+      reordersAlwaysPay: z.boolean().optional(),
+    })
+    .optional(),
+  colorSetup: z
+    .object({
+      /** Fee per counted color per LP, cents (MRP: 9500). */
+      perColorCents: centsSchema,
+      /** Multiply by disc count (2LP doubles). Default true. */
+      perDisc: z.boolean().optional(),
+      /** Ordered category matchers → color counts (first match wins),
+       * matched as substrings against the tier + kind names. colors: 0 is a
+       * genuine "no setup fee" (black vinyl). */
+      categories: z
+        .array(z.object({ match: matchListSchema, colors: z.number().int().min(0).max(12) }))
+        .max(24),
+      /** Splatter composes base colors + a per-splatter-color fee.
+       * maxSplatterColors bounds what the press actually offers (MRP: 3);
+       * counts above it are refused (fall back to the manual row — honest),
+       * never priced. Absent = no configured maximum. */
+      splatter: z
+        .object({
+          match: matchListSchema.optional(),
+          baseColors: z.number().int().min(0).max(12).optional(),
+          perSplatterColorCents: centsSchema,
+          maxSplatterColors: z.number().int().min(1).max(12).optional(),
+        })
+        .optional(),
+      /** Count when no category matches; absent = can't derive (falls back
+       * to the manual pricing row — honest, never guessed). */
+      defaultColors: z.number().int().min(0).max(12).optional(),
+    })
+    .optional(),
+  /** Flat press-setup fee on runs under `underQty` units (MRP: $95 < 500). */
+  pressSetup: z
+    .object({
+      amountCents: centsSchema,
+      underQty: z.number().int().min(1).max(1_000_000),
+    })
+    .optional(),
+  /** Open-top poly bag priced as ONE per-unit line with the insertion fee
+   * folded in (MRP 16.4 / 4.11: 25¢ bag + 12¢ insertion = one 37¢ line). */
+  polyBag: z
+    .object({
+      label: z.string().max(120).optional(),
+      bagCents: centsSchema,
+      insertionCents: centsSchema,
+    })
+    .optional(),
+});
+export type SetupFeeRules = z.infer<typeof setupFeeRulesSchema>;
+
 export const pricingComponentConfigSchema = z.object({
   rows: z.array(pricingRowSchema).max(2000),
+  // Optional per-press setup-fee rules (Task #3387). Lives alongside the
+  // rows in the same pricing config blob; absent = manual behavior.
+  setupRules: setupFeeRulesSchema.optional(),
 });
 export type PricingComponentConfig = z.infer<typeof pricingComponentConfigSchema>;
 

@@ -12786,6 +12786,26 @@ seed_mrp_services_tier3() {
 seed_mrp_services_tier3 dev  "${DATABASE_URL:-}"
 seed_mrp_services_tier3 prod "${PROD_DATABASE_URL:-}"
 
+# Task #3387 — MRP setup-fee RULES (first configuration of the press-generic
+# setup-fee rules engine). Marker-guarded inside the script (mrp_setup_rules_v1).
+seed_mrp_setup_rules() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping MRP setup-rules seed on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/seed-mrp-setup-rules.ts 2>&1); then
+    echo "post-merge: MRP setup-rules seed ok on $label"
+    echo "$out" | tail -4
+  else
+    echo "post-merge: WARNING — MRP setup-rules seed failed on $label (continuing, marker withheld so next merge retries)"
+    echo "$out" | tail -10
+  fi
+}
+seed_mrp_setup_rules dev  "${DATABASE_URL:-}"
+seed_mrp_setup_rules prod "${PROD_DATABASE_URL:-}"
+
 # Task #3227 — component→price linkage rows (each press's package component
 # options linked to that press's OWN price sources). Idempotent DDL on BOTH
 # DBs (keeps the schema-drift guard green).

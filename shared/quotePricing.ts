@@ -17,7 +17,7 @@
 // Vinyl rows are matched by NAME (row label/detail vs the catalog color/tier
 // names) because the builder's swatches come from the relational catalog
 // while pricing rows key off the vinyl component's slugs.
-import type { PricingRow, PricingRung } from "./pressComponents";
+import type { PricingRow, PricingRung, SetupFeeRules, StamperRule } from "./pressComponents";
 
 export type QuoteSizeId = "7" | "10" | "12";
 const SIZE_TO_VINYL: Record<QuoteSizeId, string> = { "7": '7"', "10": '10"', "12": '12"' };
@@ -269,6 +269,294 @@ export const QUOTE_SETUP_SERVICE_KEYS = [
   "service:colorfee",
 ] as const;
 
+// ── Per-press setup-fee rules engine (Task #3387) ───────────────────────
+// Press-generic evaluation of the one-time setup lines from the build
+// itself (quantity, weight, discs, color category, splatter colors, reorder
+// flag). The rule VOCABULARY is shared platform code; each press's VALUES
+// live in its pricing config (`setupRules`, shared/pressComponents.ts) —
+// MRP's Day-2 numbers are the first configuration, seeded by
+// scripts/seed-mrp-setup-rules.ts. A press with no rules resolves setup
+// lines exactly as before (manual pricing rows only).
+//
+// Resolution order per setup line (single source of truth for the builder,
+// the server /send gate, and the estimate email):
+//   1. per-quote operator override (builderState.setupOverrides, cents) —
+//      only honored when the press HAS rules (no-rules presses byte-identical)
+//   2. rules-derived amount (with a human-readable derivation note)
+//   3. the press's `service:<id>` pricing row (manual cell → ladder → legacy)
+//   4. null → "Pricing pending" (honest; blocks send)
+
+/** The build facts the rules evaluate — derived from live builder controls
+ * on the client and from the persisted builderState on the server. */
+export type SetupRuleContext = {
+  sizeId: QuoteSizeId;
+  /** Effective run size (the builder's 1,000-unit anchor pre-pick). */
+  qty: number;
+  discs: number;
+  weightId: string;
+  colorKind?: string | null;
+  colorTierName?: string | null;
+  reorder?: boolean;
+  /** Splatter accent-color count (operator-set stepper). null = unknown. */
+  splatterColors?: number | null;
+  /** Per-quote operator overrides, cents by setup line id. */
+  overrides?: Record<string, unknown> | null;
+};
+
+const moneyC = (cents: number) =>
+  (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
+const intFmt = (n: number) => n.toLocaleString("en-US");
+
+function ruleHaystack(ctx: SetupRuleContext): string {
+  return norm(`${ctx.colorTierName ?? ""} ${ctx.colorKind ?? ""}`);
+}
+const anyMatch = (list: string[] | undefined, hay: string) =>
+  Array.isArray(list) && list.some((m) => hay.includes(norm(m)));
+
+function stamperRuleMatches(r: StamperRule, ctx: SetupRuleContext, hay: string): boolean {
+  if (r.sizes && !r.sizes.includes(String(ctx.sizeId))) return false;
+  if (r.weights && !r.weights.includes(String(ctx.weightId))) return false;
+  if (r.tierMatch && !anyMatch(r.tierMatch, hay)) return false;
+  return true;
+}
+
+export type DerivedSetupFee = { dollars: number; note: string };
+/** A rule REFUSING the build: the persisted value is present but the press
+ * doesn't offer it (e.g. splatter count above maxSplatterColors). Unlike a
+ * null (unknown → manual-row fallback), a refusal keeps the line "Pricing
+ * pending" — it must never be priced off a stale manual row, and the /send
+ * gate fails closed on it. */
+export type RefusedSetupFee = { refused: true; note: string };
+
+/** Stamper fee (MRP 16.1 shape): first matching rule wins; new audio gets the
+ * rule's free allowance, reorders (and always-pay categories) pay every unit.
+ * Fees are per RECORD, so multi-disc builds multiply by disc count. */
+export function evaluateStamperFee(
+  rules: SetupFeeRules | null | undefined,
+  ctx: SetupRuleContext,
+): DerivedSetupFee | null {
+  const cfg = rules?.stamper;
+  if (!cfg?.rules?.length || !(ctx.qty > 0)) return null;
+  const hay = ruleHaystack(ctx);
+  const rule = cfg.rules.find((r) => stamperRuleMatches(r, ctx, hay));
+  if (!rule) return null;
+  const discs = ctx.discs > 0 ? Math.floor(ctx.discs) : 1;
+  const reorder = ctx.reorder === true && cfg.reordersAlwaysPay !== false;
+  const free = reorder ? 0 : rule.freeUnits ?? 0;
+  const charged = Math.max(0, Math.floor(ctx.qty) - free);
+  const cents = rule.perUnitCents * charged * discs;
+  const per = `${moneyC(rule.perUnitCents)}/record`;
+  const lp = discs > 1 ? ` × ${discs} LP` : "";
+  let note: string;
+  if (charged === 0) {
+    note = `New audio — first ${intFmt(rule.freeUnits ?? 0)} units included`;
+  } else if (reorder && (rule.freeUnits ?? 0) > 0) {
+    note = `Reorder — ${per} × ${intFmt(charged)} units${lp}`;
+  } else if ((rule.freeUnits ?? 0) > 0) {
+    note = `New audio — ${per} × ${intFmt(charged)} units over the first ${intFmt(rule.freeUnits ?? 0)}${lp}`;
+  } else {
+    note = `${rule.label ?? "Pays at all quantities"} — ${per} × ${intFmt(charged)} units${lp}`;
+  }
+  return { dollars: cents / 100, note };
+}
+
+/** Color setup fee (MRP 16.2 shape): $N per counted color per LP; splatter
+ * composes base colors + a per-splatter-color fee; 2LP doubles. Returns null
+ * (fall back to the manual row) when the category can't be derived, and a
+ * refusal (line stays pending, no fallback) for an invalid/out-of-range
+ * splatter-color count. */
+export function evaluateColorSetupFee(
+  rules: SetupFeeRules | null | undefined,
+  ctx: SetupRuleContext,
+): DerivedSetupFee | RefusedSetupFee | null {
+  const cfg = rules?.colorSetup;
+  if (!cfg) return null;
+  const hay = ruleHaystack(ctx);
+  if (!hay.trim()) return null; // no color picked yet — nothing to derive
+  const discs = ctx.discs > 0 ? Math.floor(ctx.discs) : 1;
+  const mult = cfg.perDisc !== false ? discs : 1;
+  const lp = mult > 1 ? ` × ${discs} LP` : "";
+  const isSplatter =
+    !!cfg.splatter &&
+    (norm(ctx.colorKind).includes("splatter") || anyMatch(cfg.splatter.match ?? ["splatter"], hay));
+  if (isSplatter) {
+    const n = ctx.splatterColors;
+    // UNKNOWN (no count picked yet) → null: fall back to the manual row,
+    // exactly like any other non-derivable rule (honest).
+    if (n == null) return null;
+    // INVALID — a count that IS present but the press doesn't offer
+    // (non-integer, < 1, or above the configured maxSplatterColors) is
+    // REFUSED: the line must stay "Pricing pending" (blocks /send), never
+    // fall back to a stale manual row that would price a build the press
+    // doesn't sell.
+    const max = cfg.splatter!.maxSplatterColors;
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 1) {
+      return { refused: true, note: "Splatter color count isn't valid — re-pick it" };
+    }
+    if (max != null && n > max) {
+      return { refused: true, note: `This press offers up to ${intFmt(max)} splatter colors` };
+    }
+    const base = (cfg.splatter!.baseColors ?? 1) * cfg.perColorCents;
+    const cents = (base + n * cfg.splatter!.perSplatterColorCents) * mult;
+    return {
+      dollars: cents / 100,
+      note: `Base color + ${intFmt(n)} splatter color${n === 1 ? "" : "s"} × ${moneyC(cfg.splatter!.perSplatterColorCents)}${lp}`,
+    };
+  }
+  let colors = cfg.categories.find((c) => anyMatch(c.match, hay))?.colors;
+  if (colors == null) colors = cfg.defaultColors;
+  if (colors == null) return null;
+  if (colors === 0) return { dollars: 0, note: "No color setup fee" };
+  const cents = colors * cfg.perColorCents * mult;
+  return {
+    dollars: cents / 100,
+    note: `${colors} color${colors === 1 ? "" : "s"} × ${moneyC(cfg.perColorCents)}${lp}`,
+  };
+}
+
+/** Press setup fee (MRP 16.3 shape): flat fee on runs under the threshold. */
+export function evaluatePressSetupFee(
+  rules: SetupFeeRules | null | undefined,
+  ctx: SetupRuleContext,
+): DerivedSetupFee | null {
+  const cfg = rules?.pressSetup;
+  if (!cfg || !(ctx.qty > 0)) return null;
+  if (ctx.qty < cfg.underQty) {
+    return { dollars: cfg.amountCents / 100, note: `Orders under ${intFmt(cfg.underQty)} units` };
+  }
+  return { dollars: 0, note: `Waived at ${intFmt(cfg.underQty)}+ units` };
+}
+
+/** Open-top poly bag as ONE per-unit line — insertion fee folded into the
+ * bag price (MRP 16.4 / 4.11). Fixed cents, so it never rides the synthetic
+ * run-size curve (laddered=true). */
+export function polyBagUnitLine(rules: SetupFeeRules | null | undefined): QuoteLine | null {
+  const pb = rules?.polyBag;
+  if (!pb) return null;
+  return {
+    id: "polybag",
+    name: pb.label?.trim() || "Open-top poly bag",
+    note: "Insertion included",
+    v: (pb.bagCents + pb.insertionCents) / 100,
+    laddered: true,
+  };
+}
+
+export type SetupLine = {
+  id: string;
+  name: string;
+  note?: string;
+  /** One-time dollars. 0 renders "Included"; null = pricing pending. */
+  amount: number | null;
+  /** true = rules-derived (the builder offers a per-quote override). */
+  derived?: boolean;
+  /** true = a per-quote operator override is in effect. */
+  overridden?: boolean;
+};
+
+function overrideCents(ctx: SetupRuleContext, id: string): number | null {
+  const o = ctx.overrides;
+  if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+  const v = (o as Record<string, unknown>)[id];
+  return typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
+}
+
+/**
+ * The one-time setup lines — single source of truth for the builder, the
+ * server /send gate, and the estimate email. Without rules this reproduces
+ * the previous behavior exactly (each line = its `service:<id>` pricing row,
+ * overrides ignored). With rules, stampers / color setup are derived from
+ * the build (manual row as fallback when a rule can't evaluate), and a
+ * press-setup line is appended when configured.
+ */
+export function computeSetupLines(
+  rows: PricingRow[] | undefined | null,
+  rules: SetupFeeRules | null | undefined,
+  ctx: SetupRuleContext,
+): SetupLine[] {
+  const pricer = makeQuotePricer(rows);
+  const hasRules = !!rules && !!(rules.stamper || rules.colorSetup || rules.pressSetup || rules.polyBag);
+  const resolve = (
+    id: string,
+    name: string,
+    staticNote: string | undefined,
+    derive: (() => DerivedSetupFee | RefusedSetupFee | null) | null,
+  ): SetupLine => {
+    if (hasRules) {
+      const oc = overrideCents(ctx, id);
+      if (oc != null) {
+        const rule = derive ? derive() : null;
+        const priced = rule && !("refused" in rule) ? rule : null;
+        return {
+          id, name, amount: oc / 100, derived: !!rule, overridden: true,
+          note: priced ? `Operator override — rules computed ${moneyC(Math.round(priced.dollars * 100))}` : "Operator override",
+        };
+      }
+      const rule = derive ? derive() : null;
+      if (rule && "refused" in rule) {
+        // The rule REFUSED the build (e.g. splatter count above the press's
+        // maximum): the line stays pending — never priced off a stale manual
+        // row — so the /send gate fails closed.
+        return { id, name, amount: null, derived: true, note: rule.note };
+      }
+      if (rule) return { id, name, amount: rule.dollars, derived: true, note: rule.note };
+    }
+    const v = pricer.flat(`service:${id}`, ctx.sizeId, ctx.qty);
+    return { id, name, amount: v, ...(staticNote ? { note: staticNote } : {}) };
+  };
+  const lines: SetupLine[] = [
+    resolve("cutting", "Lacquer cutting", undefined, null),
+    resolve("plating", "Lacquer plating", undefined, null),
+    resolve("test", "Test pressing", "Includes 2-day domestic shipping", null),
+    resolve("stampers", "Stampers", undefined, () => evaluateStamperFee(rules, ctx)),
+    resolve("colorfee", "Color setup fee", undefined, () => evaluateColorSetupFee(rules, ctx)),
+  ];
+  if (rules?.pressSetup) {
+    // The press-setup line only EXISTS for presses that configured the rule
+    // — no-rules presses keep today's five lines byte-identically. The rule
+    // always evaluates (never null when configured), so `service:setup` rows
+    // are not consulted.
+    const oc = overrideCents(ctx, "setup");
+    const rule = evaluatePressSetupFee(rules, ctx)!;
+    lines.push(
+      oc != null
+        ? { id: "setup", name: "Press setup", amount: oc / 100, derived: true, overridden: true, note: `Operator override — rules computed ${moneyC(Math.round(rule.dollars * 100))}` }
+        : { id: "setup", name: "Press setup", amount: rule.dollars, derived: true, note: rule.note },
+    );
+  }
+  return lines;
+}
+
+/** Build the rules context from a persisted builder state — the server-side
+ * twin of the builder's live controls. ABSENT fields fail SAFE (unknown →
+ * manual-row fallback), but a PRESENT-yet-invalid splatter count must stay
+ * distinguishable so the rule can refuse it (fail closed at /send). */
+export function setupCtxFromState(state: QuoteBuilderState): SetupRuleContext {
+  return {
+    sizeId: String(state.sizeId ?? "12") as QuoteSizeId,
+    qty: typeof state.qty === "number" && state.qty > 0 ? state.qty : LADDER_REFERENCE_QTY,
+    discs: typeof state.discs === "number" && state.discs > 0 ? state.discs : 1,
+    weightId: String(state.weightId ?? "140"),
+    colorKind: typeof state.colorKind === "string" ? state.colorKind : null,
+    colorTierName: typeof state.colorTierName === "string" ? state.colorTierName : null,
+    reorder: state.reorder === true,
+    // null/undefined = genuinely absent (never picked). Any other non-number
+    // persisted value (forged string/boolean/object/…) maps to NaN — present
+    // but invalid — which the color-setup rule REFUSES instead of falling
+    // back to a stale manual row.
+    splatterColors:
+      state.splatterColors == null
+        ? null
+        : typeof state.splatterColors === "number"
+          ? state.splatterColors
+          : Number.NaN,
+    overrides:
+      state.setupOverrides && typeof state.setupOverrides === "object" && !Array.isArray(state.setupOverrides)
+        ? (state.setupOverrides as Record<string, unknown>)
+        : null,
+  };
+}
+
 /** The builder's persisted control snapshot (payload.builderState) — loose on
  * purpose: old drafts may lack newer fields, and every miss fails CLOSED
  * (counts as pending) rather than silently pricing. */
@@ -286,6 +574,16 @@ export type QuoteBuilderState = {
   insertId?: string;
   stickerShapeId?: string;
   done?: string[];
+  // ── Setup-fee rules inputs (Task #3387) — persisted so the server /send
+  // gate + estimate email re-derive the exact same setup lines. ──
+  /** Reorder of existing audio: stamper free allowance does not apply. */
+  reorder?: boolean;
+  /** Splatter accent-color count (only meaningful on splatter builds). */
+  splatterColors?: number | null;
+  /** Open-top poly bag picked (prices via rules.polyBag, one folded line). */
+  polyBag?: boolean;
+  /** Per-quote operator overrides on derived setup lines, cents by line id. */
+  setupOverrides?: Record<string, number> | null;
   [k: string]: unknown;
 };
 
@@ -344,6 +642,7 @@ export function invalidQuoteBuilderState(bs: unknown): string | null {
 export function computeQuotePendingIds(
   bs: QuoteBuilderState | null | undefined,
   rows: PricingRow[] | undefined | null,
+  rules?: SetupFeeRules | null,
 ): string[] {
   const state = bs && typeof bs === "object" ? bs : {};
   const done = new Set(Array.isArray(state.done) ? state.done.map(String) : []);
@@ -380,9 +679,13 @@ export function computeQuotePendingIds(
   if (state.stickerShapeId && state.stickerShapeId !== "none" && pricer.flat(`stickers:${state.stickerShapeId}`, size, qty) == null) {
     pending.push("sticker");
   }
-  for (const key of QUOTE_SETUP_SERVICE_KEYS) {
-    if (pricer.flat(key, size, qty) == null) pending.push(key.slice("service:".length));
+  // Setup lines resolve through the shared rules engine (Task #3387): with
+  // no rules configured this is exactly the old `service:<id>` row loop.
+  for (const l of computeSetupLines(rows, rules ?? null, setupCtxFromState(state))) {
+    if (l.amount == null) pending.push(l.id);
   }
+  // A recorded poly-bag pick with no poly-bag rule can't price — fail closed.
+  if (state.polyBag === true && polyBagUnitLine(rules) == null) pending.push("polybag");
   return pending;
 }
 
@@ -437,9 +740,10 @@ const withSuffix = (name: string, suffix: string) =>
 export function computeQuoteEmailBreakdown(
   bs: QuoteBuilderState | null | undefined,
   rows: PricingRow[] | undefined | null,
+  rules?: SetupFeeRules | null,
 ): QuoteEmailBreakdown | null {
   if (invalidQuoteBuilderState(bs)) return null;
-  if (computeQuotePendingIds(bs, rows).length > 0) return null;
+  if (computeQuotePendingIds(bs, rows, rules).length > 0) return null;
   const state = bs as QuoteBuilderState;
   const list: PricingRow[] = Array.isArray(rows) ? rows.filter((r) => r && typeof r.key === "string") : [];
   const pricer = makeQuotePricer(list);
@@ -509,6 +813,12 @@ export function computeQuoteEmailBreakdown(
   raw.push({ id: "assembly", name: "Assembly", note: "Insert placed on top before shrink", v: assemblyV?.v ?? null, laddered: assemblyV?.laddered });
   const shrinkV = pricer.flatEx("service:shrink", sizeId, qty);
   raw.push({ id: "shrink", name: "Shrinkwrap", note: "Retail-ready seal", v: shrinkV?.v ?? null, laddered: shrinkV?.laddered });
+  // Open-top poly bag (Task #3387): ONE per-unit line, insertion folded in.
+  if (state.polyBag === true) {
+    const pb = polyBagUnitLine(rules);
+    if (pb == null) return null; // pending gate already failed closed; stay honest
+    raw.push(pb);
+  }
 
   // Pending gate above guarantees no nulls, but stay fail-closed anyway.
   if (raw.some((l) => l.v == null)) return null;
@@ -516,18 +826,13 @@ export function computeQuoteEmailBreakdown(
     id: l.id, name: l.name, ...(l.note ? { note: l.note } : {}), unitDollars: scaledUnitDollars(l, unitFactor),
   }));
 
-  const setupDefs: Array<{ id: string; name: string; note?: string; key: string }> = [
-    { id: "cutting", name: "Lacquer cutting", key: "service:cutting" },
-    { id: "plating", name: "Lacquer plating", key: "service:plating" },
-    { id: "test", name: "Test pressing", note: "Includes 2-day domestic shipping", key: "service:test" },
-    { id: "stampers", name: "Stampers", key: "service:stampers" },
-    { id: "colorfee", name: "Color setup fee", key: "service:colorfee" },
-  ];
+  // Setup lines through the shared rules engine (Task #3387) — same
+  // derivation (and derivation notes) the builder showed when Send was hit.
+  // Without rules this is byte-identical to the old five-row loop.
   const setupLines: QuoteEmailSetupLine[] = [];
-  for (const d of setupDefs) {
-    const v = pricer.flat(d.key, sizeId, qty);
-    if (v == null) return null;
-    setupLines.push({ id: d.id, name: d.name, ...(d.note ? { note: d.note } : {}), dollars: v });
+  for (const l of computeSetupLines(rows, rules ?? null, setupCtxFromState(state))) {
+    if (l.amount == null) return null;
+    setupLines.push({ id: l.id, name: l.name, ...(l.note ? { note: l.note } : {}), dollars: l.amount });
   }
 
   const unitCost = unitLines.reduce((a, l) => a + l.unitDollars, 0);

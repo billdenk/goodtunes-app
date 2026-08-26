@@ -25852,7 +25852,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressVinylStyles.tsx",
-    "snippet": "<div className=\"text-[10.5px] font-bold uppercase tracking-wider\" style={{ color: t.faint }}>Style</div>"
+    "snippet": "<div className=\"text-[10.5px] font-bold uppercase tracking-wider\" style={{ color: t.faint }}>Type</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -25927,7 +25927,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-components/PressVinylStyles.tsx",
-    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: t.faint, marginBottom: 7 }}>Style name</div>"
+    "snippet": "<div className=\"text-[11px] font-bold uppercase tracking-wider\" style={{ color: t.faint, marginBottom: 7 }}>Type name</div>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -26267,21 +26267,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<div className=\"text-[13px] font-semibold\" style={{ marginTop: 28, color: INK }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<p className=\"text-[12px] text-center\" style={{ marginTop: 6, color: '#a1a1a6', maxWidth: 280 }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 12, color: '#a1a1a6' }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
     "snippet": "<p className=\"text-[12px] text-center\" style={{ marginTop: 6, maxWidth: 320, color: '#a1a1a6' }}>"
   },
   {
@@ -26293,6 +26278,21 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
     "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: '#a1a1a6', lineHeight: 1.4 }}>{h.note}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<div className=\"text-[13px] font-semibold\" style={{ marginTop: 28, color: INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<p className=\"text-[12px] text-center\" style={{ marginTop: 6, color: '#a1a1a6', maxWidth: 280 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 12, color: '#a1a1a6' }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -26762,21 +26762,6 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<div className=\"text-[13px] font-semibold\" style={{ marginTop: 28, color: INK }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<p className=\"text-[12px] text-center\" style={{ marginTop: 6, color: '#a1a1a6', maxWidth: 280 }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 12, color: '#a1a1a6' }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
     "snippet": "<p className=\"text-[12px] text-center\" style={{ marginTop: 6, maxWidth: 320, color: '#a1a1a6' }}>"
   },
   {
@@ -26788,6 +26773,21 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
     "snippet": "<div className=\"text-[11px]\" style={{ marginTop: 3, color: '#a1a1a6', lineHeight: 1.4 }}>{h.note}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "<div className=\"text-[13px] font-semibold\" style={{ marginTop: 28, color: INK }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "<p className=\"text-[12px] text-center\" style={{ marginTop: 6, color: '#a1a1a6', maxWidth: 280 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "<p className=\"text-[12px]\" style={{ marginTop: 12, color: '#a1a1a6' }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -26843,6 +26843,16 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
     "snippet": "<div className=\"text-[12.5px]\" style={{ marginTop: 18, color: SUBINK, lineHeight: 1.6, paddingLeft: 20 }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "className=\"text-[12px] font-medium rounded-full\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "<span className=\"inline-flex items-center text-[12px] font-medium rounded-full\" style={{ gap: 8, padding: '5px 8px 5px 14px', border: `1px solid ${HAIRLINE}`, background: '#fff', color: SUBINK }} data"
   },
   {
     "rule": "hardcoded-font-size",
@@ -26917,12 +26927,27 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "{l.note && <div className=\"text-[11px]\" style={{ color: '#a1a1a6', marginTop: 1, opacity: 0.8 }}>{l.note}</div>}"
+    "snippet": "{l.note && <div className=\"text-[11px]\" style={{ color: '#a1a1a6', marginTop: 1, opacity: 0.8 }} data-testid={`quote-setup-note-${l.id}`}>{l.note}</div>}"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
-    "snippet": "<span className=\"text-[12px]\" style={{ color: l.amount == null ? '#b25e09' : l.amount === 0 ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums' }}>{l.amount == null ? 'Pricing pending' : l.amount"
+    "snippet": "className=\"text-[12px] focus:outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "<button type=\"button\" onClick={() => { setSetupOverrides((p) => { const n = { ...p }; delete n[l.id]; return n; }); touch(); }} className=\"text-[11px] font-medium\" style={{ border: 'none', background:"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "className=\"text-[12px]\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressQuoteBuilder.tsx",
+    "snippet": "<span className=\"text-[12px]\" style={{ color: l.amount == null ? '#b25e09' : l.amount === 0 ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums' }} data-testid={`quote-setup-amount-${l.id}`}>{l.am"
   },
   {
     "rule": "hardcoded-font-size",

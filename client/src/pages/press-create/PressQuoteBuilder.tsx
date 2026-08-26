@@ -29,7 +29,7 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useAdminDark } from '@/lib/adminAppearance';
 import { PRESS_MARK_ON_DARK, PRESS_MARK_ON_LIGHT } from '@/lib/pressMark';
 import type { PressComponentsPayload } from '@shared/pressComponents';
-import { makeQuotePricer, pendingLines, scaledUnitDollars, type QuoteLine } from './quotePricing';
+import { makeQuotePricer, pendingLines, scaledUnitDollars, computeSetupLines, polyBagUnitLine, type QuoteLine } from './quotePricing';
 import { PressLogoImg, usePressBrand, usePressCatalogSwatches } from './PressPackageBuilder';
 import californialandCover from './assets/californialand-cover.jpg';
 import californialandInnerSleeve from './assets/californialand-inner-sleeve.png';
@@ -2527,6 +2527,11 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
     queryKey: [`/api/press/${pressId}/components`],
   });
   const pricer = useMemo(() => makeQuotePricer(components?.pricing?.rows), [components]);
+  // Per-press setup-fee rules (Task #3387): when the press has rules
+  // configured, stamper / color-setup / press-setup lines derive from the
+  // build itself (with per-quote operator override). No rules → the manual
+  // `service:<id>` rows price everything, exactly as before.
+  const setupRules = components?.pricing?.setupRules ?? null;
 
   // ── Shared state — the record size flows through every section ──
   const [sizeId, setSizeId] = useState<SizeId>('12');
@@ -2558,6 +2563,16 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
 
   const [stickerShapeId, setStickerShapeId] = useState<StickerShapeId | 'none'>('none');
   const [stickerSizeId, setStickerSizeId] = useState<string>('3x3');
+
+  // ── Setup-fee rules controls (Task #3387) — only surfaced when the press
+  // has rules configured; presses without rules never see them. ──
+  const [reorder, setReorder] = useState(false);
+  const [splatterColors, setSplatterColors] = useState<number>(1);
+  const [polyBag, setPolyBag] = useState(false);
+  // Per-quote operator overrides on derived setup lines (cents by line id).
+  const [setupOverrides, setSetupOverrides] = useState<Record<string, number>>({});
+  const [editingSetupId, setEditingSetupId] = useState<string | null>(null);
+  const [editingSetupVal, setEditingSetupVal] = useState('');
 
   const [clientName, setClientName] = useState<string | null>(null);
   const [clientSearch, setClientSearch] = useState('');
@@ -2761,6 +2776,8 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
     picked('sticker') && stickerShapeId !== 'none' ? (() => { const p = pricer.flatEx(`stickers:${stickerShapeId}`, sizeId, q); return { id: 'sticker', name: `${stickerShape?.name ?? 'Sticker'} sticker`, v: p?.v ?? null, laddered: p?.laddered }; })() : null,
     vinylDone ? (() => { const p = pricer.flatEx('service:assembly', sizeId, q); return { id: 'assembly', name: 'Assembly', note: 'Insert placed on top before shrink', v: p?.v ?? null, laddered: p?.laddered }; })() : null,
     vinylDone ? (() => { const p = pricer.flatEx('service:shrink', sizeId, q); return { id: 'shrink', name: 'Shrinkwrap', note: 'Retail-ready seal', v: p?.v ?? null, laddered: p?.laddered }; })() : null,
+    // Open-top poly bag (Task #3387): ONE per-unit line, insertion folded in.
+    vinylDone && polyBag ? polyBagUnitLine(setupRules) : null,
   ] as Array<QuoteLine | null>).filter((x): x is QuoteLine => x !== null);
   const quoteLines = linesAt(effQty);
   // Sum with the run-size factor applied ONLY to operator-entered (manual)
@@ -2771,13 +2788,19 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   // One-time setup costs — also real-price-only now: each line resolves from
   // a `service:<id>` pricing row (0 renders "Included"); missing = pending.
   // Laddered service rows (stampers) resolve their one-time total at the run size.
-  const QB_SETUP_LINES = [
-    { id: 'cutting', name: 'Lacquer cutting', amount: pricer.flat('service:cutting', sizeId, effQty) },
-    { id: 'plating', name: 'Lacquer plating', amount: pricer.flat('service:plating', sizeId, effQty) },
-    { id: 'test', name: 'Test pressing', amount: pricer.flat('service:test', sizeId, effQty), note: 'Includes 2-day domestic shipping' },
-    { id: 'stampers', name: 'Stampers', amount: pricer.flat('service:stampers', sizeId, effQty) },
-    { id: 'colorfee', name: 'Color setup fee', amount: pricer.flat('service:colorfee', sizeId, effQty) },
-  ];
+  // Setup lines through the shared rules engine (Task #3387): rules-derived
+  // lines carry a derivation note and accept a per-quote override; without
+  // rules this resolves each line from its `service:<id>` row exactly as
+  // before. Same function feeds the server /send gate + estimate email.
+  const isSplatterBuild = vinylDone && color?.kind === 'splatter';
+  const QB_SETUP_LINES = computeSetupLines(components?.pricing?.rows, setupRules, {
+    sizeId, qty: effQty, discs, weightId,
+    colorKind: vinylDone ? color?.kind ?? null : null,
+    colorTierName: vinylDone ? color?.kindNote ?? null : null,
+    reorder,
+    splatterColors: isSplatterBuild ? splatterColors : null,
+    overrides: setupOverrides,
+  });
   const QB_SETUP_TOTAL = QB_SETUP_LINES.reduce((acc, l) => acc + (l.amount ?? 0), 0);
   const total = picked('qty') ? perUnit * qty + QB_SETUP_TOTAL : 0;
   // Any picked line (or setup line) without a real price ⇒ the quote is
@@ -2791,6 +2814,22 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   const sendEarned = sendEarnedBase && !pricingPending;
 
   const perUnitAt = (q: number) => unitAt(linesAt(q), tierFactor(q));
+
+  // Commit a per-quote setup override (dollars typed → cents stored).
+  // Empty input clears the override back to the rules-derived amount.
+  const commitSetupOverride = (id: string) => {
+    const raw = editingSetupVal.trim().replace(/^\$/, '').replace(/,/g, '');
+    setEditingSetupId(null);
+    if (raw === '') {
+      setSetupOverrides((p) => { const n = { ...p }; delete n[id]; return n; });
+      touch();
+      return;
+    }
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return;
+    setSetupOverrides((p) => ({ ...p, [id]: Math.round(n * 100) }));
+    touch();
+  };
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
   const sizeLabel = VINYL_SIZES.find((s) => s.id === sizeId)?.label ?? '';
@@ -2809,6 +2848,12 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
     labelId, holeId, insertId, insertVariantId,
     stickerShapeId, stickerSizeId,
     clientName,
+    // Setup-fee rules inputs (Task #3387) — persisted so the server /send
+    // gate + estimate email re-derive the exact same setup lines.
+    reorder,
+    splatterColors: isSplatterBuild ? splatterColors : null,
+    polyBag,
+    setupOverrides,
     done: Array.from(done),
   };
   // One-line build summary the summary bar / list rows show
@@ -2851,6 +2896,19 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
       if (typeof bs.stickerShapeId === 'string') setStickerShapeId(bs.stickerShapeId);
       if (typeof bs.stickerSizeId === 'string') setStickerSizeId(bs.stickerSizeId);
       if (typeof bs.clientName === 'string') setClientName(bs.clientName);
+      if (typeof bs.reorder === 'boolean') setReorder(bs.reorder);
+      // Whole counts only — hydrate the raw persisted value (even above the
+      // press's max) so the operator sees what was saved; the rules engine
+      // refuses out-of-range counts, leaving the line "Pricing pending".
+      if (typeof bs.splatterColors === 'number' && Number.isInteger(bs.splatterColors) && bs.splatterColors >= 1) setSplatterColors(bs.splatterColors);
+      if (typeof bs.polyBag === 'boolean') setPolyBag(bs.polyBag);
+      if (bs.setupOverrides && typeof bs.setupOverrides === 'object' && !Array.isArray(bs.setupOverrides)) {
+        const o: Record<string, number> = {};
+        for (const [k, v] of Object.entries(bs.setupOverrides)) {
+          if (typeof v === 'number' && Number.isFinite(v) && v >= 0) o[k] = Math.round(v);
+        }
+        setSetupOverrides(o);
+      }
       if (Array.isArray(bs.done)) setDone(new Set(bs.done as StepKey[]));
     }
     // Row not found / no builderState → start fresh (leave defaults).
@@ -3690,6 +3748,52 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                   {insertType.id === 'none' ? '' : ` · ${insertType.name}`}
                   {stickerShape ? ` · ${stickerShape.name} sticker` : ''}
                 </div>
+                {/* Setup-fee rules controls (Task #3387) — only for presses
+                    with rules configured. Reorder flips the stamper free
+                    allowance off; splatter builds set the accent-color count;
+                    poly bag adds the single folded 37¢-style unit line. */}
+                {setupRules && (setupRules.stamper || setupRules.polyBag || (isSplatterBuild && setupRules.colorSetup?.splatter)) && (
+                  <div className="flex flex-wrap items-center" style={{ gap: 10, marginTop: 16, paddingLeft: 20 }} data-testid="quote-rule-options">
+                    {setupRules.stamper && (
+                      <button
+                        type="button"
+                        onClick={() => { if (!canEdit) return; setReorder((v) => !v); touch(); }}
+                        aria-pressed={reorder}
+                        data-testid="quote-reorder-toggle"
+                        className="text-[12px] font-medium rounded-full"
+                        style={{ padding: '6px 14px', border: reorder ? `1.5px solid ${BLUE}` : `1px solid ${HAIRLINE}`, background: reorder ? 'rgba(49,158,216,0.08)' : '#fff', color: reorder ? BLUE : SUBINK, cursor: canEdit ? 'pointer' : 'default' }}
+                      >
+                        {reorder ? '✓ ' : ''}Reorder — existing audio
+                      </button>
+                    )}
+                    {setupRules.polyBag && (
+                      <button
+                        type="button"
+                        onClick={() => { if (!canEdit) return; setPolyBag((v) => !v); touch(); }}
+                        aria-pressed={polyBag}
+                        data-testid="quote-polybag-toggle"
+                        className="text-[12px] font-medium rounded-full"
+                        style={{ padding: '6px 14px', border: polyBag ? `1.5px solid ${BLUE}` : `1px solid ${HAIRLINE}`, background: polyBag ? 'rgba(49,158,216,0.08)' : '#fff', color: polyBag ? BLUE : SUBINK, cursor: canEdit ? 'pointer' : 'default' }}
+                      >
+                        {polyBag ? '✓ ' : ''}{setupRules.polyBag.label?.trim() || 'Open-top poly bag'} · {fmt((setupRules.polyBag.bagCents + setupRules.polyBag.insertionCents) / 100)}/unit
+                      </button>
+                    )}
+                    {isSplatterBuild && setupRules.colorSetup?.splatter && (() => {
+                      // The press's configured maximum bounds the stepper
+                      // (MRP offers up to 3); no configured max = engine
+                      // schema ceiling of 12.
+                      const maxSplatter = setupRules.colorSetup.splatter.maxSplatterColors ?? 12;
+                      return (
+                      <span className="inline-flex items-center text-[12px] font-medium rounded-full" style={{ gap: 8, padding: '5px 8px 5px 14px', border: `1px solid ${HAIRLINE}`, background: '#fff', color: SUBINK }} data-testid="quote-splatter-colors">
+                        Splatter colors
+                        <button type="button" aria-label="Fewer splatter colors" disabled={!canEdit || splatterColors <= 1} onClick={() => { setSplatterColors((n) => Math.max(1, n - 1)); touch(); }} style={{ width: 22, height: 22, borderRadius: '50%', border: `1px solid ${HAIRLINE}`, background: '#fff', color: SUBINK, cursor: canEdit && splatterColors > 1 ? 'pointer' : 'default', opacity: canEdit && splatterColors > 1 ? 1 : 0.4, lineHeight: 1 }}>−</button>
+                        <span style={{ minWidth: 12, textAlign: 'center', color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-splatter-colors-count">{splatterColors}</span>
+                        <button type="button" aria-label="More splatter colors" disabled={!canEdit || splatterColors >= maxSplatter} onClick={() => { setSplatterColors((n) => Math.min(maxSplatter, n + 1)); touch(); }} style={{ width: 22, height: 22, borderRadius: '50%', border: `1px solid ${HAIRLINE}`, background: '#fff', color: SUBINK, cursor: canEdit && splatterColors < maxSplatter ? 'pointer' : 'default', opacity: canEdit && splatterColors < maxSplatter ? 1 : 0.4, lineHeight: 1 }}>+</button>
+                      </span>
+                      );
+                    })()}
+                  </div>
+                )}
                 {/* Honest math, big finish — now in lockstep with the client
                     estimate (Bill, Aug 16 2026): Per record expands to the full
                     component breakdown, setup costs are in the math, hairlines
@@ -3761,9 +3865,44 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                         <div key={l.id} className="flex items-center justify-between gap-4" style={{ padding: '8px 20px 8px 34px', borderTop: `1px solid ${HAIRLINE}` }}>
                           <div>
                             <div className="text-[12px]" style={{ color: SUBINK }}>{l.name}</div>
-                            {l.note && <div className="text-[11px]" style={{ color: '#a1a1a6', marginTop: 1, opacity: 0.8 }}>{l.note}</div>}
+                            {l.note && <div className="text-[11px]" style={{ color: '#a1a1a6', marginTop: 1, opacity: 0.8 }} data-testid={`quote-setup-note-${l.id}`}>{l.note}</div>}
                           </div>
-                          <span className="text-[12px]" style={{ color: l.amount == null ? '#b25e09' : l.amount === 0 ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums' }}>{l.amount == null ? 'Pricing pending' : l.amount === 0 ? 'Included' : fmt(l.amount)}</span>
+                          {/* Rules-derived lines accept a per-quote operator
+                              override (Task #3387): click the amount to edit;
+                              overridden lines offer Reset back to the rule. */}
+                          {l.derived && canEdit && editingSetupId === l.id ? (
+                            <input
+                              autoFocus
+                              value={editingSetupVal}
+                              onChange={(e) => setEditingSetupVal(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === 'Enter') commitSetupOverride(l.id); if (e.key === 'Escape') setEditingSetupId(null); }}
+                              onBlur={() => commitSetupOverride(l.id)}
+                              inputMode="decimal"
+                              data-testid={`quote-setup-override-input-${l.id}`}
+                              className="text-[12px] focus:outline-none"
+                              style={{ width: 88, padding: '3px 8px', borderRadius: 8, border: `1.5px solid ${BLUE}`, textAlign: 'right', color: INK, fontVariantNumeric: 'tabular-nums', background: '#fff' }}
+                            />
+                          ) : (
+                            <span className="inline-flex items-center" style={{ gap: 8 }}>
+                              {l.overridden && canEdit && (
+                                <button type="button" onClick={() => { setSetupOverrides((p) => { const n = { ...p }; delete n[l.id]; return n; }); touch(); }} className="text-[11px] font-medium" style={{ border: 'none', background: 'transparent', color: BLUE, cursor: 'pointer', padding: 0 }} data-testid={`quote-setup-override-reset-${l.id}`}>Reset</button>
+                              )}
+                              {l.derived && canEdit ? (
+                                <button
+                                  type="button"
+                                  onClick={() => { setEditingSetupId(l.id); setEditingSetupVal(l.amount == null ? '' : l.amount.toFixed(2)); }}
+                                  title="Override this derived amount for this quote"
+                                  data-testid={`quote-setup-amount-${l.id}`}
+                                  className="text-[12px]"
+                                  style={{ border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', color: l.amount === 0 && !l.overridden ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}
+                                >
+                                  {l.amount == null ? 'Pricing pending' : l.amount === 0 ? 'Included' : fmt(l.amount)}
+                                </button>
+                              ) : (
+                                <span className="text-[12px]" style={{ color: l.amount == null ? '#b25e09' : l.amount === 0 ? '#a1a1a6' : SUBINK, fontVariantNumeric: 'tabular-nums' }} data-testid={`quote-setup-amount-${l.id}`}>{l.amount == null ? 'Pricing pending' : l.amount === 0 ? 'Included' : fmt(l.amount)}</span>
+                              )}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>

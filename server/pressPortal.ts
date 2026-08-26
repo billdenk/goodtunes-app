@@ -3405,7 +3405,7 @@ export function registerPressPortalRoutes(
     const payload = (row.payload ?? {}) as Record<string, any>;
     const { loadPressComponents } = await import("./pressComponents");
     const configs = await loadPressComponents(String(row.press_id));
-    const breakdown = computeQuoteEmailBreakdown(payload.builderState ?? null, configs.pricing?.rows ?? []);
+    const breakdown = computeQuoteEmailBreakdown(payload.builderState ?? null, configs.pricing?.rows ?? [], configs.pricing?.setupRules ?? null);
     const accent = resolvePressEstimateAccent(row.email_branding ?? null);
     const pressDomain = String(row.press_website_url ?? "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim();
     const token = String(req.params.token).trim();
@@ -4100,7 +4100,7 @@ export function registerPressPortalRoutes(
     ) => {
       const { loadPressComponents } = await import("./pressComponents");
       const configs = await loadPressComponents(pressId);
-      const breakdown = computeQuoteEmailBreakdown(freshPayload.builderState ?? null, configs.pricing?.rows ?? []);
+      const breakdown = computeQuoteEmailBreakdown(freshPayload.builderState ?? null, configs.pricing?.rows ?? [], configs.pricing?.setupRules ?? null);
       const jobTitle = String(freshRow.title ?? "your record").trim() || "your record";
       const clientName = String(freshPayload.clientName ?? recipient.name ?? "").trim() || recipient.email;
       const preparedBy = preparedByName || (typeof freshPayload.preparedBy === "string" ? freshPayload.preparedBy : null);
@@ -4169,7 +4169,7 @@ export function registerPressPortalRoutes(
     }
     const { loadPressComponents } = await import("./pressComponents");
     const configs = await loadPressComponents(pressId);
-    const pendingIds = computeQuotePendingIds(builderState, configs.pricing?.rows ?? []);
+    const pendingIds = computeQuotePendingIds(builderState, configs.pricing?.rows ?? [], configs.pricing?.setupRules ?? null);
     if (pendingIds.length > 0) {
       return res.status(409).json({
         message: "This build includes components awaiting pricing — it can be saved as a draft, but not sent as a firm quote yet.",

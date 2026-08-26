@@ -452,7 +452,10 @@ export async function loadPressComponents(pressId: string): Promise<{
     }
   }
 
-  return { vinyl, jackets, sleeves, labels, inserts, stickers, pricing };
+  // `pricing` is always assigned above (seeded when absent) — the fallback
+  // only convinces the type checker, it can never actually be taken.
+  const pricingOut: PricingComponentConfig = pricing ?? seededPricing;
+  return { vinyl, jackets, sleeves, labels, inserts, stickers, pricing: pricingOut };
 }
 
 export function registerPressComponentRoutes(
