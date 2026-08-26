@@ -811,7 +811,7 @@ export function PressLabelsComponent({ payload, canEdit, save, saving }: {
           <PageHeading lead="Center labels." rest="Create your options." t={t} />
         </div>
         <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: t.subink }}>
-          Pick the label styles you offer. Artists choose from these when they design a record with {press.name}.
+          Pick the label types you offer. Artists choose from these when they design a record with {press.name}.
         </p>
         {saving && (
           <div className="flex items-center gap-1.5 text-[12px]" style={{ marginTop: 10, color: t.subink }} data-testid="labels-saving">
@@ -910,10 +910,10 @@ export function PressLabelsComponent({ payload, canEdit, save, saving }: {
           )}
 
           <section>
-            <StepHeading lead="Pick a type." rest="Which label styles?" t={t} />
+            <StepHeading lead="Pick a type." rest="Which label types?" t={t} />
             <p className="text-[12.5px]" style={{ marginTop: 10, color: t.subink }}>
               The center label is the round printed disc glued in the middle of the record.
-              {canEdit ? ' Toggle Offered on each style you want artists to choose from.' : ''}
+              {canEdit ? ' Toggle Offered on each type you want artists to choose from.' : ''}
             </p>
             <div
               style={{

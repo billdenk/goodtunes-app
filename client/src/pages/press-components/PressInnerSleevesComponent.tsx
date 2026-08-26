@@ -258,7 +258,7 @@ function SleeveStage({ sleeve, t, logoUrl, pressName }: { sleeve: SleeveLook | n
           <rect x={4} y={4} width={28} height={28} rx={1} />
           <path d="M14 4 L14 32" />
         </svg>
-        <span style={{ fontSize: 13, fontWeight: 500 }}>Select a sleeve style</span>
+        <span style={{ fontSize: 13, fontWeight: 500 }}>Select a sleeve type</span>
       </div>
     );
   }
@@ -443,7 +443,7 @@ export function PressInnerSleevesComponent({
         <div className="min-w-0">
           <PageHeading lead="Inner sleeves." rest="What holds the record." t={t} />
           <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: t.subink }}>
-            Pick the inner-sleeve styles you offer. Artists choose from these when they design a record with {press.name}.
+            Pick the inner-sleeve types you offer. Artists choose from these when they design a record with {press.name}.
           </p>
           {saving && (
             <p className="text-[12px]" style={{ marginTop: 8, color: t.faint }} data-testid="sleeves-saving">
@@ -476,7 +476,7 @@ export function PressInnerSleevesComponent({
             {/* Size */}
             <StepHeading lead="Pick a size." rest="The record sets the fit." t={t} />
             <p className="text-[12.5px]" style={{ marginTop: 10, color: t.subink }}>
-              Every sleeve style comes cut to the record size.
+              Every sleeve type comes cut to the record size.
             </p>
             <div style={{ marginTop: 18, display: "flex", gap: 12 }}>
               {VINYL_SIZES.map((s) => {
@@ -500,7 +500,7 @@ export function PressInnerSleevesComponent({
 
             {/* Style */}
             <div style={{ marginTop: 36 }}>
-              <StepHeading lead="Pick a style." rest="The sleeve inside the jacket." t={t} />
+              <StepHeading lead="Pick a type." rest="The sleeve inside the jacket." t={t} />
               <p className="text-[12.5px]" style={{ marginTop: 10, color: t.subink }} data-testid="sleeves-availability">
                 {offeredCount} of {SLEEVE_STYLES.length} styles available from {press.name}.
               </p>

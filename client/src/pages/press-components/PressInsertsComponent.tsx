@@ -340,7 +340,7 @@ function InsertStage({
           <rect x={4} y={4} width={28} height={28} rx={1} />
           <path d="M14 4 L14 32" />
         </svg>
-        <span style={{ fontSize: 13, fontWeight: 500 }}>Select an insert style</span>
+        <span style={{ fontSize: 13, fontWeight: 500 }}>Select an insert type</span>
       </div>
     );
   }
@@ -699,7 +699,7 @@ export function PressInsertsComponent({
         <div className="min-w-0">
           <PageHeading lead="Inserts." rest="What ships inside." t={t} />
           <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: t.subink }}>
-            Pick the insert styles you offer — lyrics, credits, art, posters. Artists choose from these when they design a record with {press.name}.
+            Pick the insert types you offer — lyrics, credits, art, posters. Artists choose from these when they design a record with {press.name}.
           </p>
           {saving && (
             <p className="text-[12px]" style={{ marginTop: 8, color: t.faint }} data-testid="inserts-saving">
@@ -759,7 +759,7 @@ export function PressInsertsComponent({
 
             {/* Style */}
             <div style={{ marginTop: 36 }}>
-              <StepHeading lead="Pick a style." rest="What the artwork ships on." t={t} />
+              <StepHeading lead="Pick a type." rest="What the artwork ships on." t={t} />
               <p className="text-[12.5px]" style={{ marginTop: 10, color: t.subink }} data-testid="inserts-availability">
                 {offeredCount} of {visibleOptions.length} styles available from {press.name}.
               </p>

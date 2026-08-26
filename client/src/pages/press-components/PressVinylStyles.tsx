@@ -6,7 +6,7 @@
 //     selected swatch, rendered with the SplatterVinylPreview PNG-mask kit, plus
 //     a quiet "Colors in your catalog" list.
 //   • RIGHT — two steps: (1) pick a category via disc-preview cards (Black,
-//     Splatter, Translucent, Opaque) with a "+ More styles" popover to add a
+//     Splatter, Translucent, Opaque) with a "+ More types" popover to add a
 //     category; (2) pick a swatch from a glossy-ball grid, or add a new swatch
 //     via a frosted Apple popover (name + hex fields + upload + size chips).
 //
@@ -832,7 +832,7 @@ type Category = {
   genStyleId?: string;
   /** Press-supplied photo shown on the style tile (type editor upload). */
   customImg?: string;
-  /** Finish styles only: which finishes this style offers artists.
+  /** Finish styles only: which finishes this type offers artists.
       Undefined = all of the style's finishes. One shared truth — the main
       page's Finish bar and the sheet edit the same list. (Bill, Aug 20 2026.) */
   offeredFinishes?: string[];
@@ -851,7 +851,7 @@ const mk = (id: string, name: string, kind: SwatchKind, base: string, extra?: Pa
 
 // Default state for a brand-new press: exactly ONE type, "Black", containing
 // exactly ONE color, "Black" (vinyl color #0C0C0C). The press grows its
-// catalog from here — adding types ("+ More styles") and colors ("Add color").
+// catalog from here — adding types ("+ More types") and colors ("Add color").
 const INITIAL_CATEGORIES: Category[] = [
   {
     id: 'black',
@@ -1081,7 +1081,7 @@ function TypeEditorPopover({
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: t.subink }}>
-                Style name
+                Type name
               </label>
               <input
                 type="text"
@@ -1159,7 +1159,7 @@ function TypeEditorPopover({
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
             data-testid={`button-archive-type-${category.id}`}
           >
-            Archive style
+            Archive type
           </button>
         )}
       </PopoverContent>
@@ -1284,7 +1284,7 @@ function CategoryCard({
   );
 }
 
-// ─── "+ More styles" popover — name a new category ────────────────────
+// ─── "+ More types" popover — name a new category ────────────────────
 function MoreTypesPopover({ onAdd, t }: { onAdd: (name: string, desc: string) => void; t: Theme }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -1313,7 +1313,7 @@ function MoreTypesPopover({ onAdd, t }: { onAdd: (name: string, desc: string) =>
             <Plus className="w-3 h-3" strokeWidth={2.5} />
           </span>
           <span className="text-[13px] font-semibold" style={{ color: t.blue }}>
-            More styles
+            More types
           </span>
         </button>
       </PopoverTrigger>
@@ -1340,7 +1340,7 @@ function MoreTypesPopover({ onAdd, t }: { onAdd: (name: string, desc: string) =>
           <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: t.subink }}>
-                Style name
+                Type name
               </label>
               <input
                 type="text"
@@ -1756,7 +1756,7 @@ function SwatchEditorPopover({
                 {/* opaque / translucent base toggle */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   <label className="text-[11px] font-bold uppercase tracking-wider" style={{ color: t.subink }}>
-                    Vinyl style
+                    Vinyl type
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                     {([
@@ -2294,7 +2294,7 @@ const VINYL_QUANTITIES = [
   { id: '4', label: '4 LP', note: 'Quad' },
 ];
 
-// ─── Add a weight — same \u201cMore styles\u201d canon popover pattern ─────────
+// ─── Add a weight — same \u201cMore types\u201d canon popover pattern ─────────
 // Some presses offer their own weights (150g, plant-specific runs), so the
 // ladder isn't fixed: a press can add a weight the same way they add a
 // pressing type. Frosted popover, two fields, Cancel / Add footer.
@@ -4067,11 +4067,11 @@ function GeneratorSheet({
   /** Live colors of the home style — the saved state shows them as chips
       beside "Add color", like the main page. (Bill, Aug 20 2026.) */
   styleSwatches?: Swatch[];
-  /** Picking a DIFFERENT style from an edit sheet isn't changing this style —
+  /** Picking a DIFFERENT style from an edit sheet isn't changing this type —
       it's starting another one. The parent closes this sheet and reopens the
       create flow seeded with the pick. (Bill, Aug 20 2026.) */
   onSwitchStyle?: (styleId: string) => void;
-  /** Create flow opened from "Change style": start collapsed on this style. */
+  /** Create flow opened from "Change type": start collapsed on this type. */
   presetStyleId?: string;
   /** Open straight onto the style's saved colors (main-page Add color). */
   startSaved?: boolean;
@@ -4091,7 +4091,7 @@ function GeneratorSheet({
   // Type flow starts as a pure style chooser; picking collapses the gallery.
   // Gallery starts open only when there's nothing picked yet (create /
   // rebuild); picking a style collapses it to the summary card, and the
-  // "Change style" chip is the way back. (Bill, Aug 20 2026.)
+  // "Change type" chip is the way back. (Bill, Aug 20 2026.)
   const [galleryOpen, setGalleryOpen] = useState(!initial && !lockedStyleId && !presetStyleId);
   const [nameTouched, setNameTouched] = useState(!!initial?.name);
   const style = genStyleById(styleId);
@@ -4540,7 +4540,7 @@ function GeneratorSheet({
         <div className="flex items-start justify-between" style={{ padding: '26px 30px 0' }}>
           <div>
             <div className="tracking-tight" style={{ fontSize: 24, fontWeight: 700, lineHeight: 1.15 }}>
-              <span style={{ color: t.ink }}>{titleLead ?? (initial ? 'Edit the color.' : 'Create a vinyl style color.')} </span>
+              <span style={{ color: t.ink }}>{titleLead ?? (initial ? 'Edit the color.' : 'Create a vinyl type color.')} </span>
               <span style={{ color: t.faint, fontWeight: 600 }}>{titleRest ?? 'The stencil does the design.'}</span>
             </div>
           </div>
@@ -4642,7 +4642,7 @@ function GeneratorSheet({
                     <button
                       type="button"
                       onClick={() => setAvailMode(true)}
-                      aria-label="Choose which sizes this style is pressed in"
+                      aria-label="Choose which sizes this type is pressed in"
                       title="Pressed in these sizes"
                       data-testid="gen-size-avail-open"
                       className="inline-flex items-center justify-center rounded-full opacity-0 group-hover/sizes:opacity-100 focus:opacity-100 transition-opacity"
@@ -4782,7 +4782,7 @@ function GeneratorSheet({
                     then your colors. Never the style's stock example. */}
                 <GenDisc size={44} gen={previewGen} ghost={previewGhost} />
                 <div className="min-w-0 flex-1">
-                  <div className="text-[10.5px] font-bold uppercase tracking-wider" style={{ color: t.faint }}>Style</div>
+                  <div className="text-[10.5px] font-bold uppercase tracking-wider" style={{ color: t.faint }}>Type</div>
                   <div className="text-[13.5px] font-semibold" style={{ color: t.ink }}>
                     {styleLevel && onStyleNameChange && styleNameEdit.trim() ? styleNameEdit : style.name}
                   </div>
@@ -4795,7 +4795,7 @@ function GeneratorSheet({
                     className="rounded-full text-[12px] font-semibold"
                     style={{ padding: '7px 14px', background: 'transparent', border: `1px solid ${t.dashedBorder}`, color: t.ink, cursor: 'pointer' }}
                   >
-                    Change style
+                    Change type
                   </button>
                 )}
               </div>
@@ -5222,7 +5222,7 @@ function GeneratorSheet({
               <div style={{ marginTop: 26, paddingTop: 20, borderTop: `1px solid ${t.hairline}` }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                   <div>
-                    <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: t.faint, marginBottom: 7 }}>Style name</div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: t.faint, marginBottom: 7 }}>Type name</div>
                     <input
                       type="text"
                       value={name}
@@ -5260,7 +5260,7 @@ function GeneratorSheet({
                     }}
                   >
                     <Check className="w-4 h-4" />
-                    Save style
+                    Save type
                   </button>
                 </div>
               </div>
@@ -5270,7 +5270,7 @@ function GeneratorSheet({
                 <div style={{ marginTop: 26, paddingTop: 20, borderTop: `1px solid ${t.hairline}` }}>
                   <div className="flex items-baseline justify-between" style={{ marginBottom: 8 }}>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: t.faint }}>
-                      Style name
+                      Type name
                     </p>
                     {/* Renamed away from the picker's name? Quiet road back.
                         (Bill, Aug 20 2026.) */}
@@ -5290,8 +5290,8 @@ function GeneratorSheet({
                     type="text"
                     value={styleNameEdit}
                     onChange={(e) => setStyleNameEdit(e.target.value)}
-                    placeholder="Style name"
-                    aria-label="Style name"
+                    placeholder="Type name"
+                    aria-label="Type name"
                     data-testid="gen-style-name"
                     className="w-full rounded-full focus:outline-none"
                     style={{ padding: '10px 18px', fontSize: 13.5, border: `1px solid ${t.hairline}`, backgroundColor: t.searchBg, color: t.ink }}
@@ -5699,7 +5699,7 @@ export function PressVinylStylesComponent({
   // "Create type" sheet — for now an exact duplicate of the color generator;
   // Andrew will spec its type-only divergence from inside it.
   // true = plain create; a string = create preseeded on that style (arrived
-  // via "Change style" from an edit sheet — selecting, not changing).
+  // via "Change type" from an edit sheet — selecting, not changing).
   const [typeSheet, setTypeSheet] = useState<boolean | string>(false);
   // Finish bar under "Pick a color" (Bill, Aug 20 2026): a viewing lens over
   // the style's colors, plus the same hover-··· offer-toggles as 12/10/7.
@@ -5752,7 +5752,7 @@ export function PressVinylStylesComponent({
     return catId;
   };
 
-  // "Save style" — the saved swatch becomes the type's tile AND its first
+  // "Save type" — the saved swatch becomes the type's tile AND its first
   // color. Returns the new style's id so the sheet stays open for more
   // colors (Bill's one-sitting flow); Done closes it.
   const saveGenType = (s: Swatch, typeName?: string, offeredFinishes?: string[]): string => {
@@ -5838,7 +5838,7 @@ export function PressVinylStylesComponent({
           </div>
           <PageHeading lead="Add your vinyl." rest="The colors you can press." t={t} />
           <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: t.subink }}>
-            Pick a style, then pick or add a color. Artists choose from these when they design a record with {PARTNER_NAME}.
+            Pick a type, then pick or add a color. Artists choose from these when they design a record with {PARTNER_NAME}.
           </p>
         </div>
 
@@ -5936,7 +5936,7 @@ export function PressVinylStylesComponent({
             {/* Category */}
             <section>
               <div className="flex items-start justify-between gap-3">
-                <StepHeading lead="Pick a style." rest="What kind of vinyl?" t={t} />
+                <StepHeading lead="Pick a type." rest="What kind of vinyl?" t={t} />
                 <div className="flex items-center gap-2.5 flex-shrink-0">
                   <span className="text-[12px] tabular-nums" style={{ color: t.faint }}>
                     {catalogList.length} colors
@@ -6187,7 +6187,7 @@ export function PressVinylStylesComponent({
           t={t}
           variant="type"
           presetStyleId={typeof typeSheet === 'string' ? typeSheet : undefined}
-          titleLead="Create a vinyl style."
+          titleLead="Create a vinyl type."
           titleRest="Add variations in the next step."
           usedByStyle={genByStyle}
         />
@@ -6212,7 +6212,7 @@ export function PressVinylStylesComponent({
           // changing this one — hop to the create flow. (Bill, Aug 20 2026.)
           onSwitchStyle={(sid) => { setGenSheet(null); setTypeSheet(sid); }}
           titleLead={genSheet.view ? 'Add a color.' : genSheet.replace ? (genSheet.swatch?.customImg ? 'Rebuild this color.' : 'Edit the color.') : undefined}
-          titleRest={genSheet.view ? 'It joins this style.' : genSheet.replace ? (genSheet.swatch?.customImg ? 'Match their photo, then replace it.' : 'Rebuild it with the picker.') : undefined}
+          titleRest={genSheet.view ? 'It joins this type.' : genSheet.replace ? (genSheet.swatch?.customImg ? 'Match their photo, then replace it.' : 'Rebuild it with the picker.') : undefined}
           t={t}
           // Editing the default color = editing the style itself: the sizes
           // ··· and the style chip come along. (Bill, Aug 20 2026.)
@@ -6223,7 +6223,7 @@ export function PressVinylStylesComponent({
               ? {
                   styleLevel: true,
                   // The default IS the style — title says so. (Bill, Aug 20 2026.)
-                  titleLead: 'Edit the style.',
+                  titleLead: 'Edit the type.',
                   titleRest: 'This will be your default.',
                   initialSizes: cat.sizes,
                   onSizesChange: (sizes: SizeId[]) =>

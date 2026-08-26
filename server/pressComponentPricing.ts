@@ -330,7 +330,7 @@ export function registerComponentPricingRoutes(
               requireJacketLadder: !!jacketId,
             });
         if (jacketUnmatched) {
-          recordNote = "No record ladder for the selected jacket style at this press — custom quote.";
+          recordNote = "No record ladder for the selected jacket type at this press — custom quote.";
         } else if (!hit) {
           recordNote = "No record ladder on file for this tier + jacket combination — custom quote.";
         }

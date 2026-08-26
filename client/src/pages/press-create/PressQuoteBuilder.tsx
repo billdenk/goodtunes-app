@@ -1054,7 +1054,7 @@ function JacketStage({ jacketType, widespine = false, tipOn = false }: { jacketT
           <rect x={4} y={4} width={28} height={28} rx={1} />
           <line x1={16} y1={4} x2={16} y2={32} />
         </svg>
-        <span style={{ fontSize: 13, fontWeight: 500 }}>Select a jacket style</span>
+        <span style={{ fontSize: 13, fontWeight: 500 }}>Select a jacket type</span>
       </div>
     );
   }
@@ -3264,7 +3264,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                 )}
                 <Gate on={canDo('label')}>
                 <section>
-                  <StepHeading lead="Pick a type." rest="Which label style?" />
+                  <StepHeading lead="Pick a type." rest="Which label type?" />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Printed before pressing — the label becomes part of the record.
                   </p>
@@ -3361,7 +3361,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
               <>
                 <StepHeading lead="Pick an inner sleeve." rest="Printed, unprinted, or polylined." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
-                  {SLEEVE_OPTIONS.length} inner sleeve styles available from {pressBrandName}.
+                  {SLEEVE_OPTIONS.length} inner sleeve types available from {pressBrandName}.
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {SLEEVE_OPTIONS.map((s) => (
@@ -3417,8 +3417,8 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                 <StepHeading lead="Add an insert." rest="Optional — or skip it." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {insertsAvailable
-                    ? `${visibleInserts.length - 1} insert styles available from ${pressBrandName} — or skip it.`
-                    : 'No insert styles press for 7" — this record ships without one.'}
+                    ? `${visibleInserts.length - 1} insert types available from ${pressBrandName} — or skip it.`
+                    : 'No insert types press for 7" — this record ships without one.'}
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {visibleInserts.map((s) => (

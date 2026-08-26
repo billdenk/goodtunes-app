@@ -393,7 +393,7 @@ function JacketStage({
           <rect x={4} y={4} width={28} height={28} rx={1} />
           <line x1={16} y1={4} x2={16} y2={32} />
         </svg>
-        <span style={{ fontSize: 13, fontWeight: 500 }}>Select a jacket style</span>
+        <span style={{ fontSize: 13, fontWeight: 500 }}>Select a jacket type</span>
       </div>
     );
   }
@@ -776,7 +776,7 @@ export function PressJacketsComponent({
         <div className="min-w-0">
           <PageHeading lead="Jackets." rest="How the record is dressed." t={t} />
           <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: t.subink }}>
-            Pick the jacket styles you offer. Artists choose from these when they design a record with {press.name}.
+            Pick the jacket types you offer. Artists choose from these when they design a record with {press.name}.
           </p>
           {saving && (
             <p className="text-[12px]" style={{ marginTop: 8, color: t.faint }} data-testid="jackets-saving">
@@ -836,7 +836,7 @@ export function PressJacketsComponent({
 
             {/* Style */}
             <div style={{ marginTop: 36 }}>
-              <StepHeading lead="Pick a style." rest="The jacket sets the tone." t={t} />
+              <StepHeading lead="Pick a type." rest="The jacket sets the tone." t={t} />
               <p className="text-[12.5px]" style={{ marginTop: 10, color: t.subink }} data-testid="jackets-availability">
                 {offeredCount} of {jacketOptions.length} styles available from {press.name}.
               </p>
