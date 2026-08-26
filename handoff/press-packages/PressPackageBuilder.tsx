@@ -41,6 +41,9 @@ import {
   Sparkles,
   Upload,
   UploadCloud,
+  MoreHorizontal,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Boxes, Disc as NavVinyl, Square as NavJacket, CircleDot as NavLabel, FileText as NavInsert, Sticker as NavSticker, ReceiptText as NavPricing, ClipboardList as NavEstimates } from 'lucide-react';
 import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
@@ -521,9 +524,9 @@ function DiscStage({ swatch, sizeId }: { swatch: Swatch; sizeId: SizeId }) {
 
 // ─── Record sizes (shared across every section) ──────────────────────
 const VINYL_SIZES = [
-  { id: '7' as SizeId,  label: '7"',  note: 'Single' },
-  { id: '10' as SizeId, label: '10"', note: 'EP' },
-  { id: '12' as SizeId, label: '12"', note: 'LP · Standard' },
+  { id: '7' as SizeId,  label: '7"',  note: '' },
+  { id: '10' as SizeId, label: '10"', note: '' },
+  { id: '12' as SizeId, label: '12"', note: '' },
 ];
 
 // Press-run quantities + discount curve (from PressCatalogPricing).
@@ -3067,8 +3070,9 @@ export function PressPackageBuilder() {
   // ── Shared state — the record size flows through every section ──
   const [sizeId, setSizeId] = useState<SizeId>('12');
   const [discs, setDiscs] = useState<number>(1);
-  const [pkgNaming, setPkgNaming] = useState(false);
-  const [pkgName, setPkgName] = useState(seed ? seed.title : '');
+  // Save is just save (Bill, Aug 22 2026): the name comes from the
+  // "How artists will see it" section — no second naming prompt at save.
+  const [pkgName] = useState(seed ? seed.title : '');
   const [pkgSaved, setPkgSaved] = useState(false);
   // The save moment is subtle, cross-page (Bill): save, brief beat so the
   // click lands, then roll back to the index — which whispers the arrival.
@@ -3079,9 +3083,6 @@ export function PressPackageBuilder() {
     }, 400);
   };
   const [qty, setQty] = useState<number>(500);
-  // Per-package MINIMUM RUN (Bill): the anchor — the highest per-unit price
-  // an artist could ever pay; bigger runs only get cheaper.
-  const [minRunQty, setMinRunQty] = useState<number>(seed ? seed.minRun : 300);
   const [weightId, setWeightId] = useState<string>(seed ? seed.weightId : '140');
   const [colorId, setColorId] = useState<string>(seed ? seed.colorId : 'BK1');
   const [colorKind, setColorKind] = useState<SwatchKind>(seed ? seed.colorKind : 'black');
@@ -3108,6 +3109,20 @@ export function PressPackageBuilder() {
 
   const [stickerShapeId, setStickerShapeId] = useState<StickerShapeId | 'none'>('none');
   const [stickerSizeId, setStickerSizeId] = useState<string>('3x3');
+
+  // ── Quantity-card curation (press-side, Bill) ──────────────────────
+  // A press can hide the tiers it isn't offering (e.g. a special 100-run
+  // price) so artists only see the intended one(s). Hidden cards stay in
+  // the press's own grid — dimmed with a word+icon chip — never deleted.
+  const [hiddenQtys, setHiddenQtys] = useState<Set<number>>(() => new Set());
+  // Custom quantities the press adds beyond the six defaults; these get a
+  // "Remove this quantity" affordance the defaults never have.
+  const [customQtys, setCustomQtys] = useState<number[]>([]);
+  // Which card's ··· menu is open, keyed by quantity.
+  const [qtyMenuOpen, setQtyMenuOpen] = useState<number | null>(null);
+  // Inline add-a-quantity mini-form.
+  const [addingQty, setAddingQty] = useState(false);
+  const [addQtyValue, setAddQtyValue] = useState('');
 
   // "How artists will see it." (Bill, Aug 19 2026) — the press supplies
   // variables, the system does the design. Vinyl color is NOT an input here;
@@ -3255,7 +3270,6 @@ export function PressPackageBuilder() {
   // the 1,000-unit tier shows the exact MRP numbers.
   const minRun = vinylDone ? (MOCK_KIND_MIN_QTY[color.kind] ?? 0) : 0;
   const tierFactor = (q: number) => qtyScale(q) / 0.70;
-  const unitFactor = tierFactor(picked('qty') ? qty : 1000);
   const baseUnit =
     (vinylDone ? (color.price + MOCK_WEIGHT_UP[weightId]) * discs : 0) +
     (picked('label') ? MOCK_LABEL_PRICE[labelId] * discs : 0) +
@@ -3264,7 +3278,6 @@ export function PressPackageBuilder() {
     (picked('insert') ? MOCK_INSERT_PRICE[insertType.id] : 0) +
     (picked('sticker') && stickerShapeId !== 'none' ? MOCK_STICKER_PRICE[stickerShapeId] : 0) +
     (vinylDone ? MOCK_ASSEMBLY_PRICE + MOCK_SHRINK_PRICE : 0);
-  const perUnit = baseUnit * unitFactor;
   // Fixed setup costs (same MRP numbers as the client estimate) — one-time,
   // quantity-independent, now part of the quote math (Bill, Aug 16 2026).
   const QB_SETUP_LINES = [
@@ -3275,14 +3288,104 @@ export function PressPackageBuilder() {
     { id: 'colorfee', name: 'Color setup fee', amount: 95 },
   ];
   const QB_SETUP_TOTAL = QB_SETUP_LINES.reduce((acc, l) => acc + l.amount, 0);
-  const total = picked('qty') ? perUnit * qty + QB_SETUP_TOTAL : 0;
 
   const perUnitAt = (q: number) => baseUnit * tierFactor(q);
-  // Minimum-run anchor (Bill): every price artists see computes here — the
-  // most they could ever pay; bigger runs only get cheaper.
-  const minUnitFactor = tierFactor(minRunQty);
-  const minPerUnit = baseUnit * minUnitFactor;
-  const minTotal = minPerUnit * minRunQty + QB_SETUP_TOTAL;
+  // Honest per-unit for ANY quantity (custom qtys included). The defined
+  // tiers give (units → scale) anchor points; between them we interpolate
+  // linearly rather than snapping to a step — no made-up flat number. Below
+  // the smallest / above the largest anchor we clamp to the end tier.
+  const TIER_ANCHORS: { q: number; scale: number }[] = QUANTITIES.map((q) => ({ q, scale: qtyScale(q) }));
+  const scaleAt = (q: number): number => {
+    if (q <= TIER_ANCHORS[0].q) return TIER_ANCHORS[0].scale;
+    const last = TIER_ANCHORS[TIER_ANCHORS.length - 1];
+    if (q >= last.q) return last.scale;
+    for (let i = 0; i < TIER_ANCHORS.length - 1; i++) {
+      const a = TIER_ANCHORS[i];
+      const b = TIER_ANCHORS[i + 1];
+      if (q >= a.q && q <= b.q) {
+        const t = (q - a.q) / (b.q - a.q);
+        return a.scale + (b.scale - a.scale) * t;
+      }
+    }
+    return last.scale;
+  };
+  // perUnitAt snaps to the step function for defined tiers; this interpolates
+  // for custom quantities. They agree exactly on the six anchor tiers.
+  const perUnitAtInterp = (q: number) => baseUnit * (scaleAt(q) / 0.70);
+
+  // Merged, de-duped, sorted grid: the six defaults plus any custom qtys the
+  // press has added. Custom ones are flagged so only they can be removed.
+  const ALL_QTYS: { q: number; custom: boolean }[] = Array.from(
+    new Map<number, boolean>([
+      ...QUANTITIES.map((q) => [q, false] as [number, boolean]),
+      ...customQtys.map((q) => [q, true] as [number, boolean]),
+    ]).entries(),
+  )
+    .map(([q, custom]) => ({ q, custom }))
+    .sort((a, b) => a.q - b.q);
+
+  // At least one quantity must stay visible to artists. A card counts as
+  // "offerable" only if it's a real tier for this package (not below minRun).
+  const offerableQtys = ALL_QTYS.filter(({ q }) => !(minRun > 0 && q < minRun));
+  const visibleOfferableCount = offerableQtys.filter(({ q }) => !hiddenQtys.has(q)).length;
+
+  const toggleHiddenQty = (q: number) => {
+    setHiddenQtys((prev) => {
+      const next = new Set(prev);
+      if (next.has(q)) next.delete(q);
+      else next.add(q);
+      return next;
+    });
+    setQtyMenuOpen(null);
+  };
+  const removeCustomQty = (q: number) => {
+    setCustomQtys((prev) => prev.filter((x) => x !== q));
+    setHiddenQtys((prev) => {
+      const next = new Set(prev);
+      next.delete(q);
+      return next;
+    });
+    if (qty === q) setQty(500);
+    setQtyMenuOpen(null);
+  };
+  const addQtyNum = Number(addQtyValue);
+  const addQtyValid =
+    Number.isFinite(addQtyNum) &&
+    Number.isInteger(addQtyNum) &&
+    addQtyNum > 0 &&
+    !ALL_QTYS.some(({ q }) => q === addQtyNum);
+  const commitAddQty = () => {
+    if (!addQtyValid) return;
+    setCustomQtys((prev) => [...prev, addQtyNum]);
+    setAddingQty(false);
+    setAddQtyValue('');
+  };
+  const cancelAddQty = () => {
+    setAddingQty(false);
+    setAddQtyValue('');
+  };
+
+  // ── Pricing anchor — ONE source of truth (Bill, note 1 + note 4) ──
+  // The min-run row is gone: the smallest VISIBLE quantity card now defines
+  // the anchor — the most an artist could ever pay; bigger runs only get
+  // cheaper. Strip, cards, and totals all read from this single anchor so
+  // they can never disagree. Falls back to the smallest offerable tier if
+  // (impossibly) nothing is visible, then to the smallest tier of all.
+  const anchorQty =
+    offerableQtys.find(({ q }) => !hiddenQtys.has(q))?.q ??
+    offerableQtys[0]?.q ??
+    ALL_QTYS[0]?.q ??
+    QUANTITIES[0];
+  // Honest per-unit at the anchor. Interpolate for custom anchors, snap for
+  // defined tiers — perUnitAtInterp agrees with perUnitAt on the six anchors.
+  const anchorIsCustom = customQtys.includes(anchorQty);
+  const anchorUnitFactor = scaleAt(anchorQty) / 0.70;
+  const anchorPerUnit = baseUnit * (anchorIsCustom ? anchorUnitFactor : tierFactor(anchorQty));
+  const anchorTotal = anchorPerUnit * anchorQty + QB_SETUP_TOTAL;
+  // Aliases kept for the estimate breakdown rows below.
+  const minUnitFactor = anchorIsCustom ? anchorUnitFactor : tierFactor(anchorQty);
+  const minPerUnit = anchorPerUnit;
+  const minTotal = anchorTotal;
 
   const fmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
   const sizeLabel = VINYL_SIZES.find((s) => s.id === sizeId)?.label ?? '';
@@ -3302,7 +3405,10 @@ export function PressPackageBuilder() {
             <>
               <span className="font-semibold" style={{ color: INK }}>{sizeLabel}</span>
               {picked('discs') && discs > 1 && (<><span style={{ color: '#d0d0d5' }}>·</span><span>{discs} LP</span></>)}
-              {picked('qty') && (<><span style={{ color: '#d0d0d5' }}>·</span><span>{qty.toLocaleString()} units</span></>)}
+              {/* Strip shows the ANCHOR quantity — the smallest visible card
+                  below (Bill, Aug 22 2026: "units are 100 not 500") — never a
+                  transient selection, so it always matches the cards. */}
+              {picked('qty') && (<><span style={{ color: '#d0d0d5' }}>·</span><span>{anchorQty.toLocaleString()} units</span></>)}
               {picked('weight') && (<><span style={{ color: '#d0d0d5' }}>·</span><span>{weightId}g</span></>)}
               {picked('color') && (<><span style={{ color: '#d0d0d5' }}>·</span><span className="truncate">{color.name}</span></>)}
               {picked('jacket') && (<><span style={{ color: '#d0d0d5' }}>·</span><span className="truncate">{jacketType.name}</span></>)}
@@ -3335,11 +3441,15 @@ export function PressPackageBuilder() {
           )}
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
+          {/* One anchor drives strip, cards, and totals (Bill, note 4): the
+              per-unit and full-run total both read the smallest visible
+              quantity — never the transiently selected card — so the strip
+              and the bottom hero can never disagree. */}
           <span className="text-[12.5px]" style={{ color: SUBINK }}>
-            Est. <span className="font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }}>{fmt(perUnit)}</span> / unit
+            Est. <span className="font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }}>{fmt(anchorPerUnit)}</span> / unit
           </span>
           <span className="text-[13px] font-semibold rounded-full" style={{ padding: '4px 14px', background: `${PRESS_ACCENT}1f`, color: 'var(--q-accent-ink)', fontVariantNumeric: 'tabular-nums' }}>
-            {fmt(total)}
+            {fmt(anchorTotal)}
           </span>
         </div>
       </div>
@@ -3382,7 +3492,7 @@ export function PressPackageBuilder() {
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-[12.5px]" style={{ color: SUBINK, fontVariantNumeric: 'tabular-nums' }} data-testid="stat-unit-price">
                   <NavPricing className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#a1a1a6' }} />
-                  From {fmt(perUnitAt(minRunQty))} / unit at {minRunQty.toLocaleString()}
+                  From {fmt(anchorPerUnit)} / unit at {anchorQty.toLocaleString()}
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-[12.5px]" style={{ color: SUBINK }} data-testid="stat-last-edited">
                   <Pencil className="w-3.5 h-3.5 flex-shrink-0" style={{ color: '#a1a1a6' }} />
@@ -3429,7 +3539,7 @@ export function PressPackageBuilder() {
                       </div>
                     )}
                     <p className="text-[12px] text-center" style={{ marginTop: (picked('ctype') || picked('weight')) ? 6 : 28, color: '#a1a1a6' }}>
-                      {sizeLabel}{picked('qty') ? ` · ${qty.toLocaleString()} units` : ''}
+                      {sizeLabel}{picked('qty') ? ` · ${anchorQty.toLocaleString()} units` : ''}
                     </p>
                   </>
                 )}
@@ -3641,7 +3751,7 @@ export function PressPackageBuilder() {
               <>
                 <StepHeading lead="Pick a jacket." rest="How it&rsquo;s built." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
-                  {jacketOptions.length} styles available from {PARTNER_NAME} for {sizeLabel} records.
+                  {jacketOptions.length} types available from {PARTNER_NAME} for {sizeLabel} records.
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {jacketOptions.map((j) => (
@@ -3689,7 +3799,7 @@ export function PressPackageBuilder() {
               <>
                 <StepHeading lead="Pick an inner sleeve." rest="Printed, unprinted, or polylined." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
-                  {SLEEVE_OPTIONS.length} inner sleeve styles available from {PARTNER_NAME}.
+                  {SLEEVE_OPTIONS.length} inner sleeve types available from {PARTNER_NAME}.
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {SLEEVE_OPTIONS.map((s) => (
@@ -3770,7 +3880,7 @@ export function PressPackageBuilder() {
                 )}
                 <Gate on={canDo('label')}>
                 <section>
-                  <StepHeading lead="Pick a type." rest="Which label style?" />
+                  <StepHeading lead="Pick a type." rest="Which label type?" />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Printed before pressing — the label becomes part of the record.
                   </p>
@@ -3823,8 +3933,8 @@ export function PressPackageBuilder() {
                 <StepHeading lead="Add an insert." rest="Optional — or skip it." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {insertsAvailable
-                    ? `${visibleInserts.length - 1} insert styles available from ${PARTNER_NAME} — or skip it.`
-                    : 'No insert styles press for 7" — this record ships without one.'}
+                    ? `${visibleInserts.length - 1} insert types available from ${PARTNER_NAME} — or skip it.`
+                    : 'No insert types press for 7" — this record ships without one.'}
                 </p>
                 <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {visibleInserts.map((s) => (
@@ -4030,31 +4140,174 @@ export function PressPackageBuilder() {
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Bigger runs bring the per-record price down — each card prices this exact record.
                   </p>
+                  <p className="text-[11.5px]" style={{ marginTop: 8, color: '#a1a1a6' }}>
+                    Hide the tiers you aren&rsquo;t offering so artists only see the price you intend. Hidden cards stay here for you.
+                  </p>
                   <div style={{ marginTop: 18, display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
-                    {QUANTITIES.map((q) => {
+                    {ALL_QTYS.map(({ q, custom }) => {
                       const active = picked('qty') && q === qty;
                       const below = q < minRun;
+                      const hidden = hiddenQtys.has(q);
+                      const priceOf = custom ? perUnitAtInterp(q) : perUnitAt(q);
+                      // Guard: the last visible offerable tier can't be hidden.
+                      const isLastVisible = !hidden && !below && visibleOfferableCount <= 1;
                       return (
-                        <button
+                        <div
                           key={q}
-                          type="button"
-                          disabled={below}
-                          onClick={() => { if (below) return; setQty(q); advance('qty', 'step-save'); mark('qty'); touch(); }}
-                          aria-pressed={active}
-                          data-testid={`qty-${q}`}
-                          className={below ? 'rounded-2xl bg-white focus:outline-none' : 'rounded-2xl bg-white transition-all hover:-translate-y-px focus:outline-none'}
-                          style={{ padding: '16px 12px', border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`, textAlign: 'center', cursor: below ? 'default' : 'pointer', opacity: below ? 0.45 : 1 }}
+                          className="group relative rounded-2xl bg-white"
+                          style={{
+                            border: active ? `2px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+                            opacity: below ? 0.45 : hidden ? 0.5 : 1,
+                            transition: 'opacity 150ms ease',
+                          }}
                         >
-                          <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK, fontVariantNumeric: 'tabular-nums' }}>{q.toLocaleString()}</div>
-                          <div className="text-[11px]" style={{ marginTop: 3, color: '#a1a1a6' }}>units</div>
-                          {below ? (
-                            <div className="text-[12px] font-medium" style={{ marginTop: 6, color: '#a1a1a6' }}>Unavailable</div>
-                          ) : (
-                            <div className="text-[12px] font-medium" style={{ marginTop: 6, color: active ? BLUE : SUBINK, fontVariantNumeric: 'tabular-nums' }}>{fmt(perUnitAt(q))}<span style={{ color: '#a1a1a6', fontWeight: 400 }}> /unit</span></div>
+                          <button
+                            type="button"
+                            disabled={below}
+                            onClick={() => { if (below) return; setQty(q); advance('qty', 'step-save'); mark('qty'); touch(); }}
+                            aria-pressed={active}
+                            data-testid={`qty-${q}`}
+                            className={below ? 'w-full rounded-2xl focus:outline-none' : 'w-full rounded-2xl transition-transform hover:-translate-y-px focus:outline-none'}
+                            style={{ padding: '16px 12px', textAlign: 'center', cursor: below ? 'default' : 'pointer', background: 'transparent', border: 'none' }}
+                          >
+                            <div className="text-[17px] font-semibold" style={{ color: active ? BLUE : INK, fontVariantNumeric: 'tabular-nums' }}>{q.toLocaleString()}</div>
+                            <div className="text-[11px]" style={{ marginTop: 3, color: '#a1a1a6' }}>units</div>
+                            {below ? (
+                              <div className="text-[12px] font-medium" style={{ marginTop: 6, color: '#a1a1a6' }}>Unavailable</div>
+                            ) : (
+                              <div className="text-[12px] font-medium" style={{ marginTop: 6, color: active ? BLUE : SUBINK, fontVariantNumeric: 'tabular-nums' }}>{fmt(priceOf)}<span style={{ color: '#a1a1a6', fontWeight: 400 }}> /unit</span></div>
+                            )}
+                            {/* Hidden state — word + icon, never color alone (Bill is colorblind) */}
+                            {hidden && !below && (
+                              <div
+                                className="inline-flex items-center gap-1 rounded-full text-[10.5px] font-medium"
+                                style={{ marginTop: 8, padding: '2px 8px', border: `1px solid ${HAIRLINE}`, color: SUBINK }}
+                              >
+                                <EyeOff style={{ width: 11, height: 11 }} />
+                                Hidden
+                              </div>
+                            )}
+                          </button>
+
+                          {/* Quiet ··· affordance — revealed on hover/focus, top-right */}
+                          {!below && (
+                            <Popover open={qtyMenuOpen === q} onOpenChange={(o) => setQtyMenuOpen(o ? q : null)}>
+                              <PopoverTrigger asChild>
+                                <button
+                                  type="button"
+                                  aria-label={`More options for ${q.toLocaleString()} units`}
+                                  data-testid={`qty-menu-${q}`}
+                                  className="absolute right-1.5 top-1.5 inline-flex items-center justify-center rounded-full transition-opacity opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 hover:bg-black/5"
+                                  style={{ width: 24, height: 24, border: 'none', background: qtyMenuOpen === q ? 'rgba(0,0,0,0.05)' : 'transparent', color: SUBINK, cursor: 'pointer', opacity: qtyMenuOpen === q ? 1 : undefined }}
+                                >
+                                  <MoreHorizontal style={{ width: 15, height: 15 }} />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent
+                                align="end"
+                                sideOffset={6}
+                                className="w-56 p-0 rounded-2xl"
+                                style={{ border: `1px solid ${HAIRLINE}` }}
+                                data-testid={`qty-menu-content-${q}`}
+                              >
+                                <div className="py-1.5">
+                                  <button
+                                    type="button"
+                                    disabled={!hidden && isLastVisible}
+                                    onClick={() => toggleHiddenQty(q)}
+                                    data-testid={`qty-toggle-hide-${q}`}
+                                    className="w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] enabled:hover:bg-slate-50 transition-colors disabled:cursor-not-allowed"
+                                    style={{ color: INK, opacity: !hidden && isLastVisible ? 0.4 : 1 }}
+                                  >
+                                    {hidden ? <Eye className="w-4 h-4 flex-shrink-0" style={{ color: '#a1a1a6' }} /> : <EyeOff className="w-4 h-4 flex-shrink-0" style={{ color: '#a1a1a6' }} />}
+                                    <span>{hidden ? 'Show to artists' : 'Hide from artists'}</span>
+                                  </button>
+                                  {!hidden && isLastVisible && (
+                                    <div className="px-3.5 pb-2 pt-0.5 text-[11px]" style={{ color: '#a1a1a6' }}>
+                                      Keep at least one price visible to artists.
+                                    </div>
+                                  )}
+                                  {custom && (
+                                    <button
+                                      type="button"
+                                      onClick={() => removeCustomQty(q)}
+                                      data-testid={`qty-remove-${q}`}
+                                      className="w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] hover:bg-slate-50 transition-colors"
+                                      style={{ color: INK, borderTop: `1px solid ${HAIRLINE}` }}
+                                    >
+                                      <Trash2 className="w-4 h-4 flex-shrink-0" style={{ color: '#a1a1a6' }} />
+                                      <span>Remove this quantity</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </PopoverContent>
+                            </Popover>
                           )}
-                        </button>
+                        </div>
                       );
                     })}
+
+                    {/* Add-a-quantity — dashed card at the end of the grid */}
+                    {addingQty ? (
+                      <div
+                        className="rounded-2xl bg-white"
+                        style={{ padding: '14px 12px', border: `1px dashed ${HAIRLINE}` }}
+                        data-testid="qty-add-form"
+                      >
+                        <div className="text-[11px] font-medium" style={{ color: '#a1a1a6', textAlign: 'center' }}>units</div>
+                        <input
+                          autoFocus
+                          type="number"
+                          inputMode="numeric"
+                          min={1}
+                          value={addQtyValue}
+                          onChange={(e) => setAddQtyValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') commitAddQty(); if (e.key === 'Escape') cancelAddQty(); }}
+                          placeholder="250"
+                          data-testid="qty-add-input"
+                          className="w-full text-center bg-white focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                          style={{ marginTop: 6, height: 34, borderRadius: 8, fontSize: 15, fontWeight: 600, border: `1px solid ${HAIRLINE}`, color: INK, fontVariantNumeric: 'tabular-nums' }}
+                        />
+                        <div className="text-[12px] font-medium" style={{ marginTop: 8, textAlign: 'center', color: addQtyValid ? SUBINK : '#a1a1a6', fontVariantNumeric: 'tabular-nums', minHeight: 16 }} data-testid="qty-add-price">
+                          {addQtyValid
+                            ? <>{fmt(perUnitAtInterp(addQtyNum))}<span style={{ color: '#a1a1a6', fontWeight: 400 }}> /unit</span></>
+                            : addQtyValue.trim() === '' ? 'Enter a run size' : ALL_QTYS.some(({ q }) => q === addQtyNum) ? 'Already a tier' : 'Enter a whole number'}
+                        </div>
+                        <div className="flex items-center justify-center gap-3" style={{ marginTop: 10 }}>
+                          <button
+                            type="button"
+                            onClick={cancelAddQty}
+                            data-testid="qty-add-cancel"
+                            className="text-[12.5px] font-medium hover:bg-black/5 rounded-full transition-colors"
+                            style={{ padding: '4px 10px', border: 'none', background: 'transparent', color: SUBINK, cursor: 'pointer' }}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!addQtyValid}
+                            onClick={commitAddQty}
+                            data-testid="qty-add-confirm"
+                            className="text-[12.5px] font-medium rounded-full transition-colors enabled:hover:bg-black/5 disabled:cursor-not-allowed"
+                            style={{ padding: '4px 12px', border: `1px solid ${HAIRLINE}`, background: 'transparent', color: addQtyValid ? INK : '#a1a1a6', cursor: addQtyValid ? 'pointer' : 'not-allowed', opacity: addQtyValid ? 1 : 0.6 }}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => { setAddingQty(true); setAddQtyValue(''); }}
+                        data-testid="qty-add-open"
+                        className="flex flex-col items-center justify-center rounded-2xl transition-colors hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                        style={{ padding: '16px 12px', border: `1px dashed ${HAIRLINE}`, color: SUBINK, cursor: 'pointer', background: 'transparent', minHeight: 88 }}
+                      >
+                        <Plus style={{ width: 18, height: 18 }} />
+                        <span className="text-[12.5px] font-medium" style={{ marginTop: 6 }}>Add a quantity</span>
+                      </button>
+                    )}
+
                     {minRun > 0 && (
                       <div className="text-[11.5px]" style={{ gridColumn: '1 / -1', color: '#a1a1a6' }} data-testid="qty-min-note">
                         {color.name} is a splatter press — the press won't run it under {minRun.toLocaleString()} units.
@@ -4287,7 +4540,7 @@ export function PressPackageBuilder() {
                   </div>
                   {/* quiet price line — the artist-rail grammar, from live page state */}
                   <div style={{ fontSize: 12, color: SUBINK, marginTop: 10 }} data-testid="artist-card-price">
-                    From ${perUnitAt(minRunQty).toFixed(2)} / unit at {minRunQty.toLocaleString()}
+                    From ${anchorPerUnit.toFixed(2)} / unit at {anchorQty.toLocaleString()}
                   </div>
                 </div>
               </div>
@@ -4299,59 +4552,80 @@ export function PressPackageBuilder() {
         <section id="step-save" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
           <Gate on={allDone}>
           <div className="rounded-3xl bg-white" style={{ marginTop: 28, padding: 32, border: `1px solid ${HAIRLINE}` }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 32, alignItems: 'start' }}>
-              <div className="min-w-0">
-                {/* Packages are catalog items — no client, no quantity picked
-                    here. Estimates get built FROM packages later (Bill). */}
-                <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6', marginBottom: 10, paddingLeft: 20 }}>The build</div>
-                <div className="text-[12.5px]" style={{ color: SUBINK, lineHeight: 1.6, paddingLeft: 20 }}>
-                  {sizeLabel} · {minRunQty.toLocaleString()} unit minimum · {weightId}g · {color.name} · {labelStyle.name} label · {jacketType.name} · {sleeveType.name} sleeve
-                  {insertType.id === 'none' ? '' : ` · ${insertType.name}`}
-                  {stickerShape ? ` · ${stickerShape.name} sticker` : ''}
-                </div>
-                {/* Minimum run — the price anchor (Bill): quiet Apple-form
-                    segmented row, reusing the builder's run tiers. */}
-                <div style={{ marginTop: 20, paddingLeft: 20 }} data-testid="min-run-row">
-                  <div className="text-[12px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>Minimum run</div>
-                  <div className="inline-flex items-center rounded-full" style={{ marginTop: 10, background: 'var(--q-track)', padding: 3, gap: 2 }}>
-                    {QUANTITIES.slice(0, 4).map((q) => {
-                      const activeMin = q === minRunQty;
-                      const below = q < minRun;
-                      return (
-                        <button
-                          key={q}
-                          type="button"
-                          disabled={below}
-                          title={below ? `Splatter won’t run under ${minRun.toLocaleString()} units` : undefined}
-                          onClick={() => { if (below) return; setMinRunQty(q); touch(); }}
-                          aria-pressed={activeMin}
-                          className="rounded-full text-[13px] font-semibold transition-colors"
-                          style={{
-                            height: 32, padding: '0 16px', border: 'none', cursor: 'default',
-                            background: activeMin ? 'var(--q-card)' : 'transparent',
-                            boxShadow: activeMin ? PILL_SHADOW : undefined,
-                            color: activeMin ? INK : SUBINK,
-                            // Disabled must be visibly deader than unselected (Bill)
-                            opacity: below ? 0.35 : 1,
-                            fontVariantNumeric: 'tabular-nums',
-                            ...(below ? {} : { cursor: 'pointer' }),
-                          }}
-                          data-testid={`min-run-${q}`}
-                        >
-                          {q.toLocaleString()}
-                        </button>
-                      );
-                    })}
+            {/* Header spans the full card (Bill, Aug 22 2026): heading, build
+                summary and anchor note up top; the stage + math sit below. */}
+            {/* Packages are catalog items — no client, no quantity picked
+                here. Estimates get built FROM packages later (Bill).
+                Apple-canon two-tone heading, sentence case (Bill, note 3):
+                the ALL-CAPS eyebrows are gone — section identity lives in
+                the heading, matching every other section in this builder. */}
+            <h2 className="tracking-tight" style={{ fontSize: 24, lineHeight: 1.15, fontWeight: 600, paddingLeft: 20 }}>
+              <span style={{ color: INK }}>The build. </span>
+              <span style={{ color: '#a1a1a6' }}>Everything you picked.</span>
+            </h2>
+            <div className="text-[12.5px]" style={{ color: SUBINK, lineHeight: 1.6, paddingLeft: 20, marginTop: 10 }}>
+              {sizeLabel} · {weightId}g · {color.name} · {labelStyle.name} label · {jacketType.name} · {sleeveType.name} sleeve
+              {insertType.id === 'none' ? '' : ` · ${insertType.name}`}
+              {stickerShape ? ` · ${stickerShape.name} sticker` : ''}
+            </div>
+            {/* The pricing anchor is the smallest visible quantity card
+                (Bill, note 1) — no separate minimum-run row. */}
+            <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 8, paddingLeft: 20, maxWidth: 560, lineHeight: 1.5 }} data-testid="anchor-note">
+              Priced at {anchorQty.toLocaleString()} units — the smallest quantity still shown to artists, and the most they&rsquo;d pay. Bigger runs only get cheaper.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 460px', gap: 40, alignItems: 'stretch', marginTop: 24 }}>
+              {/* The package itself, full quantity-stage size (Bill, Aug 22
+                  2026): same geometry as the quantity stage — jacket, inner
+                  sleeve tucked properly, record — vertically centered so the
+                  album runs from the top of the Per-record box to the bottom
+                  of the run total. */}
+              <div className="min-w-0 flex items-center justify-center">
+                <div className="relative group" style={{ width: JS_BASE + 140, height: JS_BASE + 12 }} data-testid="save-package-stage">
+                  <div
+                    className="absolute transition-transform duration-500 ease-out group-hover:translate-x-11"
+                    style={{ left: 140, top: 14, width: JS_BASE - 16, height: JS_BASE - 16, zIndex: 1, borderRadius: '50%', boxShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
+                    aria-hidden
+                  >
+                    <VinylDisc size={JS_BASE - 16} swatch={color} />
                   </div>
-                  <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 8, maxWidth: 460, lineHeight: 1.5 }}>
-                    The smallest run you&rsquo;ll press for this package. Every price artists see is anchored here.
+                  <div
+                    className="absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-6"
+                    style={{
+                      left: 38, top: 10, width: JS_BASE - 12, height: JS_BASE - 12, zIndex: 2,
+                      background: look.printed
+                        ? 'linear-gradient(155deg, #1e1e26 0%, #0f0f14 100%)'
+                        : look.color === 'black' ? '#0a0a0a' : '#ffffff',
+                      border: look.color === 'black' || look.printed ? '1px solid #222' : '1px solid rgba(0,0,0,0.10)',
+                      boxShadow: '0 1px 8px rgba(0,0,0,0.22)',
+                      overflow: 'hidden',
+                    }}
+                    aria-hidden
+                  >
+                    {look.printed && (useArtistArt ? (
+                      <img src={californialandInnerSleeve} alt="" aria-hidden className="w-full h-full object-cover" />
+                    ) : (
+                      <RainbowPrintFace logoSize={(JS_BASE - 12) * 0.42} />
+                    ))}
+                  </div>
+                  <div className="absolute overflow-hidden rounded-sm" style={{ left: 0, top: 0, width: JS_BASE, height: JS_BASE, zIndex: 3, boxShadow: '0 4px 22px rgba(0,0,0,0.35)' }}>
+                    {useArtistArt ? (
+                      <img src={californialandCover} alt="Artist cover" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center" style={{ background: '#111112' }}>
+                        <img src={mrpLabelLogo} alt="Memphis Record Pressing" style={{ width: '52%', height: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.92 }} />
+                      </div>
+                    )}
                   </div>
                 </div>
+              </div>
+
+              {/* The math on the right (Bill, Aug 22 2026), a bit wider. */}
+              <div className="min-w-0 flex flex-col">
                 {/* Honest math, big finish — now in lockstep with the client
                     estimate (Bill, Aug 16 2026): Per record expands to the full
                     component breakdown, setup costs are in the math, hairlines
                     inset, gradient on the total band. */}
-                <div className="rounded-2xl" style={{ marginTop: 20, border: `1px solid ${HAIRLINE}`, overflow: 'hidden', maxWidth: 560 }}>
+                <div className="rounded-2xl" style={{ border: `1px solid ${HAIRLINE}`, overflow: 'hidden' }}>
                   <button
                     type="button"
                     onClick={() => setQbDetailsOpen((v) => !v)}
@@ -4365,7 +4639,7 @@ export function PressPackageBuilder() {
                         <span className="text-[13.5px] font-medium" style={{ color: INK }}>Per record</span>
                         <ChevronDown className="w-3.5 h-3.5 transition-transform" style={{ color: '#a1a1a6', transform: qbDetailsOpen ? 'rotate(180deg)' : 'none' }} />
                       </div>
-                      <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>This exact build, at the minimum run</div>
+                      <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>This exact build, at {anchorQty.toLocaleString()} units</div>
                     </div>
                     <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-per-record">{fmt(minPerUnit)}</span>
                   </button>
@@ -4397,7 +4671,7 @@ export function PressPackageBuilder() {
                       <div className="text-[13.5px] font-medium" style={{ color: INK }}>Run</div>
                       <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>{discs > 1 ? `${discs} LP per record, pressed and packed` : 'Pressed and packed'}</div>
                     </div>
-                    <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-run">{minRunQty.toLocaleString()} units · {fmt(minPerUnit * minRunQty)}</span>
+                    <span className="text-[14px] font-semibold" style={{ color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-run">{anchorQty.toLocaleString()} units · {fmt(anchorPerUnit * anchorQty)}</span>
                   </div>
                   <div aria-hidden style={{ height: 1, background: HAIRLINE, margin: '0 20px' }} />
                   <button
@@ -4433,79 +4707,48 @@ export function PressPackageBuilder() {
                   <div className="flex items-end justify-between gap-4" style={{ padding: '16px 20px 18px', borderTop: `1px solid ${HAIRLINE}`, background: 'linear-gradient(180deg, rgba(49,158,216,0.10) 0%, rgba(49,158,216,0.02) 100%)' }}>
                     <div>
                       <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: BLUE }}>Full run total</div>
-                      <div className="text-[11.5px]" style={{ marginTop: 3, color: SUBINK }}>At the minimum run — the most an artist would pay</div>
+                      <div className="text-[11.5px]" style={{ marginTop: 3, color: SUBINK }}>At {anchorQty.toLocaleString()} units — the most an artist would pay</div>
                     </div>
                     <span className="font-semibold tracking-tight" style={{ fontSize: 34, lineHeight: 1, color: INK, fontVariantNumeric: 'tabular-nums' }} data-testid="quote-total-hero">{fmt(minTotal)}</span>
                   </div>
                 </div>
               </div>
-
-              <div className="flex flex-col items-end gap-3 flex-shrink-0">
-                {!pkgSaved && !pkgNaming && (
-                  <div className="flex items-center gap-3">
-                    {/* ONE terminal action — the earned confirm of the whole
-                        walk, so it takes the page's single filled blue
-                        (Bill, Aug 20 2026: estimates are built FROM packages
-                        later, never sent from the builder). */}
-                    <Button
-                      className="rounded-full px-7"
-                      style={{ background: BLUE, color: '#fff', height: 44, fontSize: 14.5 }}
-                      onClick={() => (seed ? finishSave() : setPkgNaming(true))}
-                      data-testid="button-save-as-package"
-                    >
-                      {seed ? 'Save changes' : 'Save to catalog'}
-                    </Button>
-                  </div>
-                )}
-                {!pkgSaved && (
-                  <p className="text-[11.5px] text-right" style={{ color: '#a1a1a6', whiteSpace: 'nowrap' }}>
-                    Packages skip quantity and price — artists pick their quantity later.
+            </div>
+            {/* Save sits below both columns, right-aligned under the math box
+                with the box's own right margin (Bill, Aug 22 2026) — the note
+                ABOVE the button. Save is just save: the package was already
+                named in "How artists will see it" — no second naming prompt.
+                One filled action. */}
+            <div className="flex flex-col items-end gap-3" style={{ marginTop: 28 }}>
+              {pkgSaved ? (
+                <div className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: '#34a853' }} data-testid="package-saved-note">
+                  <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#34a85315', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Check className="w-3 h-3" strokeWidth={3} />
+                  </span>
+                  "{cardName.trim() || pkgName || 'Untitled package'}" saved to Product Specs › MRP Packages
+                </div>
+              ) : (
+                <>
+                  <p className="text-[11.5px] text-right" style={{ color: '#a1a1a6' }}>
+                    {(cardName.trim() || pkgName)
+                      ? 'Packages skip quantity and price — artists pick their quantity later.'
+                      : 'Name your package above — the name is what artists see.'}
                   </p>
-                )}
-
-                {/* Save as Package (Bill, Aug 16 2026): the same config, kept as
-                    a reusable named package — auto-priced from the component
-                    prices, offered to artists as a quick pick. */}
-                {pkgSaved ? (
-                  <div className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: '#34a853' }} data-testid="package-saved-note">
-                    <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#34a85315', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Check className="w-3 h-3" strokeWidth={3} />
-                    </span>
-                    "{pkgName || 'Untitled package'}" saved to Product Specs › MRP Packages
-                  </div>
-                ) : pkgNaming ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      autoFocus
-                      value={pkgName}
-                      onChange={(e) => setPkgName(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && pkgName.trim()) finishSave(); if (e.key === 'Escape') setPkgNaming(false); }}
-                      placeholder="Name this package"
-                      className="rounded-full text-[13px] focus:outline-none"
-                      style={{ height: 36, padding: '0 14px', border: `1px solid ${HAIRLINE}`, background: 'var(--q-card)', color: INK, width: 200 }}
-                      data-testid="input-package-name"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => { setPkgNaming(false); setPkgName(''); }}
-                      className="text-[13.5px] font-medium transition-opacity hover:opacity-70"
-                      style={{ background: 'none', border: 'none', color: SUBINK, cursor: 'pointer', padding: '0 6px' }}
-                      data-testid="button-package-name-cancel"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => pkgName.trim() && finishSave()}
-                      className="rounded-full text-[13.5px] font-semibold transition-all"
-                      style={{ height: 36, padding: '0 18px', border: 'none', background: pkgName.trim() ? BLUE : 'rgba(128,128,136,0.25)', color: pkgName.trim() ? '#fff' : '#a1a1a6', cursor: pkgName.trim() ? 'pointer' : 'default' }}
-                      data-testid="button-package-name-save"
-                    >
-                      Save
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+                  {/* Confirm earns its blue (Bill, Aug 26 2026): no name, no save —
+                      quiet outline until the package has a real name. */}
+                  <Button
+                    className="rounded-full px-7"
+                    disabled={!(cardName.trim() || pkgName)}
+                    style={(cardName.trim() || pkgName)
+                      ? { background: BLUE, color: '#fff', height: 44, fontSize: 14.5 }
+                      : { background: 'transparent', color: '#6e6e73', border: '1px solid #6e6e73', height: 44, fontSize: 14.5, cursor: 'default' }}
+                    onClick={finishSave}
+                    data-testid="button-save-as-package"
+                  >
+                    {seed ? 'Save changes' : 'Save to catalog'}
+                  </Button>
+                </>
+              )}
             </div>
           </div>
           </Gate>
