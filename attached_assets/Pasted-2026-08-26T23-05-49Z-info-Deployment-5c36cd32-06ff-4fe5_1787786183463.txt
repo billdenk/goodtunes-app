@@ -1,0 +1,62 @@
+2026-08-26T23:05:49Z info: Deployment: 5c36cd32-06ff-4fe5-a515-bb4cd8e7bc7f
+2026-08-26T23:05:49Z info: Build: cb6222e9-78c8-4262-b5a1-7199e64e64d0
+2026-08-26T23:10:16Z info: Running Security Scan
+2026-08-26T23:10:20Z info: Installing packages
+--> npm install
+
+npm notice
+npm notice New major version of npm available! 10.8.2 -> 12.0.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.2
+npm notice To update run: npm install -g npm@12.0.2
+npm notice
+
+2026-08-26T23:10:24Z info: Starting Build
+
+> rest-express@1.0.0 build
+> tsx script/build.ts
+
+
+building client...
+
+vite v7.3.6 building client environment for production...
+
+transforming...
+
+Browserslist: browsers data (caniuse-lite) is 10 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+
+warn - The class `duration-[140ms]` is ambiguous and matches multiple utilities.
+warn - If this is content and not a class, replace it with `duration-&lsqb;140ms&rsqb;` to silence this warning.
+
+✓ 3322 modules transformed.
+
+rendering chunks...
+
+[plugin vite:reporter] 
+(!) /home/runner/workspace/node_modules/@capacitor/core/dist/index.js is dynamically imported by /home/runner/workspace/client/src/lib/pushNotifications.ts but also statically imported by /home/runner/workspace/client/src/lib/nativeNowPlaying.ts, /home/runner/workspace/client/src/lib/nativeSecureKey.ts, /home/runner/workspace/client/src/lib/nativeVolume.ts, /home/runner/workspace/client/src/lib/platform.ts, /home/runner/workspace/node_modules/@capacitor/app/dist/esm/index.js, /home/runner/workspace/node_modules/@capacitor/app/dist/esm/web.js, /home/runner/workspace/node_modules/@capacitor/filesystem/dist/esm/index.js, /home/runner/workspace/node_modules/@capacitor/filesystem/dist/esm/web.js, /home/runner/workspace/node_modules/@capacitor/push-notifications/dist/esm/index.js, dynamic import will not move module into another chunk.
+
+
+computing gzip size...
+
+../dist/public/assets/Viryl_1782351633843-JBoZPNaf.svg                                                  4.18 kB │ gzip:     1.85 kB
+../dist/public/assets/deezer-Dpi7I0Hn.svg                                                               4.35 kB │ gzip:     1.97 kB
+
+✓ built in 20.38s
+building server...
+
+
+  dist/index.cjs  4.3mb ⚠️
+
+⚡ Done in 1546ms
+
+2026-08-26T23:10:52Z info: Pushing pid1 binary layer...
+2026-08-26T23:10:55Z info: Created pid1 binary layer
+2026-08-26T23:10:58Z info: Pushing hosting layer...
+2026-08-26T23:10:58Z info: Retrieved cached nix layer
+2026-08-26T23:10:58Z warning: Detected broken symlink! The path "/tmp/pulse-PKdhtXMmr18n" does not exist.
+2026-08-26T23:10:58Z info: Created hosting layer
+2026-08-26T23:15:46Z info: Created Repl layer
+2026-08-26T23:15:49Z info: Skipping container streaming artifacts (SOCI/ZTOC) for non-reserved-VM deployment
+2026-08-26T23:15:53Z info: Security Scan Complete
