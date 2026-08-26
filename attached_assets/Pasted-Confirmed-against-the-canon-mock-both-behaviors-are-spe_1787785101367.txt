@@ -1,0 +1,20 @@
+Confirmed against the canon mock — both behaviors are spec'd right in `PressQuoteBuilder` (the estimate builder source of truth), so this is live-app drift on Otis's side, not something we missed:
+
+1. **The strip:** in the mock it's `position: sticky` *in normal flow* — content never slides under it clipped, and the sticky preview column below offsets by the strip's height. In your screenshots the run/disc tiles are sliced off behind the strip, which means Otis's build is overlaying it instead of keeping it in flow.
+2. **Type collapse:** the mock's rule is explicit — the type grid *folds to a summary row once a color is picked*, with a "Change type" affordance to re-expand. Your second screenshot has "Black w Lime Green & Pink" chosen and the grid still fully open.
+
+So yes — we fixed this for estimates; the live app just doesn't match the handoff. Paste-ready for Otis:
+
+---
+
+**Otis — two corrections on the estimate builder (press view), both drift from the handoff mock (`PressQuoteBuilder` grammar):**
+
+1. **The running summary strip is clipping content.** The strip ("12" · 2 LP · 300 units · …" with Est. $/unit on the right) must be `position: sticky` in the normal document flow, pinned directly under the 56px app header — never an overlay that content scrolls beneath. Right now the run-price tiles and disc-count tiles render sliced off behind it. Anything else that sticks below it (the album preview column) offsets by header + strip height, exactly as the mock does.
+
+2. **The Type section isn't collapsing.** Canon: once a color is picked, the "Pick a type" grid folds to a single summary row (chosen type + count) with a quiet "Change type" that re-expands it. Currently the full grid stays open after a color is chosen ("Black w Lime Green & Pink" selected, grid still expanded). Reminder: the word is "Type" everywhere — never "Style".
+
+Acceptance for both: scroll the page top to bottom at 1440 in both themes — no tile, heading, or control ever renders partially hidden behind the strip; and after picking a color the Type grid is a summary row until "Change type" is clicked.
+
+---
+
+Say the word if you want me to eyeball his fix once it's live.

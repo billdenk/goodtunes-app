@@ -1,0 +1,21 @@
+Pushed. Both files landed on `billdenk/goodtunes-app` main:
+
+- `handoff/help-feedback/HelpFeedbackDialog.tsx` @ `88d5937` — the mock, verbatim
+- `handoff/help-feedback/README.md` @ `aecfcb9` — states checklist + must-work list
+
+Here's the paste-ready message for Otis:
+
+---
+
+**Otis — new handoff: the Help & feedback dialog, redesigned to apple-canon.** Files at `handoff/help-feedback/` on main (`88d5937`). Standard handoff law applies (`handoff/README-template.md`): delete-first — take the existing Help & feedback modal UI out and drop this in character-for-character; wire data only, no re-derivation.
+
+What's new, in three moves:
+1. **Canon dress** — two-tone heading, rounded-full segmented pills (the squared Bug/Feature tabs are gone), gray-circle X, quiet-text Cancel, and the Send button earns its blue only once a title is typed.
+2. **"My requests" is no longer a link crowding the X** — it's a segmented control (New report / My requests) on its own row.
+3. **The auto-screenshot is visible** — an attachment card with a thumbnail, plus a preview sheet where the customer drags to highlight areas (numbered pins, % coords that travel with the report). `PageThumb`/`BigPage` are drawn stand-ins: swap their interiors 1:1 for the real captured screenshot image, keep every border, radius, and the %-based overlay exactly as written.
+
+The README has the full states checklist (10 states, both themes, 1440/1024/768 screenshot diff = acceptance) and the Must-work list — everything not on that list is decorative chrome. One flagged question rather than an invention: the My requests **empty state** is enumerated in the README but not drawn in the mock — say the word if you want it mocked first, otherwise use the card grammar with a quiet "You haven't sent anything yet." line.
+
+---
+
+Also from this stretch, already live in the mocks: the builder summary strip now locks under the top bar on both PMP and Memphis, and the PMP strip is light with their real logo icon instead of black with a lettered chip.
