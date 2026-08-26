@@ -2461,7 +2461,7 @@ function SectionHeading({ lead, rest, sub }: { lead: string; rest: string; sub: 
 
 // Progressive-step order — Apple buy-flow style. 'hole' only applies to 7".
 type StepKey = 'size' | 'discs' | 'qty' | 'weight' | 'ctype' | 'color' | 'jacket' | 'sleeve' | 'hole' | 'label' | 'insert' | 'sticker';
-const STEP_ORDER: StepKey[] = ['size', 'discs', 'weight', 'ctype', 'color', 'jacket', 'sleeve', 'hole', 'label', 'insert', 'sticker', 'qty'];
+const STEP_ORDER: StepKey[] = ['size', 'discs', 'weight', 'ctype', 'color', 'hole', 'label', 'jacket', 'sleeve', 'insert', 'sticker', 'qty'];
 
 // Locked steps sit at low opacity and ignore clicks until unlocked.
 function Gate({ on, children }: { on: boolean; children: ReactNode }) {
@@ -3210,105 +3210,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
           />
         </section>
 
-        {/* ═══ 2 · JACKET (Choose your jacket) ═══ */}
-        <section id="step-jacket" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
-          <Gate on={canDo('jacket')}>
-          <SplitSection
-            left={
-              <>
-                <JacketStage jacketType={jacketType} widespine={jacketVariantId === 'widespine'} tipOn={jacketVariantId === 'tipon'} />
-                <div className="text-[13px] font-semibold" style={{ marginTop: 28, color: INK }}>
-                  {sizeLabel} {jacketType.name}
-                  {selectedJacketVariant && selectedJacketVariant.id !== 'standard' && (
-                    <span style={{ color: '#a1a1a6' }}> · {selectedJacketVariant.label}</span>
-                  )}
-                </div>
-                <p className="text-[12px] text-center" style={{ marginTop: 6, color: '#a1a1a6', maxWidth: 280 }}>
-                  {jacketType.note}
-                  {jacketType.gatefoldPanels > 0 && <span> Hover to preview the fold.</span>}
-                </p>
-              </>
-            }
-            right={
-              <>
-                <StepHeading lead="Pick a jacket." rest="How it&rsquo;s built." />
-                <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
-                  {jacketOptions.length} styles available from {pressBrandName} for {sizeLabel} records.
-                </p>
-                <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {jacketOptions.map((j) => (
-                    <JacketTile
-                      key={j.id}
-                      jacket={j}
-                      active={picked('jacket') && j.id === jacketType.id}
-                      variantId={j.id === jacketType.id ? jacketVariantId : j.variants[0].id}
-                      onSelect={() => selectJacket(j.id)}
-                      onVariantSelect={(id) => { setJacketVariantId(id); mark('jacket'); touch(); }}
-                    />
-                  ))}
-                </div>
-              </>
-            }
-          />
-          </Gate>
-        </section>
-
-        {/* ═══ 3 · INNER SLEEVE (Choose your inner sleeve) ═══ */}
-        <section id="step-sleeve" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
-          <Gate on={canDo('sleeve')}>
-          <SplitSection
-            left={
-              <>
-                <div style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  filter: picked('sleeve') ? 'none' : 'grayscale(1) opacity(0.45)',
-                  transition: 'filter 0.4s ease',
-                }}>
-                  <SleeveStage sleeve={look} />
-                  <div className="text-[13px] font-semibold" style={{ marginTop: 28, color: INK }}>
-                    {sizeLabel} {sleeveType.name}
-                    {selectedSleeveVariant && (
-                      <span style={{ color: '#a1a1a6' }}> · {selectedSleeveVariant.label}</span>
-                    )}
-                  </div>
-                  <p className="text-[12px] text-center" style={{ marginTop: 6, color: '#a1a1a6', maxWidth: 280 }}>
-                    {picked('sleeve') ? sleeveType.note : 'Select a finish to add it to your estimate.'}
-                  </p>
-                </div>
-              </>
-            }
-            right={
-              <>
-                <StepHeading lead="Pick an inner sleeve." rest="Printed, unprinted, or polylined." />
-                <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
-                  {SLEEVE_OPTIONS.length} inner sleeve styles available from {pressBrandName}.
-                </p>
-                <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {SLEEVE_OPTIONS.map((s) => (
-                    <SleeveTile
-                      key={s.id}
-                      sleeve={s}
-                      active={picked('sleeve') && s.id === sleeveId}
-                      variantId={s.id === sleeveId ? sleeveVariantId : s.variants[0].id}
-                      onSelect={() => selectSleeve(s.id)}
-                      onVariantSelect={(id) => { setSleeveVariantId(id); mark('sleeve'); touch(); }}
-                    />
-                  ))}
-                </div>
-                <p className="text-[12px]" style={{ marginTop: 12, color: '#a1a1a6' }}>
-                  {sleeveType.id === 'printed'
-                    ? 'The artist supplies print-ready artwork for the sleeve face.'
-                    : sleeveType.id === 'polylined'
-                      ? 'No artwork needed — ships with anti-static poly lining.'
-                      : 'No artwork needed — packaging ships as-is.'}
-                </p>
-              </>
-            }
-          />
-          </Gate>
-        </section>
-
-        {/* ═══ 4 · CENTER LABELS ═══ */}
+        {/* ═══ 2 · CENTER LABELS — right after the vinyl itself (Bill): the label is part of the pressed record ═══ */}
         <section id="step-labels" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
           <Gate on={canDo(is7 ? 'hole' : 'label')}>
           <SplitSection
@@ -3372,7 +3274,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                         key={s.id}
                         style={s}
                         active={picked('label') && s.id === labelId}
-                        onSelect={() => { setLabelId(s.id); advance('label', insertsAvailable ? 'step-inserts' : 'step-stickers'); mark('label'); touch(); }}
+                        onSelect={() => { setLabelId(s.id); advance('label', 'step-jacket'); mark('label'); touch(); }}
                         discSize={tileDiscSize}
                         labelRatio={labelRatio}
                         holeRatio={labelHoleRatio}
@@ -3383,6 +3285,104 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                 </section>
                 </Gate>
               </div>
+            }
+          />
+          </Gate>
+        </section>
+
+        {/* ═══ 3 · JACKET (Choose your jacket) ═══ */}
+        <section id="step-jacket" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+          <Gate on={canDo('jacket')}>
+          <SplitSection
+            left={
+              <>
+                <JacketStage jacketType={jacketType} widespine={jacketVariantId === 'widespine'} tipOn={jacketVariantId === 'tipon'} />
+                <div className="text-[13px] font-semibold" style={{ marginTop: 28, color: INK }}>
+                  {sizeLabel} {jacketType.name}
+                  {selectedJacketVariant && selectedJacketVariant.id !== 'standard' && (
+                    <span style={{ color: '#a1a1a6' }}> · {selectedJacketVariant.label}</span>
+                  )}
+                </div>
+                <p className="text-[12px] text-center" style={{ marginTop: 6, color: '#a1a1a6', maxWidth: 280 }}>
+                  {jacketType.note}
+                  {jacketType.gatefoldPanels > 0 && <span> Hover to preview the fold.</span>}
+                </p>
+              </>
+            }
+            right={
+              <>
+                <StepHeading lead="Pick a jacket." rest="How it&rsquo;s built." />
+                <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
+                  {jacketOptions.length} styles available from {pressBrandName} for {sizeLabel} records.
+                </p>
+                <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {jacketOptions.map((j) => (
+                    <JacketTile
+                      key={j.id}
+                      jacket={j}
+                      active={picked('jacket') && j.id === jacketType.id}
+                      variantId={j.id === jacketType.id ? jacketVariantId : j.variants[0].id}
+                      onSelect={() => selectJacket(j.id)}
+                      onVariantSelect={(id) => { setJacketVariantId(id); mark('jacket'); touch(); }}
+                    />
+                  ))}
+                </div>
+              </>
+            }
+          />
+          </Gate>
+        </section>
+
+        {/* ═══ 4 · INNER SLEEVE (Choose your inner sleeve) ═══ */}
+        <section id="step-sleeve" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+          <Gate on={canDo('sleeve')}>
+          <SplitSection
+            left={
+              <>
+                <div style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  filter: picked('sleeve') ? 'none' : 'grayscale(1) opacity(0.45)',
+                  transition: 'filter 0.4s ease',
+                }}>
+                  <SleeveStage sleeve={look} />
+                  <div className="text-[13px] font-semibold" style={{ marginTop: 28, color: INK }}>
+                    {sizeLabel} {sleeveType.name}
+                    {selectedSleeveVariant && (
+                      <span style={{ color: '#a1a1a6' }}> · {selectedSleeveVariant.label}</span>
+                    )}
+                  </div>
+                  <p className="text-[12px] text-center" style={{ marginTop: 6, color: '#a1a1a6', maxWidth: 280 }}>
+                    {picked('sleeve') ? sleeveType.note : 'Select a finish to add it to your estimate.'}
+                  </p>
+                </div>
+              </>
+            }
+            right={
+              <>
+                <StepHeading lead="Pick an inner sleeve." rest="Printed, unprinted, or polylined." />
+                <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
+                  {SLEEVE_OPTIONS.length} inner sleeve styles available from {pressBrandName}.
+                </p>
+                <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {SLEEVE_OPTIONS.map((s) => (
+                    <SleeveTile
+                      key={s.id}
+                      sleeve={s}
+                      active={picked('sleeve') && s.id === sleeveId}
+                      variantId={s.id === sleeveId ? sleeveVariantId : s.variants[0].id}
+                      onSelect={() => selectSleeve(s.id)}
+                      onVariantSelect={(id) => { setSleeveVariantId(id); mark('sleeve'); touch(); }}
+                    />
+                  ))}
+                </div>
+                <p className="text-[12px]" style={{ marginTop: 12, color: '#a1a1a6' }}>
+                  {sleeveType.id === 'printed'
+                    ? 'The artist supplies print-ready artwork for the sleeve face.'
+                    : sleeveType.id === 'polylined'
+                      ? 'No artwork needed — ships with anti-static poly lining.'
+                      : 'No artwork needed — packaging ships as-is.'}
+                </p>
+              </>
             }
           />
           </Gate>

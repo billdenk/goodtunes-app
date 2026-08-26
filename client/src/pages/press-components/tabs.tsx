@@ -226,9 +226,9 @@ export function PressInnerSleevesComponentTab({ pressId }: { pressId: string }) 
 
 const VINYL_SEGMENTS = [
   { id: "vinyl", label: "Vinyl" },
+  { id: "labels", label: "Center Labels" },
   { id: "jackets", label: "Jackets" },
   { id: "sleeves", label: "Inner Sleeves" },
-  { id: "labels", label: "Center Labels" },
   { id: "inserts", label: "Inserts" },
   { id: "stickers", label: "Stickers" },
 ] as const;
