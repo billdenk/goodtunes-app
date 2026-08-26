@@ -1,0 +1,1041 @@
+Lance Binder  0:13  
+So we've got what we call the client matrix. This is going to be whatever's etched into
+
+Speaker 1  0:21  
+the
+
+Lance Binder  0:21  
+itself and make the. What the client may refer to as the catalog, or do they do they even your customers? Do they even really know what that you guys call it a catalog number? What's going to be on the record?
+
+Andrew Goeken  0:32  
+Yeah, we call it the catalog number. A lot of them just are like, oh, we don't need one, and we're like, maybe suggest one again. Yeah.
+
+Lance Binder  0:40  
+So that and that's again, it's going to be etched on the lacquer or the DMM, and then so it'll show up on all subsequent stampers and all records that are pressed using it. This is something that's internal to us, this internal matrix, and that's because we reach out to our our parent company GZ, and they do a lot of playing, and it's an internal number. That's that's our it's equivalent of the client's catalog number, but it's something that we use, and it's across all the GZ companies: GC in Prague, and then MRP here, NRP in Nashville, NPRP in Toronto. So it's like a shared kind of a value to it. That's systemically assigned, and it's used to track a lot of other stuff. But yeah, have no. I don't think any of this stuff is going to matter to anything we we do back and forth. Most of the stuff that we do, it all kind of keys off of the client matrix or catalog number. We deal with, you know, is it the RPM, and a lot of our data then is also determined by what kind of a cut it is, whether it's from a DMM master or a lacquer cut. I don't know that any of that. This is more background. I don't know how much of it's going to matter as far as an interface goes. Probably not at
+
+Speaker 2  2:08  
+all.
+
+Lance Binder  2:09  
+Yeah, I guess it all depends what we want to do. And then we also have you know who's doing the plating. So that's that. We've got. Let's go to that one we looked at yesterday. That there too, just so we can look at the, and it wasn't under the MRP list. It was under the, was it under the versions? Yeah, you were looking at versions yesterday. Yeah, there we go. So, well, let's start here. So this is our our basic MRP. Let's close it out. Sorry. So this is just in our big long list of different MRP numbers and you selected it by what title? By artist. Okay, so again, it has the MRP number assigned. It's got the client matrix in there. It's going to be etched on the lacquer and our internal matrix versions. So the audio is is kind of a constant for the artist and the title and the format, but that versions designation tells us that there's 17 different variants of that. It's all pressed with the same audio, but it could be colored vinyl, could be varied packaging because the catalog numbers for the retailers, and this is where the catalog number, I guess, definition gets a little bit confusing. Gets what's used at retail. It's usually this tied to the UPCs. You guys heard all this yesterday. So if we open that versions up, if we open that item above, well, yeah. Oh no, we don't want to see that. Where does the one we look? I pulled it up yesterday, Daniel.
+
+Speaker 1  3:45  
+Yeah,
+
+Lance Binder  3:45  
+I think I used a different a different grid. Is that it? This is the versions list. Okay, that's the versions list. So, again, if we look at the at the left, our MRP number is the same. That's the number that we assigned because we assigned it to the audio, the client matrix or catalog number, it's identical for all 17 of these. The internal matrix is identical, but here we have catalog number, which is kind of used in the retail world. You've got every single one of them is unique. We have a description of the version. You know, Amazon version, Hot Topic, direct-to-consumer versions 123456789, The wide release at the top. That's the general, probably the most widely or the most common item available at multiple retailers, and probably the most likely to be reordered. We assign in a unique finished because these are assigned to the finished goods that we create, and each one has a unique UPC. Which, depending on the packaging requirements, they'll always be. We probably have a unique UPC on every single. Piece of product that goes out the door because it'll be identified at retail, and the artist can track how many were sold, you know, via that version versus at Amazon versus at Hot Topic. But it all ties back to the one constant is going to be that when the client matrix or what some people also refer to as a catalog number, and then the catalog can get confusing. Yeah, and then what you refer to as the catalog in this one that changes those do not get etched on the records, or no, they're not on the records at all. Got it. They're going to be put on the UPC, and that might if we opened any of these up, we could see that like the packaging. In fact, I don't know. Is there area? I don't know how close to this one you are. If we were going to look at that first one, the wide release. Sometimes that's referred to in the industry as not generic, but standard. Standard. It's probably going to be black vinyl. Yeah. It's not going to have any retailer-specific packaging or call-out stickers or anything. It's going to be a plain black fang. Packaging is going to be the UPC is probably printed on the jacket itself because it's the standard jacket, and there may be a sticker on the top that says, "Hey, this is Bear Tooth's new album, blah blah blah, and it doesn't call out anything about the retailer. I guess let's open. If we look at the definition itself for customer order, let's look at the customer order. How many of these? Look at it. Okay, how many ship none through? Okay, so yeah, that's okay. So we're 1,370 of them. We have, we have. Let's see what was what did it what was it made of? You want to look at the so we've got the tabs at the top that show the pressing transactions, the packaging transactions, our sleeting. This item over here again. These are all our inventory part numbers that went into making this. So again, we use our MRP number to kind of link to all the different components that go in there. So these are, and if a part number begins, let's go back to that manual. That was helpful. So this is the parts breakdown for finished good one. So we assign a part number to the finished good itself that starts with our MRP number. Finish good one. It's got an insert that has a. So these are inventory part numbers are based on the MRP number if it's title specific. The kind of stock INS is insert JKT is jacket LP one is a obviously the vinyl itself is what goes into making the vinyl is a subset we have stamper A stamper B center label one center label two we have black compound and a sleeve black polyline. So we've got generic part numbers. We have our title-specific part numbers. Again, won't matter.
+
+Lance Binder  8:09  
+This is just background because when you go go over to our packaging site, this is what keys all of the demand from the different parts in inventory. The fact that we were going to make 1370 coda showed, hey, we've got a work order pack to package this. We don't have any of the items as these items are received into inventory. It would show one more workable component for the packaging work order. We have a, but before that, we have the pressing work order.
+
+Zack (MRP)  8:39  
+I want to say this is kind of relevant because what the goal, one of the goals here is that we would ingest the order data from Good Jones and then build that bill of materials. So exactly, we would create the parts. We would make that bomb structure. If it's got generic parts, those generic parts would show up. So yeah, yeah. When they
+
+Lance Binder  8:59  
+click sleeve white paper, we would translate that to whatever our inventory pieces have. So that
+
+Andrew Goeken  9:04  
+those are those are the connecting points that we'll need to use for the API those in. So when they order that,
+
+Zack (MRP)  9:14  
+you could tell us that it's a white paper sleeve, and we could we could we would tie it to
+
+Speaker 1  9:19  
+our parts. Yeah, that to our part number. Yeah, kind of a cross referencing that
+
+Speaker 3  9:23  
+we would use. Yeah, we'd have to set it up prior to. Yeah,
+
+Zack (MRP)  9:26  
+yeah, you won't have to speak our language. You'll just have to tell us that it's a white paper sleeve, and we'll make it, and we'll we'll create the part.
+
+Speaker 3  9:32  
+Oh, you're talking about spreading it rather than negatively creating the
+
+Zack (MRP)  9:36  
+yes. Okay. Well, you have to get that out automatically, but they don't. I mean, we don't need to. They don't need to specifically find our partners. Yeah, they don't need to tell us MRP
+
+Lance Binder  9:46  
+1234 dash JKT dash. Yeah, because a lot of them won't
+
+Zack (MRP)  9:49  
+exist, right? That's right. That's what I'm saying. We would need something
+
+Speaker 3  9:52  
+for them to map to if they were going to tell us the part number, so to speak.
+
+Zack (MRP)  9:57  
+Yeah, they they don't need to supply the partners because most of them wanting. Anyway, like a new sticker would be a new RP specific sticker. All they need to do is tell us it's a sticker. It's this size, this finish, this shape, and then we'll create the part.
+
+Lance Binder  10:11  
+Yeah, and again, some of this. So for a brand new order, a brand new title, I don't know how far in the weeds this is getting, but Arian help help us out here too. We would get this whatever kind of a feed or whatever it is from from Good Tunes, and here's a new thing. We don't create any of that stuff automatically. We have to go in, set up the customer because there's another part of Coda. We want to jump back to that. I guess, and it all depends on if it's if it's coming through Good Tunes and good tunes as our client versus is it coming through the MRP quote generator thing and it's direct with MRP. That's a good point. Let's go back to customers. Sorry, should have started with that. There you go. Just remember that. Put a pin in all of that stuff. So we've got all these different individual labels we've got them categorized by label group. Like, let's look at our choices for label group. So you got A to Z, beggars, broker, brokers as a category, Concord, that possum GZ, Indy, which covers all of the things that don't get picked up by the the larger ones, you know, got Universal, Warner, Sony. So is that label or label group? We're looking at the. That's label group. These are the labels, but these label groups. Yeah. So if you look at let's look for the heck of it, look at want to look at what would be the most complicated Sony. If you filter it on Sony, so under the Sony label group umbrella, we've got all these individual subsidiaries. So the orders could be when we get the order from one of those, we enter an order based on that particular customer. We got them categorized whether it's major. What are our other choices under client category? Broken or indie. We've got the pricing tier. So tier one is going to be large scale customers probably get better rates or different you know order thresholds for for for price breaks. Client then is pricing two. Pricing three is the one that we're talking about putting in initially, right? For this for this project, payment terms: whether the client's active, what do they order from us? So we we I guess the quantity terms we're billing off of finished good quantities. Is that what that means, Arian? Yep. Okay. Taxable invoice. So some of our billing accounting accounting stuff that our accounting people need to go ahead and cut the invoice. Once they see that a job is completed at Cota and shipped, they can invoice based on, and again based on each client. Are they are we billing by finished good unit probably billing by this is how many jackets and LPs were used and these were all the assembly charges. So sometimes there's very detailed invoicing. Sometimes it's at a at the finished good level. So all this stuff is kind of back end.
+
+Bill Denk  13:15  
+Are we able to use the whiteboard by any chance?
+
+Andrew Goeken  13:17  
+Yes. The
+
+Lance Binder  13:18  
+West. Can we use the whiteboard
+
+Speaker 1  13:19  
+by any chance? Oh yeah. You don't want me to put anything on here.
+
+Lance Binder  13:25  
+These people are this crew here are not impressed by my work. We
+
+Arian Kennedy  13:31  
+can we can erase that.
+
+Speaker 1  13:32  
+You can take a picture of it. No.
+
+Arian Kennedy  13:36  
+That conversation did not go anywhere.
+
+Speaker 1  13:38  
+This
+
+Speaker 3  13:38  
+is
+
+Speaker 4  13:39  
+a big waste of time here. Yeah. Okay. not my name. As Arians is so much better. That's why you do. And the whole board ended up against Zach to do it. Yeah. It was like us yesterday. This is that when I was. What is this? The message goes to Brandon and Zach.
+
+Arian Kennedy  13:57  
+No, you weren't there. In fact, like a new he was nowhere.
+
+Zack (MRP)  14:01  
+I was also not in that mute. Yeah, that's why.
+
+Andrew Goeken  14:05  
+That's why they kept on putting it on you.
+
+Bill Denk  14:10  
+I just want to try and figure out, like for example, when so right now you have you have this. Oh, or just a codec. Codec. See the codec here. Yep. What else comes into codec? Like, do you have any other
+
+Lance Binder  14:31  
+systemic? Well, we okay. We've got inbound. We've got we go get data via API from from GZ, so that's some some inbound stuff. That's that that's that internal matrix we were talking about. We outbound. We have some EDI. We send. Shipment level ASNs to one client. We're talking about doing it with more. The invoicing is all comes straight out of QuickBooks, doesn't it? But it bounces against Coda data. It
+
+Speaker 3  15:17  
+comes in a Coda to create a report now, right? But Code
+
+Lance Binder  15:21  
+is not sending invoicing. Code is not sending in, so yeah, it's it's tied to QuickBooks or invoicing. Yeah, I think he's just looking for feeds. What's coming in? What's going out? Right. Okay. So
+
+Bill Denk  15:37  
+GZ is one way. GZ
+
+Lance Binder  15:39  
+one way is going in. It's going to be both ways. We're developing the API mapping for us to order plates from them, and some of some of the plates for our plating department. So we will be sending purchase order information to GZ straight from Coda at some point to needs a POs.
+
+Andrew Goeken  16:02  
+Then QuickBooks is also just ingested, not a few ways to feed. Correct. Okay. Yeah. Right now.
+
+Bill Denk  16:08  
+All right. So someone places an order. What are the what are the different ways they place
+
+Lance Binder  16:13  
+orders? So, and this is going to be the area in question. Yep. And some of those we're looking at eventually getting some EDI from some of our larger customers for POs, that's again 2b. We're looking at POs, bills of material inbound at some point from some clients.
+
+Arian Kennedy  16:35  
+So for right now, we are very heavily email. So like our customer may have like some outbound system that they use, but what happens is a purchase order comes directly to our inbox, and we're operating off of inbox receipt for order confirmation, and that's for the most part of like if they're sending us an order, it's via email. We might have a phone call, be like, hey, I'm gonna send this your way, but like we have to have some sort of quote-unquote paper show also for like asset delivery. So we're primarily working out of the inbox.
+
+Lance Binder  17:07  
+So very mid 20th century or late 20th century. So
+
+Bill Denk  17:12  
+when you have stuff in the inbox, so somebody's coming, taking that information out, they're manually typing it in. Are they putting it in to the code? Yes. Yes.
+
+Arian Kennedy  17:21  
+So we have like Coda. We have our project tracker. We have whatever environment we're creating the estimate in Google Sheets or Coda, and we also work with connecting our estimate details to our finance team using another sort of I don't know what it's called. There's an acronym for it, but like Monday.com. What would you call that?
+
+Speaker 1  17:48  
+It's the CRM.
+
+Arian Kennedy  17:52  
+Is it like they have the CRM module, but they have like I don't know the whatever.
+
+Andrew Goeken  18:02  
+Monday.com, which would be like project management.
+
+Bill Denk  18:07  
+Is that the project tracker? Project
+
+Lance Binder  18:08  
+tracker is the Google Sheet that Brandon was referring to yesterday. That's the thing that we're trying to kill. So you're trying to kill it and
+
+Andrew Goeken  18:14  
+replace it with Monday. That's why you have two. No,
+
+Lance Binder  18:16  
+no, replace it with with all the because Coda has probably 95% of the information to create its own project tracker, but there's a couple key elements that are still only tracked in the project tracker. Huh?
+
+Lance Binder  18:28  
+Yeah, that's work
+
+Speaker 3  18:29  
+OS is what it's called.
+
+Arian Kennedy  18:31  
+So, like, I mean, as far as just like the points of entry that we have, so like to talk to our finance team and our customer service team, use Monday.com to get the estimate actually in the QuickBooks. That's how we transact transact to get that that information. So we have Monday.com for that. And then since we're already here too, another shoot off from email correspondence is our delivery of assets, audio and art files to our internal teams. So our customers send those to us via WeTransfer, Dropbox, any other file sharing. Sorry to the
+
+Lance Binder  19:11  
+service team, whoever's managing their
+
+Zack (MRP)  19:13  
+report, right?
+
+Arian Kennedy  19:14  
+And then in turn, our customer service team sends an email to our art team and our audio teams to deliver those assets. We get it by like Dropbox, WeTransfer, Google Drive, any sort of file sharing source that we have. We do have some clients who upload to an FTP, but it's not very many. I think just Concorde. They all end up
+
+Zack (MRP)  19:43  
+in our Google Drive directory. Yes. For the for the project.
+
+Arian Kennedy  19:47  
+Yes.
+
+Zack (MRP)  19:49  
+So they they may come in in a myriad of different ways, but they all end up the same organized in the same way on our end.
+
+Arian Kennedy  20:00  
+I'm sorry for jumping around a little bit. Just talking about all the places that we had to touch. Yeah, it's messy.
+
+Speaker 1  20:05  
+It's messy.
+
+Arian Kennedy  20:06  
+No, that's it is. That's why I'm like all of the contained that you have in this sort of system. I'm like, I think we can really use that. Just a matter of how we get from point A to point B.
+
+Bill Denk  20:18  
+Yeah. Right. So, so you can collect files that you can Dropbox email, but you have orders that come out
+
+Speaker 1  20:27  
+of
+
+Arian Kennedy  20:27  
+your email. They might be like, "Hey, I'm about to send you an email. Yeah, email all the way. Yes,
+
+Bill Denk  20:36  
+and in order to get this order into it using the project tracker, or The
+
+Lance Binder  20:42  
+project tracker is just used to record a job that's going to then be tracked.
+
+Arian Kennedy  20:49  
+So we have to put it in the tracker because that's our over overhead view of all of the jobs that we have scheduled or to be scheduled. It's a placeholder. It records our ordering components. It records our test dressing processes. So we have to make a code or a tracker entry. But as far as like the what are we truly transactioning against? Although we do have transactions on the project tracker, the coded entry is where our work orders are coming from. So we have to have a project tracker entry, and we have to have the code of entry based on the details that we've got from our client, emails, phone calls, order confirmations.
+
+Zack (MRP)  21:28  
+So the project tracker can be distributed as like a high-level overview of all the information that, for the most part, resides in Coda, except for one or two things right now. Well,
+
+Lance Binder  21:37  
+and some and some of the items on the project tracker may not even be confirmed as real orders in coding. We use it as placeholders for some of our demand for.
+
+Bill Denk  21:45  
+And so, how do you get it from the project tracker to encode?
+
+Lance Binder  21:48  
+So they kind of have an intent, don't they?
+
+Arian Kennedy  21:51  
+Yeah. So it really just depends on like how the information's coming through. Just to like give a few different scenarios. So let's say that we have a client like, hey, I have an order coming for you guys. I don't have all the assets locked in yet, but I want to reserve some space with you guys. And so we might have like a tentative project tracker line made to hold that capacity. No
+
+Lance Binder  22:15  
+PO. We
+
+Arian Kennedy  22:16  
+don't have any sort of like we might have like a reference name like, hey, this is for indie person project 2026. Some sort of like placeholder information, but we do need to have like the vinyl color and the capacity for it. So we might have a project tracker line that exists because it was a placeholder. We might have the client be like hey, I'm ready to start on my audio, but I don't have any other details available yet. But you guys can go ahead and get started on the audio while I'm pending that. So we have a project tracker entry that has the like our sales order number because we're auctioning against something as our MRP has the matrix that they want to edge ours name, album title, but maybe nothing else. So that would be an internal tracker, or they're like, "Hey, I have everything for you. I know what I want to order. I have my art files. I have all this stuff outlined. So as we are like starting to set it up in Coda, starting to route our emails, we're also mapping it out on the tracker at the same time. Now, depending on what comes first, like they're like we have to have an MRP number. We have to have a customer. We have to have an SL order. So we're like we're working on that stuff in Coda, but then we're like, I want to go ahead and map it out on the tracker at the same time. So I have two new people that I'm training, and I was like, I'm so sorry, like going back and forth. Like I'm just watch my screen, watch my screen. So there's stuff that I was doing like at the same time, but you know, depending on if you're working on Bear
+
+Bill Denk  23:43  
+Tooth, yes,
+
+Arian Kennedy  23:45  
+yes, yes. But if you're like working on like the Bear Tooth project that we had, maybe you're like, I want to map all this stuff out on the tracker first, and then plug things in as I'm working on the coda entries. It also just depends on what kind of like project you're working with at that point. What the
+
+Lance Binder  24:04  
+workflow is for the size of the project. No, it's a musical term, which probably isn't the best. Which probably it's probably not the best definition for the system that we're that we're building. So we had
+
+Arian Kennedy  24:17  
+a
+
+Bill Denk  24:18  
+central operating data. No, we had a contest. We had to
+
+Lance Binder  24:23  
+create an acronym.
+
+Arian Kennedy  24:24  
+We had like a little like contest for people sending in their submissions to name it, and that's what we like. Oh, you got
+
+Andrew Goeken  24:32  
+a good name.
+
+Lance Binder  24:33  
+No, there was there was a judge.
+
+Arian Kennedy  24:35  
+Yeah, yeah.
+
+Lance Binder  24:36  
+So we have no idea how he placed and how the votes went
+
+Speaker 1  24:40  
+landed. We
+
+Andrew Goeken  24:40  
+come up with an acronym. My wife was here. She'd be like, "I know exactly what that is. Like, hell yeah.
+
+Speaker 1  24:45  
+So sometimes the project driver. The project director is yeah. Everything that's come in, maybe something that's up to your job, may not be a job. Sometimes it might go away. Yeah. Placeholder. Yeah. So is this also placeholder for scheduling?
+
+Arian Kennedy  25:01  
+So the project tracker is organized in a unique way. So we have our project tracker broken up by our customer groupings, and then within those customer groupings, we have it organized by press date.
+
+Bill Denk  25:15  
+Customer groupings, like independent, yeah.
+
+Arian Kennedy  25:20  
+So back in the day, we had all of our customers mixed up within the project tracker, and we had it just strictly by date. But then during the scary COVID times, we're like we have so much stuff going on, and we really need to focus on the priorities within our customers by a specific date. So we pivoted and we adjusted it based on our customer groupings, with two exceptions, we have our short run program that we're looking to like batch run, so we have that in its own section, and then anything that we're not managing fully here at MRP, if we're doing it all in with our partner, we have that scheduled separately. But our project tracker again is by customer, and then a date range with within the customer. Can you pull that up? So, and just some things about the project tracker. And again, the cool thing about Google and why it was so helpful. There's still this. You can drag rows up and down. You can move all that kind of stuff around as you need. As these, so this is a project tracker. Purple's probably not a good one, right? Because those are offloaded orders. Those are orders that we've offloaded to GC. So here are which customizes UMG.
+
+Lance Binder  26:30  
+Aaron, help us out here. Sorry, Brandon's texting
+
+Arian Kennedy  26:32  
+me. So Brandon was texting me. So the travel section is GZ. Then we have a rework section that is like separate from normal. Yeah. Then we have our our short run section, which is what we're in right now.
+
+Lance Binder  26:46  
+Let's look at our. Let's where do we look at for like Sony or somebody like that?
+
+Arian Kennedy  26:50  
+So if you scroll down, there's going to be like a blue bar. You've already passed it. You're in the A to Z section right now. Can you do a Control F and then type staging?
+
+Speaker 5  27:05  
+Staging.
+
+Speaker 6  27:06  
+Yep. So we have a
+
+Lance Binder  27:07  
+catalog crop.
+
+Arian Kennedy  27:08  
+We have staging area per client. So A to Z. This is in alphabetical order. So our first client that we have is A to Z as far as scheduling on the tracker goes. So anything between this blue bar for A to Z staging, and the next blue bar would be A to Z related. So let's
+
+Lance Binder  27:26  
+stop at some of those yellow ones. I think yellow is that a good one? Let's go. We got several of them. Well, we can. I don't want to look at those reorder things. Those are crazy. Okay, so here we got the MRP number which we got from Coda. We have the internal matrix, which we go get from GZ, and then that's the client's cat number. Well, it's it's it's not necessarily the internal matrix. It's not necessarily the client matrix, though, is it? Because it could be unique to the finished good.
+
+Arian Kennedy  27:58  
+What the catalog number? Catalog number
+
+Lance Binder  28:01  
+is the finished good number.
+
+Arian Kennedy  28:03  
+Yes. Okay. It might be the same as the matrix. Like we
+
+Lance Binder  28:07  
+were talking about, I say sometimes the client usually like that wide version, the standard version. Yeah. The what's etched on the record is still going to be the catalog number that goes to retail. So you
+
+Arian Kennedy  28:16  
+shouldn't be alarmed if the matrix and the catalog number aren't the same, because it could be a version or like a specific, and we were using
+
+Lance Binder  28:25  
+this for years and years and years before we even had Coda. So we have the owner of the artist and the title. All this stuff is manually kind of probably copied and pasted in depot date when they want to see it. So then this is when we need to ship it, and this is when we need to press it. So the dates here, there's some back and forth because Coda, as we keep building stuff, we have built some two-way transactions between the project tracker and Coda. If this is linked to an actual Coda order, where would that be? We come a little more to the right. It
+
+Bill Denk  28:58  
+would be underlined on the left. Well, but that just answers the question about the link. First of all, so Lovely Bill has the same piece. Sorry, so it has the same MRP number, same matrix number, same CAT number, same arch number. Period piece is the only ones as retail. And what is for the man?
+
+Arian Kennedy  29:18  
+So, depending on the client, you can have shared catalog numbers between versions. So it's like if they don't have a robust system for organizing their projects, they might be like, I don't. They might not even want a catalog number, which we kind of touched based on the other. So this is one
+
+Lance Binder  29:35  
+of those right here. So there's something different probably in the packaging or the color of the vinyl, and they just are using the same the same I guess whatever's etched on the vinyl. They're using they're using it for both as an identifier for
+
+Zack (MRP)  29:50  
+finishing. One may have a sticker and the other one may not, and that may that could be the only difference.
+
+Arian Kennedy  29:55  
+Yep, and for this one, just looking at the version names too, we have retail and band, and usually. Portion for the band, they're like taking it on tour with them, or they like have like just something that the band's going to keep on hand. Like we see shared catalog numbers, especially if there's D 2c variants or something that they're not trying to go to retail for. Again, it really just depends on what type of system our clients are using.
+
+Andrew Goeken  30:22  
+Would you prefer it to be set up in the way that if there isn't just a sticker internally, you would prefer that to have a different catalog number?
+
+Arian Kennedy  30:33  
+It's not necessarily related to the the bom specifics, but like if we're like, hey, this is how we would really like something to be set up. If there's a unique version, if you have more than one version, have a unique catalog number for it. It's a good way for you to organize it on your side as the end consumer and also on our side. Even though we do assign unique finished good part numbers, the finished goods will be unique
+
+Arian Kennedy  30:57  
+at a glance. View having a distinction between the catalog numbers is just also another point of hey there is another version of this title,
+
+Andrew Goeken  31:07  
+and the reason I ask that is because I I could be wrong, but I'm thinking we could just for our our system for good tune the good tune side of things we can automate that that hey if we auto assign a catalog number to you, if you don't input one, then if you duplicate that to do a different kind of color vinyl, then it's the same catalog number with a variant that is done automatically again, unless they change it themselves. And we could probably put that that same logic, if that's something that you would want, we could put that same logic into the MRP
+
+Bill Denk  31:47  
+system as
+
+Speaker 7  31:48  
+well.
+
+Bill Denk  31:48  
+For example, as soon as your live ones here,
+
+Arian Kennedy  31:51  
+yeah.
+
+Bill Denk  31:52  
+What I'm curious about is let's imagine for just a moment that you got an email, you could type what you could do into a platform, or the customer thinking something they could go regularly platform. Could be
+
+Speaker 1  32:06  
+one entry.
+
+Bill Denk  32:06  
+Go see either one, and that could either have the project tracker, whatever you scroll up on some project trackers automatically done. You can push it into Google Sheets for that, but it would be a searchable, easier I would think solution than got the project tracker, and then you have one upload that comes here from the clients. So if they want to upload stuff, they said an email. You can upload it to that same central spot. It's one place for the team to download as well. No Dropbox or the announcement. One place for a payment that the kids centralize can be pushed out of QuickBooks if you want as well. But keeping invoices on, and then vendors and even GC, you can also plug in at the same time for whatever you want. So it's all in one central place, and doing the work of this.
+
+Lance Binder  33:02  
+So again, a couple things. So something, some a lot of our data is dependent on some architecture being created in Coda for and tied to a particular customer, and then tied to all the part number generation and invoicing and stuff like that. And just I don't know.
+
+Bill Denk  33:21  
+But imagine if we go to get something here. Yeah. We go out to Coda. Yeah, that's what we need. Yeah. Yeah.
+
+Lance Binder  33:28  
+No, and that was those kinds of things. Here's the whole thing. This project tracker. The idea is to make it. The idea is to make it go away. So up here. I mean, we. That's our plan anyway is to make it go away. So right now we have to use it because there are certain elements that Coda doesn't know about, and we haven't done the development to have Coda have that intelligence because we keep getting other things keep jumping up as priorities. But yeah, so but here's where this is where I was going earlier. I know that that's a hyperlink, but isn't the customer order entered somewhere too? Scroll over to the right. Come scroll to the right. So this is when we know it's a real order. That's the code of order entry. So there are certain transactions date, and I can't. Some of them go two ways. Our scheduler can come to change that date, 8:27, 26, it says, "Oh, I need it pressed on the 25th. It'll go to the order in Coda and actually change the press date, so we can see the work orders on the floor have some dates. So there's some dates that change. Coda feeds some dates back to Project Tracker. Project Tracker feeds some dates back to Coda. It has to have the right links and the right logic worked out. So as we develop certain things, we're going to hey, if we can't replace the project tracker, let's see if we can at least update it or take updates from the tracker. People
+
+Bill Denk  34:52  
+should give you guys a medal. People should give you guys a medal. Well, and a lot of it's our our developer
+
+Lance Binder  34:58  
+does some pretty clever shit.
+
+Zack (MRP)  35:00  
+This is the sheet that they said they would stop. They told us to stop calling about. Yeah. Yeah. Oh, there were there were years that we kept adding so much that the whole thing would break
+
+Speaker 3  35:10  
+and we'd have to recreate it. I mean, it's so fragile,
+
+Speaker 1  35:13  
+and there's so much stuff dependent on this. All of
+
+Lance Binder  35:16  
+our compound demand, how much how much much color to order? When are we going to need it? We've built some incredibly complicated Google Sheets for compound demand as well that are fed by the tracker and fed by Coda information too. It's like a hybrid, but the whole thing is all of this information, almost all of it's already in Coda. So the idea of having to enter it again on the sheet-it's just like why. So the dates we're doing back and forth. Some of this. Let's go to the left then now again. Sorry.
+
+Bill Denk  35:48  
+And how?
+
+Speaker 1  35:49  
+So this.
+
+Bill Denk  35:50  
+How big is this? Oh, so you have 2026. So
+
+Lance Binder  35:53  
+keep keep going. Daniel. No. This is the other terrible
+
+Speaker 8  35:57  
+thing.
+
+Arian Kennedy  35:58  
+We've broken it before, and we've had to date like Koda knows
+
+Lance Binder  36:02  
+this. Coda knows this. This is some of the front end stuff. We use a little box that says, "Do we have the lacquer of the DM? Is the cut? Is the audio available? So the X means yes, we've got everything we need. Line through it means we don't need it. We this is stuff that's just developed over the years, and it drives drives me nuts. Stampers? Do we have stampers in house? This stuff is trapped in Koda as well, but because we still order stuff from other places, we don't have all our purchase order stuff with the different vendors tied in. So we put we have these little you know whatever characters we put in there that tells us, hey, if it's ready to go or not, and then we add little notes if we need to see the history behind the ordering and the receipt of those stamps. Again, Coda knows all this shit, but we're coming in and we're typing it all in again on the project tracker because the project tracker knows when all of the items are workable, so we can tell us certain other things are ready to go. Same thing with test pressing status. This is out for client approval. Center labels. Hey, Coda knows this information too, but we're still making the manual update here. Same with the sleeves. Same with the jackets. Same with the inserts. We don't need the download card. So basically, this is static information left and right of all the potential components in for packaging. But some we don't need, some we need, some we have, some we have on order. Again, Coda knows all this stuff. If it's a real order, but we're still tracking it here, making we receive it in a Coda. The inventory's there. Well, let's go to the tracker and make sure we've made the little remark that they were received on this day, and now we have everything. So these are the things that we're trying to get rid of. One of the things of it keep going to the right. What else do we? Coda knows we have the bomb. Cota knows if it's pressed. So one of the coda knows that. Cota knows that. Keep going to the right. All of that. So this is what drives our demand. Keep coming to the right. Bill confirmed. This is all Coda data, Coda data, Coda data. Okay. These columns up here. As we press the records, when when we create, I don't know how much detail Branda got into, but we break up a pressing work order into chunks of 380 LPs because that's the batch of records that's going to fit on one of our handling units that's going to go to packaging. So we have an order for 10,000 LPs. It's going to break it up into increments of 380, plus any extras, plus any overs, plus any client samples that are part of the order. Again, this is all coda information. As they complete LPs on the floor, and they'll scan that batch and say, "I'm done with that 380. It's going to come update that column there, so it's going to show we're getting closer to being done, and it's going to reduce the quantity of records to be produced, and it reduces the quantity of compound necessary to make it. So again, it's driving the compound inventory kind of in real time based on transactions from.
+
+Bill Denk  39:19  
+So with the what does the total LPs do?
+
+Arian Kennedy  39:25  
+Yeah. So as if it's like a single LP or double LP. Like the if you go over to the left, sorry, to make you go back and forth, Daniel. So the initial quantity that we have over here is the finished good quantity. So if we have a two LP like that, is it? My skyscraper that's a two LP. Yeah. So they want 2003 finished goods, but since it's a two LP, we'll be making 4006 total LPs.
+
+Bill Denk  39:52  
+So why the the three and the six? Are they really asking for three more than 2000?
+
+Arian Kennedy  39:58  
+It's for client samples.
+
+Lance Binder  40:00  
+So we have certain types of orders that we also send usually new release orders where they want. Once we package certain goods, they want to see like the first things off the line. Yeah. So before we like complete anything or ship anything, they're going to see did they screw something up in the information given to us, or did we screw something up in the translation of that information?
+
+Arian Kennedy  40:21  
+And while we do have like our production tolerance of plus or minus 10% like say we were on the minus the 10% well they already said we sold all these units to Depot, but we still need samples of that. That's why we go ahead and pad the order quantity by the samples, so we know for sure that we're able to fulfill those client samples out of the order. And we
+
+Lance Binder  40:42  
+also build in a 10% overage, but we cap it at 100. So if we make 500, if the order is for 500 LPs, we'll make 550 plus any samples. If it's 10,000, we'll make 10,100. Those 100 kind of come into play if something gets damaged after it's produced, after it's pressed, and it's it's damaged and it's leaving, or they they identify quality issues with it, because certain orders, especially to retailers like Target, need everything complete. You don't ship partials. They're they've got their planogram set up at the store that account for this many stores. We need facings of five, and you need to produce. You need to supply the entire quantity. So this we build in, and overs is pretty much is kind of a standard with the vinyl industry anyway. So it's the same with the print that we get. We know that we're going to have some extra jackets, so we'll go ahead and package them. So that that's the what's behind all that. So again, Coda sending information. All this stuff needs to be done manually on the tracker. We're still setting up the order information, and we're still tracking all of the inbound components and the test press status on the tracker.
+
+Bill Denk  41:51  
+When you see the code is doing this automatically, where's codea getting information from?
+
+Lance Binder  41:57  
+They're getting they're getting it. So Coda produces, and we find a live order. We find a live order. I mean, Coda has the order. So if we go back to, let's go to, let's go to. I guess we noted something. This order. That's a Coda order. Okay.
+
+Andrew Goeken  42:15  
+So Coda generates the order number and the MRP number. Yes. Got
+
+Lance Binder  42:19  
+it. Okay. So, but if we go all the way to the left, what's still open on the old Sugar Hill game? Let's click on the hyperlink there. That's going to take us to the Coda order. So, just to so I get order and. But but based bottom line is this the idea is this is going to go away and this overall tracking complete with placeholder data the idea is it's all going to live in Coda one day so the idea of updating the project tracker back and forth and manually entering anything. Timing plan on that is the elements that we still need to get in the coda. Sorry, test pressing transactions.
+
+Bill Denk  43:19  
+The
+
+Lance Binder  43:21  
+compound demand, yeah. So we're going to have to add for
+
+Zack (MRP)  43:27  
+the
+
+Lance Binder  43:28  
+place holding items, the things that we may have audio for, but we don't have anything else for. But we may have a, hey, Sony's got 100,000 unit release, and they they think they're going to use opaque yellow. We need to put a placeholder in for that so that it drives the demand for the compound.
+
+Bill Denk  43:44  
+What about the connection to the manufacturing?
+
+Speaker 3  43:46  
+Sorry. The
+
+Bill Denk  43:47  
+connection to the manufacturing for the compound.
+
+Lance Binder  43:49  
+So when you say the connection to the manufacturing is okay.
+
+Zack (MRP)  43:58  
+That's all. That's all done within code.
+
+Bill Denk  44:01  
+So
+
+Lance Binder  44:03  
+coda generates the pressing work order from manufacturing, and it also generates the packaging
+
+Speaker 3  44:08  
+work order from it. It
+
+Lance Binder  44:09  
+also shows the demand for all of
+
+Speaker 1  44:12  
+the
+
+Lance Binder  44:12  
+any real live order. So we're
+
+Speaker 1  44:14  
+talking about internal.
+
+Lance Binder  44:14  
+That was going to ask you. What do you mean? I'm
+
+Bill Denk  44:16  
+speaking of the. So how do we get cut out for?
+
+Lance Binder  44:23  
+Different people. Okay, so it shows as demand. It'll look at it'll look across from the from the project tracker, which is fed by either live orders or placeholder orders. It tells this is the press date, this is the weight of the record, this is the date that it needs to be done by, and knows that for every 140 gram record, we need 100 and I don't know if it's 180 grams of compound just to take to account for any scrap and flash that comes off the record. So there's a demand for kilograms based on the. Compound color and the dates that the LPs are are are needed, and all that's in the tracker today. So that shows on a on a Google sheet called the compound tracker, but it also shows on the comp it shows in Coda, but Coda doesn't have the placeholders, so it's not going to wait. So the compound demand is calculated on the project tracker. LPs needed, color needed, number when is it needed, and it shows up on on our demand level. So you
+
+Bill Denk  45:33  
+have a material that can be in house.
+
+Speaker 1  45:36  
+Yes.
+
+Bill Denk  45:37  
+So you know it's here.
+
+Lance Binder  45:40  
+Yeah. Yeah. And you
+
+Bill Denk  45:41  
+also have about a bedroom.
+
+Lance Binder  45:43  
+Well, we or we are needing to order, and again, code it. And we know it's on order. We know it's in house, and we know what the demand is. So, so when we need to order it out to the vendor, is it a manual process or is it code to that? Well, again, this is still a hybrid. So Coda knows the inventory we have. We're tying the POs that we're now creating a Coda for the. Yeah, when we create a PO and Coda, we'll create a PO and Coda for the compound. We're still tracking some of that on a separate Google sheet because of the placeholders that Cota doesn't know about, so Coda has the inventory, and we know what the on order is, but the demand is fed by the project tracker because we don't have the placeholder values for non-confirmed jobs that get Coda. He's asking if the process for ordering is looked like. Yeah, so the sheet. Do we want to go to another Google sheet? We want to continue with Project Tracker.
+
+Bill Denk  46:47  
+No, I think I'm doing Project Tracker for now. I'm trying to do
+
+Speaker 1  46:49  
+it. Okay. I'm trying to get an idea of what's involved. Yeah.
+
+Lance Binder  46:52  
+Let's go to the Compound Tracker. So it's the most. It's the slickest Google sheet we use.
+
+Speaker 3  46:59  
+The largest.
+
+Lance Binder  47:01  
+It's the largest
+
+Speaker 2  47:02  
+and most complicated.
+
+Lance Binder  47:03  
+Yeah, but it also requires the least amount of of data entry because most of the all the entry is fed most of it's fed by Coda. Yeah, or the project. It reads. It harvests the demand from the project tracker. It harvests the inventory from Coda. So look a little bit black at the top. We've got rolling. We got current inventory. We've got what's on order. That's based on the POs that are open. So what's left? We've got overall demand, rolling inventory for the next 24 weeks, for the next 55 weeks. Then we have the demand. What's I think last week and current week, and then what's due following the following week. And again, this is taken by LPs being needing to be produced from the project tracker, calculating by 14180. showing them the kilograms needed by week, and we also have, based on some of these other tables, we do a lot of wets. Black may not be the best example. Let's go to T zero, T T 2t, 02, and it's going to come down.
+
+Bill Denk  48:19  
+One quick question. Yeah, I think we'll get to it on the rebrand.
+
+Lance Binder  48:29  
+So that's added back into inventory as we have compounds set up in Koda as virgin compound. Those are the virgin pellets that we get from the manufacturer or regrind. So we don't include the regrind on hand inventory yet against our demand. I think we're thinking about doing that, but regrind can be unreliable. You don't know if you've gotten some if it's been contaminated during the recycling process, right? So it's on hand and it shows on hand, but we have we've chosen to exclude the type regrind from our to satisfy the demand. An inventory separated is its own type. It's not going to get into the version. So we have this much version. We have this much regrind. Yeah. Right. This sheet right now is only calculating against version. But we could say, hey, let's let's use it all.
+
+Bill Denk  49:22  
+How would you know it's good?
+
+Lance Binder  49:26  
+Usually, when you put it on press, when
+
+Speaker 3  49:30  
+you start using it, oh, that sucks. You guys use that
+
+Andrew Goeken  49:33  
+as kind of almost like a sunk cost, and you're like, we make money on it, we make money on it. Yeah, yeah, like you try to use, but yeah, you may run into issues. You may have to toss some portion of it if it's contaminated. So
+
+Bill Denk  49:46  
+the only when you say contaminated,
+
+Lance Binder  49:48  
+usually so in the pressing process, you know those center labels. Some of those get loose and they fly around. They may wind up in the grinder. So you've got to ground up one center label. Can destroy an entire bin of regroup. Wow! Yeah, because it's not going to be in every record you make, but it's going to be in enough records that your your waste level goes so high. So, and every pressing plant deals with quality questions about regrinding. So, and and different colors. Grinding black is one thing grinding clear compound that's very easy to get contaminated.
+
+Bill Denk  50:26  
+So a lot of our regrown winds are going into the lens. We already do this kind of bigger hole or something like this, unless the center link will got off of the center area. It will be still there. There's
+
+Lance Binder  50:41  
+well yeah now we're down way down down the hole. You would not believe the number of conversations we have about summer labels, either the paper stock or the ink type. Is it ready to show you? We have to bake the labels to bake to basically get all make so they don't blow up on the press. You have to get all the the moisture out of them. So change of paper stock, change of of ink really drives can drive changes on the floor. So we we have fought paper stock issues because they're not cupping right, and we're they're pulling up either none on the machine or they're pulling up 10 at a time. So yeah, center roll is a big thing too. But it's not. But you got to make sure that that's going to be right when you put it on the
+
+Speaker 1  51:25  
+record. All these
+
+Lance Binder  51:26  
+little pieces.
+
+Bill Denk  51:27  
+So, so then on the rebrand, reason I was asking about that was to try to figure out when you factor in order to have to order regrinds its own separate things. So that's where somebody chooses house makes rebrand, whatever. But that's but
+
+Lance Binder  51:42  
+that's a decision. We could say, look, we're getting so good at making rewrite. Let's start incorporating that in our supply against demand.
+
+Bill Denk  51:51  
+That's just a just. But for right now, it's used as it's just sitting there. And then somebody says they want house mix. It's just there, but it's taking floor space off. Well, we'll
+
+Lance Binder  52:01  
+so here's the thing: we've got black regrind out there. We're going to make a black record. It's it's just as basically as as good. It's like making a record version.
+
+Speaker 1  52:11  
+So for the static,
+
+Lance Binder  52:13  
+I don't know that it makes that much difference on the static. It's really it's just it's that paper, or it's a something not noticed or something metallic in there because something on the blades of the grinder, something happened like somebody dropped a wrench in the grinder. I don't think we've had that happen in a while. It used to happen with some of our old grinders. So, so rolling demand again. Code is tracking the inventory upon receipt, and again in live transactions, as we produce records on the floor, it consumes the compound in inventory based on the number of records you're making and the calculated amount of waste, and then it lowers the demand of records on the project tracker. So the demand is is is real time based on production, and the on hand is based on real time production. Those are transactions that come back from Coda because Coda is tying again the pressing work order that says how many records to make of what color and what weight. That's that's driven by Coda to the floor. Well, that's your vendor. That's sorry. That's a Coda vendor. So yeah, if if once we have that placeholder function in in in Coda, we can pretty much even drive all all the demand from that too.
+
+Andrew Goeken  53:44  
+So this sheet is pretty much all about pulling the information to show you demand.
+
+Lance Binder  53:48  
+Show us demand, which from Coda and from the project track. The demand comes from the project tracker, the on hand and the and the on order comes from Coda. So, and it also shows us in here, if we're back at T02, we also break up the demand if it's a straight clear because T02 is you know clear. So our total demand for the next 55 weeks we're going to make records that need 5,975 kilograms of clear to make clear records, but most of the demand is tied up in blends. So that means we've got order, and when people order, this is another reason why special effects are different from our from the blends. Blends are its own inventory type, so the demand in the system on the project tracker says I need however many records of MB 001 or what MB 01, so it's that code for the blend has a recipe that says for MB 01 or maybe not MB 01. Let's look at the color codes of recipe because these all have encoded too, but the demand isn't being calculated by code again. So, like all of these here, if somebody orders Aqua Canary, which is code DD42, and it shows up on the product project tracker as DD42, it says I'm going to need 96% of T02, and then I need 2% of of opaque canary yellow. So that's two colors. It's going to break the demand up. 96% of it needs to be against clear. 2% of it needs to go to yellow. That goes back and shows on the summary here, Daniel, as what we needed for, you can drill down further and look at the individual words, but it's going to show you what you got or what you need. So, and as we go through week by week, so hey, look, we're gonna we show. Let's go back to that to next week because we're already in. It's already not danger. It says that for a week of week 36, 831. This is based on the press date, which is entered on the project tracker, which feeds the the work orders as well in Cota. It says we need that much for blends, and it's yellow because we don't have enough on house in house, but we have an open PO that, based on the due date and PO, it should be here to satisfy that demand. If we see a cell that goes red, that means we don't have it, and we don't have an open PO that's going to fulfill it. And that's when people have to go. We need to find out where to get this compound, or else we need to move some dates on some orders.
+
+Bill Denk  56:42  
+No, it doesn't. Right here, we're
+
+Lance Binder  56:47  
+kind of looking here. We've got like a a worksheet that we've created, that but it's an annual process to look for when we go short. So, but again, that's something that will that's planned on being built in as well too. So we have
+
+Speaker 3  57:00  
+a lot of plans. A lot of plans, which we
+
+Lance Binder  57:03  
+keep ready if it's development time. So, and what he says,
+
+Speaker 3  57:06  
+we have these plans. We have it laid out, and something comes up. I don't know. We can deal with this. Yeah, right
+
+Lance Binder  57:10  
+now for the code of focus right now is almost 100% on getting the plating department up.
+
+Andrew Goeken  57:16  
+You guys are like Dune. It's plans within plans within plans. Well, that's an
+
+Lance Binder  57:20  
+entirely new operation that we are building based on GZ's plating operation with serialization of each stamper and all this these mother's father and slackers DNM's. So it's very complex, and we're almost ready to start doing some serious testing on it. But again, it's been our almost all-consuming code development for now, and it has nothing to do with any of the sheets we're looking at right now. It's entirely independent of. So again, the idea is this sheet's going to go away. The compound tracker, the project tracker is gonna go away. Like Brandon said, and then I can give them a retirement date. But and
+
+Andrew Goeken  58:07  
+those are the would you say those are the only two Google Sheets? Once those two are retired and code, I can handle those. That's when your done code is up to par on what you need.
+
+Lance Binder  58:16  
+Well, there's still a bunch of stuff to do. Okay, a lot of it has to do with some probably more. I don't know what else do we have to do once we get rid of these two sheets and all the things that go into it. There's a lot of PO stuff. I mean, there's a lot of building on systems we already have. Yeah. We we got them to a certain point where we okay we can get by with this, but we need to come back and add this. Yeah, there's the
+
+Zack (MRP)  58:42  
+there's the prepress workflow with the prepress
+
+Lance Binder  58:46  
+for the art files and the audio files. There's a bunch of work to do on that because that's still the different spreadsheet. We're exporting to
+
+Zack (MRP)  58:51  
+QuickBooks because that's double entry.
+
+Lance Binder  58:53  
+Yeah, the importing from coding to QuickBooks for invoicing.
+
+Speaker 3  58:56  
+So yeah, so after replying up and we're we just mentioned the prepress queue and then we're also doing the kind of stock parsing. We're breaking out our
+
+Lance Binder  59:05  
+all of our different components
+
+Speaker 3  59:06  
+for our components to be more drinking because right now they're just basically two or three things this type. Even though on the back end they keep track of all these different all these different characteristics of each of these parts that we don't actually house. So one
+
+Lance Binder  59:24  
+of the, I guess, I guess, I guess, it's a pro and a con about the code of development is a lot of the coded data is still stuff that was migrated from old Google Sheets, and that we're looking to parse out and
+
+Andrew Goeken  59:40  
+sorry, restructure, basically restructure. Yeah. So a
+
+Lance Binder  59:43  
+lot of the stuff we got it in. It's good enough. It's better than the spreadsheets we were working with. And then we were building the big things like we got to you know add part numbers for everything. We need inventory management. We need to be able to press the work orders with real time you know demand and updates. Same with packaging. We need. To show the demand for all the jackets and the stuff on the floor, we need to consume those jackets and LPs on the floor when we make something, whether it be in you know sleeving assembly or package. So we've been doing all of the warehouse transactional functions, but there's a lot of kind of front end or master data that we need to do a better job improve on.
+
+Bill Denk  1:00:20  
+What about the creating the covers, the sleeves? Is that fit in the house, or is that done through manufacturing?
+
+Lance Binder  1:00:26  
+Manufacturing, creating the sleeves, creating the covers.
+
+Arian Kennedy  1:00:30  
+Like as far as our vendors, the art file setup.
+
+Bill Denk  1:00:34  
+No, I'm saying the actual manufacturing
+
+Arian Kennedy  1:00:37  
+of it. So I mean, as far as like we do have some of those capabilities in house, but then we also work with with vendors in that case. So as far as depending on what vendor we're working with, the submission of the art files and also the way that we place the order can be different. We have some, like we have to send in an official PO, like a PDF document. We have some that we're working off of, like an order Sheet, some that we have to send the art files to a specific system, like we're talking about. We were talking about Rosales yesterday, right? As far as like they have a place where they can proof it back to us, where we can download or approve it within their their system view. We have somewhere we link the file to a specific sheet from our Google Drive. We share a link from our Google Drive to the vendor.
+
+Lance Binder  1:01:27  
+That's right. That's some of the PO improvements we're looking to make too, isn't it? So we've got very basic PO types. Certain items are on quantity, but the the interaction with different vendors for different things is a definite thing.
+
+Speaker 6  1:01:40  
+Yeah, there is
+
+Speaker 3  1:01:41  
+not a one-size-fits-all. Yeah,
+
+Arian Kennedy  1:01:43  
+some of them like we have to send an email PO. It just it depends on who works.
+
+Bill Denk  1:01:49  
+If they're doing the art for the for the cover and for their sleeve, then you have to then take that and then recreate maybe another template or something for that.
+
+Arian Kennedy  1:02:04  
+So we have our template that we're like, hey, this template will work for this vendor or multiple vendors. That the specific output file that each vendor requests can have different requirements. So it might be a specific output color profile, or it might have like a different like extended to dye line or something, depending on the vendor. But what we're working with, that's something that we outline to our art team in email. We try to identify the vendor at the time that we're routing the art files to our team, so that way when they're like, "Hey, this has been approved. This is approved, and you're ready to order it, they have it exported to the specific vendor.
+
+Bill Denk  1:02:48  
+How do they know which vendor is? Based on volume, they have more from one vendor to another, or is it the type of?
+
+Arian Kennedy  1:02:55  
+It's volume. It's also depending on what type of like kind of stock that we're ordering, some vendors can only work with specific parameters. So that's something that like our customer service team has to know. But also we have to coordinate with our purchasing department of one person. And sometimes Carolyn will have to ask our art team to like re-export the files because she needs to change the vendor, so it's that's something that we would also want to try to work on in the future with some of this parsing out. Like where where can we identify that in a much easier place too? Yeah.
+
+Zack (MRP)  1:03:36  
+When I was talking about prepress workflow, that's what Chase is. It's the art one,
+
+Speaker 1  1:03:42  
+yeah.
+
+Bill Denk  1:03:43  
+We don't template this, and so if we have connection, if it's photo, we're taking a decision as to which vendor this is going to go to, then we can actually create that template ready for the new.
+
+Lance Binder  1:04:06  
+So let's go to the let's go to PO or confidence. Let's go look at jackets, a ballot on the inventory balance. Because again, whatever we and I'm not sure if I followed what all you were suggesting could happen
+
+Bill Denk  1:04:27  
+here. Right now, we have the ability you saw yesterday where you can put in a template and then it has the Nordic template in here. Yeah, loads over top, right? Everything gets it set up, so we could actually have the other vendor templates. So when you get ready to push the job out, just choose which vendor you want to get it, and it's already will place the art on the yeah.
+
+Lance Binder  1:04:59  
+I mean that at least. Some pretty slick stuff. We need to tie it into so what the PLs that we have now to get the demand. It's driven by the orders of Coda, firm packaging order that says packaging X number of stuffs. So we've got. Let's look under. So this says inventory balances. It's showing all types. Let's let's be focused by jackets. So let's let's look at get rid of the on hand and let's look at has committed. So what this means is so that's a particular child. We don't look at generic. So if it's got an MRP number, it's title specific. It shows level. top one, I mean the second one, Albert King with Stevie Rayvon. That could be interested in the jacket. It's a trifold jacket, 20 point board, three pockets. That's some of the data. This is an aside that we're looking to parse out. Break that description up into like three unique fields, right? So that's the parsing that we're doing, and we're kind of on the road for that. So, but that's the inventory part number at the at the left. It's the MRP number, the kind of stock which is the jacket. It's jacket number one, so it's probably the only version for that. Could be different. It's the wide version, artist title on hand. We have 467-minute inventory. We have a work order out there, packaging that needs 1000. So it showed that our availability is negative 533. Oh, there's a purchase order in for 1000. So we need the visibility of. Again, the project tracker still works with a lot of this stuff because the placeholder stuff isn't encoded. But this is legitimate demand, legitimate on hand, and legitimate on order. You can probably we can probably open that, right? Yep. We can see what it's making. We can see the existing inventory if it's you know usable or not. We always have to decide whether to put usable or inventory in that on hand, we can also suppress things that have quality issues, blah blah blah, like a normal warehouse management system. Those are the orders that are relying on it. Some are already done. Here's the open PO. So the PO, let's open it. It's expected on 916. That's the purchase order. It was cut to Ross Ellis. So we're expect that was that's the part number. That's what it's going to show them is on demand in our on sorry on order in our inventory. That long ass description that we want to break up and pricing and all that kind of stuff. So when it's received, of course we'll receive it as the part number. It'll satisfy the the PO quantity, and then our finance team can, when they get the invoice from Rosellis, they're going to know is it did I get invoiced correctly? So they can do the three-way tie. We order this much at this amount. We receive this much. We're invoiced for this much at this amount, so they can do the three-way tie. So those are that's also regardless of what we come up with from. I mean, this is we still the idea is to still have code to kind of be the the system of record based on vendor vendor pricing because the goal here is also based on I think we're having to look stuff up for the pricing. Is Carolyn having to look up pricing for some of these jackets that she just knows off the top of her head?
+
+Arian Kennedy  1:08:25  
+Some of them she might know off the top of her head, but like there are like specific pricing grids that we have for that, and Carolyn is still having to do manual manipulation to these POs as well because we don't have that kind of stock parsing out. All the
+
+Lance Binder  1:08:38  
+parsed kind of stuff,
+
+Arian Kennedy  1:08:40  
+and also like there are some specific things that each vendor needs to have outlined on their PO, like the die template on this one, for example, that die 10566 or whatever that says. That's specific. That's a template identification for a trifold jacket with this particular vendor. So there's some manipulations that she has to do, which is something that we don't want her to have to do in the future. There's certain things that require a setup charge, so it's a flat setup fee, and then there's a price per quantity of whatever item she's ordering.
+
+Lance Binder  1:09:10  
+But I think the again the idea that further development for a lot of these is going to have some basic pricing templates in for certain vendors, so there's not as much lookup. It's like I'm ordering this kind of stock thing from Ross Ellis, and here's here's our price. So the idea is to have those tables as well, so it'll populate. So that was just that's a little again pieces that are that are good. And I think the whole PO thing has only gone in this year, right? Is that 2026? That was before
+
+Arian Kennedy  1:09:41  
+the. Did we go drink after piano?
+
+Speaker 3  1:09:44  
+I did. We went to drink. We went to. We went and had hairs. Yeah, I don't.
+
+Arian Kennedy  1:09:54  
+It felt good outside. Yeah, we
+
+Speaker 4  1:09:56  
+left early. It wasn't this year. I'm hoping it's this year
+
+Lance Binder  1:10:02  
+because it needs to be an accomplishment for 2026. Anyway, these are just all the things that we have kind of lined up. So I mean, any the fact that that we're looking to sunset some of the Google Sheets, bring a bunch more stuff at least in in house from a visibility standpoint. Those are all things that we've kind of wanted us to keep in consideration. So
+
+Speaker 3  1:10:21  
+I'll go to June to find out.
+
+Andrew Goeken  1:10:23  
+Yeah, great. Yeah, on the
+
+Bill Denk  1:10:25  
+vendor side too.
+
+Arian Kennedy  1:10:26  
+It was August in 2025.
+
+Lance Binder  1:10:28  
+Well, and the vendors are all similar to customers. There's a vendor master data table too. And the reason
+
+Bill Denk  1:10:34  
+I'm saying that is because we talked to one press who said, "Hey, my price changes based upon the vendor that I'm talking to, and so it's a smaller press, and so that's what I was curious about. Like, for example, vendors' pricing changes, and the vendor pricing sector is their way to auto adjust it so that like if the vendor's pricing changes
+
+Lance Binder  1:11:00  
+fluctuates, that you
+
+Speaker 3  1:11:02  
+notify. Well,
+
+Lance Binder  1:11:10  
+and I think so. Some of our print, we already can help more with this. So, we still have some customers that send in their own print, right? Does A to Z still send theirs in? So, A to Z sends in their own stuff, so we don't we don't have anything to do with that. We got one of our major major customers that used to send in their own print. Then they wanted us to source their print by using their vendors. Yeah, they could basically we were cutting the P.O.s that they were choosing who the vendor was and all the pricing, and then now it's reverting back to I don't know what what the hell are they doing now?
+
+Arian Kennedy  1:11:44  
+Sending in their own stuff. Sending in their own stuff. So now they're sending in their
+
+Lance Binder  1:11:48  
+own stuff again. So the the customers' decisions and input and based on what so those things are constantly in flux too, and it drives us crazy from an inventory standpoint. What do we own? What they own. Sometimes it's the same part number, so some parts were purchased and purchased by us, and some are purchased by them, and it's the same inventory. So, yeah, and so that fluctuating pricing. If we get to the point where we're, I don't know that I don't know, and it's right up down here either. If we get an order for which we're sourcing print, do we have besides Ross Ellison, somebody NMS, which is a local that we use, do we choose them based on pricing and volume where we're going to go, or do we? Huh?
+
+Speaker 9  1:12:34  
+We choose. Yeah,
+
+Lance Binder  1:12:35  
+but I don't know how often it is that we have discretion over ordering jackets or sleeves.
+
+Arian Kennedy  1:12:41  
+I mean, for the most part, like we're we're giving that direction depending on the volume and the order profiles. We have some like if it calls for a special PMS or a special finish, like we might not be able to use a specific vendor for that. But anything that we have as far as like the pricing that we give to our customer, like we're taking everything into consideration for where it needs to go, so we shouldn't like have to come across like, oh, we can't do this for you this time at this rate. Like that's everything. Like we are factoring all that stuff in.
+
+Lance Binder  1:13:14  
+Because I think what you were going at bill is based on price or current place, price and volume or whatever the decision to send it to which benefit the
+
+Bill Denk  1:13:22  
+system can maybe suggest that can see the price. This
+
+Lance Binder  1:13:28  
+kind of goes back to our kind of stock parsing because certain vendors can't produce certain types of jackets, right? So it's it's pricing, it's the component type, it's the colors that are available, other
+
+Bill Denk  1:13:39  
+variables. So there's some
+
+Lance Binder  1:13:40  
+variables besides price. It's availability. That's what I mean. So, so also
+
+Bill Denk  1:13:44  
+the other thing too is does the vendor have the ability to get in town within the time you have it back?
+
+Lance Binder  1:13:51  
+And there's that two turn times. Yeah.
+
+Speaker 1  1:13:52  
+So yeah, one
+
+Lance Binder  1:13:54  
+person's just down the street,
+
+Speaker 10  1:13:55  
+and the other
+
+Lance Binder  1:13:56  
+one
+
+Speaker 4  1:13:57  
+is in Canada. So yeah.
+
+Bill Denk  1:13:59  
+Because that's one of the things that I would like to do also is with vendors to connect vendors in on our systems, so that now that offers the opportunity to throttle how we need to enhance stuff.
+
+Lance Binder  1:14:14  
+But if we're back to that major customer supplying their own print, I don't know what percentage of print inbound to us is sourced by us versus client supplied. I don't know, Marion. I know you're getting pulled over that you pulled in stuff.
+
+Arian Kennedy  1:14:29  
+I don't know. Are we close to
+
+Lance Binder  1:14:30  
+6040 vendor supplied or 4060
+
+Arian Kennedy  1:14:34  
+or? Um, I don't know. It's just as far as like what our volume is versus what particular client volume is. I don't know if I have like the numbers for that specifically, but I mean, as far as like this like vendor shuffle, we are doing that dance a little bit. But I mean, it's not necessarily something that's like unmanageable. We just really like to streamline it wherever we can, and by streamlining it. What sort of manual manipulation to whatever type of ordering process that we're having to do? How can we streamline that so the person who's having to make those calls is able to focus on that instead of doing some data entry on that? And it's like, what what can we do to help clean up some of that data entry? So this parsing that we're trying to do in Coda to have all that streamlined, and then whatever we can do further upstream for like the customer service team to streamline their data entry to zeroing in on that single source of truth because we really want Coda to be that, but knowing that we have some outside manipulation for how our customers get us the information, and how it changes, and how those changes are recorded, because we'll have an email, and then they have a phone call like, "Hey, actually, I want to change everything that I sent you. And if that doesn't come back in email, you look at your email, like, "Oh, they're here. We're good. So, like, I think you know, having a place like we're talking about here, where like the client is able to send that information. We can log that in as like a hub for recording changes like that. And Coda being like, "Hey, I got this, and this the source of truth for it now.
+
+Lance Binder  1:16:13  
+It seems to me no matter where the information comes from or how it gets it, kind of we need a central point to know, you know, what we need, what do we have, when do we need stuff, and where is it coming from, and when are we going to get it? Yeah,
+
+Bill Denk  1:16:25  
+and those and those would be the materials for the vial, the packaging piece, packaging components. Well, it also goes back
+
+Lance Binder  1:16:36  
+to also goes back to and well,
+
+Bill Denk  1:16:39  
+it
+
+Lance Binder  1:16:40  
+was the stampers, center labels, whether whether whether whether the title has been approved or not. Can we even order the stamps? Can't do that until you know that the test pressing's been approved. You know, art files, art and audio files. So just the soft stuff, the audio and the audio and the art. All right. Yeah. All right. then there's the hard, and then there's the the client's approval to go forward. Oh yeah, and then then you can order all the pieces, whether it be Stanford's labels compound for here, and jackets, inserts, and sleeves and stuff for over there.
+
+Speaker 1  1:17:17  
+So I know
+
+Lance Binder  1:17:18  
+it's not it's not simple. Shouldn't be a big deal. One
+
+Bill Denk  1:17:21  
+thing about like California land, right? So it's a flight to be brought in, and they want to try and get their stuff by August the 18th, and said, "Is the artwork by whatever time flying delay or getting the artwork until like two weeks ago, maybe that we filled, and then we sent it, and then he said, "Hey, so will we have these for the 28th? And I'm like, "28, I think this is like that's 21 five because some time you get scheduled in, but so then you have the demands of like if you can retake this in a week and a half. So there's that
+
+Lance Binder  1:18:02  
+whole critical path on in order to hit this date. When our assets due, when should we expect them? And I think we've got we have guidelines for our clients, right, Arian? We're supposed to have assets due. Yeah,
+
+Bill Denk  1:18:13  
+that's why I want to put a timeline, like
+
+Arian Kennedy  1:18:16  
+what you were showing us yesterday afternoon. Yeah, yeah,
+
+Bill Denk  1:18:19  
+that's kind of like on the website. Street date, backup. And that way, as they're approaching it, it's letting them know your date slipping, or it slips, and it lets them know that you know.
+
+Lance Binder  1:18:31  
+Yeah, they know and they know why the
+
+Bill Denk  1:18:34  
+projected date might be this, but it's not been verified.
+
+Arian Kennedy  1:18:36  
+Right. So you know, like we're talking about like the overall quantity, how quick you want it, like determining all these different avenues. Like you want it to look good and be of quality. Maybe you don't get it in the fastest turn. If you're wanting it fast, like you might have to like, you know, like maybe you aren't able to customize it as much. Like talking about short run or standard production run things like that, so you know of course everybody's wanting things faster and faster and faster. But if we don't have some sort of guardrails and parameters on how quickly we're able to get something out for somebody, then the exception of we want it fast is becoming the rule, and then it's like we're only able to press, pack, and ship X amount of time. As long as some rabbits in the hat,
+
+Lance Binder  1:19:22  
+and before, and then it becomes an expectation, and some of our larger customers tend to you get strong-armed on things based on the talent and the dates, because some of the times the talent doesn't understand things about supply chain and asset delivery. Yeah,
+
+Arian Kennedy  1:19:37  
+and that's not to say that we can't do like expedited requests. You know, as soon as like we're actually workable, of course we can take a look at what's possible there. But that is like a hey, like we're identifying what's possible here. If we're having to identify what's possible on every single order, you send. And not only does that not help you as the customer for how you're able to market out. Advertise and hold dates and expectations for your consumers, but also hear like how are we supposed to check to see if we have enough compound or like how many like presses are we able to schedule based on when we'll have be workable for our assets too? Because there's just many and like people involved with it. I think having the guardrails that you established on the what you were showing us yesterday for you can have this amount of time to market it, you have this amount of time that you need to allow for production. Hey, if you find that you didn't need to make a change, this is your like you can't change this order anymore. So I mean, all that's important, but that's clearly laying out expectations based on parameters that you're working with the vendor as well, like for whoever's pressing it for you. But all that stuff is very important, and that doesn't mean like if we have something urgent come through that we can't work with you on it. But just trying to get the the normal to be within the guardrails.
+
+Bill Denk  1:21:01  
+Let's just say hypothetically that any order that comes through us could talk to the project tracker, right? And then maybe you could approve, or it goes to another Google sheet that you set up, and then you can approve jobs to go there. So you're not entering; you're just clicking, clicking, clicking add, and then that way.
+
+Lance Binder  1:21:28  
+Well, that would that would be the idea we're talking about. Maybe even you know systemically, right? Some kind of electronic thing, or you just talking about? Yeah.
+
+Bill Denk  1:21:34  
+So basically, what happens with any order that comes in through us would be, and that's whether it's going through Good Tunes or whether it's coming through, and just to confirm to in case you don't know, the way we're we're doing this is that control. So basically, you know, your Good Tunes here, and Memphis is here, and then we have on our side we have artists coming in for stuff, distributors, artists, anything coming through us, we're making Memphis the preferred producer or whatever it is. Yeah. So, so what I make sure is so so any of the stuff that's coming through us, I want to make sure it's coming to you in the way that you want to receive it. Yeah. So we can do stuff as producer here too. Yeah. Not only this, but also how we can help with currently having that's not coming from us, but from the sources. But what can we do today that can help you here? And what would the path be look like that this this either goes right into the project tracker, or you have a pre-project tracker that comes from us, and you can manually verify so you're confident. Yeah, move that, move that, move that, and that's good. And then that then feeds Coda. But if we can do that, then my goal is that we can use this system to feed Cota with anything you want from Project Tracker.
+
+Lance Binder  1:22:51  
+Well, again, the Project Track. The idea is right now their Coda and the Project Tracker kind of done in 10. Project Tracker is going to go away, but we need there's certain data. The idea is the stuff that's coming through you. It's going to be a real, real order. So it's not we're not place holding anything. We're not waiting on additional information. We'll know quantity, color. We'll have all that other stuff. So the idea would be, I mean, it would probably get. We'd have to set up the core data in Coda for the MRV number that's. we have to set up the. I guess we need. I guess if we're talking about inputs, what would we need before the order goes in? We would need artist title catalog matrix, you know, whatever the entry matrix number is, to set up, and it would come under the Good Tunes umbrella, so it would be customers Good Tunes. We already have you set up on the customer thing. Hey, we need to create an MRP number and assign. We we didn't tell you about our SO number. That's another thing that was kind of a legacy data value from the old days. But what it what it does. If I can sidetrack for just a second, if we get like that one of those titles that has multiple versions, same audio, different packaging, different colors. If they all come in at the same time, they all have a unique order. They may even have unique POs from the client. We assign them a blanket, what we call an SO number. Now, whether it's a sales order or not can be debated, but it's a grouping reference number that we can then use. We track it. It helps us with our purchasing because of all the version we've got. What we looked at earlier, if it's 17 versions of something, we're not going to order jackets. But they're all using the same jacket, but just a unique EPC. We don't want to order jackets per each of the 17 versions. We're going to aggregate those. So if within the SO we have shared components, again they're going to have similar dates. We're going to push all that together so that when we order the jackets from our vendor, we get what. Whatever volume discount we get, because we've aggregated all that stuff using that SO is kind of a catch-all for the SO is tied to the MRP number, but it's for one set of PO. It could be one PO number from a client. It could be multiples that are tied to multiple versions. So we use it as a as like a catch-all thing for purchasing and for and for tracking, so that has to be created in code as well. So would we take the good tooth data, set up a title if it's brand new? I guess you'd have to know: is it 33 and third? Is it 45?
+
+Arian Kennedy  1:25:36  
+Which we're outlining in the system. Yeah, based on their audio submission. Yes.
+
+Lance Binder  1:25:42  
+So we need all that stuff so that we could create the master data for the title, which would include an MRP, and then at the point that the order would get ingested, it would be quantity, expected date. With for then we would probably assign our SO number to
+
+Arian Kennedy  1:26:01  
+it. We like if we're assigning a marketing number and we're like getting ready to action on it. We're assigning that SO number very quickly after.
+
+Lance Binder  1:26:08  
+Okay. Okay. So that would be it's not it's it's title and
+
+Speaker 11  1:26:12  
+orders
+
+Lance Binder  1:26:12  
+expected order. Yeah. So we'd set that up and then we would use the order data to then create the actual order and coda. Currently, we'd have to, in tandem, put all that shit in Project Tracker too, just to say it was there, so we can keep our managing our our whole workload real and and anticipate.
+
+Bill Denk  1:26:32  
+Could we create something that so people have the hand key? We just put all the stuff that should go to Project Tracker, and I'll call it pre-project tracker, and the mapper just reviews it, makes sure that the data is coming in properly. But I think that's I think well. So you switch to here. So
+
+Zack (MRP)  1:26:48  
+yeah, you're talking about formatting the information so that we don't have to manually enter. Oh yeah, absolutely. No, that'd be great. And we're
+
+Lance Binder  1:26:55  
+thinking, ideally, we'd be formatting whatever we're getting here that would maybe we would look at the data for the title creation as one thing, and then the order information. Hopefully, check all the boxes to create the versions and maybe a draft for an order.
+
+Arian Kennedy  1:27:15  
+If I mean, if that's possible, that'd be really cool. I think that's what Daniel is wanting to get to: is how would we make that talk to each other, but even like before thinking about that, if we could have our system that we're discussing with you guys just even offer us an official bill of materials, that way it can just be like one step easier for putting it into Coda. Like here we outlined and confirmed details for this specific title. One source of an export bomb from the system, so we're not having to dig through emails or having to cross-reference. Oh, there was an art file email. Let me make sure what's in the art file email actually matches the order email for our client. Let's make sure that the audio. Okay, well, they said that they wanted 45, but obviously this is way too long to be 45. You know, stuff like that, which we're having checks and balances within just our email environment because what happened over here wasn't the same that happened over here. Now, of course, things can change whenever you get to the proofing process. Maybe they did decide that they want to change the inner sleeve or something like that, but we know we can contain that a little bit within the system.
+
+Lance Binder  1:28:25  
+Do we? And this just to show you the data points again. I know that having something that was that we could be formatted where we can populate most of that stuff that's in a project tracker is great. I wonder if at some point we can show you in the test environment what does it create, what does it take to create a new title, and then what does it take to attach an SO to it, and then what does it take to create a customer order? We can make one up in text. So just the data pieces that have been given if you want to see something like that. Yeah,
+
+Bill Denk  1:28:55  
+and then the other part with this too is the reason I was asking about Pending items is because, and this may not be the case, but the orchard we're talking about next month, they said they have like 25,000 all
+
+Lance Binder  1:29:10  
+these sub labels listed subsidiaries,
+
+Bill Denk  1:29:12  
+and they want they want a system that they can order their vinyl through and do self servicing. So if they have artists coming here, we do we put in like you know the time the project track what they need. We may find we have pending stuff here, but the question is, would Memphis want to know? Hey, they're like, is there doing jobs in view? Could come like a pipeline
+
+Arian Kennedy  1:29:37  
+view for 10 to the yeah,
+
+Bill Denk  1:29:40  
+so you actually see that view. So the trigger stuff holds you up. At least you know here's a potential pipeline and updates. People are asking for the parking lot. I mean, having
+
+Arian Kennedy  1:29:49  
+like a parking lot or a pipeline view for that would be amazing. Like a one called
+
+Lance Binder  1:29:54  
+what do you what do you call it when you go park it outside the airport and wait so that's like a cell phone lot. Cars that may leave, you know, it's the it's the Uber gathering spot. Yeah,
+
+Bill Denk  1:30:09  
+yeah. So then, so at least you have an idea what's coming in. Yeah, you can throttle based on that as well as well.
+
+Andrew Goeken  1:30:15  
+And then if somebody decides to on that end say, hey, we want to go through and send it to print. Then we can give those customers an estimated date too. Like you know, bounce back. Hey, look, this is you know where the you are in the pipeline or whatever. This your date won't be able to get done you know until this date.
+
+Bill Denk  1:30:36  
+Right. So because if we're giving them an idea, I would like to actually tie it into what the possibility. What we need to get it in there, yeah, right. And so at least they have an idea. Hey, right now you're at a 16-week wait. Right now, you want to get to 12, or you're now at 10 to whatever. So I just want to give them an idea of where they're at with the process. Maybe each step they take trims that down. Hey, you go load your art. Oh, now you're up at 16. Yeah, now we've everything's gone through well, and so so that's something to try to figure out. Okay, with this, how we can make sure that anything that we're bringing to you at your work that I mean, how many are is sort of a label, but on average, if there's four, that's 100,000 artists. 25,000
+
+Lance Binder  1:31:23  
+seems like a lot. Maybe that's just how did they look at their customer base or their affiliates
+
+Speaker 4  1:31:28  
+base? That's a lot.
+
+Bill Denk  1:31:29  
+I talked to Cobalt as well, and Cobalt said they had 25,000. So
+
+Lance Binder  1:31:33  
+I guess that's just the number of people who had ordered records as their own independent label through
+
+Bill Denk  1:31:39  
+them. Yeah, or that they they are a distributor. Oh yeah, yeah. So for so anyway, so I don't know what that would lead to the default number. But if they turn the faucet on to say, hey, we're going to do it back to your stuff, and I would suggest that we do it just to people we know. Start off a small group, yeah, and then we throw it out. But I just make it
+
+Lance Binder  1:32:07  
+as easy as possible, give us everything we need to make it as clean. Yeah, no, that's that's that's awesome.
+
+Bill Denk  1:32:12  
+And so what happens is when they come in, they're going to be paying for. We've set up Stripe account set up. Money goes in there. Memphis can access through their account to get the funds program. So let me just be seeing this. That question is: since we already have all of the order, we have the quantity and everything else. Are we pushing it to code? We're pushing it to QuickBooks. Are we pushing it to QuickBooks? Well, I guess QuickBooks would generate an invoice once we've completed and shipped the order. So QuickBooks would have to have the.
+
+Arian Kennedy  1:32:48  
+We have different terms for different clients. What
+
+Lance Binder  1:32:52  
+we have different terms
+
+Speaker 4  1:32:53  
+of payment terms.
+
+Arian Kennedy  1:32:54  
+So like ends up payment terms. Yeah. So like we have some clients that they have to pay prior to production. So like for that, we're sending out an invoice before we have any final counts and any numbers like that. So it also just depends on the customer base that we have as
+
+Lance Binder  1:33:09  
+well. So on our customer would be good tubes
+
+Arian Kennedy  1:33:12  
+in this instance, but if we're thinking about like if for Markley other guys, yeah, right,
+
+Lance Binder  1:33:16  
+yeah, yeah, that's because we have to set them up each individually. They wouldn't be in their blanket. Yeah, so self-service. Nice.
+
+Speaker 1  1:33:28  
+Scribbled
+
+Unknown Speaker  1:33:30  
+with all the business. If you're scribbled, yeah, you should. You should be able to decide for your own stuff. That's true.
+

@@ -1,0 +1,171 @@
+Bill Denk  0:00  
+That could help maybe get you to where you needed to be with Cota sooner, so that if we're intaking information and then, especially if we're doing self-service, so if we can pull in any of the stuff that you need that maybe hasn't been built yet, that can then be fed into Coda because you have right. So then Maybe if we do that, and then and then you you build in code as you have time for the intake for the however you would do with the extra points where you're pulling in the data. And
+
+Lance Binder  0:33  
+if it's and again all that sourcing stuff, if it all if it all winds up in our current environment and shows this demand and stuff, I think that that will work. So really, I think what we were talking about earlier is the you know formatting some stuff that we can paste into the the soon to be dead project tracker or or import in Dakota as and create as and create the master data needed to flesh out in order that kind of stuff that that I mean that's probably the first thing.
+
+Bill Denk  1:02  
+So what are you what are you planning for the funeral?
+
+Arian Kennedy  1:04  
+He said soon to be dead, but I think that was a very generous statement. Then you're gonna have procession. I mean, you went out drinking
+
+Lance Binder  1:13  
+dinner. Life's no, it's no. Good God,
+
+Arian Kennedy  1:17  
+we did say that. We can't retire until life
+
+Lance Binder  1:20  
+support that it's on is just again it keeps getting pushed because of other projects. It is
+
+Arian Kennedy  1:28  
+something that all departments would be interested in not having
+
+Speaker 1  1:34  
+to because there's so much there's so much duplicate as to fill
+
+Lance Binder  1:37  
+there
+
+Arian Kennedy  1:38  
+except for Phil. But we need to
+
+Lance Binder  1:39  
+give Phil, that's our planner, the view in Coda, but he can move shit around wherever he wants. The project director won't go away; it'll just become a view. So, but and it won't be a manual entry thing. It'll be a. That's what I'm saying. It's just a view that encoder will create for you. So, but again, easily ingestible title data and customer data and order data. I think it's going to do.
+
+Andrew Goeken  2:04  
+Yeah. Would you want the
+
+Lance Binder  2:05  
+main thing? All of
+
+Andrew Goeken  2:06  
+those things populating kind of in one place. Like, hey, it would be great if as soon as an order comes in, the artist does their art files, puts in their title, their dates, their stuff. We just have like I don't, you know, I'll call an order sheet for now, or an order page where it's just okay. I can click here to download the files. I can click here to download the art. You know, maybe a button that takes it for the if the art team is looking at it. Maybe that takes them to just hey, here's a breakdown of us testing it against your guys's internal file. But that's that's a
+
+Bill Denk  2:40  
+good point because that's one of the things I was going to ask next. Was I guess that would be Arian? Yeah, because what information do you what information do you want? So an order is placed, it's in the system, and customers put it in there. So, what would your team like to see when they go in to look at it?
+
+Arian Kennedy  2:59  
+So that's like as far as like the dashboard, lunch is
+
+Lance Binder  3:02  
+almost here. Okay,
+
+Arian Kennedy  3:04  
+so I don't know if that's getting into like a dashboard view or something like that, which is where I have a little bit more in my musings for things. Because oh, that's right.
+
+Bill Denk  3:13  
+You you told us we were gonna musings to the avenue.
+
+Speaker 2  3:15  
+Yeah, we need to have some music.
+
+Andrew Goeken  3:17  
+Yes, you Bill has musings now.
+
+Arian Kennedy  3:21  
+Um. Are there any customer orders that
+
+Andrew Goeken  3:24  
+are? Oh, I sent a customer order email to you.
+
+Arian Kennedy  3:27  
+Yeah, I mean, like some of the stuff that you guys had outlined in the like the admin view that I had for Nina Solano, like that was really helpful too. But I mean, as far as like, what do we Need to put the information in Dakota. Like we kind of try to like all encompass ask for that.
+
+Lance Binder  3:49  
+That's something. I'm gonna go get the food. But then, do we want to walk through this title and MRP setup and like a setup of a version and a setup of an order? Yeah, I'm gonna do that. The art and audio is outside of that, but it would be. I'm curious. That would be great if there's like an easy way to pull all that in. Or you also have
+
+Arian Kennedy  4:07  
+like a place for them to upload their assets and like some of that checking that the system does. Like that would be really helpful for us to kind of do some kickback to the customer before having to involve the other teams, which is the case now because like our customer service team doesn't have the same programs and also just the knowledge that our art team is looking at like we could learn that but as far as like pre-flight and checking all this stuff within like the purviews but that takes away
+
+Bill Denk  4:37  
+time
+
+Arian Kennedy  4:38  
+also like we're supposed to be answering our our customers too. So while yes, it'd be helpful if we can at least flag it immediately to our clients. Like, hey, this is flagging our system's flagging this. We need to change that. If we do have that option, like we can. But for until we get to a place like that, we're having to kick it to our art team. They have to kick it back to us or go back directly to our client. So if anything, if we. Do to like streamline this information, having a place that it can be uploaded and then we can download it from the system. And we've
+
+Bill Denk  5:07  
+already built
+
+Arian Kennedy  5:07  
+that. So that's going to be very very helpful.
+
+Bill Denk  5:10  
+The thing I want to find out about is this is hoping to talk to some of our team, and I don't even know if there's like a junior person I could talk to to find out today. But basically, Brandon had said something yesterday about files of type in it. Most of your client, most of the clients don't know how to do an outline. Now I type, so they're setting up live type. And I wasn't sure do they send fonts with it when they do it, and
+
+Arian Kennedy  5:36  
+sometimes they do, sometimes they don't. Like we request any art files that come to us, come fully packaged. That includes links to the fonts, all that good stuff. Sometimes they don't send us the native files that have everything. Sometimes they just send us like.
+
+Bill Denk  5:49  
+So we could detect if there aren't fonts, and we could ask them to, oh, there are no fonts. There are fonts in here. Please upload your fonts, so they the system would do that automatically. Okay. Yeah, that
+
+Arian Kennedy  6:00  
+we do get some people who send us like the fully packaged files, and some people who don't. So like, if they are like, "Hey, we see something, we're not able to help you fix this because you didn't like your fonts or anything like that. We have to go back to them.
+
+Bill Denk  6:15  
+So, if do people upload JPEGs, and when they do, if their font size is a little bit smaller than what it, we get
+
+Arian Kennedy  6:24  
+back to them and ask them for revised files, and then we try to steer them to a an acceptable like if like we need this as like a PDF or like can you let us know what program you're using like and we've gotten to a place now where we've our team like in efforts to help these clients, we've made specific guidelines for like if you're a independent who's working with Canva, like we have templates set up for Canva because the just using that sort of do you get
+
+Bill Denk  6:55  
+a lot of those?
+
+Arian Kennedy  6:56  
+We do, and unfortunately, like sometimes there's like a random one, and our team's like, "What is this? So they've tried to help out with that, but like we're almost overkill to a point that's like now we're trying to like direct somebody who isn't that privy to setting up art files like to now go into a zip file where we've has all these different sort of like environments where you can create art, and so like, there's definitely like we don't want to like overcorrect this and confuse people more type of deal. Which sometimes I feel like we're nearing that a little bit. But again, just in efforts for what is the intention? What do you want this to look like? Because like again, if they're trying to blow up something from like the small to that thing, like the quality is not going to be there. It's not going to be what you're intending. Well, we
+
+Bill Denk  7:43  
+did some some before we definitely need this about a year and a half ago. Oh yeah. As a test, they sent us like a postage stamp size thing for their album, and we're like, you know, we can't use that. So, and and so we were able to do like a one test with Place in the UK Elastic Stage, to try it and see, and going together like, hey, our album doesn't look that great. Well, that's because you sent us the postage stamp. If you want to look good when we get them run, well, that was after.
+
+Andrew Goeken  8:09  
+That was even after they first sent us a postage stamp. Then they sent us another higher res one, like this is the highest res we have, and I was like, still not going to print good. Yeah, I was like, this one's higher, but it's still not going to print good. Like it's you know it's still seven inches instead of 12. Yeah. So we ended up our you know all right we'll send the one off to print to to show them you know yeah on the the things with the art team too. We've also been talking about like I think the biggest bounce back is going to be that 300 PPI. Like even if we do try and build back cover, you know, just upload your back cover, your center, and your front, and try and build a template, you know, kind of backwards, it's still going to have to be at least the 300 pixels per inch. Yeah. So it's at 12 inches. Right.
+
+Bill Denk  9:03  
+So basically, what's what'll happen is if they upload an image, it's not three pixels per inch. We're just going to notify them. They need another one. Oh, thank you for saying that. That reminds me. Does the prepress department don't laugh when I say this, but do they want work? Meaning, like, is this something like Memphis is like okay? Well, we'll we'll do the file, but we're going to charge you 50 bucks or 100 bucks to do it.
+
+Arian Kennedy  9:25  
+So with our current like capacity with the team members that we have right now, and then just like all of the things that we have to do currently, which hopefully you know in the future we'll be able to streamline that. I don't necessarily know that we have the ability to do that now. As far as like the ability, as in, can our team members do it? Yes. But as far as like the capacity for it, I don't think that we have that currently. Here's
+
+Bill Denk  9:51  
+why I'm asking because I'm curious. I'm sorry to interrupt. I'm just trying to figure out: is if we can save the team time by not having to. Look at every single file, and we can begin to trust the systems that comes through. They can give it one quick look, realize, yeah, that's what we need to be, and it's pretty, it's pretty straightforward. Then does that give them time to now have it become a revenue center, where let's say the client. I'm picturing is if I'm a client, I go on. I try and use the thing. Comes up and says, "This thing is CMY. It's RGB, not CMYK. And I'm like, "I don't know where the RGB thing is. I don't know anything about. Or this, or it's not 250 pixels per inch. It's not 300. You're like, "I don't know how to fix that. I thought if it comes up maybe twice and it can't be fixed, that maybe we have like a little thing. Hey, need help? We can do your files for 50 bucks or 100 bucks, whatever it is. So it becomes a revenue generation for the team, rather than them just sitting there constantly trying to climb out of all the files that aren't right because we're having the system take care of that for them.
+
+Lance Binder  10:57  
+It's all in there. I separated
+
+Speaker 3  10:58  
+the sandwich
+
+Lance Binder  11:00  
+and stuff.
+
+Arian Kennedy  11:02  
+So I think that something like ultimately we want to be able to do all the heavy lifting for our clients. Is some like you're you're saying the same thing, right? Like we want to be that place where like hey, as we're seeing people are leaving labels, people are leaving people who've already done everything for them. Like we've had some people who are like, "Oh, I want to do this new album and I want to promote this stuff, but I don't even know a photographer to like take the photos with, right?
+
+Andrew Goeken  11:28  
+Yeah, different parts. We have a line item on the pricing good for this.
+
+Arian Kennedy  11:33  
+Yeah, but we haven't. Did
+
+Andrew Goeken  11:34  
+we ever use it?
+
+Arian Kennedy  11:35  
+No.
+
+Andrew Goeken  11:35  
+Yeah. No. Okay. No. Prices do so so well with their own.
+
+Bill Denk  11:38  
+Yeah. But
+
+Arian Kennedy  11:40  
+it's like if we had the capacity for it, I'm sure we wouldn't want to do that. We want to be able to like serve that capacity. I'll
+
+Lance Binder  11:47  
+break the
+
+Arian Kennedy  11:48  
+ice. You don't have to wait for us to get it. Lance is like eating now.
+
