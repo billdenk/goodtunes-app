@@ -2909,10 +2909,10 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
   // ── Shared state — the record size flows through every section ──
   const [sizeId, setSizeId] = useState<SizeId>('12');
   const [discs, setDiscs] = useState<number>(1);
-  const [pkgNaming, setPkgNaming] = useState(false);
   const [pkgName, setPkgName] = useState('');
   const [pkgSaved, setPkgSaved] = useState(false);
-  // Quiet inline prompt: the create flow can't persist a blank name.
+  // Belt-and-braces flag: save is disabled until named, but if a blank-name
+  // save is ever attempted the card's name input flags red.
   const [nameRequired, setNameRequired] = useState(false);
   const [qty, setQty] = useState<number>(500);
   const [weightId, setWeightId] = useState<string>('140');
@@ -3324,7 +3324,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
       const run = async () => {
         const body = {
           kind: 'package' as const,
-          title: pkgName.trim() || 'Untitled package',
+          title: pkgName.trim(),
           status,
           payload: {
             builderState,
@@ -3369,8 +3369,9 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
   // `canEdit === false` is read-only: no writes.
   const savePackageLive = () => {
     if (!canEdit) return;
-    // Never persist a live row with a blank name — quiet inline prompt first.
-    if (!pkgName.trim()) { setNameRequired(true); setPkgNaming(true); return; }
+    // No name, no save (Bill, Aug 26 2026) — the button is a quiet outline
+    // pill until named, so this is a belt-and-braces guard, never a prompt.
+    if (!pkgName.trim()) { setNameRequired(true); return; }
     setNameRequired(false);
     saveMutation.mutate('live');
   };
@@ -4663,19 +4664,28 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
 
             </div>
             {/* Save sits below both columns, right-aligned under the math box
-                (Bill, Aug 22 2026) — the note ABOVE the button. */}
+                (Bill, Aug 22 2026) — the note ABOVE the button. The package is
+                named in "How artists will see it" — no second naming prompt
+                here (gogoods, Aug 26 2026), and no name means no save (Bill,
+                Aug 26 2026): the button rests as a quiet outline pill until a
+                real name exists, then earns its blue. Never an "Untitled
+                package". */}
             <div className="flex flex-col items-end gap-3" style={{ marginTop: 28 }}>
                 {canEdit && !pkgSaved && (
                   <p className="text-[11.5px] text-right" style={{ color: '#a1a1a6' }}>
-                    Packages skip quantity and price — artists pick their quantity later.
+                    {pkgName.trim()
+                      ? 'Packages skip quantity and price — artists pick their quantity later.'
+                      : 'Name your package above — the name is what artists see.'}
                   </p>
                 )}
-                {canEdit && !pkgSaved && !pkgNaming && (
+                {canEdit && !pkgSaved && (
                   <Button
                     className="rounded-full px-7"
-                    style={{ background: BLUE, color: '#fff', height: 44, fontSize: 14.5 }}
-                    onClick={() => { if (openedRow) { savePackageLive(); } else { setPkgNaming(true); } }}
-                    disabled={saveMutation.isPending}
+                    disabled={!pkgName.trim() || saveMutation.isPending}
+                    style={pkgName.trim()
+                      ? { background: BLUE, color: '#fff', height: 44, fontSize: 14.5 }
+                      : { background: 'transparent', color: '#6e6e73', border: '1px solid #6e6e73', height: 44, fontSize: 14.5, cursor: 'default' }}
+                    onClick={savePackageLive}
                     data-testid="quote-save"
                   >
                     {openedRow ? 'Save changes' : 'Save to catalog'}
@@ -4686,52 +4696,14 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                     Couldn&rsquo;t save — check your connection and try again.
                   </p>
                 )}
-                {pkgSaved ? (
+                {pkgSaved && (
                   <div className="flex items-center gap-2 text-[13px] font-semibold" style={{ color: '#34a853' }} data-testid="package-saved-note">
                     <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#34a85315', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Check className="w-3 h-3" strokeWidth={3} />
                     </span>
-                    "{pkgName || 'Untitled package'}" saved to Product Specs › {`${pressBrandShort} Packages`}
+                    "{pkgName}" saved to Product Specs › {`${pressBrandShort} Packages`}
                   </div>
-                ) : (pkgNaming && canEdit) ? (
-                  <div className="flex flex-col items-end gap-1.5">
-                    <div className="flex items-center gap-2">
-                      <input
-                        autoFocus
-                        value={pkgName}
-                        onChange={(e) => { setPkgName(e.target.value); if (e.target.value.trim()) setNameRequired(false); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && pkgName.trim()) { savePackageLive(); } if (e.key === 'Escape') setPkgNaming(false); }}
-                        placeholder="Name this package"
-                        className="rounded-full text-[13px] focus:outline-none"
-                        style={{ height: 36, padding: '0 14px', border: `1px solid ${nameRequired ? '#e0245e' : HAIRLINE}`, background: 'var(--q-card)', color: INK, width: 200 }}
-                        data-testid="input-package-name"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => { setPkgNaming(false); setNameRequired(false); }}
-                        className="text-[13.5px] font-medium transition-opacity hover:opacity-70"
-                        style={{ background: 'none', border: 'none', color: SUBINK, cursor: 'pointer', padding: '0 6px' }}
-                        data-testid="button-package-name-cancel"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { savePackageLive(); }}
-                        className="rounded-full text-[13.5px] font-semibold transition-all"
-                        style={{ height: 36, padding: '0 18px', border: 'none', background: pkgName.trim() ? BLUE : 'rgba(128,128,136,0.25)', color: pkgName.trim() ? '#fff' : '#a1a1a6', cursor: pkgName.trim() ? 'pointer' : 'default' }}
-                        data-testid="button-package-name-save"
-                      >
-                        Save
-                      </button>
-                    </div>
-                    {nameRequired && (
-                      <p className="text-[11.5px]" style={{ color: '#e0245e' }} data-testid="package-name-required">
-                        Name this package first.
-                      </p>
-                    )}
-                  </div>
-                ) : null}
+                )}
             </div>
           </div>
           </Gate>
