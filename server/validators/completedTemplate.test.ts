@@ -1114,6 +1114,132 @@ describe("Task #3069 — spot-usage detection (unused swatches pass certificatio
   });
 });
 
+describe("RGB usage discipline — non-printing RGB never fails the color check", () => {
+  const LABEL_SPEC = SPECS["label-a"] ?? Object.values(SPECS).find((s: any) => s.color) as any;
+  const scanOf = (s: string) => scanBuffer(Buffer.from(s, "latin1"));
+  const pageHead = (extra = "") =>
+    `%PDF-1.6\n/Type /Page /MediaBox [ 0 0 100 100 ]\n${extra}`;
+
+  test("RGB swatch defined only (palette) + CMYK painted → unused, pass with note", () => {
+    const s =
+      pageHead("/DeviceRGB\n") + // palette swatch definition, never painted
+      "<< /Length 30 >>\nstream\n0 0 0 1 k 0 0 10 10 re f\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.equal(scan.hasRGB, true);
+    assert.equal(scan.rgbUsage, "unused");
+    const checks = validateCompletedComponent(scan as any, { ...SPECS["jacket"], expectedPages: 0 } as any);
+    const color = find(checks, "tmpl.color");
+    assert.equal(color.status, "pass");
+    assert.match(color.message, /non-printing RGB/);
+  });
+
+  test("spot USED + RGB dieline swatches defined → pass, not fail (gogoods case)", () => {
+    const pdf = bleedPdf({ wIn: 12.75, hIn: 12.75, color: "/DeviceRGB", usedSpotNames: ["PANTONE#20186#20C"] });
+    const scan = scanBuffer(pdf);
+    assert.equal(scan.hasRGB, true);
+    assert.equal(scan.rgbUsage, "unused");
+    const checks = validateCompletedComponent(scan as any, { ...SPECS["jacket"], expectedPages: 0 } as any);
+    assert.equal(find(checks, "tmpl.color").status, "pass");
+  });
+
+  test("rg paint inside a /PrintState /OFF layer → unused (hidden dieline)", () => {
+    const s =
+      pageHead() +
+      "9 0 obj << /Type /OCG /Name (Dieline) /Usage << /Print << /PrintState /OFF >> >> >> endobj\n" +
+      "/Resources << /Properties << /MC0 9 0 R >> >>\n" +
+      "<< /Length 90 >>\nstream\n0 0 0 1 k 0 0 10 10 re f /OC /MC0 BDC 1 0 0 rg 0 0 5 5 re f EMC\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.equal(scan.hasRGB, true);
+    assert.equal(scan.rgbUsage, "unused");
+  });
+
+  test("rg paint inside a default-hidden (/OFF array) layer → unused", () => {
+    const s =
+      pageHead() +
+      "9 0 obj << /Type /OCG /Name (Guides) >> endobj\n" +
+      "/OCProperties << /OCGs [ 9 0 R ] /D << /OFF [ 9 0 R ] >> >>\n" +
+      "/Resources << /Properties << /MC0 9 0 R >> >>\n" +
+      "<< /Length 90 >>\nstream\n0 0 0 1 k 0 0 10 10 re f /OC /MC0 BDC 1 0 0 rg 0 0 5 5 re f EMC\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.equal(scan.rgbUsage, "unused");
+  });
+
+  test("plain rg paint (no layer) → used, RGB-only still fails", () => {
+    const s =
+      pageHead() +
+      "<< /Length 30 >>\nstream\n1 0 0 rg 0 0 10 10 re f\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.equal(scan.rgbUsage, "used");
+    const checks = validateCompletedComponent(scan as any, { ...SPECS["jacket"], expectedPages: 0 } as any);
+    assert.equal(find(checks, "tmpl.color").status, "fail");
+  });
+
+  test("rg paint inside a VISIBLE layer → used (only genuinely hidden layers excuse)", () => {
+    const s =
+      pageHead() +
+      "9 0 obj << /Type /OCG /Name (Art) >> endobj\n" +
+      "/Resources << /Properties << /MC0 9 0 R >> >>\n" +
+      "<< /Length 90 >>\nstream\n/OC /MC0 BDC 1 0 0 rg 0 0 5 5 re f EMC\nendstream\n%%EOF";
+    assert.equal(scanOf(s).rgbUsage, "used");
+  });
+
+  test("unresolvable /OC name → used (fail-closed)", () => {
+    const s =
+      pageHead() +
+      "<< /Length 90 >>\nstream\n/OC /MCX BDC 1 0 0 rg 0 0 5 5 re f EMC\nendstream\n%%EOF";
+    assert.equal(scanOf(s).rgbUsage, "used");
+  });
+
+  test("RGB image XObject → used (placed raster art keeps failing)", () => {
+    const s =
+      pageHead() +
+      "<< /Subtype /Image /Width 10 /Height 10 /ColorSpace /DeviceRGB /Length 4 >>\nstream\nxxxx\nendstream\n" +
+      "<< /Length 30 >>\nstream\n0 0 10 10 re f\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.equal(scan.rgbUsage, "used");
+  });
+
+  test("RGB-alias cs selection outside layers → used", () => {
+    const s =
+      pageHead() +
+      "/Resources << /ColorSpace << /CSR /DeviceRGB >> >>\n" +
+      "<< /Length 40 >>\nstream\n/CSR cs 1 scn 0 0 10 10 re f\nendstream\n%%EOF";
+    assert.equal(scanOf(s).rgbUsage, "used");
+  });
+
+  test("RGB defined but content unparseable → unknown, legacy fail preserved", () => {
+    const s =
+      pageHead("/DeviceRGB\n") +
+      "<< /Length 9 /Filter /FlateDecode >>\nstream\nnot-flate\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.equal(scan.rgbUsage, "unknown");
+    const checks = validateCompletedComponent(scan as any, { ...SPECS["jacket"], expectedPages: 0 } as any);
+    assert.equal(find(checks, "tmpl.color").status, "fail");
+  });
+
+  test("legacy stored scan (no rgbUsage field) keeps legacy behavior", () => {
+    const s =
+      pageHead("/DeviceRGB\n") +
+      "<< /Length 30 >>\nstream\n0 0 10 10 re f\nendstream\n%%EOF";
+    const scan: any = scanOf(s);
+    delete scan.rgbUsage;
+    const checks = validateCompletedComponent(scan, { ...SPECS["jacket"], expectedPages: 0 } as any);
+    assert.equal(find(checks, "tmpl.color").status, "fail");
+  });
+
+  test("grayscaleRequired: unused RGB swatches don't fail the grayscale check", () => {
+    const s =
+      pageHead("/DeviceRGB\n") +
+      "<< /Length 32 >>\nstream\n0 g 0 0 10 10 re f\nendstream\n%%EOF";
+    const scan = scanOf(s);
+    assert.equal(scan.rgbUsage, "unused");
+    const spec = { ...SPECS["jacket"], expectedPages: 0, printRules: { grayscaleRequired: true } } as any;
+    const checks = validateCompletedComponent(scan as any, spec);
+    const gs = find(checks, "tmpl.grayscale");
+    assert.ok(gs && gs.status !== "fail", `grayscale check should not fail: ${gs?.message}`);
+  });
+});
+
 describe("Task #3012/#3030 — fallback safety: no rules ⇒ identical verdicts (bleed excepted)", () => {
   test("a spec without printRules produces exactly today's check set, plus the always-on bleed check", () => {
     const scan = scanBuffer(fakePdf({ pages: 4, wIn: 6.5, hIn: 7.6811, color: "cmyk+spot", fonts: "embedded" }));

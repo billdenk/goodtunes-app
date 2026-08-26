@@ -152,6 +152,21 @@ export type CompletedPdfScan = {
    * strokes) — never a guess.
    */
   dielineGuides: MeasuredTemplateGuides | null;
+  /**
+   * RGB usage discipline (gogoods, Aug 26 2026) — dieline swatches saved in
+   * the palette as RGB, or a dieline drawn on a hidden / non-printing layer,
+   * must not fail the color check. Mirrors spotUsage semantics:
+   *   "none"    — no RGB tokens at all.
+   *   "used"    — RGB is painted in PRINTABLE content: `rg`/`RG` operators
+   *               (outside optional-content blocks whose layer is hidden or
+   *               marked print-off), a content `cs` selection resolving to a
+   *               DeviceRGB/CalRGB alias, or an RGB image XObject.
+   *   "unused"  — RGB tokens exist (palette swatches, editing data) but the
+   *               content streams decoded cleanly and none of it prints.
+   *   "unknown" — content couldn't be parsed; callers keep legacy behavior
+   *               (RGB counts as present). Fail-closed.
+   */
+  rgbUsage: SpotUsage;
 };
 
 export type SpotUsage = "none" | "used" | "unused" | "unknown";
@@ -252,6 +267,15 @@ export function unembeddedFromSets(
 }
 
 const OBJ_HEADER_RE = /(\d+)\s+\d+\s+obj\b/g;
+// RGB usage discipline — optional-content plumbing (lexical, cap-guarded).
+const OC_OFF_ARRAY_RE = /\/OFF\s*\[((?:\s*\d+\s+\d+\s+R)+)\s*\]/g;
+const PROP_DICT_RE = /\/Properties\s*<<((?:[^<>]|<<[^<>]*>>)*)>>/g;
+// One combined token walk per decoded content stream: /OC-tagged BDC (with
+// the properties resource name), generic BDC/BMC, EMC, RGB paint operators,
+// and cs/CS colorspace selections — in document order.
+const OC_RGB_TOKEN_RE =
+  /\/OC\s*\/([^\s/\[\]<>()]+)\s*BDC(?![A-Za-z0-9])|(BDC|BMC)(?![A-Za-z0-9])|(EMC)(?![A-Za-z0-9])|(?:[\d.]+\s+){3}(rg|RG)(?![A-Za-z0-9])|\/([^\s/\[\]<>()]+)\s+(?:cs|CS)(?![A-Za-z0-9])/g;
+const MAX_RGB_OC_CONTEXTS = 400;
 function decodePdfName(raw: string): string {
   return raw.replace(/#([0-9a-fA-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
 }
@@ -317,6 +341,20 @@ export class CompletedPdfScanner {
   private spotImage = false; // image XObject with an inline Separation/DeviceN colorspace
   private readonly spotImageNames = new Set<string>(); // readable inline spot-image ink names
   private readonly contentCsNames = new Set<string>(); // names selected via cs/CS
+
+  // RGB usage discipline (gogoods, Aug 26 2026) — track whether RGB is
+  // actually PAINTED in printable content, optional-content (layer) aware.
+  private rgbPaintPlain = false; // rg/RG outside any /OC marked-content block
+  private readonly rgbPaintOcContexts: string[][] = []; // enclosing /OC resource names per rg/RG hit
+  private rgbImage = false; // image XObject declaring /DeviceRGB or /CalRGB
+  private readonly csRgbAlias = new Set<string>(); // resource names aliased directly to an RGB space
+  private readonly csSelPlain = new Set<string>(); // cs/CS selections seen outside /OC blocks
+  private readonly csSelOcContexts = new Map<string, string[][]>(); // cs selections under /OC
+  private readonly ocgObjIds = new Set<string>(); // obj ids with /Type /OCG
+  private readonly ocgPrintOff = new Set<string>(); // OCG obj ids whose /Usage marks /PrintState /OFF
+  private readonly ocgOffIds = new Set<string>(); // obj ids listed in a default-config /OFF [ … ] array
+  private readonly propEntries = new Map<string, string>(); // /Properties resource name → obj id
+  private readonly propAmbiguous = new Set<string>(); // same name → conflicting obj ids
 
   // Task #3069 caps — instance fields so tests can exercise each boundary.
   private readonly capTotalStream: number;
@@ -443,6 +481,39 @@ export class CompletedPdfScanner {
           ? ("file" as const)
           : ("system" as const);
 
+    // RGB usage discipline — resolve whether RGB is painted in PRINTABLE
+    // content. A layer hides its content only when its /OC resource name
+    // resolves unambiguously to an OCG that is print-off or default-hidden;
+    // anything unresolvable stays "printable" (fail-closed).
+    const ocOff = (names: string[]): boolean =>
+      names.some((n) => {
+        if (this.propAmbiguous.has(n)) return false;
+        const id = this.propEntries.get(n);
+        if (id === undefined) return false;
+        return this.ocgPrintOff.has(id) || (this.ocgOffIds.has(id) && this.ocgObjIds.has(id));
+      });
+    let rgbUsage: SpotUsage = "none";
+    if (this.rgb) {
+      const paintPrintable =
+        this.rgbPaintPlain || this.rgbPaintOcContexts.some((ctx) => !ocOff(ctx));
+      let csPrintable = false;
+      for (const n of Array.from(this.contentCsNames)) {
+        if (!this.csRgbAlias.has(n) || this.csAmbiguous.has(n)) continue;
+        if (this.csSelPlain.has(n)) { csPrintable = true; break; }
+        const ctxs = this.csSelOcContexts.get(n);
+        if (ctxs && ctxs.some((c) => !ocOff(c))) { csPrintable = true; break; }
+      }
+      if (paintPrintable || csPrintable || this.rgbImage) {
+        rgbUsage = "used";
+      } else {
+        const parseUntrusted =
+          this.encrypted || this.zlibFailed || this.lzwContent || this.capHit ||
+          this._truncated || this.objStm || this.otherFilterContent ||
+          this.decodedStreams === 0;
+        rgbUsage = parseUntrusted ? "unknown" : "unused";
+      }
+    }
+
     const pageCount = this.typePage > 0 ? this.typePage : this.media.length;
 
     // Task #3097 — dieline guide extraction. Only attempted when the whole
@@ -523,6 +594,7 @@ export class CompletedPdfScanner {
       spotUsageAttribution,
       usedSpotColorNames: Array.from(usedNames),
       dielineGuides,
+      rgbUsage,
       fontNames: Array.from(this.baseFontNames).sort(),
       unembeddedFontNames: unembeddedFromSets(this.baseFontNames, this.embeddedFontNames, this.embedded),
       minTextSizePt: this.minTextSize,
@@ -600,6 +672,17 @@ export class CompletedPdfScanner {
             if (nm) this.sepObjName.set(id, nm);
           }
         }
+        // RGB usage discipline — optional-content group (layer) objects.
+        // /Usage << /Print << /PrintState /OFF >> >> marks a layer the
+        // producer says must NOT print (the classic exported dieline layer).
+        if (/\/Type\s*\/OCG\b/.test(ahead)) {
+          const id = om[1];
+          if (this.ocgObjIds.size < this.capEntries) this.ocgObjIds.add(id);
+          else if (!this.ocgObjIds.has(id)) this.capHit = true;
+          if (/\/Print\b[\s\S]{0,80}?\/PrintState\s*\/OFF\b/.test(ahead)) {
+            this.ocgPrintOff.add(id);
+          }
+        }
       }
       if (om.index === OBJ_HEADER_RE.lastIndex) OBJ_HEADER_RE.lastIndex++;
     }
@@ -653,6 +736,9 @@ export class CompletedPdfScanner {
             if (this.csInlineSep.has(res) || this.csRefEntries.has(res)) this.csAmbiguous.add(res);
             this.csNonSpot.add(res);
           }
+          // RGB usage discipline — remember which aliases are RGB spaces so
+          // a content `cs` selection of them counts as painted RGB.
+          if (dm[2] === "DeviceRGB" || dm[2] === "CalRGB") this.csRgbAlias.add(res);
           if (dm.index === CS_DIRECT_NONSPOT_RE.lastIndex) CS_DIRECT_NONSPOT_RE.lastIndex++;
         }
       }
@@ -668,6 +754,47 @@ export class CompletedPdfScanner {
       if (this.csRefTargets.size < this.capEntries) this.csRefTargets.add(tm2[1]);
       else if (!this.csRefTargets.has(tm2[1])) this.capHit = true;
       if (tm2.index === CS_REF_TARGET_RE.lastIndex) CS_REF_TARGET_RE.lastIndex++;
+    }
+
+    // RGB usage discipline — default-configuration hidden layers: an
+    // /OFF [ N 0 R … ] array (optional-content config) lists OCGs whose
+    // default state is hidden. Honored at finish() only for ids that ALSO
+    // proved to be /Type /OCG objects, so a stray /OFF key elsewhere can
+    // never hide printable content.
+    OC_OFF_ARRAY_RE.lastIndex = 0;
+    let offm: RegExpExecArray | null;
+    while ((offm = OC_OFF_ARRAY_RE.exec(s)) !== null) {
+      if (offm.index < commit) {
+        const refRe = /(\d+)\s+\d+\s+R\b/g;
+        let r: RegExpExecArray | null;
+        while ((r = refRe.exec(offm[1])) !== null) {
+          if (this.ocgOffIds.size < this.capEntries) this.ocgOffIds.add(r[1]);
+          else if (!this.ocgOffIds.has(r[1])) this.capHit = true;
+        }
+      }
+      if (offm.index === OC_OFF_ARRAY_RE.lastIndex) OC_OFF_ARRAY_RE.lastIndex++;
+    }
+
+    // RGB usage discipline — /Properties resource dicts map marked-content
+    // resource names (`/OC /MC0 BDC`) to OCG objects.
+    PROP_DICT_RE.lastIndex = 0;
+    let pm: RegExpExecArray | null;
+    while ((pm = PROP_DICT_RE.exec(s)) !== null) {
+      if (pm.index < commit) {
+        const entryRe = /\/([^\s/\[\]<>()]+)\s+(\d+)\s+\d+\s+R\b/g;
+        let e: RegExpExecArray | null;
+        while ((e = entryRe.exec(pm[1])) !== null) {
+          const res = decodePdfName(e[1]);
+          const prev = this.propEntries.get(res);
+          if (prev === undefined) {
+            if (this.propEntries.size < this.capEntries) this.propEntries.set(res, e[2]);
+            else this.capHit = true;
+          } else if (prev !== e[2]) {
+            this.propAmbiguous.add(res); // same name → conflicting targets
+          }
+        }
+      }
+      if (pm.index === PROP_DICT_RE.lastIndex) PROP_DICT_RE.lastIndex++;
     }
 
     // Task #3012 — spot-color (Separation) names for the Pantone check.
@@ -742,6 +869,10 @@ export class CompletedPdfScanner {
         if (isImage || isFont || isObjStm) {
           // Task #3069 — an image XObject can carry a DIRECT Separation/
           // DeviceN colorspace: painted spot ink even with no `cs` operator.
+          // RGB usage discipline — an RGB image XObject is treated as
+          // painted RGB (placed photos/rasters; keeps genuinely-RGB raster
+          // art failing exactly as before).
+          if (isImage && /\/(DeviceRGB|CalRGB)\b/.test(look)) this.rgbImage = true;
           if (isImage && (/\/Separation\b/.test(look) || /\/DeviceN\b/.test(look))) {
             this.spotImage = true;
             SEPARATION_NAME_RE.lastIndex = 0;
@@ -835,6 +966,9 @@ export class CompletedPdfScanner {
     if (!this.cmyk && /(?:[\d.]+\s+){4}[kK](?![A-Za-z0-9])/.test(code)) this.cmyk = true;
     if (!this.rgb && /(?:[\d.]+\s+){3}(?:rg|RG)(?![A-Za-z0-9])/.test(code)) this.rgb = true;
     if (!this.gray && /(?:[\d.]+\s+)[gG](?![A-Za-z0-9])/.test(code)) this.gray = true;
+    // RGB usage discipline — walk marked-content nesting so rg/RG paint (and
+    // cs selections) inside a hidden / print-off layer can be excluded later.
+    this.walkOcAwareRgb(code);
     CONTENT_CS_RE.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = CONTENT_CS_RE.exec(code)) !== null) {
@@ -859,6 +993,50 @@ export class CompletedPdfScanner {
         this.guideCode.push(code);
         this.guideCodeBytes += code.length;
       }
+    }
+  }
+
+  // RGB usage discipline — one ordered token walk per decoded content
+  // stream, tracking BDC/BMC…EMC nesting. rg/RG paint and cs/CS selections
+  // record the enclosing /OC resource names; content with NO resolvable /OC
+  // context counts as plainly painted (fail-closed at finish()). Cap
+  // overflow degrades to "plainly painted", never to silently ignored.
+  private walkOcAwareRgb(code: string): void {
+    OC_RGB_TOKEN_RE.lastIndex = 0;
+    const stack: (string | null)[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = OC_RGB_TOKEN_RE.exec(code)) !== null) {
+      if (m[1] !== undefined) {
+        stack.push(decodePdfName(m[1])); // /OC /Name BDC
+      } else if (m[2] !== undefined) {
+        stack.push(null); // generic BDC/BMC (incl. /OC << inline dict >> BDC)
+      } else if (m[3] !== undefined) {
+        if (stack.length > 0) stack.pop(); // EMC
+      } else if (m[4] !== undefined) {
+        // rg/RG paint.
+        const names = stack.filter((n): n is string => n !== null);
+        if (names.length === 0) this.rgbPaintPlain = true;
+        else if (this.rgbPaintOcContexts.length < MAX_RGB_OC_CONTEXTS) {
+          this.rgbPaintOcContexts.push(names.slice());
+        } else {
+          this.rgbPaintPlain = true; // overflow — conservative
+        }
+      } else if (m[5] !== undefined) {
+        // cs/CS selection.
+        const res = decodePdfName(m[5]);
+        const names = stack.filter((n): n is string => n !== null);
+        if (names.length === 0) this.csSelPlain.add(res);
+        else {
+          const list = this.csSelOcContexts.get(res) ?? [];
+          if (list.length < MAX_RGB_OC_CONTEXTS) {
+            list.push(names.slice());
+            this.csSelOcContexts.set(res, list);
+          } else {
+            this.csSelPlain.add(res); // overflow — conservative
+          }
+        }
+      }
+      if (m.index === OC_RGB_TOKEN_RE.lastIndex) OC_RGB_TOKEN_RE.lastIndex++;
     }
   }
 
@@ -1979,13 +2157,23 @@ export function validateCompletedComponent(
   // Older stored scans lack spotUsage — default keeps legacy behavior.
   const spotUsage: SpotUsage = (scan as any).spotUsage ?? (scan.hasSpot ? "unknown" : "none");
   const spotInUse = scan.hasSpot && spotUsage !== "unused";
+  // RGB usage discipline (gogoods, Aug 26 2026) — RGB that never prints
+  // (palette swatches, hidden / print-off dieline layers) must not fail the
+  // check. Older stored scans lack rgbUsage — default keeps legacy behavior.
+  const rgbUsage: SpotUsage = (scan as any).rgbUsage ?? (scan.hasRGB ? "unknown" : "none");
+  const rgbInUse = scan.hasRGB && rgbUsage !== "unused";
+  const rgbNote = !scan.hasRGB
+    ? ""
+    : rgbUsage === "unused"
+      ? " — non-printing RGB (swatches / hidden layers) ignored"
+      : " — embedded RGB preview ignored";
   if (spec.color === "process-4c") {
     if (scan.hasCMYK) {
       checks.push({
         key: "tmpl.color",
         label: "Color (4-color process)",
         status: "pass",
-        message: `CMYK process present${spotInUse ? " (+ spot)" : ""}${scan.hasRGB ? " — embedded RGB preview ignored" : ""}.`,
+        message: `CMYK process present${spotInUse ? " (+ spot)" : ""}${rgbNote}.`,
       });
     } else if (spotInUse) {
       // process-4c means a full-color label printed in CMYK. A spot-only
@@ -1998,7 +2186,7 @@ export function validateCompletedComponent(
         status: "fail",
         message: "Spot color only — this label is specified as 4-color process (CMYK), not a 1-color spot imprint. Supply CMYK art, or change the label spec / override with justification.",
       });
-    } else if (scan.hasRGB) {
+    } else if (rgbInUse) {
       checks.push({
         key: "tmpl.color",
         label: "Color (4-color process)",
@@ -2021,9 +2209,9 @@ export function validateCompletedComponent(
         key: "tmpl.color",
         label: "Color (CMYK / PMS)",
         status: "pass",
-        message: `${parts.join(" + ")} present${scan.hasRGB ? " — embedded RGB preview ignored" : ""}.`,
+        message: `${parts.join(" + ")} present${rgbNote}.`,
       });
-    } else if (scan.hasRGB) {
+    } else if (rgbInUse) {
       checks.push({
         key: "tmpl.color",
         label: "Color (CMYK / PMS)",
@@ -2392,7 +2580,7 @@ export function validateCompletedComponent(
 
   // 9. Grayscale-required pieces (press flags a B/W component).
   if (rules?.grayscaleRequired) {
-    if (scan.hasRGB) {
+    if (rgbInUse) {
       checks.push({
         key: "tmpl.grayscale",
         label: "Grayscale (B/W piece)",

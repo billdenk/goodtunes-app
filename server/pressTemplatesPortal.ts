@@ -1854,14 +1854,18 @@ export function registerPressTemplateFlowRoutes(
         // Ink — same canon as the certification test's cmyk-or-pms branch.
         const spotUsage = (scan as any).spotUsage ?? (scan.hasSpot ? "unknown" : "none");
         const spotInUse = scan.hasSpot && spotUsage !== "unused";
+        // RGB usage discipline — non-printing RGB (palette swatches, hidden
+        // / print-off dieline layers) must not fail; mirrors certification.
+        const rgbUsage = (scan as any).rgbUsage ?? (scan.hasRGB ? "unknown" : "none");
+        const rgbInUse = scan.hasRGB && rgbUsage !== "unused";
         if (scan.hasCMYK || spotInUse) {
           const parts = [scan.hasCMYK ? "CMYK" : null, spotInUse ? "spot/PMS" : null].filter(Boolean);
           rows.push({
             param: "Color",
             tone: "pass",
-            detail: `${parts.join(" + ")} ink present${scan.hasRGB ? " — embedded RGB preview ignored" : ""}`,
+            detail: `${parts.join(" + ")} ink present${scan.hasRGB ? (rgbUsage === "unused" ? " — non-printing RGB (swatches / hidden layers) ignored" : " — embedded RGB preview ignored") : ""}`,
           });
-        } else if (scan.hasRGB) {
+        } else if (rgbInUse) {
           rows.push({
             param: "Color",
             tone: "fail",
