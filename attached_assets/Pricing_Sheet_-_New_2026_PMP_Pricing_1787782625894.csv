@@ -1,0 +1,251 @@
+Item,Quantity,Cost,Price,Vendor,PMP EXTENDED PRICING,CLIENT EXTENDED PRICING,PROFIT MARGIN,UPDATED?,Old Cost
+Records,,,,,,,,,
+No additional records,,,,,,,,,
+Black - 250,250,N/A,$4.50,,,"$1,125.00",,,
+Black - 500,500,N/A,$2.75,,,"$1,375.00",,,
+Black - 1000,1000,N/A,$2.50,,,"$2,500.00",,,
+Black - 5000,5000,N/A,$2.25,,,"$11,250.00",,,
+Color - 250,250,N/A,$7.00,,,"$1,750.00",,,
+Color - 500,500,N/A,$4.25,,,"$2,125.00",,,
+Color - 1000,1000,N/A,$3.50,,,"$3,500.00",,,
+Color - 5000,5000,N/A,$3.00,,,"$15,000.00",,,
+Mixed - 250,250,N/A,$7.75,,,"$1,937.50",,,
+Mixed - 500,500,N/A,$5.10,,,"$2,550.00",,,
+Mixed - 1000,1000,N/A,$4.00,,,"$4,000.00",,,
+Handmade - 250,250,N/A,$10.00,,,"$2,500.00",,,
+Handmade - 500,500,N/A,$9.00,,,"$4,500.00",,,
+Handmade - 1000,1000,N/A,$8.00,,,"$8,000.00",,,
+"7"" Black - 500",500,N/A,$2.50,,,"$1,250.00",,,
+"7"" Black - 1000",1000,N/A,$2.00,,,"$2,000.00",,,
+"7"" Color - 500",500,N/A,$3.50,,,"$1,750.00",,,
+"7"" Color - 1000",1000,N/A,$3.00,,,"$3,000.00",,,
+"7"" Mixed - 500",500,N/A,$4.50,,,"$2,250.00",,,
+"7"" Mixed - 1000",1000,N/A,$4.00,,,"$4,000.00",,,
+PMP XTP - 100,1,N/A,"$1,500.00",,,"$1,500.00",,,
+Set Up Fee,,,,,,,,,
+No color set up fee,,,,,,,,,
+Color set up fee,1,N/A,$300.00,,,,,,
+Jackets,,,,,,,,,
+No jacket,,,,,,,,,
+Standard Digital Jacket - 100,100,$2.60,$3.64,,$260.00,$364.00,$104.00,,$2.60
+Standard Jacket - 250,250,$2.00,$2.80,Superior,$500.00,$700.00,$200.00,5/26,$2.04
+Standard Jacket - 300,300,$1.72,$2.41,Superior,$516.00,$722.40,$206.40,5/26,$2.04
+Standard Jacket - 500,500,$1.10,$1.54,Superior,$550.00,$770.00,$220.00,5/26,$1.02
+Standard Jacket - 1000,"1,000",$0.75,$1.05,Superior,$750.00,"$1,050.00",$300.00,5/26,$0.65
+Standard Jacket - 1500,"1,500",$0.64,$0.90,Superior,$960.00,"$1,344.00",$384.00,5/26,$0.65
+Standard Jacket - 2000,"2,000",$0.50,$0.70,Taylor,"$1,000.00","$1,400.00",$400.00,5/26,$0.51
+Standard Jacket - 5000,"5,000",$0.42,$0.59,Taylor,"$2,100.00","$2,940.00",$840.00,5/26,$0.44
+Standard Jacket - 7500,"7,500",$0.39,$0.55,Taylor,"$2,925.00","$4,095.00","$1,170.00",5/26,$0.43
+Standard Jacket - 10000,"10,000",$0.39,$0.55,Taylor,"$3,900.00","$5,460.00","$1,560.00",5/26,$0.43
+Wide Spine Standard Jacket - 250,250,$2.50,$3.50,Superior,$625.00,$875.00,$250.00,5/26,$2.74
+Wide Spine Standard Jacket - 500,500,$1.60,$2.24,Superior,$800.00,"$1,120.00",$320.00,5/26,$1.37
+Wide Spine Standard Jacket - 1000,"1,000",$1.22,$1.71,Superior,"$1,220.00","$1,708.00",$488.00,5/26,$0.99
+Wide Spine Standard Jacket - 2000,"2,000",$0.87,$1.22,Taylor,"$1,740.00","$2,436.00",$696.00,5/26,$0.85
+Wide Spine Standard Jacket - 5000,"5,000",$0.73,$1.02,Taylor,"$3,650.00","$5,110.00","$1,460.00",5/26,$0.78
+Wide Spine Standard Jacket - 10000,"10,000",$0.69,$0.97,Taylor,"$6,900.00","$9,660.00","$2,760.00",5/26,$0.72
+Gatefold Jacket - 250,250,$3.97,$5.56,Superior,$992.50,"$1,389.50",$397.00,5/26,$5.64
+Gatefold Jacket - 500,500,$2.86,$4.00,Superior,"$1,430.00","$2,002.00",$572.00,5/26,$2.82
+Gatefold Jacket - 1000,"1,000",$1.86,$2.60,Superior,"$1,860.00","$2,604.00",$744.00,5/26,$1.79
+Gatefold Jacket - 2000,"2,000",$1.14,$1.60,Taylor,"$2,280.00","$3,192.00",$912.00,5/26,$1.13
+Gatefold Jacket - 5000,"5,000",$0.87,$1.22,Taylor,"$4,350.00","$6,090.00","$1,740.00",5/26,$0.91
+"Digital 7"" Jacket - 100",100,$3.17,$4.44,,$317.00,$443.80,$126.80,,$3.17
+"7"" Jacket - 250",250,$2.70,$3.78,Taylor,$675.00,$945.00,$270.00,5/26,$2.38
+"7"" Jacket - 500",500,$1.13,$1.58,Taylor,$565.00,$791.00,$226.00,5/26,$1.19
+"7"" Jacket - 1000","1,000",$0.63,$0.88,Taylor,$630.00,$882.00,$252.00,5/26,$0.64
+"7"" Jacket - 2000","2,000",$0.45,$0.63,Taylor,$900.00,"$1,260.00",$360.00,5/26,$0.46
+Inserts,,,,,,,$678.33,,
+No insert,,,,,,,,,
+1 sided inserts - 250,250,$0.66,$0.92,,,,$0.00,,$0.66
+2 sided inserts - 250,250,$2.04,$2.86,Superior,$510.00,$714.00,$204.00,5/26,$1.96
+2 sided inserts - 500,500,$1.03,$1.44,Superior,$515.00,$721.00,$206.00,5/26,$0.98
+2 sided inserts - 1000,1000,$0.65,$0.91,Superior,$650.00,$910.00,$260.00,5/26,$0.63
+2 sided inserts - 5000,5000,$0.25,$0.35,Taylor,"$1,250.00","$1,750.00",$500.00,5/26,$0.26
+"Recycled paper, matte insert 1/1 black - 250",250,$0.49,$0.69,,$122.50,$171.50,$49.00,,$0.49
+"Recycled paper, matte insert 1/1 black - 500",500,$0.49,$0.69,,$245.00,$343.00,$98.00,,$0.49
+"Recycled paper, matte insert 1/1 black - 1000",1000,$0.49,$0.69,,$490.00,$686.00,$196.00,,$0.49
+"Recycled paper, matte insert 1/1 black - 5000",5000,$0.49,$0.69,,"$2,450.00","$3,430.00",$980.00,,$0.49
+"Recycled paper, matte insert 4/4 color - 250",250,$0.68,$0.95,,$170.00,$238.00,$68.00,,$0.68
+"Recycled paper, matte insert 4/4 color - 500",500,$0.68,$0.95,,$340.00,$476.00,$136.00,,$0.68
+"Recycled paper, matte insert 4/4 color - 1000",1000,$0.68,$0.95,,$680.00,$952.00,$272.00,,$0.68
+"Recycled paper, matte insert 4/4 color - 5000",5000,$0.68,$0.95,,"$3,400.00","$4,760.00","$1,360.00",,$0.68
+Foldover insert 4 panel - 250,250,$2.70,$3.78,Superior,$675.00,$945.00,$270.00,5/26,$3.64
+Foldover insert 4 panel - 500,500,$1.33,$1.86,Superior,$665.00,$931.00,$266.00,5/26,$1.95
+Foldover insert 4 panel - 1000,1000,$0.90,$1.26,Superior,$900.00,"$1,260.00",$360.00,5/26,$1.11
+"7"" 2 sided insert - 500",500,N/A,$0.81,,,,,,N/A
+"7"" 2 sided insert - 1000",1000,N/A,$0.62,,,,,,N/A
+Sleeves,,,,,,,,,
+No sleeve,,,,,,,,,
+Printed Inner Sleeve - 250,250,$1.89,$2.65,Superior,$472.50,$661.50,$189.00,5/26,$2.36
+Printed Inner Sleeve - 500,500,$1.04,$1.46,Superior,$520.00,$728.00,$208.00,5/26,$1.18
+Printed Inner Sleeve - 1000,1000,$0.83,$1.16,Superior,$830.00,"$1,162.00",$332.00,5/26,$0.93
+Printed Inner Sleeve - 5000,5000,$0.28,$0.39,Taylor,"$1,400.00","$1,960.00",$560.00,5/26,$0.40
+Printed Inner Sleeve - 10000,10000,$0.26,$0.36,Taylor,"$2,600.00","$3,640.00","$1,040.00",5/26,$0.35
+Black Paper Sleeve - 250,250,N/A,$0.45,,,$112.50,,,
+Black Paper Sleeve - 500,500,N/A,$0.45,,,$225.00,,,
+Black Paper Sleeve - 1000,1000,N/A,$0.45,,,$450.00,,,
+Black Paper Sleeve - 2000,2000,N/A,$0.45,,,$900.00,,,
+Black Paper Sleeve - 5000,5000,N/A,$0.45,,,"$2,250.00",,,
+Black Paper Sleeve - 10000,10000,N/A,$0.45,,,"$4,500.00",,,
+White Paper Sleeve - 250,250,N/A,$0.25,,,$62.50,,,
+White Paper Sleeve - 500,500,N/A,$0.25,,,$125.00,,,
+White Paper Sleeve - 1000,1000,N/A,$0.25,,,$250.00,,,
+White Paper Sleeve - 2000,2000,N/A,$0.25,,,$500.00,,,
+White Paper Sleeve - 5000,5000,N/A,$0.25,,,"$1,250.00",,,
+White Paper Sleeve - 10000,10000,N/A,$0.25,,,"$2,500.00",,,
+Black Poly Sleeve - 250,250,N/A,$0.50,,,$125.00,,,
+Black Poly Sleeve - 500,500,N/A,$0.50,,,$250.00,,,
+Black Poly Sleeve - 1000,1000,N/A,$0.50,,,$500.00,,,
+Black Poly Sleeve - 2000,2000,N/A,$0.50,,,"$1,000.00",,,
+Black Poly Sleeve - 5000,5000,N/A,$0.50,,,"$2,500.00",,,
+Black Poly Sleeve - 10000,10000,N/A,$0.50,,,"$5,000.00",,,
+White Poly Sleeve - 250,250,N/A,$0.50,,,$125.00,,,
+White Poly Sleeve - 500,500,N/A,$0.50,,,$250.00,,,
+White Poly Sleeve - 1000,1000,N/A,$0.50,,,$500.00,,,
+White Poly Sleeve - 2000,2000,N/A,$0.50,,,"$1,000.00",,,
+White Poly Sleeve - 5000,5000,N/A,$0.50,,,"$2,500.00",,,
+White Poly Sleeve - 10000,10000,N/A,$0.50,,,"$5,000.00",,,
+Center Labels,,,,,,,,,
+No center label,,,,,,,,,
+Center Labels - 1000,1,$150.00,$210.00,,$150.00,$210.00,$60.00,,
+Center Labels - 2000,1,$250.00,$350.00,,$250.00,$350.00,$100.00,,
+Center Labels - 5000,1,$550.00,$770.00,,$550.00,$770.00,$220.00,,
+Center Labels - 10000,1,"$1,050.00","$1,470.00",,"$1,050.00","$1,470.00",$420.00,,
+"7"" Center Labels - 250",250,,$0.72,,,$180.00,,,
+"7"" Center Labels - 500",500,,$0.38,,,$190.00,,,
+"7"" Center Labels - 1000",1000,,$0.19,,,$190.00,,,
+Bags / Shrink Wrap,,,,,,,,,
+No bag / shrink wrap,,,,,,,,,
+Poly Bags (Non Resealable) - 250,250,N/A,$0.50,,,$125.00,,,
+Poly Bags (Non Resealable) - 500,500,N/A,$0.50,,,$250.00,,,
+Poly Bags (Non Resealable) - 1000,1000,N/A,$0.50,,,$500.00,,,
+Poly Bags (Non Resealable) - 2000,2000,N/A,$0.50,,,"$1,000.00",,,
+Poly Bags (Non Resealable) - 5000,5000,N/A,$0.50,,,"$2,500.00",,,
+Poly Bags (Non Resealable) - 10000,10000,N/A,$0.50,,,"$5,000.00",,,
+Poly Bags (Resealable) - 250,250,N/A,$0.65,,,$162.50,,,
+Poly Bags (Resealable) - 500,500,N/A,$0.65,,,$325.00,,,
+Poly Bags (Resealable) - 1000,1000,N/A,$0.65,,,$650.00,,,
+Poly Bags (Resealable) - 2000,2000,N/A,$0.65,,,"$1,300.00",,,
+Poly Bags (Resealable) - 5000,5000,N/A,$0.65,,,"$3,250.00",,,
+Poly Bags (Resealable) - 10000,10000,N/A,$0.65,,,"$6,500.00",,,
+"7"" Poly Bags (Resealable)",1,N/A,$0.65,,,,,,
+"7"" Poly Bags (Non Resealable)",1,N/A,$0.40,,,,,,
+Shrink Wrap - 250,250,N/A,$0.30,,,$75.00,,,
+Shrink Wrap - 500,500,N/A,$0.30,,,$150.00,,,
+Shrink Wrap - 1000,1000,N/A,$0.30,,,$300.00,,,
+Shrink Wrap - 2000,2000,N/A,$0.30,,,$600.00,,,
+Shrink Wrap - 5000,5000,N/A,$0.30,,,"$1,500.00",,,
+Shrink Wrap - 10000,10000,N/A,$0.30,,,"$3,000.00",,,
+Download Cards,,,,,,,,,
+No download card,,,,,,,,,
+3x3 - 500,500,$0.35,$0.49,,,,,,
+3x3 - 1000,1000,$0.25,$0.35,,,,,,
+2.5x3 - 500,500,$0.35,$0.49,,,,,,
+2.5x3 - 1000,1000,$0.25,$0.35,,,,,,
+Booklets,,,,,,,,,
+No booklet,,,,,,,,,
+8 page Booklet - 50,50,$14.54,$20.36,,,,,,
+8 page Booklet - 100,100,$7.32,$10.25,,,,,,
+8 page Booklet - 250,250,$3.05,$4.27,,,,,,
+8 page Booklet - 500,500,$1.83,$2.56,,,,,,
+8 page Booklet - 1000,1000,$1.20,$1.68,,,,,,
+8 page Booklet - 2000,2000,$0.94,$1.32,,,,,,
+8 page Booklet - 5000,5000,$0.76,$1.06,,,,,,
+8 page Booklet - 10000,10000,$0.62,$0.87,,,,,,
+12 page Booklet - 50,50,$16.45,$23.03,,,,,,
+12 page Booklet - 100,100,$8.27,$11.58,,,,,,
+12 page Booklet - 250,250,$3.43,$4.80,,,,,,
+12 page Booklet - 500,500,$1.96,$2.74,,,,,,
+12 page Booklet - 1000,1000,$1.32,$1.85,,,,,,
+12 page Booklet - 2000,2000,$1.05,$1.47,,,,,,
+12 page Booklet - 5000,5000,$0.87,$1.22,,,,,,
+12 page Booklet - 10000,10000,$0.77,$1.08,,,,,,
+16 page Booklet - 50,50,$23.32,$32.65,,,,,,
+16 page Booklet - 100,100,$11.66,$16.32,,,,,,
+16 page Booklet - 250,250,$4.66,$6.52,,,,,,
+16 page Booklet - 500,500,$2.67,$3.74,,,,,,
+16 page Booklet - 1000,1000,$1.77,$2.48,,,,,,
+16 page Booklet - 2000,2000,$1.43,$2.00,,,,,,
+16 page Booklet - 5000,5000,$1.11,$1.55,,,,,,
+16 page Booklet - 10000,10000,$0.97,$1.36,,,,,,
+20 page Booklet - 50,50,$19.20,$26.88,,,,,,
+20 page Booklet - 100,100,$9.65,$13.51,,,,,,
+20 page Booklet - 250,250,$4.20,$5.88,,,,,,
+20 page Booklet - 500,500,$2.58,$3.61,,,,,,
+20 page Booklet - 1000,1000,$1.96,$2.74,,,,,,
+20 page Booklet - 2000,2000,$1.74,$2.44,,,,,,
+20 page Booklet - 5000,5000,$1.59,$2.23,,,,,,
+20 page Booklet - 10000,10000,$1.44,$2.02,,,,,,
+24 page Booklet - 50,50,$19.25,$26.95,,,,,,
+24 page Booklet - 100,100,$9.70,$13.58,,,,,,
+24 page Booklet - 250,250,$4.25,$5.95,,,,,,
+24 page Booklet - 500,500,$2.63,$3.68,,,,,,
+24 page Booklet - 1000,1000,$2.00,$2.80,,,,,,
+24 page Booklet - 2000,2000,$1.79,$2.51,,,,,,
+24 page Booklet - 5000,5000,$1.64,$2.30,,,,,,
+24 page Booklet - 10000,10000,$1.49,$2.09,,,,,,
+Set Up / Add Ons,,,,,,,,,
+No add on,,,,,,,,,
+Packaging Provided - 250,250,N/A,$0.10,,,$25.00,,,
+Packaging Provided - 500,500,N/A,$0.10,,,$50.00,,,
+Packaging Provided - 1000,1000,N/A,$0.10,,,$100.00,,,
+Packaging Provided - 2000,2000,N/A,$0.10,,,$200.00,,,
+Packaging Provided - 5000,5000,N/A,$0.10,,,$500.00,,,
+Packaging Provided - 10000,10000,N/A,$0.10,,,"$1,000.00",,,
+Insertion Fee - 250,250,N/A,$0.10,,,$25.00,,,
+Insertion Fee - 500,500,N/A,$0.10,,,$50.00,,,
+Insertion Fee - 1000,1000,N/A,$0.10,,,$100.00,,,
+Insertion Fee - 2000,2000,N/A,$0.10,,,$200.00,,,
+Insertion Fee - 5000,5000,N/A,$0.10,,,$500.00,,,
+Insertion Fee - 10000,10000,N/A,$0.10,,,"$1,000.00",,,
+180 Gram - 250,250,N/A,$0.75,,,$187.50,,,
+180 Gram - 500,500,N/A,$0.75,,,$375.00,,,
+180 Gram - 1000,1000,N/A,$0.75,,,$750.00,,,
+180 Gram - 2000,2000,N/A,$0.75,,,"$1,500.00",,,
+180 Gram - 5000,5000,N/A,$0.75,,,"$3,750.00",,,
+180 Gram - 10000,10000,N/A,$0.75,,,"$7,500.00",,,
+2x3 rectangle or 2.5 circle sticker - 250,250,$0.57,$0.80,,$142.50,$199.50,$57.00,,
+2x3 rectangle or 2.5 circle sticker - 500,500,$0.37,$0.52,,$185.00,$259.00,$74.00,,
+2x3 rectangle or 2.5 circle sticker - 1000,1000,$0.23,$0.32,,$230.00,$322.00,$92.00,,
+2x3 rectangle or 2.5 circle sticker - 2000,2000,$0.14,$0.20,,$280.00,$392.00,$112.00,,
+2x3 rectangle or 2.5 circle sticker - 5000,5000,$0.10,$0.14,,$500.00,$700.00,$200.00,,
+Barcode stickers - 1100,1100,N/A,$0.30,,,$330.00,,,
+Reverse Board Setup,1,N/A,$150.00,,,,,,
+Color Setup - 1 Color,1,N/A,$300.00,,,,,,
+Color Setup - 2 to 3 Color,1,N/A,$200.00,,,,,,
+Color Setup - 4 Color,1,N/A,$150.00,,,,,,
+Press / Stamper Setup,1,N/A,$150.00,,,,,,
+Big Hole Punch,1,N/A,$0.25,,,,,,
+Matte Finish Upcharge - 1000,1,N/A,$250.00,Taylor,,,,5/26,
+PMS Metallic/Flourescent - 1000,1,N/A,$336.00,Taylor,,,,5/27,
+Embossing - 1000,1000,N/A,$5.60,Superior,,"$5,600.00",,5/28,
+Lacquer,,,,,,,,,
+No lacquer cutting,,,,,,,,,
+Lacquer Cutting (Singular - 1 side of record),1,$200.00,$300.00,,,,$100.00,,
+"7"" Lacquer Cutting",1,$175.00,$250.00,,,,$75.00,,
+Stamper,,,,,,,,,
+No plating / stamper,,,,,,,,,
+Plating - 2 Step (Singular - 1 side of record),1,N/A,$238.00,,,,,,
+Plating - 3 Step (Singular - 1 side of record),1,N/A,$278.00,,,,,,
+Plating - Additional Stamper (Singular - 1 side of record),1,N/A,$165.00,,,,,,
+"7"" Plating - 3 Step (Singular - 1 side of record)",1,N/A,$278.00,,,,,,
+Labor,,,,,,,,,
+No labor,,,,,,,,,
+Boxing and Palletizing - 250,250,N/A,$0.50,,,$125.00,,,
+Boxing and Palletizing - 500,500,N/A,$0.50,,,$250.00,,,
+Boxing and Palletizing - 1000,1000,N/A,$0.50,,,$500.00,,,
+Boxing and Palletizing - 2000,2000,N/A,$0.50,,,"$1,000.00",,,
+Boxing and Palletizing - 5000,5000,N/A,$0.50,,,"$2,500.00",,,
+Boxing and Palletizing - 10000,10000,N/A,$0.50,,,"$5,000.00",,,
+Insertion - 250,250,N/A,$0.10,,,$25.00,,,
+Insertion - 500,500,N/A,$0.10,,,$50.00,,,
+Insertion - 1000,1000,N/A,$0.10,,,$100.00,,,
+Insertion - 2000,2000,N/A,$0.10,,,$200.00,,,
+Insertion - 5000,5000,N/A,$0.10,,,$500.00,,,
+Insertion - 10000,10000,N/A,$0.10,,,"$1,000.00",,,
+Test Presses - (5),1,N/A,$50.00,,,$50,,,
+Obi Application -250,250,N/A,$0.25,,,$62.50,,,
+Obi Application -500,500,N/A,$0.25,,,$125.00,,,
+Obi Application -1000,1000,N/A,$0.25,,,$250.00,,,
+Obi Application -2000,2000,N/A,$0.25,,,$500.00,,,
+Obi Application -5000,5000,N/A,$0.25,,,"$1,250.00",,,
+Obi Application -10000,10000,N/A,$0.25,,,"$2,500.00",,,
