@@ -19,13 +19,13 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   BadgeCheck, Clock3, XCircle, AlertTriangle, History, Upload, X,
-  MoreHorizontal, Archive, RotateCcw, Loader2, AlertCircle, Plus, Layers, Pencil, Trash2, Info,
+  MoreHorizontal, Archive, RotateCcw, Loader2, AlertCircle, Plus, Layers, Pencil, Trash2, Info, Download,
 } from "lucide-react";
 // Live-test flow (handoff, Aug 14 2026): the upload sheet stashes the chosen
 // PDF in the transit store, then the tab routes to the Live test page.
 import { pendingTemplateFile, freshLiveSave } from "./PressTemplateLiveTest";
 import { ChevronDown as NavChevron } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, fetchBlob, FetchBlobError } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminDark } from "@/lib/adminAppearance";
 import { uploadAdminDoc, DOC_UPLOAD_ACCEPT } from "@/lib/adminUpload";
@@ -526,10 +526,11 @@ function CustomSlotActions({
 // ─── Per-tile ••• overflow (handoff, Aug 15 2026) — appears on hover in the
 // tile's top-right corner. Archive lives here (with a confirm); archived
 // tiles get Restore instead. Handoff-verbatim styling; wired handlers.
-function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore, onReplace, pos }: {
+function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArchive, onRestore, onReplace, onDownload, downloading, pos }: {
   tileKey: string; title: string; archived: boolean; t: Theme;
   menuFor: string | null; setMenuFor: (k: string | null) => void;
   onArchive: () => void; onRestore: () => void; onReplace?: () => void;
+  onDownload?: () => void; downloading?: boolean;
   pos?: string; // position classes — default hugs the tile's top-right corner
 }) {
   const open = menuFor === tileKey;
@@ -569,6 +570,28 @@ function TileOverflow({ tileKey, title, archived, t, menuFor, setMenuFor, onArch
               </button>
             ) : (
               <>
+              {/* Task #3403 — download the slot's live template file. Rides
+                  the authed same-origin route (bearer + cookie via fetchBlob),
+                  so it works for stored /objects/ files AND proxied legacy
+                  external links alike. */}
+              {onDownload && (
+                <button
+                  type="button"
+                  disabled={downloading}
+                  onClick={(e) => { e.stopPropagation(); onDownload(); }}
+                  className={cn("w-full flex items-center gap-2.5 px-3.5 h-9 text-[13px] font-medium text-left", t.hoverWash)}
+                  style={{ color: t.ink, opacity: downloading ? 0.6 : 1 }}
+                  role="menuitem"
+                  data-testid={`menuitem-download-${tileKey}`}
+                >
+                  {downloading ? (
+                    <Loader2 className="w-3.5 h-3.5 flex-shrink-0 animate-spin" style={{ color: t.subink }} />
+                  ) : (
+                    <Download className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} />
+                  )}
+                  Download template&hellip;
+                </button>
+              )}
               {onReplace && (
                 <button
                   type="button"
@@ -990,6 +1013,43 @@ export function PressTemplatesIndex({
   const [editSlot, setEditSlot] = useState<CustomTemplateSlot | null>(null);
   const { toast } = useToast();
 
+  // Task #3403 — ••• → Download template… on a filled slot: fetch the slot's
+  // live file through the authed route (bearer + cookie — a bare <a href>
+  // drops auth headers, standing landmine) and hand it to the browser as a
+  // save. The route proxies legacy external links too; a dead one answers
+  // 422 template_link_dead, which maps to the tile's "Needs re-upload" story.
+  const [downloadingKey, setDownloadingKey] = useState<string | null>(null);
+  const downloadSpecFile = async (spec: TemplateSpecWithHistory, slotTitle: string, key: string) => {
+    if (downloadingKey) return;
+    setDownloadingKey(key);
+    try {
+      const blob = await fetchBlob(`/api/press/${pressId}/templates/${spec.id}/file`);
+      const fileName = spec.templateFileName?.toLowerCase().endsWith(".pdf")
+        ? spec.templateFileName
+        : `${(spec.displayName ?? slotTitle).trim() || "Template"}.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      setMenuFor(null);
+    } catch (e: any) {
+      const dead = e instanceof FetchBlobError && e.status === 422;
+      toast({
+        title: dead ? "This template needs re-upload" : "Couldn't download the template",
+        description: dead
+          ? (e.message || "The file's link no longer works — re-attach the template file to this slot to fix it.")
+          : e?.message,
+        variant: "destructive",
+      });
+    } finally {
+      setDownloadingKey(null);
+    }
+  };
+
   // Task #3066 — remove a custom slot made by mistake. The server refuses
   // (409) when the slot's spec already has upload history.
   const removeSlot = useMutation({
@@ -1278,6 +1338,8 @@ export function PressTemplatesIndex({
                           )
                         }
                         onReplace={canEdit && filled ? () => { setMenuFor(null); openUpload(slot); } : undefined}
+                        onDownload={filled ? () => downloadSpecFile(spec!, slot.title, overflowKey) : undefined}
+                        downloading={downloadingKey === overflowKey}
                       />
                     )}
                     {slot.customSlot && canEdit && (
