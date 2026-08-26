@@ -181,7 +181,11 @@ export function PressingOrderStepper({
     );
   }
   const { stages, currentIdx } = directStages;
-  const { data: latest } = useQuery<PressingOrderRequest | null>({
+  // Task #3385 — the server threads per-press display labels for the two
+  // generic press-ERP reference fields (MRP: "MRP #" / "SO #").
+  const { data: latest } = useQuery<
+    (PressingOrderRequest & { erpLabels?: { jobNumber: string; salesOrder: string } }) | null
+  >({
     queryKey: ["/api/admin/albums", albumId, "pressing-order"],
   });
 
@@ -328,6 +332,32 @@ export function PressingOrderStepper({
           );
         })}
       </div>
+
+      {/* Task #3385 — press-ERP reference numbers on the album's press
+          context. The press assigns these (blank until they arrive);
+          operators enter them from the Press-orders queue detail. */}
+      {latest && (submittedPending || submittedApproved) && (
+        <div
+          className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-600"
+          data-testid="pressing-erp-refs"
+        >
+          <span>
+            <span className="font-semibold text-slate-500">
+              {(latest.erpLabels ?? { jobNumber: "Press job #" }).jobNumber}:
+            </span>{" "}
+            <span data-testid="text-erp-job">{latest.pressJobNumber || "—"}</span>
+          </span>
+          <span>
+            <span className="font-semibold text-slate-500">
+              {(latest.erpLabels ?? { salesOrder: "Press SO #" }).salesOrder}:
+            </span>{" "}
+            <span data-testid="text-erp-so">{latest.pressSalesOrderNumber || "—"}</span>
+          </span>
+          {!latest.pressJobNumber && !latest.pressSalesOrderNumber && (
+            <span className="text-slate-400">Assigned by the press — entered by GoodTunes when they arrive.</span>
+          )}
+        </div>
+      )}
 
       {latest && latest.status === "rejected" && (
         <div className="mt-3 rounded-md border border-[color:var(--brand-heart)]/40 bg-[color:var(--brand-heart)]/5 p-3 flex items-start gap-2">

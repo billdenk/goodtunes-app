@@ -9,9 +9,10 @@ import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { StatusDot } from "@/components/admin/StatusDot";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/Spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, authHeaders, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useExclusiveDisclosure } from "@/hooks/useExclusiveDisclosure";
 import type { PressingOrderRequest } from "@shared/schema";
@@ -28,6 +29,9 @@ type Row = PressingOrderRequest & {
   albumTitle: string | null;
   albumArtist: string | null;
   albumArtwork: string | null;
+  // Task #3385 — per-press display labels for the two generic press-ERP
+  // reference fields (MRP: "MRP #" / "SO #"; generic defaults elsewhere).
+  erpLabels?: { jobNumber: string; salesOrder: string };
 };
 
 const dollars = (c: number) => formatUsdCents(c);
@@ -47,6 +51,10 @@ function deepLinkOrderId(searchStr: string): string | null {
 
 export function AdminPressingOrders() {
   const { toast } = useToast();
+  // Task #3385 — the ERP-reference PATCH is an operator verb (mirrors
+  // approve/reject); scoped partners see the values read-only.
+  const { data: meRole } = useQuery<{ role: string }>({ queryKey: ["/api/me/role"] });
+  const isOperator = meRole?.role === "super_admin" || meRole?.role === "admin";
   const urlSearch = useSearch();
   const linkedOrderId = deepLinkOrderId(urlSearch);
   // When deep-linked from search the target order can be in any status,
@@ -66,8 +74,11 @@ export function AdminPressingOrders() {
   const { data: rows, isLoading } = useQuery<Row[]>({
     queryKey: ["/api/admin/pressing-orders", { status }],
     queryFn: async () => {
+      // authHeaders() so bearer-token admin logins work too — a
+      // cookie-only fetch 401s under #token-hash sessions.
       const r = await fetch(`/api/admin/pressing-orders?status=${status}`, {
         credentials: "include",
+        headers: authHeaders(),
       });
       if (!r.ok) throw new Error(await r.text());
       return r.json();
@@ -271,6 +282,8 @@ export function AdminPressingOrders() {
                         <Field label="Total" value={dollars(row.totalCents)} strong />
                       </div>
 
+                      <ErpRefsSection row={row} isOperator={isOperator} />
+
                       {row.status === "pending" ? (
                         <div className="mt-4 space-y-2 border-t border-[var(--apple-hairline)] pt-4">
                           <Textarea
@@ -321,6 +334,104 @@ export function AdminPressingOrders() {
         )}
       </div>
     </AdminFrame>
+  );
+}
+
+// Task #3385 — the two generic press-ERP reference numbers (press job/
+// master # + press sales-order #) that match this run to a job in the
+// producing press's ERP. The press assigns both out-of-band in Phase 1,
+// so they start blank and an operator types them in here — in any status
+// (numbers often arrive after approval). Labels come per-press from the
+// server (MRP: "MRP #" / "SO #"); scoped partners see values read-only.
+function ErpRefsSection({ row, isOperator }: { row: Row; isOperator: boolean }) {
+  const { toast } = useToast();
+  const labels = row.erpLabels ?? { jobNumber: "Press job #", salesOrder: "Press SO #" };
+  const [job, setJob] = useState(row.pressJobNumber ?? "");
+  const [so, setSo] = useState(row.pressSalesOrderNumber ?? "");
+  // Re-seed from the server row when its values change (a save elsewhere
+  // refetched the list) — matching values are a no-op for in-progress typing.
+  useEffect(() => {
+    setJob(row.pressJobNumber ?? "");
+    setSo(row.pressSalesOrderNumber ?? "");
+  }, [row.id, row.pressJobNumber, row.pressSalesOrderNumber]);
+  const dirty =
+    (job.trim() || "") !== (row.pressJobNumber ?? "") ||
+    (so.trim() || "") !== (row.pressSalesOrderNumber ?? "");
+  const save = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("PATCH", `/api/admin/pressing-orders/${row.id}/erp-refs`, {
+        pressJobNumber: job.trim() || null,
+        pressSalesOrderNumber: so.trim() || null,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/pressing-orders"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/admin/albums", row.albumId, "pressing-order"],
+      });
+      toast({ title: "ERP references saved." });
+    },
+    onError: (e: any) => {
+      toast({
+        title: "Couldn't save ERP references",
+        description: e?.message || "Try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  if (!isOperator) {
+    return (
+      <div className="mt-4 pt-4 border-t border-[var(--apple-hairline)] grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1.5 text-[12.5px]">
+        <Field label={labels.jobNumber} value={row.pressJobNumber ?? "—"} />
+        <Field label={labels.salesOrder} value={row.pressSalesOrderNumber ?? "—"} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-[var(--apple-hairline)]">
+      <div className="text-[10.5px] uppercase tracking-wider text-[var(--apple-subink)] font-semibold">
+        Press ERP references
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="text-xs text-[var(--apple-subink)]">{labels.jobNumber}</span>
+          <Input
+            value={job}
+            onChange={(e) => setJob(e.target.value)}
+            placeholder="Assigned by the press"
+            className="mt-0.5 h-8 w-44 text-xs"
+            maxLength={120}
+            data-testid={`input-erp-job-${row.id}`}
+          />
+        </label>
+        <label className="block">
+          <span className="text-xs text-[var(--apple-subink)]">{labels.salesOrder}</span>
+          <Input
+            value={so}
+            onChange={(e) => setSo(e.target.value)}
+            placeholder="Assigned by the press"
+            className="mt-0.5 h-8 w-44 text-xs"
+            maxLength={120}
+            data-testid={`input-erp-so-${row.id}`}
+          />
+        </label>
+        <Button
+          type="button"
+          onClick={() => save.mutate()}
+          disabled={!dirty || save.isPending}
+          className="h-8 border border-[var(--brand-blue)] bg-transparent text-[var(--brand-blue)] hover:bg-[var(--brand-blue)]/10 disabled:opacity-50"
+          data-testid={`button-save-erp-${row.id}`}
+        >
+          {save.isPending ? "Saving…" : "Save"}
+        </Button>
+      </div>
+      <div className="mt-1 text-xs text-[var(--apple-faint)]">
+        The press assigns these — blank until they arrive. A reorder gets a new sales-order number.
+      </div>
+    </div>
   );
 }
 

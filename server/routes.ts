@@ -5,7 +5,8 @@ import { pool, db } from "./db";
 import { registerPlacesRoutes } from "./places";
 import { registerPublishingSettlementRoutes, registerPublisherPortalRoutes } from "./publishingSettlementRoutes";
 import { sql, and, eq, ne, or, ilike, isNull, isNotNull, desc, inArray, gt } from "drizzle-orm";
-import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, fulfillmentDestinations, albumPreviewGrants, pressingOrderRequests, completedTemplateFileEvents, TERMS_VERSION } from "@shared/schema";
+import { userAlbums, albums, certReservations, certTrueupLedger, orders, songs as songsTable, songs, people as peopleTable, instruments as instrumentsTable, vendors as vendorsTable, labels as labelsTable, playlists as playlistsTable, customerUsers, reservedHandles, FAN_RECENT_KINDS, trackPublishingSplits, trackMechanicalSplits, manufacturers, pressColors, pressColorTiers, jobRuns, fulfillmentPartners, fulfillmentDestinations, albumPreviewGrants, pressingOrderRequests, pressCustomerProfiles, completedTemplateFileEvents, TERMS_VERSION } from "@shared/schema";
+import { resolvePressErpRefLabels, DEFAULT_PRESS_CUSTOMER_PROFILE } from "@shared/pressErp";
 import {
   MRP_DOMAIN,
   HELLBENDER_DOMAIN,
@@ -20122,6 +20123,27 @@ export async function registerRoutes(
     // null-or-string. Distinct from bio so a re-scrape can't clobber
     // operator-entered quote notes.
     if (b.operationalNote !== undefined) u.operationalNote = strOrNull(b.operationalNote);
+    // Task #3385 — per-press display labels for the two generic press-ERP
+    // reference fields on pressing orders (MRP: "MRP #" / "SO #"). Null or
+    // both-blank clears back to the generic defaults (shared/pressErp.ts).
+    if (b.erpRefLabels !== undefined) {
+      if (b.erpRefLabels === null) {
+        u.erpRefLabels = null;
+      } else {
+        const parsed = z
+          .object({
+            jobNumber: z.string().max(40).nullable().optional(),
+            salesOrder: z.string().max(40).nullable().optional(),
+          })
+          .safeParse(b.erpRefLabels);
+        if (!parsed.success) {
+          return res.status(400).json({ message: "erpRefLabels must be { jobNumber?, salesOrder? } (≤40 chars each)" });
+        }
+        const jobNumber = parsed.data.jobNumber?.trim() || null;
+        const salesOrder = parsed.data.salesOrder?.trim() || null;
+        u.erpRefLabels = jobNumber || salesOrder ? { jobNumber, salesOrder } : null;
+      }
+    }
     if (b.location !== undefined) u.location = strOrNull(b.location);
     // Task #489 — structured snapshot, pass through as-is.
     if (b.locationAddress !== undefined) u.locationAddress = b.locationAddress ?? null;
@@ -36658,6 +36680,37 @@ export async function registerRoutes(
     return worst;
   }
 
+  // Task #3385 — resolve the display labels for the two generic press-ERP
+  // reference fields (press job/master # + press sales-order #) for a
+  // pressing order. Vocabulary is per-press (MRP: "MRP #" / "SO #"): use
+  // the snapshot's pressId when the request carries one, else fall back
+  // to the album's saved catalog pick (album_skus.press_id), else the
+  // generic defaults. Values are operator-entered either way; only the
+  // labels vary per press.
+  async function resolveErpLabelsForOrder(
+    albumId: string,
+    snapshotPressId: string | null | undefined,
+  ): Promise<{ jobNumber: string; salesOrder: string }> {
+    try {
+      let pressId = snapshotPressId ?? null;
+      if (!pressId) {
+        const r = await db.execute<{ press_id: string }>(sql`
+          SELECT press_id FROM album_skus
+          WHERE album_id = ${albumId} AND press_id IS NOT NULL
+          ORDER BY active DESC, created_at DESC NULLS LAST
+          LIMIT 1
+        `);
+        pressId = ((r as any).rows?.[0]?.press_id as string | undefined) ?? null;
+      }
+      if (!pressId) return resolvePressErpRefLabels(null);
+      const m = await storage.getManufacturerById(pressId);
+      return resolvePressErpRefLabels((m as any)?.erpRefLabels ?? null);
+    } catch {
+      // Label resolution is presentation-only — never let it fail a read.
+      return resolvePressErpRefLabels(null);
+    }
+  }
+
   // GET latest request for an album — drives the Sell-tab stepper's
   // "Submitted / rejected" state without a second round trip.
   app.get("/api/admin/albums/:id/pressing-order", requireAdmin, async (req, res) => {
@@ -36671,7 +36724,12 @@ export async function registerRoutes(
       if (err) return res.status(err.status).json(err.body);
     }
     const row = await storage.getLatestPressingOrderRequestForAlbum(albumId);
-    res.json(row ?? null);
+    if (!row) return res.json(null);
+    // Task #3385 — thread the per-press ERP vocabulary so the Sell-tab
+    // stepper can caption the reference numbers correctly ("MRP #"/"SO #"
+    // for MRP, generic defaults elsewhere).
+    const erpLabels = await resolveErpLabelsForOrder(albumId, row.packageSnapshot?.pressId);
+    res.json({ ...row, erpLabels });
   });
 
   // POST submit — gated by the same edit_metadata verb that the Sell
@@ -36802,11 +36860,15 @@ export async function registerRoutes(
     const out = await Promise.all(
       rows.map(async (r) => {
         const a = await storage.getAlbumById(r.albumId, { includeHidden: true });
+        // Task #3385 — per-press labels for the ERP reference fields so
+        // the queue detail captions them in the press's own vocabulary.
+        const erpLabels = await resolveErpLabelsForOrder(r.albumId, r.packageSnapshot?.pressId);
         return {
           ...r,
           albumTitle: a?.title ?? null,
           albumArtist: a?.artist ?? null,
           albumArtwork: a?.artwork ?? null,
+          erpLabels,
         };
       }),
     );
@@ -36879,6 +36941,167 @@ export async function registerRoutes(
         .update(pressingOrderRequests)
         .set({ expectedArrivalAt: body.data.expectedArrivalAt ? new Date(body.data.expectedArrivalAt) : null })
         .where(eq(pressingOrderRequests.id, String(req.params.id)))
+        .returning();
+      res.json(row);
+    },
+  );
+
+  // PATCH erp-refs — Task #3385. Operator-entered press-ERP reference
+  // numbers matching this run to a job in the producing press's ERP
+  // (MRP: MRP # + SO #; labels are per-press, columns generic). The
+  // press assigns both out-of-band in Phase 1 — no API exchange — so
+  // blank is normal and either field can be set/cleared independently,
+  // in any request status (numbers often arrive after approval).
+  // super_admin only, mirroring the other operator verbs on this queue.
+  app.patch(
+    "/api/admin/pressing-orders/:id/erp-refs",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const body = z
+        .object({
+          pressJobNumber: z.string().max(120).nullable().optional(),
+          pressSalesOrderNumber: z.string().max(120).nullable().optional(),
+        })
+        .strict()
+        .safeParse(req.body);
+      if (!body.success) {
+        return res.status(400).json({
+          message: "pressJobNumber / pressSalesOrderNumber must be strings ≤120 chars or null",
+        });
+      }
+      const set: Partial<typeof pressingOrderRequests.$inferInsert> = {};
+      if (body.data.pressJobNumber !== undefined) {
+        set.pressJobNumber = body.data.pressJobNumber?.trim() || null;
+      }
+      if (body.data.pressSalesOrderNumber !== undefined) {
+        set.pressSalesOrderNumber = body.data.pressSalesOrderNumber?.trim() || null;
+      }
+      if (Object.keys(set).length === 0) {
+        return res.status(400).json({ message: "Nothing to update" });
+      }
+      const existing = await storage.getPressingOrderRequest(String(req.params.id));
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      const [row] = await db
+        .update(pressingOrderRequests)
+        .set(set)
+        .where(eq(pressingOrderRequests.id, String(req.params.id)))
+        .returning();
+      const erpLabels = await resolveErpLabelsForOrder(row.albumId, row.packageSnapshot?.pressId);
+      res.json({ ...row, erpLabels });
+    },
+  );
+
+  // ─── Task #3385 — Press-scoped customer profile ───────────────────
+  // How this press's own ERP customer record classifies the buying
+  // entity: category (major/broker/indie), pricing tier (1/2/3),
+  // payment terms, billing basis. One shared structure for every press;
+  // MRP's vocabulary is just the first data. v1 surfaces the platform's
+  // own record (customerKind='goodtunes', customerId=NULL — GoodTunes is
+  // customer-of-record for brokered orders), so the GET falls back to a
+  // sensible brokered default when no row exists yet. Operator-only in
+  // BOTH directions: requireAdmin admits every partner bearer, and a
+  // press must not read/write how we're classified in its ERP from our
+  // side — this is internal ops data.
+  app.get(
+    "/api/admin/manufacturers/:id/customer-profile",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      const [row] = await db
+        .select()
+        .from(pressCustomerProfiles)
+        .where(
+          and(
+            eq(pressCustomerProfiles.pressId, pressId),
+            eq(pressCustomerProfiles.customerKind, "goodtunes"),
+            isNull(pressCustomerProfiles.customerId),
+          ),
+        )
+        .limit(1);
+      if (row) return res.json(row);
+      // Virtual default — not persisted until the operator saves.
+      res.json({
+        id: null,
+        pressId,
+        customerKind: DEFAULT_PRESS_CUSTOMER_PROFILE.customerKind,
+        customerId: null,
+        category: DEFAULT_PRESS_CUSTOMER_PROFILE.category,
+        pricingTier: DEFAULT_PRESS_CUSTOMER_PROFILE.pricingTier,
+        paymentTerms: DEFAULT_PRESS_CUSTOMER_PROFILE.paymentTerms,
+        billingBasis: DEFAULT_PRESS_CUSTOMER_PROFILE.billingBasis,
+      });
+    },
+  );
+
+  app.put(
+    "/api/admin/manufacturers/:id/customer-profile",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const press = await storage.getManufacturerById(pressId);
+      if (!press) return res.status(404).json({ message: "Manufacturer not found" });
+      const body = z
+        .object({
+          // Category + tier are selects seeded with MRP's vocabulary, but
+          // loose validation (any short string) keeps another press's
+          // scheme usable without a code change.
+          category: z.string().max(40).nullable().optional(),
+          pricingTier: z.string().max(40).nullable().optional(),
+          paymentTerms: z.string().max(200).nullable().optional(),
+          billingBasis: z.string().max(200).nullable().optional(),
+        })
+        .strict()
+        .safeParse(req.body);
+      if (!body.success) {
+        return res.status(400).json({ message: body.error.issues[0]?.message ?? "Invalid" });
+      }
+      const clean = (v: string | null | undefined) =>
+        v === undefined ? undefined : v?.trim() || null;
+      const patch = {
+        category: clean(body.data.category),
+        pricingTier: clean(body.data.pricingTier),
+        paymentTerms: clean(body.data.paymentTerms),
+        billingBasis: clean(body.data.billingBasis),
+      };
+      const [existing] = await db
+        .select()
+        .from(pressCustomerProfiles)
+        .where(
+          and(
+            eq(pressCustomerProfiles.pressId, pressId),
+            eq(pressCustomerProfiles.customerKind, "goodtunes"),
+            isNull(pressCustomerProfiles.customerId),
+          ),
+        )
+        .limit(1);
+      if (existing) {
+        const set: Record<string, unknown> = { updatedAt: new Date() };
+        for (const [k, v] of Object.entries(patch)) {
+          if (v !== undefined) set[k] = v;
+        }
+        const [row] = await db
+          .update(pressCustomerProfiles)
+          .set(set)
+          .where(eq(pressCustomerProfiles.id, existing.id))
+          .returning();
+        return res.json(row);
+      }
+      const [row] = await db
+        .insert(pressCustomerProfiles)
+        .values({
+          pressId,
+          customerKind: "goodtunes",
+          customerId: null,
+          category: patch.category ?? DEFAULT_PRESS_CUSTOMER_PROFILE.category,
+          pricingTier: patch.pricingTier ?? null,
+          paymentTerms: patch.paymentTerms ?? null,
+          billingBasis: patch.billingBasis ?? null,
+        })
         .returning();
       res.json(row);
     },

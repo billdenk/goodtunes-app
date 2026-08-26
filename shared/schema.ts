@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { SignedCertLadderRung } from "./signedCertLadder";
 import type { CompletedTemplateConfig, VinylSize, VinylRpm } from "./vendorSpecs";
 import type { CompletedTemplateComponent } from "./uploadValidation";
+import type { PressErpRefLabels } from "./pressErp";
 
 // Task #475 — 30-day soft-delete Trash. Every admin-deletable entity
 // (albums, songs, people, vendors, instruments, labels, manufacturers,
@@ -5182,6 +5183,12 @@ export const manufacturers = pgTable("manufacturers", {
   // each SKU at save time via `costSnapshotBrokerDiscountPct` so a
   // mid-quote rate change can't retroactively rewrite finalised SKUs.
   brokerDiscountPct: integer("broker_discount_pct").notNull().default(0),
+  // Task #3385 — per-press display labels for the two generic press-ERP
+  // reference fields carried on pressing_order_requests (press job/master
+  // number + press sales-order number). Every press runs its own ERP with
+  // its own vocabulary (MRP: "MRP #" / "SO #"); null = generic defaults.
+  // Shape + resolver live in shared/pressErp.ts.
+  erpRefLabels: jsonb("erp_ref_labels").$type<PressErpRefLabels>(),
   // Task #625 — short free-text operational note shown on the
   // manufacturer admin page. Used for quote-conditions, overrun
   // tolerance, pricing rules (e.g. MRP: "Quoted TOTAL is retail —
@@ -6468,10 +6475,47 @@ export const pressingOrderRequests = pgTable("pressing_order_requests", {
   // time (manufacturers.turnaround_weeks_* / turnaround_days) anchored
   // on decidedAt. Stored value always wins over the derived estimate.
   expectedArrivalAt: timestamp("expected_arrival_at"),
+  // Task #3385 — the two generic press-ERP reference numbers that match
+  // this run to a job in the producing press's ERP. The press ASSIGNS
+  // both (MRP: "MRP #" = artist+title+format+RPM+client matrix; "SO #" =
+  // order grouping for aggregated purchasing, a reorder gets a new one),
+  // so they start blank and an operator types them in once the press
+  // communicates them — Phase 1 has no API exchange. Display labels
+  // resolve per-press from manufacturers.erp_ref_labels (see
+  // shared/pressErp.ts); the columns themselves are press-agnostic.
+  pressJobNumber: text("press_job_number"),
+  pressSalesOrderNumber: text("press_sales_order_number"),
 });
 
 export type PressingOrderRequest = typeof pressingOrderRequests.$inferSelect;
 export type InsertPressingOrderRequest = typeof pressingOrderRequests.$inferInsert;
+
+// ─── Task #3385 — Press-scoped customer profile ────────────────────────
+// How a press's own ERP customer record classifies the buying entity:
+// category (major / broker / indie), pricing tier (1/2/3), payment terms,
+// billing basis — MRP's values are the first data, but the columns are
+// loose text so any press's scheme fits. One row per (press, customer):
+// customerKind='goodtunes' + customerId=NULL is the platform's own record
+// at that press (GoodTunes is customer-of-record for brokered orders);
+// the kind/id pair leaves room for direct label/artist relationships
+// later without a schema change. Uniqueness is enforced by an expression
+// index (press_id, customer_kind, COALESCE(customer_id,'')) created in
+// post-merge.sh so the all-NULL-customerId goodtunes rows can't dupe.
+export const pressCustomerProfiles = pgTable("press_customer_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pressId: varchar("press_id").notNull().references(() => manufacturers.id, { onDelete: "cascade" }),
+  customerKind: text("customer_kind").notNull().default("goodtunes"), // goodtunes | label | artist
+  customerId: varchar("customer_id"), // null for the platform's own record
+  category: text("category"), // major | broker | indie (press vocabulary, loose text)
+  pricingTier: text("pricing_tier"), // MRP: "1" | "2" | "3"
+  paymentTerms: text("payment_terms"), // free text, e.g. "Net 30"
+  billingBasis: text("billing_basis"), // free text, e.g. "per finished unit"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type PressCustomerProfile = typeof pressCustomerProfiles.$inferSelect;
+export type InsertPressCustomerProfile = typeof pressCustomerProfiles.$inferInsert;
 
 // ─── Task #533 — Pool-funded early masters cut ─────────────────────────
 // Authoritative per-event log of contributions to (and releases from)

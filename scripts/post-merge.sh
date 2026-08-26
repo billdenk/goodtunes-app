@@ -13210,3 +13210,55 @@ mirror_external_song_audio() {
 }
 mirror_external_song_audio dev  "${DATABASE_URL:-}"
 mirror_external_song_audio prod "${PROD_DATABASE_URL:-}"
+
+# Task #3385 — Press ERP identifiers on orders + press customer profile.
+# Two generic operator-entered press-ERP reference numbers on
+# pressing_order_requests (labels per press via manufacturers.erp_ref_labels;
+# MRP: "MRP #" / "SO #"), plus press_customer_profiles (category / pricing
+# tier / payment terms / billing basis — one shared structure for every
+# press). Uniqueness uses COALESCE(customer_id,'') so the platform's own
+# goodtunes/NULL-customer rows can't dupe. Idempotent, dev + prod.
+migrate_press_erp_identifiers_task_3385() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping press-ERP identifiers migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE pressing_order_requests
+  ADD COLUMN IF NOT EXISTS press_job_number         text,
+  ADD COLUMN IF NOT EXISTS press_sales_order_number text;
+ALTER TABLE manufacturers
+  ADD COLUMN IF NOT EXISTS erp_ref_labels jsonb;
+CREATE TABLE IF NOT EXISTS press_customer_profiles (
+  id             varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  press_id       varchar NOT NULL REFERENCES manufacturers(id) ON DELETE CASCADE,
+  customer_kind  text NOT NULL DEFAULT 'goodtunes',
+  customer_id    varchar,
+  category       text,
+  pricing_tier   text,
+  payment_terms  text,
+  billing_basis  text,
+  created_at     timestamp NOT NULL DEFAULT now(),
+  updated_at     timestamp NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS press_customer_profiles_scope_uniq
+  ON press_customer_profiles (press_id, customer_kind, COALESCE(customer_id, ''));
+-- Seed MRP's vocabulary as the first per-press labels — only when the
+-- press hasn't set any yet, so a later operator edit is never clobbered.
+UPDATE manufacturers
+   SET erp_ref_labels = '{"jobNumber":"MRP #","salesOrder":"SO #"}'::jsonb
+ WHERE lower(coalesce(domain, '')) = 'memphisrecordpressing.com'
+   AND erp_ref_labels IS NULL
+   AND deleted_at IS NULL;
+COMMIT;
+SQL
+  then
+    echo "post-merge: press-ERP identifiers migration ok on $label"
+  else
+    echo "post-merge: WARNING — press-ERP identifiers migration failed on $label (continuing)"
+  fi
+}
+migrate_press_erp_identifiers_task_3385 dev  "${DATABASE_URL:-}"
+migrate_press_erp_identifiers_task_3385 prod "${PROD_DATABASE_URL:-}"

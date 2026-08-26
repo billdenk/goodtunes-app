@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { VinylPreview } from "@/components/VinylPreview";
 import { resolveVinylColor, DEFAULT_JACKET_UPGRADE, type VinylColorOption } from "@shared/pressing";
+import { PRESS_CUSTOMER_CATEGORIES, PRESS_CUSTOMER_PRICING_TIERS } from "@shared/pressErp";
 import { resolvePressPlaceholderArt as _resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
@@ -782,6 +783,17 @@ export function AdminManufacturer() {
                 Matilda ERP): key management + pending-push review. Same
                 hard server-side operator gate as the Coda card. */}
             {isOperator && <ErpPushCard pressId={id} />}
+
+            {/* Task #3385 — per-press ERP reference labels + how this
+                press's customer record classifies GoodTunes. Server routes
+                are super_admin-gated; the card renders for operators only. */}
+            {isOperator && (
+              <PressErpCustomerCard
+                m={m}
+                onSaveLabels={(patch) => save.mutate(patch)}
+                savingLabels={save.isPending}
+              />
+            )}
           </>
         )}
         {tab === "contacts" && (
@@ -6210,6 +6222,211 @@ function AddSwatchChip({
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+// ─── Task #3385 — Press ERP vocabulary + customer profile ─────────────
+// Operator-only card. Top half: the per-press display labels for the two
+// generic press-ERP reference fields carried on pressing orders (MRP
+// names them "MRP #" / "SO #"; another press can name them differently
+// or leave the defaults). Bottom half: how this press's own ERP customer
+// record classifies GoodTunes — category (major/broker/indie), pricing
+// tier (1/2/3), payment terms, billing basis. MRP's vocabulary seeds the
+// selects, but the server accepts loose text so any press's scheme fits.
+export function PressErpCustomerCard({
+  m,
+  onSaveLabels,
+  savingLabels,
+}: {
+  m: Manufacturer;
+  onSaveLabels: (patch: Partial<Manufacturer>) => void;
+  savingLabels: boolean;
+}) {
+  const { toast } = useToast();
+  const ERP_INPUT =
+    "w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[color:var(--brand-blue)]/40";
+  const savedLabels = (m as any).erpRefLabels as
+    | { jobNumber?: string | null; salesOrder?: string | null }
+    | null
+    | undefined;
+  const [jobLabel, setJobLabel] = useState(savedLabels?.jobNumber ?? "");
+  const [soLabel, setSoLabel] = useState(savedLabels?.salesOrder ?? "");
+  const labelsDirty =
+    (jobLabel.trim() || "") !== (savedLabels?.jobNumber ?? "") ||
+    (soLabel.trim() || "") !== (savedLabels?.salesOrder ?? "");
+
+  type Profile = {
+    id: string | null;
+    category: string | null;
+    pricingTier: string | null;
+    paymentTerms: string | null;
+    billingBasis: string | null;
+  };
+  const { data: profile } = useQuery<Profile>({
+    queryKey: [`/api/admin/manufacturers/${m.id}/customer-profile`],
+  });
+  const [category, setCategory] = useState<string>("");
+  const [pricingTier, setPricingTier] = useState<string>("");
+  const [paymentTerms, setPaymentTerms] = useState<string>("");
+  const [billingBasis, setBillingBasis] = useState<string>("");
+  const [profileDirty, setProfileDirty] = useState(false);
+  // Seed edit state from the fetched profile; only re-seed while the
+  // operator hasn't started editing (local-edit vs shared-query re-seed).
+  useEffect(() => {
+    if (!profile || profileDirty) return;
+    setCategory(profile.category ?? "");
+    setPricingTier(profile.pricingTier ?? "");
+    setPaymentTerms(profile.paymentTerms ?? "");
+    setBillingBasis(profile.billingBasis ?? "");
+  }, [profile, profileDirty]);
+
+  const saveProfile = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("PUT", `/api/admin/manufacturers/${m.id}/customer-profile`, {
+        category: category || null,
+        pricingTier: pricingTier || null,
+        paymentTerms: paymentTerms.trim() || null,
+        billingBasis: billingBasis.trim() || null,
+      });
+      return r.json();
+    },
+    onSuccess: () => {
+      setProfileDirty(false);
+      queryClient.invalidateQueries({
+        queryKey: [`/api/admin/manufacturers/${m.id}/customer-profile`],
+      });
+      toast({ title: "Customer profile saved" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't save", description: e?.message, variant: "destructive" }),
+  });
+
+  const SELECT_CLS = ERP_INPUT;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 space-y-5 max-w-3xl" data-testid="card-press-erp">
+      <div>
+        <div className="text-sm font-semibold text-slate-900">ERP references &amp; customer profile</div>
+        <div className="text-xs text-slate-500 mt-0.5">
+          How pressing orders match up with {m.name}'s own ERP, and how their customer record classifies GoodTunes.
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+          Order reference labels
+        </div>
+        <div className="text-xs text-slate-500">
+          What this press calls the two reference numbers on a pressing order. Blank uses the generic defaults.
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label='Job / master number label (default "Press job #")'>
+            <input
+              value={jobLabel}
+              onChange={(e) => setJobLabel(e.target.value)}
+              placeholder="e.g. MRP #"
+              maxLength={40}
+              className={ERP_INPUT}
+              data-testid="input-erp-label-job"
+            />
+          </Field>
+          <Field label='Sales-order number label (default "Press SO #")'>
+            <input
+              value={soLabel}
+              onChange={(e) => setSoLabel(e.target.value)}
+              placeholder="e.g. SO #"
+              maxLength={40}
+              className={ERP_INPUT}
+              data-testid="input-erp-label-so"
+            />
+          </Field>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            disabled={!labelsDirty || savingLabels}
+            onClick={() => {
+              const jobNumber = jobLabel.trim() || null;
+              const salesOrder = soLabel.trim() || null;
+              onSaveLabels({
+                erpRefLabels: jobNumber || salesOrder ? { jobNumber, salesOrder } : null,
+              } as Partial<Manufacturer>);
+            }}
+            className="h-8 border border-[color:var(--brand-blue)] bg-transparent text-[color:var(--brand-blue)] hover:bg-[color:var(--brand-blue)]/10 disabled:opacity-50"
+            data-testid="button-save-erp-labels"
+          >
+            Save labels
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-2 border-t border-slate-100 pt-4">
+        <div className="text-xs uppercase tracking-wider text-slate-500 font-semibold">
+          Customer profile (GoodTunes at this press)
+        </div>
+        <div className="text-xs text-slate-500">
+          GoodTunes is customer-of-record for brokered orders — these mirror the press's own customer-record fields.
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Customer category">
+            <select
+              value={category}
+              onChange={(e) => { setCategory(e.target.value); setProfileDirty(true); }}
+              className={SELECT_CLS}
+              data-testid="select-customer-category"
+            >
+              <option value="">—</option>
+              {PRESS_CUSTOMER_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{c[0].toUpperCase() + c.slice(1)}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Pricing tier">
+            <select
+              value={pricingTier}
+              onChange={(e) => { setPricingTier(e.target.value); setProfileDirty(true); }}
+              className={SELECT_CLS}
+              data-testid="select-customer-pricing-tier"
+            >
+              <option value="">—</option>
+              {PRESS_CUSTOMER_PRICING_TIERS.map((t) => (
+                <option key={t} value={t}>Tier {t}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Payment terms">
+            <input
+              value={paymentTerms}
+              onChange={(e) => { setPaymentTerms(e.target.value); setProfileDirty(true); }}
+              placeholder="e.g. Net 30"
+              maxLength={200}
+              className={ERP_INPUT}
+              data-testid="input-customer-payment-terms"
+            />
+          </Field>
+          <Field label="Billing basis">
+            <input
+              value={billingBasis}
+              onChange={(e) => { setBillingBasis(e.target.value); setProfileDirty(true); }}
+              placeholder="e.g. per finished unit"
+              maxLength={200}
+              className={ERP_INPUT}
+              data-testid="input-customer-billing-basis"
+            />
+          </Field>
+        </div>
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            disabled={!profileDirty || saveProfile.isPending}
+            onClick={() => saveProfile.mutate()}
+            className="h-8 border border-[color:var(--brand-blue)] bg-transparent text-[color:var(--brand-blue)] hover:bg-[color:var(--brand-blue)]/10 disabled:opacity-50"
+            data-testid="button-save-customer-profile"
+          >
+            {saveProfile.isPending ? "Saving…" : "Save profile"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

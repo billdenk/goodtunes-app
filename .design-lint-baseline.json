@@ -18805,6 +18805,11 @@
     "snippet": "className=\"inline-flex items-center justify-center h-9 px-3.5 rounded-full text-[12.5px] font-semibold text-[var(--brand-blue)] hover:bg-[var(--apple-blue)]/10 transition-colors\""
   },
   {
+    "rule": "admin-explicit-save-button",
+    "file": "client/src/pages/AdminManufacturer.tsx",
+    "snippet": ">"
+  },
+  {
     "rule": "admin-link-missing-shared-treatment",
     "file": "client/src/pages/AdminManufacturer.tsx",
     "snippet": "<Link"
