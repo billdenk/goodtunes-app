@@ -137,3 +137,26 @@ Wholesale ladder seeded in `server/pressCatalog.ts` (`PMP_BOOKLET_LADDER`). The 
 ## Press throughput
 
 ~35–40 seconds per record (just under 2 records / minute).
+
+## 2026 component pricing (Jonathan, Aug 26 2026)
+
+Full sheet: `docs/vendors/pmp-pricing-2026.csv` (records, setup fees, jackets, inserts, sleeves, center labels, bags/shrink, download cards, booklets, stickers, lacquer, plating, labor).
+
+**How PMP's quantity blocks work (Jonathan, verbatim intent):** each item is a
+NAMED BLOCK like "Black - 250" whose `Quantity` column is only the DEFAULT the
+estimator fills in — the price break belongs to the block, not the entered
+quantity. A customer on "Black - 250" can raise the quantity to 300 and still
+pays the 250-block per-unit rate; their estimator does NOT auto-jump to the
+500 break. PMP uses this deliberately for control, e.g. a 250-unit double-LP
+project presses 500 records total, so the CSR picks the 500 block for the
+price break but sets 250 units on each disc ("here's a little discount").
+
+**Implications for our builder:** per-unit rate = the chosen block's rate
+(rung selected by operator/CSR, defaulting from quantity), not a pure
+quantity→rung lookup; quantity is editable within a block without repricing.
+This is looser than MRP-style snap-to-rung — keep block choice explicit on
+PMP estimates. `Price` = client price; `Cost` (where present) = PMP's cost,
+margin columns informational. "PMP XTP - 100" is a flat $1,500 line. Note the
+sheet's line is Black/Color/Mixed/Handmade (+7" variants) — the brief's
+"Black 4 / Color 18 / Splatter 12" maps to swatch counts, sheet is the
+pricing families.
