@@ -13305,3 +13305,25 @@ SQL
 }
 migrate_press_erp_identifiers_task_3385 dev  "${DATABASE_URL:-}"
 migrate_press_erp_identifiers_task_3385 prod "${PROD_DATABASE_URL:-}"
+
+# Ruby handoff (Aug 2026) — Help & feedback dialog redesign: drag-to-highlight
+# rectangles (% coords of the screenshot) ride each partner_feedback row.
+# Idempotent, dev + prod.
+migrate_partner_feedback_highlights() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping partner-feedback highlights migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE partner_feedback
+  ADD COLUMN IF NOT EXISTS highlights jsonb;
+SQL
+  then
+    echo "post-merge: partner-feedback highlights migration ok on $label"
+  else
+    echo "post-merge: WARNING — partner-feedback highlights migration failed on $label (continuing)"
+  fi
+}
+migrate_partner_feedback_highlights dev  "${DATABASE_URL:-}"
+migrate_partner_feedback_highlights prod "${PROD_DATABASE_URL:-}"

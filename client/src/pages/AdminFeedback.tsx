@@ -46,6 +46,7 @@ type Feedback = {
   body: string;
   pageUrl: string | null;
   screenshotUrl: string | null;
+  highlights: Array<{ x: number; y: number; w: number; h: number }> | null;
   status: string;
   escalated: boolean;
   internalNotes: string | null;
@@ -490,12 +491,38 @@ function FeedbackDetail({
           <div className="mt-4">
             <Label className="text-[11px] font-semibold uppercase tracking-wider text-[var(--apple-subink)]">Screenshot</Label>
             <a href={feedback.screenshotUrl} target="_blank" rel="noreferrer">
-              <img
-                src={feedback.screenshotUrl}
-                alt="Submitter screenshot"
-                className="mt-1 max-h-64 w-full rounded-lg border border-[var(--apple-hairline)] object-contain"
-                data-testid="img-detail-screenshot"
-              />
+              {feedback.highlights && feedback.highlights.length > 0 ? (
+                // Submitter drew highlights (% coords of the screenshot) —
+                // render the image unletterboxed so the numbered pins land
+                // exactly where they pointed.
+                <span className="relative mt-1 block overflow-hidden rounded-lg border border-[var(--apple-hairline)]">
+                  <img
+                    src={feedback.screenshotUrl}
+                    alt="Submitter screenshot"
+                    className="block h-auto w-full"
+                    data-testid="img-detail-screenshot"
+                  />
+                  {feedback.highlights.map((m, i) => (
+                    <span
+                      key={i}
+                      className="absolute rounded-lg border-2 border-[#319ED8] bg-[#319ED8]/10"
+                      style={{ left: `${m.x}%`, top: `${m.y}%`, width: `${m.w}%`, height: `${m.h}%` }}
+                      data-testid={`overlay-highlight-${i}`}
+                    >
+                      <span className="absolute -left-2.5 -top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#319ED8] text-[11px] font-bold text-white shadow ring-2 ring-white">
+                        {i + 1}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                <img
+                  src={feedback.screenshotUrl}
+                  alt="Submitter screenshot"
+                  className="mt-1 max-h-64 w-full rounded-lg border border-[var(--apple-hairline)] object-contain"
+                  data-testid="img-detail-screenshot"
+                />
+              )}
             </a>
           </div>
         )}

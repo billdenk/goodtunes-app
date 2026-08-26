@@ -6170,6 +6170,9 @@ export const partnerFeedback = pgTable("partner_feedback", {
   body: text("body").notNull(),
   pageUrl: text("page_url"),
   screenshotUrl: text("screenshot_url"),
+  // Drag-to-highlight markup drawn on the screenshot preview — array of
+  // { x, y, w, h } rectangles as % of the screenshot (Ruby handoff Aug 2026).
+  highlights: jsonb("highlights").$type<Array<{ x: number; y: number; w: number; h: number }>>(),
   status: text("status").notNull().default("new"), // new|reviewing|in_progress|shipped|closed
   escalated: boolean("escalated").notNull().default(false),
   internalNotes: text("internal_notes"),

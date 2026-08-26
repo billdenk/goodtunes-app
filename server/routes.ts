@@ -4221,9 +4221,25 @@ export async function registerRoutes(
       .extend({
         kind: z.enum(["bug", "feature"]),
         title: z.string().trim().min(1).max(200),
-        body: z.string().trim().min(1).max(5000),
+        // Ruby handoff (Aug 2026): the redesigned dialog gates Send on the
+        // title only — details are optional.
+        body: z.string().trim().max(5000).default(""),
         pageUrl: z.string().trim().max(2000).optional().nullable(),
         screenshotUrl: z.string().trim().max(2000).optional().nullable(),
+        // Drag-to-highlight rectangles drawn on the screenshot preview,
+        // % coords of the screenshot. Meaningless without a screenshot.
+        highlights: z
+          .array(
+            z.object({
+              x: z.number().min(0).max(100),
+              y: z.number().min(0).max(100),
+              w: z.number().min(0).max(100),
+              h: z.number().min(0).max(100),
+            }),
+          )
+          .max(50)
+          .optional()
+          .nullable(),
       })
       .safeParse(req.body);
     if (!parsed.success) {
@@ -4260,6 +4276,7 @@ export async function registerRoutes(
         body: r.body,
         pageUrl: r.pageUrl,
         screenshotUrl: r.screenshotUrl,
+        highlights: r.highlights,
         status: r.status,
         publicReply: r.publicReply,
         createdAt: r.createdAt,
