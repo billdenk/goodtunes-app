@@ -17,18 +17,18 @@
 // the q-word. Self-contained per handoff rules.
 
 import { useState } from 'react';
-import californialandCover from '../assets/californialand-cover.jpg';
+import deadAliveCover from '../assets/dead-alive-cover.jpg';
 import pmpLogoAsset from '../assets/pmp-icon.svg';
 import goodtunesLogo from '../assets/goodtunes-logo.png';
 import jonathanPhoto from '../assets/jonathan-hibma.png';
 
 // ─── Mock data — same project the estimate page created ──────────────
-const MOCK_CLIENT_FIRST = 'Niina';
+const MOCK_CLIENT_FIRST = 'Dead Alive';
 const MOCK_CLIENT_EMAIL = 'niina@soleilmusic.com';
 const MOCK_ESTIMATE_NO = '071526-02';
 const MOCK_PREPARED_BY = 'Jonathan Hibma';
-const MOCK_JOB = 'Californialand';
-const MOCK_SPEC = '12" · 140g · Clear Red · 1 LP';
+const MOCK_JOB = 'The Madness of Dr. Ludvig Von Brainmatter';
+const MOCK_SPEC = '12" · 140g · Clear Green · 1 LP';
 const MOCK_QTY = '1,000 units';
 const MOCK_UNIT = '$5.37 /unit';
 // 1,000 × $5.37 + $1,295 fixed setup = $6,665.00 → 50% deposit.
@@ -463,7 +463,7 @@ export default function PressClientNextStepsPMPDark() {
 
               {/* Project card — the estimate carried forward */}
               <div style={{ marginTop: 28, borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.55)', padding: 20, display: 'flex', alignItems: 'center', gap: 16, textAlign: 'left' }}>
-                <img src={californialandCover} alt={`${MOCK_JOB} cover art`} style={{ width: 64, height: 64, borderRadius: 0, objectFit: 'cover', border: `1px solid ${HAIRLINE}` }} />
+                <img src={deadAliveCover} alt={`${MOCK_JOB} cover art`} style={{ width: 64, height: 64, borderRadius: 0, objectFit: 'cover', border: `1px solid ${HAIRLINE}` }} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: -0.2 }}>{MOCK_JOB}</div>
                   <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 3 }}>{MOCK_SPEC}</div>
