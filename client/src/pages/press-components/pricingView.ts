@@ -30,6 +30,32 @@ export function priceForSize(r: PricingRow, s: VinylSizeId): number | null {
   return r.priceCents ?? null;
 }
 
+/** The seeded quantity ladder backing a row under a size, or null. Vinyl
+ * rows are strictly per-size; flat rows mirror priceForSize's "any size's
+ * value shows everywhere" semantics. Display + counting only — the flat
+ * cell stays the editable surface and overrides the ladder when typed. */
+export function ladderForSize(
+  r: PricingRow,
+  s: VinylSizeId,
+): { qty: number; unitCents: number }[] | null {
+  const clean = (l?: { qty: number; unitCents: number }[]) =>
+    l && l.length ? [...l].sort((a, b) => a.qty - b.qty) : null;
+  if (r.kind === "type" || r.kind === "color") return clean(r.rungsBySize?.[s]);
+  const direct = clean(r.rungsBySize?.[s]);
+  if (direct) return direct;
+  for (const l of Object.values(r.rungsBySize ?? {})) {
+    const got = clean(l);
+    if (got) return got;
+  }
+  return null;
+}
+
+/** Priced = a typed flat cell OR a backing quantity ladder. Drives the
+ * "N of M priced" counter so ladder-priced rows stop reading as gaps. */
+export function rowPricedForSize(r: PricingRow, s: VinylSizeId): boolean {
+  return priceForSize(r, s) != null || ladderForSize(r, s) != null;
+}
+
 export type PricingGroups = {
   out: { type: PricingRow; colors: PricingRow[] }[];
   orphans: PricingRow[];
@@ -59,7 +85,7 @@ export function visibleRowsForSize(rows: PricingRow[], size: VinylSizeId): Prici
 }
 
 export function pricedCountForSize(rows: PricingRow[], size: VinylSizeId): number {
-  return visibleRowsForSize(rows, size).filter((r) => priceForSize(r, size) != null).length;
+  return visibleRowsForSize(rows, size).filter((r) => rowPricedForSize(r, size)).length;
 }
 
 /** Default chip: the first size that has any rows, so a 12"-only press opens

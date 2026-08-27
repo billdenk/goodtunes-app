@@ -284,7 +284,11 @@ export function seedQuoteFlatRows(labels: LabelsComponentConfig): PricingRow[] {
 }
 export function rowHasAnyPrice(r: PricingRow): boolean {
   if (r.priceCents != null) return true;
-  return Object.values(r.pricesBySize ?? {}).some((v) => v != null);
+  if (Object.values(r.pricesBySize ?? {}).some((v) => v != null)) return true;
+  // Imported quantity ladders count as pricing too — a ladder-only row must
+  // survive a re-sync just like a typed cell (Task #3409, PMP record lines).
+  if (Object.values(r.rungsBySize ?? {}).some((l) => (l?.length ?? 0) > 0)) return true;
+  return Object.values(r.rungsBySizeHeavy ?? {}).some((l) => (l?.length ?? 0) > 0);
 }
 
 /**
@@ -307,15 +311,25 @@ export function mergePricingRows(existing: PricingRow[], seeded: PricingRow[]): 
     }
     return bySize;
   };
+  // Ladder fields ride along with the press's typed cells: a re-sync from
+  // the vinyl config must not strip seeded rungsBySize/rungsBySizeHeavy or
+  // their provenance tag (Task #3409, PMP record lines).
+  const carryLadders = (prev: PricingRow) => ({
+    ...(prev.rungsBySize && Object.keys(prev.rungsBySize).length ? { rungsBySize: prev.rungsBySize } : {}),
+    ...(prev.rungsBySizeHeavy && Object.keys(prev.rungsBySizeHeavy).length
+      ? { rungsBySizeHeavy: prev.rungsBySizeHeavy }
+      : {}),
+    ...(prev.pricingSource ? { pricingSource: prev.pricingSource } : {}),
+  });
   const out: PricingRow[] = seeded.map((s) => {
     const prev = byKey.get(s.key);
     if (!prev) return s;
-    return { ...s, priceCents: null, pricesBySize: migrate(prev, s.sizes) };
+    return { ...s, priceCents: null, pricesBySize: migrate(prev, s.sizes), ...carryLadders(prev) };
   });
   const seededKeys = new Set(seeded.map((s) => s.key));
   for (const r of existing) {
     if (!seededKeys.has(r.key) && rowHasAnyPrice(r)) {
-      out.push({ ...r, priceCents: null, pricesBySize: migrate(r, r.sizes ?? []) });
+      out.push({ ...r, priceCents: null, pricesBySize: migrate(r, r.sizes ?? []), ...carryLadders(r) });
     }
   }
   return out;

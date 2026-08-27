@@ -21,6 +21,7 @@ import {
   SIZE_CHIPS,
   defaultSizeChip,
   groupPricingRows,
+  ladderForSize,
   priceForSize,
   pricedCountForSize,
   visibleRowsForSize,
@@ -104,6 +105,40 @@ function ColorRowLabel({ row, swatch, t }: { row: PricingRow; swatch: VinylSwatc
           {name ?? row.label}
         </span>
       )}
+    </span>
+  );
+}
+
+/** Display-only affordance for a row backed by a seeded quantity ladder
+ * (Task #3409, PMP record lines): blank cell = priced by the ladder (range
+ * shown); a typed cell overrides it, clearing falls back. Ladders are not
+ * editable here. */
+function LadderHint({
+  ladder,
+  flatCents,
+  rowKey,
+  t,
+}: {
+  ladder: { qty: number; unitCents: number }[] | null;
+  flatCents: number | null;
+  rowKey: string;
+  t: Theme;
+}) {
+  if (!ladder) return null;
+  const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+  const cents = ladder.map((r) => r.unitCents);
+  const lo = Math.min(...cents);
+  const hi = Math.max(...cents);
+  const range = lo === hi ? `${dollars(lo)}` : `${dollars(lo)}–${dollars(hi)}`;
+  const detail = ladder.map((r) => `${r.qty.toLocaleString()} → ${dollars(r.unitCents)}/unit`).join(" · ");
+  return (
+    <span
+      className="text-xs tabular-nums whitespace-nowrap"
+      style={{ color: t.faint }}
+      title={`Quantity ladder: ${detail}${flatCents != null ? " — overridden by the typed price" : ""}`}
+      data-testid={`ladder-hint-${rowKey}`}
+    >
+      {flatCents != null ? "overrides ladder" : `${range} · qty ladder`}
     </span>
   );
 }
@@ -341,6 +376,7 @@ export function PressComponentPricing({
                 <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: t.faint }}>
                   Type upcharge · per unit
                 </span>
+                <LadderHint ladder={ladderForSize(g.type, size)} flatCents={priceFor(g.type)} rowKey={g.type.key} t={t} />
                 <PriceCell rowKey={g.type.key} priceCents={priceFor(g.type)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(g.type.key, c)} />
               </div>
             </div>
@@ -352,7 +388,10 @@ export function PressComponentPricing({
                 style={{ borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }}
               >
                 <ColorRowLabel row={r} swatch={swatchByRowKey.get(r.key) ?? null} t={t} />
-                <PriceCell rowKey={r.key} priceCents={priceFor(r)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
+                <div className="flex items-center gap-3">
+                  <LadderHint ladder={ladderForSize(r, size)} flatCents={priceFor(r)} rowKey={r.key} t={t} />
+                  <PriceCell rowKey={r.key} priceCents={priceFor(r)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
+                </div>
               </div>
             ))}
           </section>
@@ -379,7 +418,10 @@ export function PressComponentPricing({
                     </span>
                   )}
                 </div>
-                <PriceCell rowKey={r.key} priceCents={priceFor(r)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
+                <div className="flex items-center gap-3">
+                  <LadderHint ladder={ladderForSize(r, size)} flatCents={priceFor(r)} rowKey={r.key} t={t} />
+                  <PriceCell rowKey={r.key} priceCents={priceFor(r)} canEdit={canEdit} t={t} onCommit={(c) => commitRow(r.key, c)} />
+                </div>
               </div>
             ))}
           </section>

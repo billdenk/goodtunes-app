@@ -113,3 +113,26 @@ test("rowHasAnyPrice: per-size or legacy value both count; empty is unpriced", (
   assert.equal(rowHasAnyPrice({ ...base, pricesBySize: { '7"': 1 } }), true);
   assert.equal(rowHasAnyPrice({ ...base, pricesBySize: { '7"': null } }), false);
 });
+
+test("rowHasAnyPrice: a quantity ladder counts as priced (standard and heavyweight)", () => {
+  const base: PricingRow = { key: "k", label: "x", detail: "", kind: "type", sizes: [], priceCents: null, pricesBySize: {} };
+  assert.equal(rowHasAnyPrice({ ...base, rungsBySize: { '12"': [{ qty: 500, unitCents: 275 }] } }), true);
+  assert.equal(rowHasAnyPrice({ ...base, rungsBySizeHeavy: { '12"': [{ qty: 500, unitCents: 375 }] } }), true);
+  assert.equal(rowHasAnyPrice({ ...base, rungsBySize: { '12"': [] } }), false);
+});
+
+test("merge: re-sync carries seeded quantity ladders and pricingSource through (matched and orphan rows)", () => {
+  const seeded = seedPricingFromVinyl(vinyl).rows;
+  const ladder = [{ qty: 500, unitCents: 275 }, { qty: 1000, unitCents: 250 }];
+  const existing: PricingRow[] = [
+    { key: "type:black", label: "Black", detail: "", kind: "type", sizes: ['7"', '10"', '12"'], priceCents: null, pricesBySize: {}, rungsBySize: { '12"': ladder }, pricingSource: "pmp-pricing-2026" },
+    // orphan (not in the re-seeded vinyl) with only a ladder must survive too
+    { key: "type:gone", label: "Retired", detail: "", kind: "type", sizes: ['12"'], priceCents: null, pricesBySize: {}, rungsBySize: { '12"': ladder } },
+  ];
+  const merged = mergePricingRows(existing, seeded);
+  const black = merged.find((r) => r.key === "type:black")!;
+  assert.deepEqual(black.rungsBySize, { '12"': ladder });
+  assert.equal(black.pricingSource, "pmp-pricing-2026");
+  const gone = merged.find((r) => r.key === "type:gone")!;
+  assert.deepEqual(gone.rungsBySize, { '12"': ladder });
+});

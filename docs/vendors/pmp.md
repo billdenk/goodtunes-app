@@ -160,3 +160,38 @@ margin columns informational. "PMP XTP - 100" is a flat $1,500 line. Note the
 sheet's line is Black/Color/Mixed/Handmade (+7" variants) — the brief's
 "Black 4 / Color 18 / Splatter 12" maps to swatch counts, sheet is the
 pricing families.
+
+### Record-line family → TYPE-row mapping (operator-approved, Aug 2026)
+
+The sheet prices records in four families; the white-label Estimates world
+prices the vinyl record line from PMP's `pricing` component TYPE rows, so the
+families are seeded as per-size quantity ladders (`rungsBySize`, source
+`pmp-pricing-2026`, marker `pmp_record_pricing_2026_v1` in
+`scripts/seed-pmp-component-pricing.ts`) onto the eight rows:
+
+| Sheet family | TYPE rows | Interpretation? |
+| --- | --- | --- |
+| **Black** | `type:black` | direct |
+| **Color** (solid single-color) | `type:color`, `type:opaque`, `type:translucent` | Opaque/Translucent under Color is **our interpretation** (both are solid single-color pours) |
+| **Mixed** (multi-color effects) | `type:splatter`, `type:splatter-4`, `type:splatter-5`, `type:mix-swirl`, `type:splatter-2-colors`, `type:black-splatter-2-colors` | Splatter 4/5, Mix/Swirl, and the two-color splatters under Mixed are **our interpretation** (all multi-color effects) |
+| **Handmade** (premium handcrafted) | `type:deed` | Deed under Handmade is **our interpretation** |
+
+Dev and prod carry different generations of PMP's color library (prod was
+operator-restructured Aug 26 2026: `color`/`mix-swirl`/`splatter-2-colors`/
+`black-splatter-2-colors` replaced `opaque`/`translucent`/`splatter-4`/`-5`/
+`deed`), so the seed matches families by **candidate key list** — absent
+candidates are fine; prod simply has no Handmade row (skipped, honest gap).
+Type rows matching no family stay unpriced/pending.
+
+Client **Price** column only (never Cost). Rungs, per unit:
+
+- **12"** — Black 250/$4.50 · 500/$2.75 · 1000/$2.50 · 5000/$2.25; Color 250/$7.00 · 500/$4.25 · 1000/$3.50 · 5000/$3.00; Mixed 250/$7.75 · 500/$5.10 · 1000/$4.00; Handmade 250/$10.00 · 500/$9.00 · 1000/$8.00
+- **7"** — Black 500/$2.50 · 1000/$2.00; Color 500/$3.50 · 1000/$3.00; Mixed 500/$4.50 · 1000/$4.00. **No 7" Handmade** — Deed stays 12"-only/unpriced in 7".
+
+Semantics in the quote pricer: an operator-typed flat cell (`pricesBySize`)
+always overrides the ladder; blank cell + ladder = priced by ladder (quantities
+between rungs snap UP to the next rung; beyond the top rung = quote required).
+180 g stays pending (the sheet has no heavyweight prices, `rungsBySizeHeavy`
+left empty). Per-color upcharges stay blank and fall through to the type row.
+Quantity snap-up is a known simplification vs Jonathan's named-block model
+above — explicit block selection is deliberately out of scope for now.

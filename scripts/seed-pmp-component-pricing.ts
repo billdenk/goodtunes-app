@@ -21,20 +21,29 @@
  * qty/unitCents (snap-up resolver); explicit-block selection is estimate-
  * builder UX to come, so nothing here may auto-reprice a chosen block.
  *
+ * RECORD-LINE LADDERS (second pass, operator-approved interpretation):
+ *   The sheet's four record families map onto PMP's vinyl TYPE pricing rows
+ *   (documented in docs/vendors/pmp.md):
+ *     Black    → type:black
+ *     Color    → type:color, type:opaque, type:translucent
+ *     Mixed    → type:splatter, type:splatter-4, type:splatter-5
+ *     Handmade → type:deed          (no 7" Handmade — Deed stays 12"-only)
+ *   Written as per-size rungsBySize quantity ladders (marker
+ *   pmp_record_pricing_2026_v1). Operator cells (pricesBySize) live in a
+ *   different field and always win at resolution time; a row that already
+ *   carries a ladder for a size is skipped, never overwritten.
+ *
  * DELIBERATELY NOT SEEDED (ambiguous — awaiting gogoods):
- *   • Record pricing (Black/Color/Mixed/Handmade + 7") — lives in the
- *     press_color_tiers catalog world; the Mixed/Handmade ↔ catalog swatch
- *     family mapping (and the brief's "Splatter = Color × 1.41" rule, which
- *     does NOT match the sheet's Mixed prices) needs confirmation.
  *   • setupRules engine values — PMP's "Color Setup 1 Color $300 / 2-3
  *     Color $200 / 4 Color $150" reads as flat-vs-per-color ambiguous; the
  *     three lines are seeded verbatim as setup-fee service items instead.
  *
- * Idempotent: marker-guarded (pmp_component_pricing_2026_v1) AND per-row
- * guarded (service items by pressId+category+label; links by
- * pressId+componentKey+optionId) — operator edits are never overwritten.
- * Missing press or missing prereq = FATAL, marker never stamped on a
- * partial run.
+ * Idempotent: marker-guarded (pmp_component_pricing_2026_v1 +
+ * pmp_record_pricing_2026_v1) AND per-row guarded (service items by
+ * pressId+category+label; links by pressId+componentKey+optionId; record
+ * ladders by per-size ladder presence) — operator edits are never
+ * overwritten. Missing press or missing prereq = FATAL, marker never
+ * stamped on a partial run.
  *
  * Dev:  npx tsx scripts/seed-pmp-component-pricing.ts
  * Prod: DATABASE_URL="$PROD_DATABASE_URL" npx tsx scripts/seed-pmp-component-pricing.ts
@@ -60,6 +69,7 @@ import {
 
 const DRY = process.argv.includes("--dry");
 const MARKER = "pmp_component_pricing_2026_v1";
+const RECORD_MARKER = "pmp_record_pricing_2026_v1";
 const SOURCE = "pmp-pricing-2026";
 // Verified present in BOTH dev and prod DBs (Aug 2026).
 const PMP_PRESS_ID = "97f5c812-63f0-4f51-ada2-092f06663856";
@@ -268,19 +278,186 @@ const LINKS: SeedLink[] = [
   { componentKey: "extras", optionId: "insertion", priceMode: "service", serviceLabel: "Insertion Fee" },
 ];
 
+// ── Record-line ladders (approved family → TYPE-row mapping) ───────────
+// Sheet record prices (client Price column), per size, in cents. The four
+// sheet families fan out onto PMP's eight vinyl TYPE rows; per-size ladders
+// land in rungsBySize (imported-fallback field — an operator cell in
+// pricesBySize always wins at resolution time, so re-runs never clobber
+// operator edits by construction; we additionally skip any row+size that
+// already carries a ladder).
+// Dev and prod carry different generations of PMP's vinyl color library
+// (prod was operator-restructured Aug 26 2026: color/mix-swirl/splatter-2-
+// colors/black-splatter-2-colors replaced opaque/translucent/splatter-4/5/
+// deed). Families therefore match by CANDIDATE key list — a candidate absent
+// from this DB's rows is fine; a family with zero matches is FATAL unless
+// marked optional (prod legitimately has no Handmade row). Type rows not
+// named by any family stay unpriced (honest pending), logged below.
+type RecordRungs = [number, number][]; // [qty, cents]
+const RECORD_FAMILIES: {
+  family: string;
+  candidateKeys: string[];
+  optional?: boolean;
+  rungs: Partial<Record<'7"' | '12"', RecordRungs>>;
+}[] = [
+  {
+    family: "Black",
+    candidateKeys: ["type:black"],
+    rungs: {
+      '12"': [[250, 450], [500, 275], [1000, 250], [5000, 225]],
+      '7"': [[500, 250], [1000, 200]],
+    },
+  },
+  {
+    // Solid single-color pours: Opaque/Translucent under Color is our
+    // approved interpretation (dev keys; prod folded both into color).
+    family: "Color",
+    candidateKeys: ["type:color", "type:opaque", "type:translucent"],
+    rungs: {
+      '12"': [[250, 700], [500, 425], [1000, 350], [5000, 300]],
+      '7"': [[500, 350], [1000, 300]],
+    },
+  },
+  {
+    // Multi-color effects: Splatter 4/5 (dev) and Mix/Swirl + the two-color
+    // splatters (prod) all read as the sheet's Mixed family.
+    family: "Mixed",
+    candidateKeys: [
+      "type:splatter",
+      "type:splatter-4",
+      "type:splatter-5",
+      "type:mix-swirl",
+      "type:splatter-2-colors",
+      "type:black-splatter-2-colors",
+    ],
+    rungs: {
+      '12"': [[250, 775], [500, 510], [1000, 400]],
+      '7"': [[500, 450], [1000, 400]],
+    },
+  },
+  {
+    // Premium handcrafted → Deed. No 7" Handmade on the sheet — Deed's 7"
+    // stays unpriced. Prod has no Deed row at all: optional, skip-with-log.
+    family: "Handmade",
+    candidateKeys: ["type:deed"],
+    optional: true,
+    rungs: {
+      '12"': [[250, 1000], [500, 900], [1000, 800]],
+    },
+  },
+];
+
+async function seedRecordLadders(pressId: string) {
+  const [marker] = (
+    await db.execute(sql`SELECT 1 FROM post_merge_data_backfills WHERE name = ${RECORD_MARKER}`)
+  ).rows;
+  if (marker) {
+    console.log(`Marker '${RECORD_MARKER}' already set — record ladders done.`);
+    return;
+  }
+
+  const [row] = await db
+    .select()
+    .from(pressComponents)
+    .where(and(eq(pressComponents.pressId, pressId), eq(pressComponents.componentKey, "pricing")));
+  if (!row) {
+    throw new Error(`PMP pricing component row not found — FATAL, not stamping '${RECORD_MARKER}'.`);
+  }
+  const config = (row.config ?? {}) as Record<string, unknown>;
+  const rows = Array.isArray((config as any).rows) ? ([...(config as any).rows] as any[]) : null;
+  if (!rows) {
+    throw new Error(`PMP pricing config has no rows array — FATAL, not stamping '${RECORD_MARKER}'.`);
+  }
+
+  let laddersWritten = 0;
+  let laddersSkipped = 0;
+  const mappedKeys = new Set<string>();
+  for (const fam of RECORD_FAMILIES) {
+    const present = fam.candidateKeys.filter((k) =>
+      rows.some((r) => r?.key === k && r?.kind === "type"),
+    );
+    if (present.length === 0) {
+      if (fam.optional) {
+        console.log(`family ${fam.family}: no matching type row in this DB — skipped (stays unpriced).`);
+        continue;
+      }
+      throw new Error(
+        `PMP family ${fam.family}: none of [${fam.candidateKeys.join(", ")}] found — FATAL, not stamping '${RECORD_MARKER}'.`,
+      );
+    }
+    for (const typeKey of present) {
+      mappedKeys.add(typeKey);
+      const idx = rows.findIndex((r) => r?.key === typeKey && r?.kind === "type");
+      const target = { ...rows[idx] };
+      const sizes: string[] = Array.isArray(target.sizes) ? target.sizes : [];
+      const rungsBySize: Record<string, { qty: number; unitCents: number }[]> = {
+        ...(target.rungsBySize ?? {}),
+      };
+      let touched = false;
+      for (const [size, pairs] of Object.entries(fam.rungs)) {
+        if (!pairs) continue;
+        // Only sizes this row is actually pressed in (Deed / Splatter 4 / 5
+        // are 12"-only; a 7" ladder there would be dead data).
+        if (sizes.length && !sizes.includes(size)) continue;
+        if (Array.isArray(rungsBySize[size]) && rungsBySize[size].length > 0) {
+          laddersSkipped++; // existing ladder (operator or prior import) — never overwrite
+          continue;
+        }
+        rungsBySize[size] = pairs.map(([qty, unitCents]) => ({ qty, unitCents }));
+        laddersWritten++;
+        touched = true;
+        console.log(
+          `${DRY ? "[dry] " : ""}${typeKey} ${size}: ${pairs.map(([q, c]) => `${q}/$${(c / 100).toFixed(2)}`).join(" · ")} (${fam.family})`,
+        );
+      }
+      if (touched) {
+        target.rungsBySize = rungsBySize;
+        target.pricingSource = SOURCE;
+        rows[idx] = target;
+      }
+    }
+  }
+  for (const r of rows) {
+    if (r?.kind === "type" && !mappedKeys.has(r.key)) {
+      console.log(`type row '${r.key}' matches no family — left unpriced (honest pending).`);
+    }
+  }
+
+  if (!DRY) {
+    await db
+      .update(pressComponents)
+      .set({ config: { ...config, rows }, updatedAt: new Date() } as any)
+      .where(eq(pressComponents.id, row.id));
+    await db.execute(
+      sql`INSERT INTO post_merge_data_backfills (name) VALUES (${RECORD_MARKER}) ON CONFLICT DO NOTHING`,
+    );
+    console.log(`record ladders: ${laddersWritten} written, ${laddersSkipped} skipped; marker '${RECORD_MARKER}' set.`);
+  } else {
+    console.log(`[dry] record ladders: ${laddersWritten} would be written, ${laddersSkipped} skipped.`);
+  }
+}
+
 async function main() {
   try {
+    const [press] = await db.select().from(manufacturers).where(eq(manufacturers.id, PMP_PRESS_ID));
+    if (!press) throw new Error(`PMP manufacturer ${PMP_PRESS_ID} not found — FATAL, not stamping.`);
+    console.log(`PMP press: ${press.id} (${press.name})`);
+
+    await seedComponentPricing(press.id);
+    await seedRecordLadders(press.id);
+  } finally {
+    await pool.end();
+  }
+}
+
+async function seedComponentPricing(pressId: string) {
+  {
     const [marker] = (
       await db.execute(sql`SELECT 1 FROM post_merge_data_backfills WHERE name = ${MARKER}`)
     ).rows;
     if (marker) {
-      console.log(`Marker '${MARKER}' already set — nothing to do.`);
+      console.log(`Marker '${MARKER}' already set — component pricing done.`);
       return;
     }
-
-    const [press] = await db.select().from(manufacturers).where(eq(manufacturers.id, PMP_PRESS_ID));
-    if (!press) throw new Error(`PMP manufacturer ${PMP_PRESS_ID} not found — FATAL, not stamping.`);
-    console.log(`PMP press: ${press.id} (${press.name})`);
 
     // ── Service items (per-item guard) ──────────────────────────────────
     let itemsInserted = 0;
@@ -292,7 +469,7 @@ async function main() {
         .from(pressServiceItems)
         .where(
           and(
-            eq(pressServiceItems.pressId, press.id),
+            eq(pressServiceItems.pressId, pressId),
             eq(pressServiceItems.category, item.category),
             eq(pressServiceItems.label, item.label),
           ),
@@ -301,7 +478,7 @@ async function main() {
       itemsInserted++;
       if (!DRY) {
         await db.insert(pressServiceItems).values({
-          pressId: press.id,
+          pressId,
           category: item.category,
           label: item.label,
           amountCents: item.amountCents,
@@ -330,7 +507,7 @@ async function main() {
       const [row] = await db
         .select()
         .from(pressComponents)
-        .where(and(eq(pressComponents.pressId, press.id), eq(pressComponents.componentKey, "pricing")));
+        .where(and(eq(pressComponents.pressId, pressId), eq(pressComponents.componentKey, "pricing")));
       if (row) {
         await db
           .update(pressComponents)
@@ -341,7 +518,7 @@ async function main() {
           .where(eq(pressComponents.id, row.id));
       } else {
         await db.insert(pressComponents).values({
-          pressId: press.id,
+          pressId,
           componentKey: "pricing",
           config: { componentLadders: blob },
         } as any);
@@ -355,7 +532,7 @@ async function main() {
     const services = await db
       .select()
       .from(pressServiceItems)
-      .where(eq(pressServiceItems.pressId, press.id));
+      .where(eq(pressServiceItems.pressId, pressId));
     const serviceByLabel = new Map(
       services.filter((s) => !s.archivedAt).map((s) => [s.label, s] as const),
     );
@@ -368,7 +545,7 @@ async function main() {
         .from(pressComponentPriceLinks)
         .where(
           and(
-            eq(pressComponentPriceLinks.pressId, press.id),
+            eq(pressComponentPriceLinks.pressId, pressId),
             eq(pressComponentPriceLinks.componentKey, link.componentKey),
             eq(pressComponentPriceLinks.optionId, link.optionId),
           ),
@@ -408,7 +585,7 @@ async function main() {
       linksInserted++;
       if (!DRY) {
         await db.insert(pressComponentPriceLinks).values({
-          pressId: press.id,
+          pressId,
           componentKey: link.componentKey,
           optionId: link.optionId,
           priceMode: link.priceMode,
@@ -426,8 +603,6 @@ async function main() {
       );
       console.log(`marker '${MARKER}' set.`);
     }
-  } finally {
-    await pool.end();
   }
 }
 

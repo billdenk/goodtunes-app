@@ -6,9 +6,11 @@ import {
   SIZE_CHIPS,
   defaultSizeChip,
   groupPricingRows,
+  ladderForSize,
   priceForSize,
   pricedCountForSize,
   rowInSize,
+  rowPricedForSize,
   visibleRowsForSize,
 } from "./pricingView";
 import type { PricingRow } from "@shared/pressComponents";
@@ -67,6 +69,40 @@ test("pricedCountForSize counts only the selected size's visible priced cells", 
   assert.equal(pricedCountForSize(rows, '12"'), 2);
   // 10": nothing priced under 10"
   assert.equal(pricedCountForSize(rows, '10"'), 0);
+});
+
+// ── Ladder-priced rows (Task #3409, PMP record lines) ─────────────────────
+const ladderRow = row({
+  key: "type:deed",
+  kind: "type",
+  sizes: ['7"', '12"'],
+  rungsBySize: { '12"': [{ qty: 1000, unitCents: 800 }, { qty: 250, unitCents: 1000 }] },
+});
+
+test("ladderForSize: vinyl rows strictly per-size, rungs sorted by qty", () => {
+  assert.deepEqual(ladderForSize(ladderRow, '12"'), [
+    { qty: 250, unitCents: 1000 },
+    { qty: 1000, unitCents: 800 },
+  ]);
+  assert.equal(ladderForSize(ladderRow, '7"'), null); // no 7" Handmade — stays unpriced
+  assert.equal(ladderForSize(row({ kind: "type" }), '12"'), null);
+  assert.equal(ladderForSize(row({ kind: "type", rungsBySize: { '12"': [] } }), '12"'), null);
+});
+
+test("ladderForSize: flat rows show any size's ladder everywhere (mirrors priceForSize)", () => {
+  const flat = row({ key: "svc", kind: "service", rungsBySize: { '12"': [{ qty: 500, unitCents: 100 }] } });
+  assert.deepEqual(ladderForSize(flat, '7"'), [{ qty: 500, unitCents: 100 }]);
+});
+
+test("rowPricedForSize + counter: blank cell + ladder counts as priced; typed cell still wins", () => {
+  assert.equal(rowPricedForSize(ladderRow, '12"'), true);
+  assert.equal(rowPricedForSize(ladderRow, '7"'), false);
+  assert.equal(priceForSize(ladderRow, '12"'), null); // cell stays blank/editable
+  const withRows = [...rows, ladderRow];
+  // 12": splatter(250) + legacy-nosizes(5) + deed ladder = 3 of 6 visible
+  assert.equal(pricedCountForSize(withRows, '12"'), 3);
+  // 7": deed has no 7" ladder — unchanged
+  assert.equal(pricedCountForSize(withRows, '7"'), 2);
 });
 
 test("defaultSizeChip picks the first chip with rows; 12\" fallback when empty", () => {

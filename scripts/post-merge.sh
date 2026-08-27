@@ -12897,9 +12897,10 @@ seed_component_price_links dev  "${DATABASE_URL:-}"
 seed_component_price_links prod "${PROD_DATABASE_URL:-}"
 
 # ── PMP component pricing from the 2026 sheet (Aug 26 2026, gogoods) ───────
-# Marker-guarded (pmp_component_pricing_2026_v1) + per-row guarded; ladders,
-# service items, and price links for PMP only. Fresh clones need it; dev+prod
-# already stamped by hand Aug 26 2026.
+# Marker-guarded (pmp_component_pricing_2026_v1 for service items/ladder blob/
+# price links, stamped by hand Aug 26 2026; pmp_record_pricing_2026_v1 for the
+# record-line rungsBySize ladders on the eight vinyl TYPE rows, stamped by
+# hand Aug 26 2026 — Task #3409) + per-row guarded. Fresh clones need both.
 seed_pmp_component_pricing() {
   local label="$1" url="$2"
   if [ -z "$url" ]; then
