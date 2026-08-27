@@ -2473,10 +2473,16 @@ function Gate({ on, children }: { on: boolean; children: ReactNode }) {
 }
 
 // Donor split-grid section: sticky preview left, pickers right.
+// Sticky offset (Task #3402): the builder scrolls inside the portal's inner
+// scroll container, which STARTS below the 56px app header — so offsets are
+// measured from under the header, not the window top. The mock's 148 assumed
+// window scrolling (56 header + 48 strip + 44 gap); here the header is outside
+// the scrollport, so the same visual position is 48 (strip) + 44 = 92. The
+// per-section scrollMarginTop values below follow the same −56 correction.
 function SplitSection({ left, right }: { left: ReactNode; right: ReactNode }) {
   return (
     <div style={{ marginTop: 40, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 520px', gap: 56, alignItems: 'start' }}>
-      <div className="sticky" style={{ top: 148 }}>
+      <div className="sticky" style={{ top: 92 }}>
         <div className="flex flex-col items-center">{left}</div>
       </div>
       <div className="min-w-0">{right}</div>
@@ -2609,7 +2615,12 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   const persistChainRef = useRef<Promise<{ id?: string } | null>>(Promise.resolve(null));
 
   // Collapse: the type grid folds to a summary row once a color is picked.
-  const [typeOpen, setTypeOpen] = useState(true);
+  // State-derived (Ruby canon, Task #3402): the grid renders open only while
+  // no type/color is picked yet (`picked('ctype')` false) OR after an explicit
+  // "Change type". Initializing false means a HYDRATED saved estimate (color
+  // already picked, `done` restored) folds to the summary row too — not just
+  // a live pick, which also sets this false on every select.
+  const [typeOpen, setTypeOpen] = useState(false);
 
   // ── Apple-style progressive steps — each unlocks after the one before ──
   const [done, setDone] = useState<Set<StepKey>>(() => new Set());
@@ -2969,7 +2980,11 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   }, [canEdit, builderState, build, sizeId, totalCents, pricingPending, clientName, pressId]);
 
   return (
-    <div className="q-create-root font-sans" style={{ color: INK }}>
+    // paddingBottom (Task #3402): the qty→save auto-scroll used to clamp at the
+    // scroller's bottom before step-save reached its scroll-margin rest, leaving
+    // the qty preview column's tail sliced behind the summary strip. Enough
+    // end-of-page air lets every scrollMarginTop be honored.
+    <div className="q-create-root font-sans" style={{ color: INK, paddingBottom: 112 }}>
       <style>{Q_THEME_CSS}</style>
       {/* Frosted running summary — pinned under the top bar */}
       <div className="sticky top-0 z-20 flex items-center justify-between gap-4"
@@ -3117,7 +3132,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
 
                 {/* Discs — 1LP..4LP (Bill, Aug 16 2026: "we forgot 1LP, 2LP, 3LP, 4LP") */}
                 <Gate on={canDo('discs')}>
-                <section id="step-discs" style={{ scrollMarginTop: 120 }}>
+                <section id="step-discs" style={{ scrollMarginTop: 64 }}>
                   <StepHeading lead="How many discs." rest="Singles to box sets." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Each disc adds a pressed record and its label. The jacket holds them all.
@@ -3147,7 +3162,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
 
                 {/* Weight */}
                 <Gate on={canDo('weight')}>
-                <section id="step-weight" style={{ scrollMarginTop: 120 }}>
+                <section id="step-weight" style={{ scrollMarginTop: 64 }}>
                   <StepHeading lead="Pick a weight." rest="How heavy it presses." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     {VINYL_WEIGHTS.length} weights available from {pressBrandName}.
@@ -3177,7 +3192,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                 {/* Type — donor "What kind of vinyl?" row.
                     Collapses to a summary row once a color is picked; Change re-expands. */}
                 <Gate on={canDo('ctype')}>
-                <section id="step-ctype" style={{ scrollMarginTop: 120 }}>
+                <section id="step-ctype" style={{ scrollMarginTop: 64 }}>
                   {picked('ctype') && !typeOpen ? (
                     <>
                       <StepHeading lead="Pick a type." rest="What kind of vinyl?" />
@@ -3202,7 +3217,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                           style={{ color: BLUE, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                           data-testid="button-change-type"
                         >
-                          Change
+                          Change type
                         </button>
                       </div>
                     </>
@@ -3244,7 +3259,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
 
                 {/* Color — the looks within the chosen type */}
                 <Gate on={canDo('color')}>
-                <section id="step-color" style={{ scrollMarginTop: 120 }}>
+                <section id="step-color" style={{ scrollMarginTop: 64 }}>
                   <StepHeading lead="Pick a color." rest="From your catalog." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     {picked('ctype')
@@ -3269,7 +3284,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
         </section>
 
         {/* ═══ 2 · CENTER LABELS — right after the vinyl itself (Bill): the label is part of the pressed record ═══ */}
-        <section id="step-labels" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+        <section id="step-labels" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 48 }}>
           <Gate on={canDo(is7 ? 'hole' : 'label')}>
           <SplitSection
             left={
@@ -3349,7 +3364,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
         </section>
 
         {/* ═══ 3 · JACKET (Choose your jacket) ═══ */}
-        <section id="step-jacket" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+        <section id="step-jacket" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 48 }}>
           <Gate on={canDo('jacket')}>
           <SplitSection
             left={
@@ -3392,7 +3407,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
         </section>
 
         {/* ═══ 4 · INNER SLEEVE (Choose your inner sleeve) ═══ */}
-        <section id="step-sleeve" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+        <section id="step-sleeve" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 48 }}>
           <Gate on={canDo('sleeve')}>
           <SplitSection
             left={
@@ -3449,7 +3464,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
         {/* ═══ 5 · INSERTS (Choose your inserts) — hidden entirely when the
             size has no real insert styles (skipStep auto-resolves to None) ═══ */}
         {insertsAvailable && (
-        <section id="step-inserts" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+        <section id="step-inserts" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 48 }}>
           <Gate on={canDo('insert')}>
           <SplitSection
             left={
@@ -3498,7 +3513,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
         )}
 
         {/* ═══ 6 · STICKERS ═══ */}
-        <section id="step-stickers" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+        <section id="step-stickers" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 48 }}>
           <Gate on={canDo('sticker')}>
           <SplitSection
             left={
@@ -3571,7 +3586,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
             record first, then watch the run size drop the per-record price.
             Album on the left (jacket closed, inner sleeve peeking), the
             original quantity cards on the right (Bill feedback, Aug 16). */}
-        <section id="step-qty" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+        <section id="step-qty" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 48 }}>
           <Gate on={canDo('qty')}>
           <SplitSection
             left={
@@ -3723,7 +3738,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
         </section>
 
         {/* ═══ 7 · SAVE ═══ */}
-        <section id="step-save" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+        <section id="step-save" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 48 }}>
           <Gate on={allDone}>
           <div className="rounded-3xl bg-white" style={{ marginTop: 28, padding: 32, border: `1px solid ${HAIRLINE}` }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 32, alignItems: 'start' }}>
