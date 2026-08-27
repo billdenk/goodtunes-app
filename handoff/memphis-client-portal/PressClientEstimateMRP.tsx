@@ -21,16 +21,30 @@
 //   mocked here as Alma Rivera).
 // - Action at the bottom is a placeholder "Start this project" (exact
 //   action TBD with Bill).
-// Self-contained per handoff rules. Numbers from the MRP PDF at 1,000 units;
-// other tiers scale with the standard qty curve.
+// Self-contained per handoff rules. Frozen defaults land on the estimate
+// exactly: 071526-02, 1,000 units, $8,375.00 (subtotal $7,080.00 + setup
+// $1,295.00). Other tiers scale with the standard qty curve.
+//
+// Otis briefs (Aug 2026):
+//  • Brief 2 — free quantity entry: any run 100–5,000 in steps of 100 via a
+//    seventh "Your quantity" card with stepper + typing; it prices at the
+//    break it has EARNED (700 → 500-break per-unit, 1,400 → 1,000-break).
+//  • Brief 4 — next-price-break callout: one quiet word+icon line by the
+//    total showing the honest per-record delta at the next break; click
+//    applies it. Hidden at 5,000 or exactly on the top break.
+//  • Brief 3 — metalwork cutting selector: radio-card row (Lacquers cut by
+//    MRP [Press default] / DMM / Lacquers you supply) with honest setup
+//    deltas; the estimate reprices and flashes on change. Default holds the
+//    frozen totals.
 
-import { useCallback, useMemo, useRef, useState } from 'react';
-import californialandCover from './assets/californialand-cover.jpg';
-import rubyVinylPhoto from './assets/mrp-ruby-translucent.png';
-import innerSleeveArt from './assets/californialand-inner-sleeve.png';
-import niinaLabelArt from './assets/niina-label-1.png';
-import mrpLogoAsset from './assets/mrp-logo.svg';
-import brandonPhoto from './assets/brandon-seavers.png';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import californialandCover from '../assets/californialand-cover.jpg';
+import rubyVinylPhoto from '../assets/mrp-ruby-translucent.png';
+import innerSleeveArt from '../assets/californialand-inner-sleeve.png';
+import niinaLabelArt from '../assets/niina-label-1.png';
+import mrpLogoAsset from '../assets/mrp-logo.svg';
+import brandonPhoto from '../assets/brandon-seavers.png';
+import goodtunesLogo from '../assets/goodtunes-logo.png';
 
 // ─── Mock data (from the MRP estimate PDF) ───────────────────────────
 const MOCK_CLIENT_FIRST = 'Niina';
@@ -44,34 +58,113 @@ const MOCK_JOB = 'Californialand';
 const MOCK_SPEC = '12" · 140g · Ruby translucent · 1 LP';
 
 // Per-unit line items at the 1,000-unit tier (PDF "DESCRIPTION" block).
+// Anchored so 1,000 units subtotals $7,080.00 → +$1,295.00 setup = the
+// frozen $8,375.00 estimate total (071526-02).
 const UNIT_LINES = [
-  { id: 'vinyl',    name: '12" LP · 140g color vinyl',            note: 'Translucent ruby, single LP',                 at1000: 2.30 },
-  { id: 'labels',   name: 'Center labels · full color',           note: 'Printed before pressing',                     at1000: 0.25 },
-  { id: 'sleeve',   name: 'Inner sleeve · full color',            note: '100# gloss text',                             at1000: 0.81 },
-  { id: 'jacket',   name: 'Single jacket · full color',           note: '20pt board, semi-gloss',                      at1000: 0.81 },
-  { id: 'insert',   name: 'Insert · 12"×12" full color',          note: '100# cover',                                  at1000: 0.67 },
-  { id: 'assembly', name: 'Assembly',                             note: 'Insert placed on top before shrink',          at1000: 0.36 },
-  { id: 'shrink',   name: 'Shrinkwrap',                           note: 'Retail-ready seal',                           at1000: 0.17 },
+  { id: 'vinyl',    name: '12" LP · 140g color vinyl',            note: 'Translucent ruby, single LP',                 at1000: 3.05 },
+  { id: 'labels',   name: 'Center labels · full color',           note: 'Printed before pressing',                     at1000: 0.30 },
+  { id: 'sleeve',   name: 'Inner sleeve · full color',            note: '100# gloss text',                             at1000: 0.95 },
+  { id: 'jacket',   name: 'Single jacket · full color',           note: '20pt board, semi-gloss',                      at1000: 1.05 },
+  { id: 'insert',   name: 'Insert · 12"×12" full color',          note: '100# cover',                                  at1000: 0.75 },
+  { id: 'assembly', name: 'Assembly',                             note: 'Insert placed on top before shrink',          at1000: 0.55 },
+  { id: 'shrink',   name: 'Shrinkwrap',                           note: 'Retail-ready seal',                           at1000: 0.43 },
 ];
 
-// Fixed setup costs (PDF "FIXED SETUP COSTS" block) — quantity-independent.
-const SETUP_LINES = [
-  { id: 'cutting',  name: 'Lacquer cutting',   amount: 650 },
-  { id: 'plating',  name: 'Lacquer plating',   amount: 375 },
+// ─── Metalwork cutting (Brief 3) ─────────────────────────────────────
+// How masters get cut. The setup block's cutting + plating lines swap per
+// choice; everything else in setup (test, stampers, color) is constant.
+// Default = "Lacquers cut by Memphis Record Pressing" and MUST keep the
+// frozen $1,295.00 setup (cutting $650.00 + plating $375.00 + $270.00 other).
+const SETUP_CONSTANT = [
   { id: 'test',     name: 'Test pressing',     amount: 175, note: 'Includes 2-day domestic shipping' },
   { id: 'stampers', name: 'Stampers',          amount: 0 },
   { id: 'color',    name: 'Color setup fee',   amount: 95 },
 ];
-const SETUP_TOTAL = SETUP_LINES.reduce((a, l) => a + l.amount, 0);
+const SETUP_CONSTANT_TOTAL = SETUP_CONSTANT.reduce((a, l) => a + l.amount, 0); // 270
 
+type MetalworkId = 'lacquer-mrp' | 'dmm' | 'lacquer-supplied';
+const METALWORK: {
+  id: MetalworkId;
+  name: string;
+  blurb: string;
+  isDefault?: boolean;
+  cutting: number;
+  cuttingLabel: string;
+  plating: number;
+  platingLabel: string;
+}[] = [
+  {
+    id: 'lacquer-mrp',
+    name: 'Lacquers cut by Memphis Record Pressing',
+    blurb: 'We cut the lacquers in-house, then plate them — the standard path.',
+    isDefault: true,
+    cutting: 650, cuttingLabel: 'Lacquer cutting',
+    plating: 375, platingLabel: 'Lacquer plating',
+  },
+  {
+    id: 'dmm',
+    name: 'DMM (direct metal mastering)',
+    blurb: 'Cut straight into copper — no lacquer step, a touch lower on cutting.',
+    cutting: 525, cuttingLabel: 'DMM cutting',
+    plating: 375, platingLabel: 'DMM plating',
+  },
+  {
+    id: 'lacquer-supplied',
+    name: 'Lacquers you supply',
+    blurb: 'You send finished lacquers; we skip cutting and only plate them.',
+    cutting: 0, cuttingLabel: 'Lacquer cutting (you supply)',
+    plating: 375, platingLabel: 'Lacquer plating',
+  },
+];
+const metalworkById = (id: MetalworkId) => METALWORK.find((m) => m.id === id) ?? METALWORK[0];
+// The setup lines for a given cutting choice — cutting + plating swap, rest holds.
+const setupLinesFor = (id: MetalworkId) => {
+  const m = metalworkById(id);
+  return [
+    { id: 'cutting', name: m.cuttingLabel, amount: m.cutting },
+    { id: 'plating', name: m.platingLabel, amount: m.plating },
+    ...SETUP_CONSTANT,
+  ];
+};
+const setupTotalFor = (id: MetalworkId) => {
+  const m = metalworkById(id);
+  return m.cutting + m.plating + SETUP_CONSTANT_TOTAL;
+};
+const DEFAULT_SETUP_TOTAL = setupTotalFor('lacquer-mrp'); // 1295 — frozen
+
+// ─── Free quantity entry (Brief 2) ───────────────────────────────────
+// The six loved tier cards ARE the price breaks. Any run 100–5,000 in steps
+// of 100 prices at the break it has EARNED (highest break ≤ qty): 700 → the
+// 500-break per-unit, 1,400 → the 1,000-break per-unit.
 const QUANTITIES = [100, 300, 500, 1000, 2000, 3000];
+const QTY_MIN = 100;
+const QTY_MAX = 5000;
+const QTY_STEP = 100;
+const snapQty = (n: number) => {
+  const clamped = Math.min(QTY_MAX, Math.max(QTY_MIN, n));
+  return Math.round(clamped / QTY_STEP) * QTY_STEP;
+};
+// The price break a quantity has earned = highest tier ≤ qty.
+const earnedBreak = (qty: number) => {
+  let b = QUANTITIES[0];
+  for (const q of QUANTITIES) if (qty >= q) b = q;
+  return b;
+};
+// The next break up from the earned one (Brief 4), or null at/above the top.
+const nextBreak = (qty: number): number | null => {
+  const earned = earnedBreak(qty);
+  const idx = QUANTITIES.indexOf(earned);
+  return idx >= 0 && idx < QUANTITIES.length - 1 ? QUANTITIES[idx + 1] : null;
+};
 
 // Same discount curve as the quote builder, anchored so 1,000 = PDF prices.
 function tierScale(qty: number): number {
   const raw = qty <= 100 ? 1.0 : qty <= 300 ? 0.88 : qty <= 500 ? 0.8 : qty <= 1000 ? 0.7 : qty <= 2000 ? 0.62 : 0.55;
   return raw / 0.7; // anchor: 1,000-unit tier matches the PDF exactly
 }
-const unitLineAt = (at1000: number, qty: number) => at1000 * tierScale(qty);
+// Per-record cost is computed at the EARNED break, not the raw quantity, so a
+// 700-unit run honestly shows the 500-break per-unit price.
+const unitLineAt = (at1000: number, qty: number) => at1000 * tierScale(earnedBreak(qty));
 const unitCostAt = (qty: number) => UNIT_LINES.reduce((a, l) => a + unitLineAt(l.at1000, qty), 0);
 
 const money = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -202,10 +295,174 @@ const confirmBtn = (earned: boolean): React.CSSProperties => ({
   color: earned ? '#1d1d1f' : SUBINK,
 });
 
+const GOLD = '#D9C153'; // MRP's site gold (Andrew, Aug 21 2026)
+
+const MRP_FOOTER_COLS: { head: string; rows: string[] }[] = [
+  { head: 'Most used links', rows: ['Vinyl Records', 'Deluxe Vinyl Packaging', 'Short-Run Record Pressing', 'Forms & Templates', 'Audio File Prep', 'Art File Prep'] },
+  { head: 'Contact us', rows: ['Phone: (901) 821-9099', 'Email: help@memphisrecordpressing.com', 'Careers'] },
+  { head: 'Privacy & security', rows: ['Privacy Notice'] },
+  { head: 'Locations', rows: ['Pressing & Customer Service: 3015 Brother Blvd, Bartlett, TN 38133', 'Packaging & Shipping: 7625 Appling Center Dr #103, Memphis, TN 38133'] },
+];
+
+// Inside the app the footer reduces to just the black bar — Memphis and us.
+// The full column footer belongs to the site/login only (Bill, Aug 21 2026).
+function MrpSiteFooter({ compact = false }: { compact?: boolean }) {
+  return (
+    <footer style={{ background: '#111112', color: '#f5f5f7', padding: compact ? '18px 26px' : '44px 26px 36px' }}>
+      {!compact && (
+      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 30 }}>
+        {MRP_FOOTER_COLS.map((c) => (
+          <div key={c.head}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: GOLD }}>{c.head}</div>
+            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
+              {c.rows.map((r) => (
+                <div key={r} style={{ fontSize: 12.5, color: 'rgba(245,245,247,0.75)', lineHeight: 1.55 }}>{r}</div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+      )}
+      <div style={{ maxWidth: 1080, margin: compact ? '0 auto' : '34px auto 0', paddingTop: compact ? 0 : 18, borderTop: compact ? 'none' : '1px solid rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(245,245,247,0.55)' }}>
+        {/* brightness(0) first forces true white — plain invert leaves a
+            non-brand tint on non-pure-black pixels (Bill caught it twice). */}
+        <img src={mrpLogoAsset} alt="" aria-hidden style={{ width: 26, height: 26, filter: 'brightness(0) invert(1)', opacity: 0.85 }} />
+        Memphis Record Pressing · memphisrecordpressing.com
+        <span style={{ flex: 1 }} />
+        {/* Powered by GoodTunes® — right side, under the rule (Bill,
+            Aug 21 2026). White logo via CSS invert (only dark assets exist). */}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)' }}>
+          Powered by
+          <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 15, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.85 }} />
+        </span>
+      </div>
+    </footer>
+  );
+}
+
+const MRP_NAV = ['Home', 'About MRP', 'Products', 'Resources', 'MRP TV', 'MRP University', 'News', 'Shop', 'Contact'];
+
+function MrpSiteHeader({ signedIn }: { signedIn: boolean }) {
+  return (
+    <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
+      {/* Utility bar */}
+      {/* Utility bar — values pulled from their live stylesheet (Bill, Aug 21
+          2026): 40px row, 12px / 400 / 0.07em body type, #333 ink. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: 40, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}`, fontSize: 12, fontWeight: 400, letterSpacing: '0.07em', color: '#333333' }}>
+        <span>Let&rsquo;s talk about your project</span>
+        <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: HAIRLINE }} />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: '#333333' }}>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <rect x="2" y="4.5" width="20" height="15" rx="2" />
+            <path d="M2.5 6.5L12 13l9.5-6.5" />
+          </svg>
+          help@memphisrecordpressing.com
+        </span>
+        <span style={{ flex: 1 }} />
+        {/* Their real social glyphs (Instagram · Facebook · YouTube), gold like
+            the live site — front-door chrome only. Signed in, they drop away
+            so nothing pulls off the page's intent (Bill, Aug 21 2026). */}
+        {!signedIn && (
+          /* Sized + celled like the live site: larger glyphs, hairline
+             dividers between each (Bill, Aug 21 2026 screenshot). */
+          <span style={{ display: 'flex', alignItems: 'stretch', alignSelf: 'stretch' }} aria-hidden>
+            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(0,0,0,0.12)' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8">
+                <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" />
+                <circle cx="12" cy="12" r="4.2" />
+                <circle cx="17.6" cy="6.4" r="1.2" fill={GOLD} stroke="none" />
+              </svg>
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(0,0,0,0.12)' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={GOLD}>
+                <path d="M14 22v-8h2.8l.5-3.4H14V8.4c0-1 .3-1.7 1.7-1.7h1.8V3.6c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v2.6H7.6V14h2.9v8h3.5z" />
+              </svg>
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(0,0,0,0.12)' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={GOLD}>
+                <path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.5 12 4.5 12 4.5s-7 0-8.9.6A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12 31 31 0 0 0 1 16.8a3 3 0 0 0 2.1 2.1c1.9.6 8.9.6 8.9.6s7 0 8.9-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 23.5 12 31 31 0 0 0 23 7.2zM9.8 15.3V8.7l6 3.3-6 3.3z" />
+              </svg>
+            </span>
+          </span>
+        )}
+      </div>
+      {/* Poppins rides with the header so both stages get the real MRP face. */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+        /* Their site's hover: ink darkens and the gold rule draws in
+           left-to-right — every item, flyout or not (Bill, Aug 21 2026). */
+        .mrp-nav-link { position: relative; transition: color 0.2s ease; }
+        .mrp-nav-link::after {
+          content: ''; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px;
+          background: ${GOLD}; transform: scaleX(0); transform-origin: left center;
+          transition: transform 0.25s ease;
+        }
+        .mrp-nav-link:hover { color: #111111; }
+        .mrp-nav-link:hover::after, .mrp-nav-link.is-active::after { transform: scaleX(1); }
+      `}</style>
+      {/* Main nav — logo left, links, gold squared button (their site pattern) */}
+      {/* Sizing matched to the live site (Bill, Aug 21 2026): taller row,
+          smaller lighter gray nav with wider tracking and roomier gaps.
+          The gold estimate button stays exactly as it was. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 34, height: 80, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}` }}>
+        <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 60, height: 60 }} />
+        {/* Nav — real values from their stylesheet (Bill, Aug 21 2026):
+            12px / 600 / 0.05em uppercase, centered; resting ink is the
+            skin's rgba(51,51,51,0.5) — the mid gray, NOT bold #333 (that
+            was the top bar's rule). Hover goes near-black on their site. */}
+        <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 30, fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+          {/* "Sign in" rides last and wears the site's active treatment —
+              near-black with the gold rule under it (Bill, Aug 21 2026). */}
+          {[...MRP_NAV, 'Sign in'].map((l) => {
+            const active = l === 'Sign in';
+            return (
+              <a
+                key={l}
+                href="#"
+                onClick={(e) => e.preventDefault()}
+                className={`mrp-nav-link${active ? ' is-active' : ''}`}
+                style={{
+                  color: active ? '#111111' : 'rgba(51,51,51,0.5)', textDecoration: 'none',
+                  fontWeight: active ? 700 : undefined,
+                }}
+              >
+                {l}
+              </a>
+            );
+          })}
+        </nav>
+        {/* Their site's gold rectangle — squared, not our pill. Shell-only
+            chrome for visitors arriving from the main site; once signed in
+            it steps aside for the account chip (Bill, Aug 21 2026). */}
+        {!signedIn && (
+          <span style={{ padding: '11px 20px', background: GOLD, color: INK, fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
+            Get an estimate
+          </span>
+        )}
+        {signedIn && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: SUBINK }}>
+            <span style={{ width: 28, height: 28, borderRadius: '50%', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: INK }}>
+              N
+            </span>
+            {MOCK_CLIENT_FIRST}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function PressClientEstimateMRP() {
   const [qty, setQty] = useState(1000);
+  // Free-entry field (Brief 2) — string so typing can be partial; commits on
+  // blur/Enter. The card is a first-class companion to the six tier cards.
+  const [qtyInput, setQtyInput] = useState('1000');
   const [setupOpen, setSetupOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Metalwork cutting choice (Brief 3) — default keeps the frozen setup.
+  const [metalwork, setMetalwork] = useState<MetalworkId>('lacquer-mrp');
+  const [setupFlash, setSetupFlash] = useState(false);
+  const flashTimer = useRef<number | null>(null);
   // Wired actions (Bill, Aug 18 2026)
   const [shareOpen, setShareOpen] = useState(false);
   const [shareName, setShareName] = useState('');
@@ -224,6 +481,25 @@ export default function PressClientEstimateMRP() {
   const [hookOpen, setHookOpen] = useState(false);
   const spin = useSpin();
 
+  // ── Sticky CTA guard (Bill, Aug 24 2026) ──
+  // Repeat the ONE filled action in the sticky bar, but only once the page's
+  // original "Start this project" button has scrolled off-screen — so exactly
+  // one filled accent action is visible at any moment. Watched with an
+  // IntersectionObserver; the sticky copy fades/slides in (reduced-motion
+  // honored via CSS below).
+  const startBtnRef = useRef<HTMLButtonElement | null>(null);
+  const [showStickyCta, setShowStickyCta] = useState(false);
+  useEffect(() => {
+    const el = startBtnRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      ([entry]) => setShowStickyCta(!entry.isIntersecting),
+      { threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
   const shareEarned = /.+@.+\..+/.test(shareEmail.trim());
   const closeShare = () => { setShareOpen(false); setShareSent(false); setShareName(''); setShareEmail(''); };
   const closeAsk = () => { setAskOpen(false); setAskSent(false); setAskMsg(''); };
@@ -233,12 +509,124 @@ export default function PressClientEstimateMRP() {
   };
   const firstName = MOCK_PREPARED_BY.split(' ')[0];
 
+  // Commit a free-entry quantity: snap to steps of 100, clamp 100–5,000,
+  // sync every price on the page exactly as a tier click does.
+  const commitQty = useCallback((raw: string) => {
+    const parsed = parseInt(raw.replace(/[^0-9]/g, ''), 10);
+    const next = Number.isFinite(parsed) ? snapQty(parsed) : qty;
+    setQty(next);
+    setQtyInput(String(next));
+  }, [qty]);
+  // Tier clicks flow through the same setter so the free-entry field mirrors.
+  const applyQty = useCallback((next: number) => {
+    const snapped = snapQty(next);
+    setQty(snapped);
+    setQtyInput(String(snapped));
+  }, []);
+  const stepQty = useCallback((dir: 1 | -1) => {
+    applyQty(qty + dir * QTY_STEP);
+  }, [qty, applyQty]);
+
+  // Metalwork change → reprice + a brief flash on the setup block (Brief 3).
+  const chooseMetalwork = useCallback((id: MetalworkId) => {
+    setMetalwork(id);
+    setSetupFlash(true);
+    if (flashTimer.current !== null) window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setSetupFlash(false), 900);
+  }, []);
+
   const unitCost = useMemo(() => unitCostAt(qty), [qty]);
   const subtotal = unitCost * qty;
-  const total = subtotal + SETUP_TOTAL;
+  const setupTotal = useMemo(() => setupTotalFor(metalwork), [metalwork]);
+  const setupLines = useMemo(() => setupLinesFor(metalwork), [metalwork]);
+  const setupDelta = setupTotal - DEFAULT_SETUP_TOTAL; // vs. press default
+  const total = subtotal + setupTotal;
+
+  // Brief 4 — next-price-break callout. The delta is the honest per-record
+  // drop the customer would earn by moving up to the next break.
+  const nextBrk = nextBreak(qty);
+  const perRecordDrop = nextBrk !== null ? unitCost - unitCostAt(nextBrk) : 0;
+  const showBreakCallout = nextBrk !== null && perRecordDrop > 0.005;
 
   return (
     <div style={{ minHeight: '100vh', background: CANVAS, color: INK, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif" }}>
+      {/* Site header — the login page’s header rides the estimate too (Bill, Aug 26 2026). */}
+      <MrpSiteHeader signedIn={false} />
+
+
+      {/* ── Sticky spec bar (Bill, Aug 24 2026): Memphis logo top-left like the
+          sibling MRP client mocks — 56px, hairline bottom border, frosted
+          backdrop-blur — carrying a LIVE spec + price summary so the numbers
+          stay visible while the client reads the detail below. Specs are a
+          compact interpunct run; per-unit + total are right-aligned and move
+          in lockstep with the page's qty/metalwork state. The page's one
+          filled action ("Start this project") stays below; the bar is quiet
+          and action-free (canon: no second filled action). ── */}
+      <header
+        data-testid="estimate-sticky-bar"
+        style={{
+          position: 'sticky', top: 0, zIndex: 40, height: 56, display: 'flex',
+          alignItems: 'center', justifyContent: 'space-between', gap: 16,
+          padding: '0 20px', borderBottom: `1px solid ${HAIRLINE}`,
+          background: 'rgba(255,255,255,0.72)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+        }}
+      >
+        {/* Memphis logo + live specs — one quiet interpunct run */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+          <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 34, height: 34, flexShrink: 0 }} />
+          <div
+            data-testid="estimate-sticky-specs"
+            style={{ fontSize: 12.5, color: SUBINK, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums' }}
+          >
+            {MOCK_SPEC} · {qty.toLocaleString()} units
+          </div>
+        </div>
+        {/* Right cluster — live price sits LEFT of the CTA; the filled action
+            appears only once the original has scrolled off (canon guard). */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexShrink: 0 }}>
+          {/* Live price — per-unit then total, updates in lockstep */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, fontVariantNumeric: 'tabular-nums' }}>
+            <span data-testid="estimate-sticky-unit" style={{ fontSize: 12.5, color: SUBINK, whiteSpace: 'nowrap' }}>
+              {money2(unitCost)} /unit
+            </span>
+            <span aria-hidden style={{ color: HAIRLINE }}>·</span>
+            <span data-testid="estimate-sticky-total" style={{ fontSize: 15, fontWeight: 700, color: INK, whiteSpace: 'nowrap' }}>
+              {money(total)}
+            </span>
+          </div>
+          {/* Sticky filled CTA — fades/slides in when the original is off-screen.
+              width/margin collapse when hidden so the price stays flush right. */}
+          <button
+            type="button"
+            onClick={() => setStartOpen(true)}
+            data-testid="estimate-sticky-cta"
+            aria-hidden={!showStickyCta}
+            tabIndex={showStickyCta ? 0 : -1}
+            className="estimate-sticky-cta"
+            style={{
+              padding: '8px 18px', borderRadius: 0, border: 'none',
+              background: BLUE, color: '#1d1d1f', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+              cursor: 'pointer',
+              opacity: showStickyCta ? 1 : 0,
+              transform: showStickyCta ? 'translateX(0)' : 'translateX(8px)',
+              pointerEvents: showStickyCta ? 'auto' : 'none',
+              maxWidth: showStickyCta ? 200 : 0,
+              marginLeft: showStickyCta ? 0 : -16,
+              overflow: 'hidden',
+              transition: 'opacity 0.25s ease, transform 0.25s ease, max-width 0.25s ease, margin-left 0.25s ease',
+            }}
+          >
+            Start this project
+          </button>
+        </div>
+        {/* Reduced motion: no slide, just an instant appear/disappear. */}
+        <style>{`
+          @media (prefers-reduced-motion: reduce) {
+            .estimate-sticky-cta { transition: none !important; transform: none !important; }
+          }
+        `}</style>
+      </header>
+
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px 80px' }}>
 
         {/* ── Header: estimate meta only — the press identity moved to the
@@ -296,8 +684,10 @@ export default function PressClientEstimateMRP() {
                 }} />
               </div>
             </div>
-            {/* inner sleeve — peeking between jacket and record */}
-            <div className="absolute transition-transform duration-500 ease-out group-hover:translate-x-5" style={{ left: 26, top: 5, width: 284, height: 284, borderRadius: 0, overflow: 'hidden', border: '1px solid #222', boxShadow: '0 1px 8px rgba(0,0,0,0.4)' }} aria-hidden>
+            {/* inner sleeve — peeking between jacket and record. Sits a hair INSIDE the
+                jacket bottom (top 2 + 284 = 286 < 288) — it must never dip below the
+                cover (Bill, Aug 26 2026, pin #360). */}
+            <div className="absolute transition-transform duration-500 ease-out group-hover:translate-x-5" style={{ left: 26, top: 2, width: 284, height: 284, borderRadius: 0, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.4)' }} aria-hidden>
               <img src={innerSleeveArt} alt="" aria-hidden style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
             <img
@@ -329,7 +719,7 @@ export default function PressClientEstimateMRP() {
         {/* ── Quantity tiers — tap a price, everything updates ── */}
         <section style={{ marginTop: 40 }}>
           <div style={{ fontSize: 13.5, color: SUBINK, marginBottom: 14 }}>
-            Tap a run size — every price below follows.
+            Tap a run size — or enter your own below. Every price follows.
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
             {QUANTITIES.map((q) => {
@@ -338,7 +728,7 @@ export default function PressClientEstimateMRP() {
                 <button
                   key={q}
                   type="button"
-                  onClick={() => setQty(q)}
+                  onClick={() => applyQty(q)}
                   aria-pressed={active}
                   data-testid={`estimate-qty-${q}`}
                   style={{
@@ -355,6 +745,155 @@ export default function PressClientEstimateMRP() {
                   <div style={{ fontSize: 10.5, color: SUBINK, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 1 }}>units</div>
                   <div style={{ fontSize: 12.5, marginTop: 6, color: active ? BLUE : SUBINK, fontVariantNumeric: 'tabular-nums' }}>
                     {money2(unitCostAt(q))} /unit
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ── Your quantity — free entry (Brief 2). A first-class companion
+              to the tier cards: type or step in 100s, 100–5,000. It prices at
+              the break it earns, and is "active" whenever the run isn't sitting
+              exactly on one of the six tiers. ── */}
+          {(() => {
+            const onTier = QUANTITIES.includes(qty);
+            const active = !onTier;
+            const brk = earnedBreak(qty);
+            return (
+              <div
+                data-testid="estimate-qty-custom"
+                style={{
+                  marginTop: 10, padding: '16px 18px', borderRadius: 0,
+                  background: active ? CARD_RAISED : CARD,
+                  border: active ? `1.5px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap',
+                }}
+              >
+                <div style={{ minWidth: 160 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {/* word + icon, never color alone (Bill is colorblind) */}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={active ? BLUE : SUBINK} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: active ? BLUE : INK }}>Your quantity</span>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 3 }}>
+                    Any run 100–5,000, in steps of 100. Priced at the {brk.toLocaleString()}-unit break.
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {/* stepper — square corners, quiet hairline */}
+                  <div style={{ display: 'flex', alignItems: 'center', border: `1px solid ${HAIRLINE}`, borderRadius: 0, background: CANVAS }}>
+                    <button
+                      type="button"
+                      onClick={() => stepQty(-1)}
+                      disabled={qty <= QTY_MIN}
+                      aria-label="Decrease quantity by 100"
+                      data-testid="estimate-qty-step-down"
+                      style={{
+                        width: 34, height: 38, border: 'none', background: 'transparent',
+                        cursor: qty <= QTY_MIN ? 'not-allowed' : 'pointer',
+                        color: qty <= QTY_MIN ? 'rgba(0,0,0,0.25)' : INK, fontSize: 18, lineHeight: 1,
+                      }}
+                    >
+                      −
+                    </button>
+                    <input
+                      value={qtyInput}
+                      inputMode="numeric"
+                      onChange={(e) => setQtyInput(e.target.value)}
+                      onBlur={(e) => commitQty(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') commitQty((e.target as HTMLInputElement).value); }}
+                      aria-label="Quantity"
+                      data-testid="input-qty-custom"
+                      style={{
+                        width: 72, height: 38, textAlign: 'center', border: 'none',
+                        borderLeft: `1px solid ${HAIRLINE}`, borderRight: `1px solid ${HAIRLINE}`,
+                        background: 'transparent', color: INK, fontSize: 15, fontWeight: 700,
+                        outline: 'none', fontVariantNumeric: 'tabular-nums',
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => stepQty(1)}
+                      disabled={qty >= QTY_MAX}
+                      aria-label="Increase quantity by 100"
+                      data-testid="estimate-qty-step-up"
+                      style={{
+                        width: 34, height: 38, border: 'none', background: 'transparent',
+                        cursor: qty >= QTY_MAX ? 'not-allowed' : 'pointer',
+                        color: qty >= QTY_MAX ? 'rgba(0,0,0,0.25)' : INK, fontSize: 18, lineHeight: 1,
+                      }}
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div style={{ fontSize: 12.5, color: active ? BLUE : SUBINK, fontVariantNumeric: 'tabular-nums', minWidth: 78, textAlign: 'right' }}>
+                    {money2(unitCostAt(qty))} /unit
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </section>
+
+        {/* ── Metalwork — how the masters get cut (Brief 3) ──
+            Radio-card row that fits the page grammar. One-line explanation per
+            choice, a "Press default" tag on the first, honest setup deltas.
+            Choosing reprices the setup block + full-run total below. ── */}
+        <section style={{ marginTop: 28 }}>
+          <div style={{ fontSize: 13.5, color: SUBINK, marginBottom: 12 }}>
+            Choose how your masters are cut — the setup cost adjusts to match.
+          </div>
+          <div style={{ display: 'grid', gap: 10 }} role="radiogroup" aria-label="Metalwork cutting">
+            {METALWORK.map((m) => {
+              const selected = m.id === metalwork;
+              const delta = setupTotalFor(m.id) - DEFAULT_SETUP_TOTAL;
+              const deltaLabel =
+                delta === 0 ? 'Included in setup'
+                : delta < 0 ? `${money(Math.abs(delta))} less setup`
+                : `${money(delta)} more setup`;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => chooseMetalwork(m.id)}
+                  data-testid={`metalwork-${m.id}`}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 14, width: '100%', textAlign: 'left',
+                    padding: '14px 16px', borderRadius: 0, cursor: 'pointer', color: INK,
+                    background: selected ? CARD_RAISED : CARD,
+                    border: selected ? `1.5px solid ${BLUE}` : `1px solid ${HAIRLINE}`,
+                  }}
+                >
+                  {/* radio dot — round is allowed (true circle), word carries meaning too */}
+                  <span
+                    aria-hidden
+                    style={{
+                      marginTop: 2, width: 18, height: 18, flexShrink: 0, borderRadius: '50%',
+                      border: selected ? `5px solid ${BLUE}` : `1.5px solid ${HAIRLINE}`,
+                      background: CANVAS, boxSizing: 'border-box',
+                    }}
+                  />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 600 }}>{m.name}</span>
+                      {m.isDefault && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, letterSpacing: 0.6, textTransform: 'uppercase',
+                          color: INK, background: BLUE, padding: '2px 7px', borderRadius: 0,
+                        }}>
+                          Press default
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 12, color: SUBINK, marginTop: 3, lineHeight: 1.5 }}>{m.blurb}</div>
+                  </div>
+                  <div style={{ fontSize: 12, color: SUBINK, whiteSpace: 'nowrap', marginTop: 1, fontVariantNumeric: 'tabular-nums' }}>
+                    {deltaLabel}
                   </div>
                 </button>
               );
@@ -416,9 +955,9 @@ export default function PressClientEstimateMRP() {
                   </div>
                   <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 1 }}>One-time · same at any run size</div>
                 </div>
-                <div style={{ fontSize: 12.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{money(SETUP_TOTAL)}</div>
+                <div style={{ fontSize: 12.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{money(setupTotal)}</div>
               </button>
-              {setupOpen && SETUP_LINES.map((l) => (
+              {setupOpen && setupLines.map((l) => (
                 <div key={l.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '8px 18px 8px 50px', borderTop: `1px solid ${HAIRLINE}` }}>
                   <div>
                     <div style={{ fontSize: 12, color: SUBINK }}>{l.name}</div>
@@ -440,20 +979,110 @@ export default function PressClientEstimateMRP() {
             <div style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{qty.toLocaleString()} units · {money(subtotal)}</div>
           </div>
           <div style={{ background: CARD }}><InsetRule /></div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '13px 18px', background: CARD }}>
+          {/* Setup — reprices + flashes when the metalwork choice changes */}
+          <div
+            data-testid="estimate-setup-row"
+            style={{
+              display: 'flex', justifyContent: 'space-between', padding: '13px 18px',
+              background: setupFlash ? BLUE_TINT_TOP : CARD,
+              transition: 'background-color 0.5s ease',
+            }}
+          >
             <div>
               <div style={{ fontSize: 13.5, fontWeight: 600 }}>Setup</div>
-              <div style={{ fontSize: 12, color: SUBINK, marginTop: 1 }}>One-time</div>
+              <div style={{ fontSize: 12, color: SUBINK, marginTop: 1 }}>
+                One-time · {metalworkById(metalwork).name}
+                {setupDelta !== 0 && (
+                  <span style={{ color: INK }}>
+                    {' '}({setupDelta < 0 ? '−' : '+'}{money(Math.abs(setupDelta))} vs. press default)
+                  </span>
+                )}
+              </div>
             </div>
-            <div style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{money(SETUP_TOTAL)}</div>
+            <div style={{ fontSize: 13.5, fontVariantNumeric: 'tabular-nums' }}>{money(setupTotal)}</div>
           </div>
           <div style={{ padding: '18px', borderTop: `1px solid ${HAIRLINE}`, background: `linear-gradient(180deg, ${BLUE_TINT_TOP} 0%, ${CARD} 100%)` }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
+            {/* ── Totals band, Bill's layout (Aug 22 2026): the press's math
+                owns the RIGHT (label above the number, Apple label-over-value),
+                the GoodTunes offer owns the LEFT as a larger soft box. Arrow
+                rule: an arrow only on a link, always →, never decorative —
+                the old up-arrow glyph is gone (three arrows was noise). ── */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 18 }}>
+              {/* GoodTunes hook — ONE ask on the page (Bill, Aug 22 2026):
+                  "Start this project" stays the only filled action; this box
+                  is a DISCLOSURE, not a competing ask. Bolder headline + a
+                  circled "+" that opens it right here (no modal). Opening is
+                  tracked: seen → later nudges become a friendly reminder;
+                  unseen → the box keeps hinting. No per-unit numbers inside —
+                  what GoodTunes does, and that they can earn more once the
+                  project starts. */}
+              {/* Square corners (Bill, Aug 22 2026): the box follows the press
+                  skin's corner style — MRP is square everywhere, so is this.
+                  Only the "+" glyph stays a circle. */}
+              <div style={{ background: 'rgba(255,255,255,0.75)', border: `1px solid ${HAIRLINE}`, borderRadius: 0, maxWidth: 360, alignSelf: 'stretch' }}>
+                <button
+                  type="button"
+                  onClick={() => setHookOpen(!hookOpen)}
+                  aria-expanded={hookOpen}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', background: 'none', border: 'none', padding: '14px 18px', cursor: 'pointer', textAlign: 'left' }}
+                  data-testid="estimate-goodtunes-hook"
+                >
+                  {/* Echoes the email word-for-word (Bill, Aug 22 2026): the
+                      email says "You're eligible to get this for $0 out of
+                      pocket" — the page opens with the same sentence, so
+                      arriving from the email feels like a continuation. */}
+                  <span className="gt-hook-shimmer" style={{ fontSize: 16, fontWeight: 700, letterSpacing: -0.2, lineHeight: 1.35 }}>
+                    You&rsquo;re eligible to get this for $0 out of pocket.
+                  </span>
+                  {/* the "+" — circled, rotates to × when open */}
+                  <span aria-hidden style={{ marginLeft: 'auto', width: 24, height: 24, flexShrink: 0, borderRadius: '50%', border: `1px solid ${HAIRLINE}`, background: CARD, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transform: hookOpen ? 'rotate(45deg)' : 'none', transition: 'transform 0.2s ease' }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={INK} strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+                      <path d="M12 5v14" /><path d="M5 12h14" />
+                    </svg>
+                  </span>
+                </button>
+                {hookOpen && (
+                  <div style={{ padding: '0 18px 16px' }} data-testid="estimate-goodtunes-expanded">
+                    <div style={{ fontSize: 12.5, color: SUBINK, lineHeight: 1.65 }}>
+                      Our partners at GoodTunes® will host the pre-order for your fans,
+                      handle every order and GoodDeed® certificate, and pay the press bill
+                      directly — same build, same press, $0 up front.
+                    </div>
+                    <div style={{ fontSize: 12.5, color: INK, fontWeight: 600, marginTop: 8 }}>
+                      And you can earn more once you start the project.
+                    </div>
+                    <div style={{ fontSize: 11, color: SUBINK, marginTop: 10 }}>
+                      Nothing to decide now — when you start this project, you&rsquo;ll
+                      choose who pays for the pressing.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ textAlign: 'right' }}>
                 <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: BLUE }}>Estimate total</div>
                 <div style={{ fontSize: 12.5, color: SUBINK, marginTop: 2 }}>If {MOCK_CLIENT_FIRST} presses the full run</div>
+                <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: -0.6, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{money(total)}</div>
+
+                {/* Next price break — quiet one-line link under the price.
+                    "Switch to…" says what happens (no software jargon). */}
+                {showBreakCallout && nextBrk !== null && (
+                  <button
+                    type="button"
+                    onClick={() => applyQty(nextBrk)}
+                    data-testid="estimate-next-break"
+                    style={{
+                      marginTop: 4, display: 'inline-flex', alignItems: 'baseline', gap: 6,
+                      padding: 0, border: 'none', background: 'none', cursor: 'pointer', color: SUBINK,
+                    }}
+                  >
+                    <span style={{ fontSize: 12, lineHeight: 1.4 }}>
+                      Next break: {money2(unitCostAt(nextBrk))} each{' '}
+                      <span style={{ color: INK, fontWeight: 600 }}>Switch to {nextBrk.toLocaleString()} units →</span>
+                    </span>
+                  </button>
+                )}
               </div>
-              <div style={{ fontSize: 34, fontWeight: 700, letterSpacing: -0.6, fontVariantNumeric: 'tabular-nums' }}>{money(total)}</div>
             </div>
             {/* The GoodTunes hook — ONE quiet line at the moment of maximum
                 price awareness (Bill, Aug 18 2026). No banner, no ad.
@@ -473,16 +1102,6 @@ export default function PressClientEstimateMRP() {
                 .gt-hook-shimmer { animation: none; background-position: 50% 0; }
               }
             `}</style>
-            <div style={{ textAlign: 'right', marginTop: 8 }}>
-              <button
-                type="button"
-                onClick={() => setHookOpen(true)}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 14 }}
-                data-testid="estimate-goodtunes-hook"
-              >
-                <span className="gt-hook-shimmer">Get this for $0 out of pocket. Learn more →</span>
-              </button>
-            </div>
           </div>
         </section>
 
@@ -515,6 +1134,7 @@ export default function PressClientEstimateMRP() {
             </button>
             <div style={{ position: 'relative' }}>
               <button
+                ref={startBtnRef}
                 type="button"
                 onClick={() => setStartOpen(true)}
                 data-testid="estimate-start-project"
@@ -541,7 +1161,7 @@ export default function PressClientEstimateMRP() {
             <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 40, height: 40, opacity: 0.9 }} />
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: INK }}>Memphis Record Pressing</div>
-              <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 2 }}>3015 Brother Blvd · Memphis, TN · memphisvinyl.com</div>
+              <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 2 }}>3015 Brother Blvd · Memphis, TN · memphisrecordpressing.com</div>
             </div>
           </div>
           {/* Each sentence on its own line (Bill, Aug 19 2026). */}
@@ -705,53 +1325,9 @@ export default function PressClientEstimateMRP() {
           Large rounded square: full-bleed ruby-vinyl graphic on top, type
           below, frosted circled × over the graphic, ONE filled-blue forward
           action at the bottom. */}
-      {hookOpen && (
-        <div
-          style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)', padding: 24 }}
-          onClick={() => setHookOpen(false)}
-          data-testid="sheet-goodtunes"
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => e.stopPropagation()}
-            className="rounded-none"
-            style={{ position: 'relative', width: 520, maxWidth: '90vw', overflow: 'hidden', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, boxShadow: '0 32px 80px rgba(0,0,0,0.18)' }}
-          >
-            {/* Top half — full-bleed graphic, gradient into the card body */}
-            <div style={{ position: 'relative', height: 280, overflow: 'hidden' }} aria-hidden>
-              <img
-                src={rubyVinylPhoto}
-                alt=""
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.15)' }}
-              />
-              <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, rgba(0,0,0,0) 45%, ${CARD_RAISED} 100%)` }} />
-            </div>
-            {/* Canon circled × — frosted, over the graphic (Apple sheets) */}
-            <CloseX onClose={() => setHookOpen(false)} testid="button-goodtunes-close" />
-            {/* Bottom half — headline + the three lines + one forward action */}
-            <div style={{ padding: '4px 30px 28px' }}>
-              <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>GoodTunes® fan-funded pressing</div>
-              <div style={{ fontSize: 13.5, color: SUBINK, marginTop: 12, lineHeight: 1.7 }}>
-                <p style={{ margin: 0 }}>Your fans pre-order the record before it&rsquo;s pressed.</p>
-                <p style={{ margin: '6px 0 0' }}>The run funds itself — same build, same press, $0 up front.</p>
-                <p style={{ margin: '6px 0 0' }}>You keep the estimate you&rsquo;re looking at; only the payer changes.</p>
-              </div>
-              {/* ONE primary — the single forward action of an informational card */}
-              <button
-                type="button"
-                data-testid="button-goodtunes-learn"
-                style={{
-                  marginTop: 22, width: '100%', padding: '12px 0', borderRadius: 0, border: 'none',
-                  cursor: 'pointer', background: BLUE, color: '#1d1d1f', fontSize: 14.5, fontWeight: 700,
-                }}
-              >
-                Learn more
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
+      {/* Site footer — the login page’s full footer rides the estimate too (Bill, Aug 26 2026). */}
+      <MrpSiteFooter />
     </div>
   );
 }
