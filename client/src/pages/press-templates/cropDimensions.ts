@@ -137,7 +137,11 @@ export function rasterCssLayout(
   tplWMm: number,
   tplHMm: number,
   viewScale: number,
-): { left: 0; top: 0; width: string; height: string; transform: string; transformOrigin: '0 0' } {
+): {
+  left: 0; top: 0; width: string; height: string;
+  maxWidth: 'none'; maxHeight: 'none';
+  transform: string; transformOrigin: '0 0';
+} {
   if (!(viewScale > 0)) throw new Error('viewScale must be > 0');
   const widthPct = (rectMm.w / tplWMm) * 100 * viewScale;
   const heightPct = (rectMm.h / tplHMm) * 100 * viewScale;
@@ -150,6 +154,18 @@ export function rasterCssLayout(
     top: 0,
     width: `${widthPct.toFixed(6)}%`,
     height: `${heightPct.toFixed(6)}%`,
+    // CRITICAL (Task #3406): the full-size layout box is USUALLY wider than
+    // the frame (widthPct = frame% × viewScale > 100% in every crop view and
+    // at any Full-Template zoom > 1). Tailwind's preflight sets
+    // `img { max-width: 100% }`, and max-width beats inline `width`
+    // regardless of specificity — without this opt-out the browser clamps
+    // the layout box back to the frame width, the translate % then resolves
+    // against the CLAMPED box, and the raster paints squeezed at the wrong
+    // panel (the Back tab filled with the front-cover slice). Divs were
+    // immune, which is why the pure-math tests passed while every <img> on
+    // screen was wrong. maxHeight is 'none' for symmetry/future-proofing.
+    maxWidth: 'none',
+    maxHeight: 'none',
     transform: `translate(${txPct.toFixed(6)}%, ${tyPct.toFixed(6)}%) scale(${(1 / viewScale).toFixed(8)})`,
     transformOrigin: '0 0',
   };

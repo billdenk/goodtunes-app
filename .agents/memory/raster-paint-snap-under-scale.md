@@ -8,3 +8,5 @@ The rule: never lay out a raster `<img>` with a tiny pre-transform box inside a 
 **Why:** the misregistration is invisible to DOM inspection — layout rects and decoded pixels all read correct; only the actual screen paint is wrong. Trust a real screenshot over DOM measurements when a raster looks shifted at high zoom.
 
 **How to apply:** give the raster a full-size layout box and do ALL scaling/positioning in one transform so it rides the compositor unsnapped.
+
+**Landmine (Aug 2026 regression):** Tailwind preflight sets `img { max-width: 100% }`, and max-width beats inline `width` regardless of specificity. Any full-size layout box wider than the frame gets silently clamped, the translate % then resolves against the CLAMPED box, and the raster paints squeezed at the wrong position (crop tabs showed the wrong jacket panel). Divs are immune — so pure-math tests and div harnesses pass while every real `<img>` is wrong. The transform-layout helper must emit `maxWidth: 'none'` (and keep tests modeling the browser's used-box resolution, clamp included).

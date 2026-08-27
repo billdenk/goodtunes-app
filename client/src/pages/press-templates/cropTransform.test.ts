@@ -202,6 +202,82 @@ describe('rasterCssLayout (Task #3374) — MRP 12-JKTSG3D-100 spine crop registr
   });
 });
 
+describe('rasterCssLayout — browser-resolved on-screen geometry (Task #3406)', () => {
+  // Regression: the pure string math above was correct while every on-screen
+  // <img> was WRONG — Tailwind's preflight `img { max-width: 100% }` clamped
+  // the full-size layout box (width > 100% in every crop view), the translate
+  // % then resolved against the clamped box, and the Back tab painted the
+  // front-cover slice. This suite resolves the style the way the BROWSER
+  // does — element box (honoring max-width) + transform → frame-relative
+  // rect — so a missing max-width opt-out fails loudly.
+  const wMm = 2209.36 * (25.4 / 72); // 779.413 mm — MRP 12-JKTSG3D-100
+  const hMm = 1528.8 * (25.4 / 72);  // 539.327 mm
+
+  /** Emulate Chromium: used box = min(width, max-width) for an <img> under
+   *  Tailwind preflight; translate % resolves against the USED border box;
+   *  scale(1/s) about origin 0 0. Returns the frame-fraction rect. */
+  const browserRect = (l: ReturnType<typeof rasterCssLayout>) => {
+    const widthPct = parseFloat(l.width);
+    const heightPct = parseFloat(l.height);
+    const maxW = (l as { maxWidth?: string }).maxWidth === 'none' ? Infinity : 100;
+    const maxH = (l as { maxHeight?: string }).maxHeight === 'none' ? Infinity : Infinity; // preflight sets no max-height
+    const usedW = Math.min(widthPct, maxW) / 100; // frame-width fractions
+    const usedH = Math.min(heightPct, maxH) / 100; // frame-height fractions
+    const m = /translate\((-?[\d.]+)%, (-?[\d.]+)%\) scale\(([\d.e-]+)\)/.exec(l.transform)!;
+    assert.ok(m, `transform parse: ${l.transform}`);
+    const [txPct, tyPct, invS] = [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3])];
+    return {
+      // frame-fraction of frame WIDTH / HEIGHT respectively
+      left: (txPct / 100) * usedW,
+      top: (tyPct / 100) * usedH,
+      width: usedW * invS,
+      height: usedH * invS,
+    };
+  };
+
+  const assertLandsAt = (rect: { x: number; y: number; w: number; h: number }, s: number) => {
+    const r = browserRect(rasterCssLayout(rect, wMm, hMm, s));
+    approx(r.left, rect.x / wMm, 1e-6, `left ${r.left} != ${rect.x / wMm}`);
+    approx(r.top, rect.y / hMm, 1e-6, `top ${r.top} != ${rect.y / hMm}`);
+    approx(r.width, rect.w / wMm, 1e-6, `width ${r.width} != ${rect.w / wMm}`);
+    approx(r.height, rect.h / hMm, 1e-6, `height ${r.height} != ${rect.h / hMm}`);
+  };
+
+  it('opts out of the Tailwind img max-width clamp', () => {
+    const l = rasterCssLayout({ x: 0, y: 0, w: wMm, h: hMm }, wMm, hMm, 2.3);
+    assert.equal(l.maxWidth, 'none');
+    assert.equal(l.maxHeight, 'none');
+  });
+
+  it('full sheet at s=1 fills the frame exactly', () => {
+    assertLandsAt({ x: 0, y: 0, w: wMm, h: hMm }, 1);
+  });
+
+  it('full sheet in a Back crop (s≈2.3) — the clamp case that showed the wrong panel', () => {
+    // Back panel (left of the spine on a jacket spread) + 4% pad → the frame
+    // scale that made widthPct = 230% and triggered the preflight clamp.
+    const back = { x: 58.2, y: 113.993, w: 313.4, h: 311.374 };
+    const pad = Math.max(back.w, back.h) * 0.04;
+    const s = wMm / (back.w + pad * 2); // ≈ 2.3
+    const sheet = rasterCssLayout({ x: 0, y: 0, w: wMm, h: hMm }, wMm, hMm, s);
+    assert.ok(parseFloat(sheet.width) > 200, 'precondition: layout box far wider than the frame');
+    assertLandsAt({ x: 0, y: 0, w: wMm, h: hMm }, s);
+    // A back-panel art rect in the same crop stays seated in the back panel.
+    assertLandsAt({ x: back.x + 1.0, y: back.y, w: back.h, h: back.h }, s);
+  });
+
+  it('skinny-spine extreme (s≈27.4, Task #3374) keeps a full-size box AND lands true', () => {
+    const focus = { x: 375.4697, y: 101.5389, w: 28.4352, h: 336.2841 };
+    const s = wMm / focus.w; // ~27.41
+    const { targetW, targetH, scale } = computeCropCanvasSize(focus.w, focus.h, 1440 * 4);
+    const rect = cropRenderedRectMm(focus, targetW, targetH, scale);
+    const l = rasterCssLayout(rect, wMm, hMm, s);
+    // The #3374 paint-snap fix must hold: layout box stays frame-sized.
+    assert.ok(parseFloat(l.width) > 50, `layout box must stay full-size, got ${l.width}`);
+    assertLandsAt(rect, s);
+  });
+});
+
 describe('cropRenderedRectMm', () => {
   it('tall-narrow spine under the 4096px cap — rect matches the rounded canvas exactly', () => {
     const focus = { x: 158.3, y: 6.1, w: 3.5 + 2 * 4.94, h: 120 + 2 * 4.94 }; // spine + 4% pad
