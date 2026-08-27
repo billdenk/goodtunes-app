@@ -16,6 +16,7 @@ import { AdminPartnerDashboard } from "@/components/admin/AdminPartnerDashboard"
 import { queryClient } from "@/lib/queryClient";
 import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
 import type { PartnerAddressSnapshot } from "@shared/schema";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 // Task #78 — Super-admin detail page for a non-profit partner.
 // Task #283 brings it under AdminFrame (narrow) with the standard
@@ -122,7 +123,7 @@ export default function AdminNonProfit() {
             aria-label="Edit logo"
           >
             {npo.logoUrl ? (
-              <img
+              <BrandMarkImg
                 src={npo.logoUrl}
                 alt={npo.name}
                 className="w-full h-full object-cover"

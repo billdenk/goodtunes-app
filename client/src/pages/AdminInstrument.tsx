@@ -49,6 +49,7 @@ import { apiRequest, getAuthToken } from "@/lib/queryClient";
 import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 /**
  * Admin · Single instrument. Wrapped in AdminFrame so it shares the top
@@ -325,7 +326,7 @@ export function AdminInstrument() {
                   data-testid="link-instrument-maker"
                 >
                   {instrument.maker.logoUrl ? (
-                    <img
+                    <BrandMarkImg
                       src={instrument.maker.logoUrl}
                       alt=""
                       className="w-3.5 h-3.5 rounded-sm object-cover"
@@ -751,7 +752,7 @@ function MakerPickerPanel({ instrument }: { instrument: InstrumentFull }) {
         >
           <div className="w-10 h-10 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
             {instrument.maker.logoUrl ? (
-              <img
+              <BrandMarkImg
                 src={instrument.maker.logoUrl}
                 alt={instrument.maker.name}
                 className="w-full h-full object-cover"
@@ -823,7 +824,7 @@ function MakerPickerPanel({ instrument }: { instrument: InstrumentFull }) {
                   >
                     <div className="w-7 h-7 rounded bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
                       {m.logoUrl ? (
-                        <img
+                        <BrandMarkImg
                           src={m.logoUrl}
                           alt=""
                           className="w-full h-full object-cover"
@@ -1252,7 +1253,7 @@ function AddMakerComposer({
         >
           <div className="w-9 h-9 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
             {shownParent.logoUrl ? (
-              <img
+              <BrandMarkImg
                 src={shownParent.logoUrl}
                 alt=""
                 className="w-full h-full object-cover"
@@ -1321,7 +1322,7 @@ function AddMakerComposer({
                   >
                     <div className="w-7 h-7 rounded-md bg-white ring-1 ring-slate-200 overflow-hidden flex items-center justify-center flex-shrink-0">
                       {c.logoUrl ? (
-                        <img
+                        <BrandMarkImg
                           src={c.logoUrl}
                           alt=""
                           className="w-full h-full object-cover"
@@ -2784,7 +2785,7 @@ function VendorRow({
         {/* Logo */}
         <div className="w-10 h-10 rounded-lg overflow-hidden bg-white border border-slate-200 flex items-center justify-center flex-shrink-0">
           {vendor.logoUrl ? (
-            <img
+            <BrandMarkImg
               src={vendor.logoUrl}
               alt={vendor.name}
               className="w-full h-full object-contain p-1"

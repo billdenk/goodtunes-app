@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 function humanizeApiError(err: unknown): string {
   const raw = err instanceof Error ? err.message : String(err ?? "");
@@ -384,7 +385,7 @@ function NpoCard({ npo }: { npo: NonProfit }) {
     <Link href={`/admin/non-profits/${npo.id}`} className="group text-left rounded-2xl bg-white border border-[var(--apple-hairline)] hover:shadow-md hover:border-[var(--brand-blue)]/30 transition-all p-4 flex items-center gap-3.5 underline-offset-2" data-testid={`card-npo-${npo.id}`}>
       <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {npo.logoUrl ? (
-          <img src={npo.logoUrl} alt={npo.name} className="w-full h-full object-cover" />
+          <BrandMarkImg src={npo.logoUrl} alt={npo.name} className="w-full h-full object-cover" />
         ) : (
           <Heart className="w-6 h-6 text-slate-300" />
         )}
@@ -411,7 +412,7 @@ function NpoRow({ npo }: { npo: NonProfit }) {
     <Link href={`/admin/non-profits/${npo.id}`} className="group w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-[var(--apple-track)] transition-colors underline-offset-2" data-testid={`row-npo-${npo.id}`}>
       <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {npo.logoUrl ? (
-          <img src={npo.logoUrl} alt={npo.name} className="w-full h-full object-cover" />
+          <BrandMarkImg src={npo.logoUrl} alt={npo.name} className="w-full h-full object-cover" />
         ) : (
           <Heart className="w-4 h-4 text-slate-300" />
         )}

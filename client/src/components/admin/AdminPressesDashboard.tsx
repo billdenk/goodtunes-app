@@ -36,7 +36,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { KpiCard, sparkFromSeries } from "@/components/admin/KpiCard";
-import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
+import { BRAND_MARK_INVERT_FILTER, useBrandMarkInvert } from "@/components/admin/BrandMarkImg";
 import { formatUsdCents } from "@shared/money";
 import { PRESS_OTHER_COLOR, PRESS_CHART_PALETTE } from "@shared/pressChartPalette";
 import { cn } from "@/lib/utils";
@@ -116,9 +116,7 @@ function PressAvatar({
   // Dark mode remaps the white circle to charcoal, so a near-black mark
   // disappears — invert it to white there (same heuristic as the press
   // detail header). Colored logos are untouched.
-  const dark = useAdminDark();
-  const darkMark = useDarkMarkLogo(logoUrl);
-  const invertLogo = dark && darkMark;
+  const invertLogo = useBrandMarkInvert(logoUrl);
   return (
     <span
       className="inline-flex items-center justify-center rounded-full bg-white border border-slate-200 overflow-hidden shrink-0"
@@ -133,7 +131,7 @@ function PressAvatar({
           style={{
             width: size - Math.max(4, Math.round(size * 0.18)),
             height: size - Math.max(4, Math.round(size * 0.18)),
-            ...(invertLogo ? { filter: "invert(1) brightness(1.7)" } : {}),
+            ...(invertLogo ? { filter: BRAND_MARK_INVERT_FILTER } : {}),
           }}
         />
       ) : (

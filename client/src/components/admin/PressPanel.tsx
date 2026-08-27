@@ -45,6 +45,7 @@ import { VINYL_FORMAT_RULES, type VinylFormat } from "@shared/vinylFormatRules";
 import { useUploadManager, useUploadStore } from "@/context/UploadManagerContext";
 import { PHYSICAL_FORMAT_TO_ALBUM_FORMAT } from "@shared/schema";
 import type { AlbumPhysicalFormat, AlbumFormat } from "@shared/schema";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 // Task #3413 — attach one master file per vinyl side. Bytes ride the
 // background upload manager (survives dialog close / navigation); the
@@ -1075,7 +1076,7 @@ export function PressPanel({
               {pressReadoutName}
             </span>
             {pressLogoUrl && (
-              <img
+              <BrandMarkImg
                 src={pressLogoUrl}
                 alt=""
                 className="w-6 h-6 rounded-full object-cover border border-slate-200 shrink-0"

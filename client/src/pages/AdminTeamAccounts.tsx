@@ -5,6 +5,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 import { ArrowUpDown, ArrowDown, ArrowUp, Search } from "lucide-react";
 
 // Team accounts — the ACCOUNT-centric answer to "someone accepted an
@@ -274,11 +275,22 @@ export function AdminTeamAccounts() {
                               return (
                                 <div key={`${t.scopeKind}:${t.scopeId ?? i}`} className="flex items-center gap-2 min-w-0">
                                   {t.thumbUrl ? (
-                                    <img
-                                      src={t.thumbUrl}
-                                      alt=""
-                                      className="w-6 h-6 rounded-full object-cover bg-[var(--apple-track)] flex-shrink-0"
-                                    />
+                                    // Artist scopes carry a PERSON photo — never
+                                    // invert those; everything else is a brand
+                                    // logo that gets the dark-mark treatment.
+                                    t.scopeKind === "artist" ? (
+                                      <img
+                                        src={t.thumbUrl}
+                                        alt=""
+                                        className="w-6 h-6 rounded-full object-cover bg-[var(--apple-track)] flex-shrink-0"
+                                      />
+                                    ) : (
+                                      <BrandMarkImg
+                                        src={t.thumbUrl}
+                                        alt=""
+                                        className="w-6 h-6 rounded-full object-cover bg-[var(--apple-track)] flex-shrink-0"
+                                      />
+                                    )
                                   ) : (
                                     <div className="w-6 h-6 rounded-full bg-[var(--apple-chip)] flex-shrink-0" />
                                   )}

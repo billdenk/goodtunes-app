@@ -45,6 +45,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 /**
  * Admin · Single manager (Task #1425).
@@ -314,7 +315,7 @@ export function AdminManager() {
             data-testid="button-edit-label-logo"
           >
             {label.logoUrl ? (
-              <img
+              <BrandMarkImg
                 src={label.logoUrl}
                 alt={label.name}
                 className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
@@ -743,7 +744,7 @@ function ImageUploadPanel({
           ].join(" ")}
         >
           {shownUrl ? (
-            <img
+            <BrandMarkImg
               src={shownUrl}
               alt={label.name}
               className={["w-full h-full", objectFitClass].join(" ")}

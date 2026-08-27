@@ -27,6 +27,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 // apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` — strip
 // the status prefix and unwrap the JSON `message` so inline dialog errors
@@ -613,7 +614,7 @@ function LabelCard({
     >
       <div className="w-14 h-14 rounded-xl overflow-hidden bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {label.logoUrl ? (
-          <img
+          <BrandMarkImg
             src={label.logoUrl}
             alt={label.name}
             className="w-full h-full object-cover"
@@ -655,7 +656,7 @@ function LabelRow({
     >
       <div className="w-10 h-10 rounded-md overflow-hidden bg-[var(--apple-track)] ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {label.logoUrl ? (
-          <img
+          <BrandMarkImg
             src={label.logoUrl}
             alt={label.name}
             className="w-full h-full object-cover"

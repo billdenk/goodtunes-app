@@ -58,6 +58,7 @@ import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
 import { ViewAsPartnerButton } from "@/components/admin/ViewAsPartnerButton";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 /**
  * Admin · Single label (Phase 6f).
@@ -370,7 +371,7 @@ export function AdminLabel() {
             data-testid="button-edit-label-logo"
           >
             {label.logoUrl ? (
-              <img
+              <BrandMarkImg
                 src={label.logoUrl}
                 alt={label.name}
                 className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"

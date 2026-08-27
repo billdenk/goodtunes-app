@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import type { FulfillmentPartner, Manufacturer } from "@shared/schema";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 // apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` —
 // strip the status prefix and unwrap the JSON `message` so inline
@@ -471,7 +472,7 @@ function PartnerCard({ partner }: { partner: FulfillmentPartner }) {
     >
       <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {partner.logoUrl ? (
-          <img src={partner.logoUrl} alt={partner.name} className="w-full h-full object-cover" />
+          <BrandMarkImg src={partner.logoUrl} alt={partner.name} className="w-full h-full object-cover" />
         ) : (
           <Truck className="w-6 h-6 text-slate-300" />
         )}
@@ -501,7 +502,7 @@ function PartnerRow({ partner }: { partner: FulfillmentPartner }) {
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-md bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center overflow-hidden flex-shrink-0">
           {partner.logoUrl ? (
-            <img src={partner.logoUrl} alt="" className="w-full h-full object-cover" />
+            <BrandMarkImg src={partner.logoUrl} alt="" className="w-full h-full object-cover" />
           ) : (
             <Truck className="w-5 h-5 text-slate-400" strokeWidth={1.5} />
           )}
@@ -544,7 +545,7 @@ function PressFulfillmentCard({ press }: { press: Manufacturer }) {
     >
       <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {(press.identityIconUrl ?? press.logoUrl) ? (
-          <img src={press.identityIconUrl ?? press.logoUrl ?? undefined} alt={press.name} className="w-full h-full object-cover" />
+          <BrandMarkImg src={press.identityIconUrl ?? press.logoUrl ?? undefined} alt={press.name} className="w-full h-full object-cover" />
         ) : (
           <Factory className="w-6 h-6 text-slate-300" />
         )}
@@ -577,7 +578,7 @@ function PressFulfillmentRow({ press }: { press: Manufacturer }) {
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-md bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center overflow-hidden flex-shrink-0">
           {(press.identityIconUrl ?? press.logoUrl) ? (
-            <img src={press.identityIconUrl ?? press.logoUrl ?? undefined} alt="" className="w-full h-full object-cover" />
+            <BrandMarkImg src={press.identityIconUrl ?? press.logoUrl ?? undefined} alt="" className="w-full h-full object-cover" />
           ) : (
             <Factory className="w-5 h-5 text-slate-400" strokeWidth={1.5} />
           )}

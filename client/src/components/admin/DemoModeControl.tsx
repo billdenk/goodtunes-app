@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Layers, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 // Task #752 — Demo Mode control. Super-admin-only, session-scoped pitch
 // switch that lives in the admin header so the on-state is always
@@ -194,7 +195,7 @@ export function DemoModeControl() {
                     data-testid={`option-demo-press-${p.id}`}
                   >
                     {p.logoUrl ? (
-                      <img
+                      <BrandMarkImg
                         src={p.logoUrl}
                         alt=""
                         className="w-6 h-6 rounded object-cover"

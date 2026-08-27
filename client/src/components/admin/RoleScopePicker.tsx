@@ -4,6 +4,7 @@ import { ChevronDown, Link2, Plus, X } from "lucide-react";
 import { apiRequest, apiErrorBody } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Spinner } from "@/components/ui/Spinner";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 export const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: "super_admin", label: "Super Admin (full access)" },
@@ -370,7 +371,11 @@ export function ScopePicker({
           data-testid={testId ? `${testId}-selected` : "scope-selected"}
         >
           {thumb(selected) ? (
-            <img src={thumb(selected)!} alt="" className="w-8 h-8 rounded-full object-cover bg-slate-100" />
+            cfg.thumbField === "logoUrl" ? (
+              <BrandMarkImg src={thumb(selected)!} alt="" className="w-8 h-8 rounded-full object-cover bg-slate-100" />
+            ) : (
+              <img src={thumb(selected)!} alt="" className="w-8 h-8 rounded-full object-cover bg-slate-100" />
+            )
           ) : (
             <div className="w-8 h-8 rounded-full bg-slate-200" />
           )}
@@ -516,7 +521,11 @@ export function ScopePicker({
                           data-testid={`option-${testId || "scope"}-${r.id}`}
                         >
                           {thumb(r) ? (
-                            <img src={thumb(r)!} alt="" className="w-7 h-7 rounded-full object-cover bg-slate-100" />
+                            cfg.thumbField === "logoUrl" ? (
+                              <BrandMarkImg src={thumb(r)!} alt="" className="w-7 h-7 rounded-full object-cover bg-slate-100" />
+                            ) : (
+                              <img src={thumb(r)!} alt="" className="w-7 h-7 rounded-full object-cover bg-slate-100" />
+                            )
                           ) : (
                             <div className="w-7 h-7 rounded-full bg-slate-200" />
                           )}

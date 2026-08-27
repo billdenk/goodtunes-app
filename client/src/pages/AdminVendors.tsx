@@ -37,6 +37,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 // apiRequest throws errors shaped like `"502: {\"message\":\"…\"}"` — strip
 // the status prefix and unwrap the JSON `message` so inline dialog errors
@@ -975,7 +976,7 @@ export function AdminVendors() {
               >
                 <div className="w-10 h-10 rounded-md bg-white ring-1 ring-[var(--apple-hairline)] overflow-hidden flex items-center justify-center flex-shrink-0">
                   {(subBrandParent ?? subBrandPrompt.parent).logoUrl ? (
-                    <img
+                    <BrandMarkImg
                       src={(subBrandParent ?? subBrandPrompt.parent).logoUrl!}
                       alt=""
                       className="w-full h-full object-cover"
@@ -1044,7 +1045,7 @@ export function AdminVendors() {
                         >
                           <div className="w-7 h-7 rounded-md bg-white ring-1 ring-[var(--apple-hairline)] overflow-hidden flex items-center justify-center flex-shrink-0">
                             {c.logoUrl ? (
-                              <img
+                              <BrandMarkImg
                                 src={c.logoUrl}
                                 alt=""
                                 className="w-full h-full object-cover"
@@ -1239,7 +1240,7 @@ function VendorCard({
     >
       <div className="w-14 h-14 rounded-xl overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {vendor.logoUrl ? (
-          <img
+          <BrandMarkImg
             src={vendor.logoUrl}
             alt={vendor.name}
             className="w-full h-full object-cover"
@@ -1284,7 +1285,7 @@ function VendorRow({
     >
       <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0">
         {vendor.logoUrl ? (
-          <img
+          <BrandMarkImg
             src={vendor.logoUrl}
             alt={vendor.name}
             className="w-full h-full object-cover"
@@ -1334,7 +1335,7 @@ function TrashedVendorRow({
     >
       <div className="w-10 h-10 rounded-md overflow-hidden bg-white ring-1 ring-[var(--apple-hairline)] flex items-center justify-center flex-shrink-0 opacity-70">
         {vendor.logoUrl ? (
-          <img
+          <BrandMarkImg
             src={vendor.logoUrl}
             alt={vendor.name}
             className="w-full h-full object-cover grayscale"

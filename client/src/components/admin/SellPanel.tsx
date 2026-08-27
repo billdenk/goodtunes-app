@@ -76,6 +76,7 @@ import {
   type PayoutFormatCost,
   type PressingOrderRequest,
 } from "@shared/schema";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 import {
   VINYL_COLORS,
   VINYL_COLOR_BY_ID,
@@ -1845,7 +1846,7 @@ export function PrinterAndPressPanel({
                     press has no logo set. */}
                 {c.press?.logoUrl ? (
                   <span className="w-4 h-4 rounded-[3px] overflow-hidden bg-white border border-slate-200 flex-shrink-0">
-                    <img src={c.press.logoUrl} alt="" className="w-full h-full object-cover" />
+                    <BrandMarkImg src={c.press.logoUrl} alt="" className="w-full h-full object-cover" />
                   </span>
                 ) : (
                   <span className="w-4 h-4 rounded-[3px] bg-slate-200 border border-slate-200 flex-shrink-0" />
@@ -1903,7 +1904,7 @@ function PressInfoPopover({ press }: { press: Manufacturer }) {
         <div className="flex flex-col gap-3">
           <div className="flex items-start gap-3">
             {(press.identityIconUrl ?? press.logoUrl) ? (
-              <img
+              <BrandMarkImg
                 src={press.identityIconUrl ?? press.logoUrl ?? undefined}
                 alt=""
                 className="w-10 h-10 rounded-md object-cover border border-slate-200 shrink-0"
@@ -5014,7 +5015,7 @@ function SkuRow({
                         // round logo (e.g. Hellbender) no longer reads
                         // as an avatar.
                         <span className="w-5 h-5 rounded-[4px] overflow-hidden bg-white border border-slate-200 flex-shrink-0">
-                          <img
+                          <BrandMarkImg
                             src={invitedPressItself.identityIconUrl ?? invitedPressItself.logoUrl ?? undefined}
                             alt=""
                             className="w-full h-full object-cover"
@@ -5041,7 +5042,7 @@ function SkuRow({
                         // stops reading as an avatar.
                         const logo = (p.identityIconUrl ?? p.logoUrl) ? (
                           <span className="w-5 h-5 rounded-[4px] overflow-hidden bg-white border border-slate-200 flex-shrink-0">
-                            <img
+                            <BrandMarkImg
                               src={p.identityIconUrl ?? p.logoUrl ?? undefined}
                               alt=""
                               className="w-full h-full object-cover"
@@ -6591,7 +6592,7 @@ function SkuRow({
             >
               <div className="flex items-center gap-2 mb-1.5">
                 {params.press?.logoUrl ? (
-                  <img
+                  <BrandMarkImg
                     src={params.press.logoUrl}
                     alt=""
                     className="w-5 h-5 object-contain flex-shrink-0"
@@ -6894,7 +6895,7 @@ function SkuRow({
                             data-testid={`button-add-estimate-press-${format}-${p.id}`}
                           >
                             {p.logoUrl ? (
-                              <img
+                              <BrandMarkImg
                                 src={p.logoUrl}
                                 alt=""
                                 className="w-4 h-4 object-contain"

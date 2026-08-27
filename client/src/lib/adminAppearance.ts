@@ -114,17 +114,45 @@ function sampleIsDarkMark(url: string): Promise<boolean | null> {
 
 const isSvgUrl = (url: string) => /\.svg(\?|#|$)/i.test(url);
 
+/** Same-origin check for logo URLs: our own uploads (relative `/objects/…`
+ * paths or absolute URLs on this host) sample cleanly and, when they're SVGs,
+ * are dark marks often enough to assume so. Cross-origin URLs can NEVER be
+ * verified (CORS taints the canvas), so they must never invert on a guess —
+ * a colored external SVG brand recolored white is worse than a dark one
+ * staying dim. */
+function isSameOriginLogoUrl(url: string): boolean {
+  if (url.startsWith("/") && !url.startsWith("//")) return true;
+  try {
+    return new URL(url, window.location.origin).origin === window.location.origin;
+  } catch {
+    return false;
+  }
+}
+
+/** Fallback verdict when pixel sampling hasn't resolved or can't run
+ * (tainted canvas, decode failure): only same-origin SVG uploads are assumed
+ * dark marks; every raster and every cross-origin URL is left untouched. */
+export function darkMarkFallback(url: string): boolean {
+  return isSvgUrl(url) && isSameOriginLogoUrl(url);
+}
+
+/** Test seam — prime the session cache so component tests can pin the
+ * invert behavior without a canvas. */
+export function primeDarkMarkCacheForTest(url: string, dark: boolean): void {
+  darkMarkCache.set(url, dark);
+}
+
 /** React hook — true when `url` is a near-black mark (suitable for a white
  * invert on a dark backdrop). Everything — SVGs included — is pixel-sampled
  * once and cached for the session; SVGs are white marks often enough (e.g.
  * `/logo-mrp-white.svg`) that assuming dark by extension is wrong. When
- * sampling can't run (tainted canvas, decode failure) SVGs fall back to
- * "dark mark" (the common case for logo assets) and rasters to "leave as-is". */
+ * sampling can't run or hasn't resolved yet, `darkMarkFallback` applies:
+ * same-origin SVG uploads read as dark marks, everything else stays raw. */
 export function useDarkMarkLogo(url: string | null | undefined): boolean {
   const subscribe = (fn: () => void) => {
     if (url && !darkMarkCache.has(url)) {
       sampleIsDarkMark(url).then((dark) => {
-        darkMarkCache.set(url, dark ?? isSvgUrl(url));
+        darkMarkCache.set(url, dark ?? darkMarkFallback(url));
         fn();
       });
     }
@@ -132,7 +160,7 @@ export function useDarkMarkLogo(url: string | null | undefined): boolean {
   };
   const getSnapshot = () => {
     if (!url) return false;
-    return darkMarkCache.get(url) ?? isSvgUrl(url);
+    return darkMarkCache.get(url) ?? darkMarkFallback(url);
   };
   return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }

@@ -6,6 +6,7 @@ import { AdminFrame } from "@/components/admin/AdminFrame";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { ErrorState } from "@/components/admin/AdminErrorBoundary";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 import { ChevronRight, ChevronDown, User as UserIcon, Heart, Factory } from "lucide-react";
 import { ScopePicker, SCOPE_CONFIG } from "@/components/admin/RoleScopePicker";
 
@@ -136,7 +137,13 @@ function TreeNode({ nodes, nodeId, depth, navigate }: { nodes: Node[]; nodeId: s
           <div className="w-4" />
         )}
         {thumb ? (
-          <img src={thumb} alt="" className="w-7 h-7 rounded-full object-cover bg-[var(--apple-track)] flex-shrink-0" />
+          // Only the LOGO branch inverts in dark mode — a person photo
+          // (photoUrl, e.g. artist nodes) must never be recolored.
+          node.photoUrl ? (
+            <img src={thumb} alt="" className="w-7 h-7 rounded-full object-cover bg-[var(--apple-track)] flex-shrink-0" />
+          ) : (
+            <BrandMarkImg src={thumb} alt="" className="w-7 h-7 rounded-full object-cover bg-[var(--apple-track)] flex-shrink-0" />
+          )
         ) : (
           <div className="w-7 h-7 rounded-full bg-[var(--apple-chip)] flex items-center justify-center flex-shrink-0">
             <KindIcon className="w-3.5 h-3.5 text-[var(--apple-subink)]" />

@@ -39,7 +39,7 @@ import { resolveVinylColor, DEFAULT_JACKET_UPGRADE, type VinylColorOption } from
 import { PRESS_CUSTOMER_CATEGORIES, PRESS_CUSTOMER_PRICING_TIERS } from "@shared/pressErp";
 import { resolvePressPlaceholderArt as _resolvePressPlaceholderArt } from "@/lib/pressPlaceholderArt";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
+import { BRAND_MARK_INVERT_FILTER, BrandMarkImg, useBrandMarkInvert } from "@/components/admin/BrandMarkImg";
 import { postAdminImage } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
@@ -257,7 +257,6 @@ export function AdminManufacturer() {
   // like the Memphis badge) vanish on the charcoal backdrop — flip them
   // white and ring the tile dark gray. Colored logos/photos are left alone
   // (pixel-sampled darkness gate, not extension-based — Memphis is a PNG).
-  const adminDark = useAdminDark();
   // Task #2044 — operator "Add album" two-step flow, mirroring AdminAlbums.
   const [artistDialogOpen, setArtistDialogOpen] = useState(false);
   const [titleDialogOpen, setTitleDialogOpen] = useState(false);
@@ -353,8 +352,7 @@ export function AdminManufacturer() {
     queryKey: ["/api/fulfillment-partners"],
     enabled: !!user?.isAdmin,
   });
-  const logoIsDarkMark = useDarkMarkLogo(m?.logoUrl ?? null);
-  const invertHeaderLogo = adminDark && logoIsDarkMark;
+  const invertHeaderLogo = useBrandMarkInvert(m?.logoUrl ?? null);
 
   const save = useMutation({
     mutationFn: async (patch: Partial<Manufacturer>) => {
@@ -557,7 +555,7 @@ export function AdminManufacturer() {
                 src={m.logoUrl}
                 alt={m.name}
                 className="w-full h-full object-cover"
-                style={invertHeaderLogo ? { filter: "invert(1) brightness(1.7)" } : undefined}
+                style={invertHeaderLogo ? { filter: BRAND_MARK_INVERT_FILTER } : undefined}
                 data-testid="img-press-logo"
               />
             ) : (
@@ -585,7 +583,7 @@ export function AdminManufacturer() {
               data-testid="button-edit-press-identity-icon"
             >
               {(m as any).identityIconUrl ? (
-                <img src={(m as any).identityIconUrl} alt="" className="w-full h-full object-cover" />
+                <BrandMarkImg src={(m as any).identityIconUrl} alt="" className="w-full h-full object-cover" />
               ) : (
                 <Pencil className="w-2.5 h-2.5 text-slate-400" />
               )}

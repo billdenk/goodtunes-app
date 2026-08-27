@@ -3,8 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Factory, Lock, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useAdminDark } from "@/lib/adminAppearance";
-import { WhiteMarkGlyph } from "@/pages/press-components/PressMarkGlyph";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 // Task #199 — Super-admin override for the "invited by press" stamp
 // that the press-invite flow writes onto people / labels. Hidden to
@@ -40,7 +39,6 @@ export function InvitedByPressPanel({
   currentPressMode?: string | null;
   onChanged?: () => void;
 }) {
-  const dark = useAdminDark();
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data: role } = useQuery<RoleInfo>({ queryKey: ["/api/me/role"] });
@@ -156,19 +154,13 @@ export function InvitedByPressPanel({
       {current ? (
         <div className="flex items-center gap-3" data-testid="row-current-invited-press">
           {current.identityIconUrl ? (
-            <img src={current.identityIconUrl} alt="" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
+            <BrandMarkImg src={current.identityIconUrl} alt="" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
           ) : current.logoUrl ? (
-            // Press-mark rule (docs/design-system.md): monochrome press logo
-            // uploads are often dark artwork on alpha — on the dark admin
-            // theme render them as a white mask so the mark stays legible.
-            // Light theme keeps the raw upload.
-            dark ? (
-              <div className="w-9 h-9 rounded-md border border-slate-200 flex items-center justify-center" aria-hidden>
-                <WhiteMarkGlyph logoUrl={current.logoUrl} size={28} />
-              </div>
-            ) : (
-              <img src={current.logoUrl} alt="" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
-            )
+            // Press-mark rule (docs/design-system.md): dark monochrome press
+            // uploads must read white on the dark admin theme — but only when
+            // pixel-sampled (or safely assumed) near-black; colored and
+            // cross-origin logos stay raw. BrandMarkImg owns that decision.
+            <BrandMarkImg src={current.logoUrl} alt="" className="w-9 h-9 rounded-md object-cover border border-slate-200" />
           ) : (
             <div
               className="w-9 h-9 rounded-md bg-slate-100 border border-slate-200 flex items-center justify-center"
@@ -287,7 +279,7 @@ export function InvitedByPressPanel({
                         data-testid={`option-press-${p.id}`}
                       >
                         {(p.identityIconUrl ?? p.logoUrl) ? (
-                          <img src={p.identityIconUrl ?? p.logoUrl ?? undefined} alt="" className="w-6 h-6 rounded object-cover" />
+                          <BrandMarkImg src={p.identityIconUrl ?? p.logoUrl ?? undefined} alt="" className="w-6 h-6 rounded object-cover" />
                         ) : (
                           <div className="w-6 h-6 rounded bg-slate-100" />
                         )}

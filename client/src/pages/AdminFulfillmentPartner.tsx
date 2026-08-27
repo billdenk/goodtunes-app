@@ -26,6 +26,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { FulfillmentPartner } from "@shared/schema";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 export function AdminFulfillmentPartner() {
   useEffect(() => {
@@ -186,7 +187,7 @@ export function AdminFulfillmentPartner() {
             aria-label="Edit logo"
           >
             {f.logoUrl ? (
-              <img src={f.logoUrl} alt={f.name} className="w-full h-full object-cover" />
+              <BrandMarkImg src={f.logoUrl} alt={f.name} className="w-full h-full object-cover" />
             ) : (
               <Truck className="w-7 h-7 text-slate-300" strokeWidth={1.5} />
             )}

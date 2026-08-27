@@ -48,6 +48,7 @@ import {
 } from "@/components/admin/PersonGearManager";
 import { RecentsRail } from "@/components/admin/RecentsRail";
 import { DemoModeControl } from "@/components/admin/DemoModeControl";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 import {
   pushRecentPerson,
   usePersonCreditRecents,
@@ -8586,7 +8587,7 @@ function AlbumLabelPicker({
           {linked ? (
             <>
               {linked.logoUrl ? (
-                <img src={linked.logoUrl} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
+                <BrandMarkImg src={linked.logoUrl} alt="" className="w-7 h-7 rounded object-cover shrink-0" />
               ) : (
                 <span className="w-7 h-7 rounded bg-slate-200 shrink-0 grid place-items-center text-[11px] font-semibold text-slate-500">
                   {getInitials(linked.name, "?")}
@@ -8647,7 +8648,7 @@ function AlbumLabelPicker({
                   data-testid={`button-album-label-pick-${l.id}`}
                 >
                   {l.logoUrl ? (
-                    <img src={l.logoUrl} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
+                    <BrandMarkImg src={l.logoUrl} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
                   ) : (
                     <span className="w-6 h-6 rounded bg-slate-200 shrink-0 grid place-items-center text-[10px] font-semibold text-slate-500">
                       {getInitials(l.name, "?")}
@@ -9540,7 +9541,7 @@ export function Admin() {
                       data-testid={`row-vendor-list-${v.id}`}
                     >
                       {logo ? (
-                        <img
+                        <BrandMarkImg
                           src={logo}
                           alt=""
                           className="w-10 h-10 rounded bg-slate-50 object-contain shrink-0"
@@ -9653,7 +9654,7 @@ export function Admin() {
                     data-testid={`row-label-${l.id}`}
                   >
                     {l.logoUrl ? (
-                      <img
+                      <BrandMarkImg
                         src={l.logoUrl}
                         alt=""
                         className="w-10 h-10 rounded bg-slate-50 object-contain shrink-0"

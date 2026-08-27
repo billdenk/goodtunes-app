@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { uploadImageFile } from "@/lib/adminUpload";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 import {
   Dialog,
   DialogContent,
@@ -211,7 +212,7 @@ export function PressLogoEditorDialog({
             </div>
             <div className="relative rounded-xl overflow-hidden aspect-square">
               {shownUrl ? (
-                <img
+                <BrandMarkImg
                   src={shownUrl}
                   alt={name}
                   className="w-full h-full object-cover"

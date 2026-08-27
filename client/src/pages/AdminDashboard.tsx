@@ -48,6 +48,7 @@ import { KpiCard, type KpiCardModel } from "@/components/admin/KpiCard";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { StatusDot } from "@/components/admin/StatusDot";
 import { useAuth } from "@/hooks/useAuth";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 /**
  * Task #140 — Stripe-style admin dashboard. Lives at /admin and
@@ -648,8 +649,10 @@ function WinningSection({ data }: { data?: WinningData }) {
                 : "rounded-xl bg-[var(--apple-tile)]",
             ].join(" ")}
           >
-            {(press ? r.logoUrl : r.coverUrl) ? (
-              <img src={press ? r.logoUrl : r.coverUrl} alt="" className={`w-full h-full ${press ? "object-contain" : "object-cover"}`} />
+            {press && r.logoUrl ? (
+              <BrandMarkImg src={r.logoUrl} alt="" className="w-full h-full object-contain" />
+            ) : !press && r.coverUrl ? (
+              <img src={r.coverUrl} alt="" className="w-full h-full object-cover" />
             ) : null}
           </span>
           <div className="flex-1 min-w-0">

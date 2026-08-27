@@ -25,6 +25,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 
 /**
  * Admin home · Gear (Phase 6c).
@@ -947,7 +948,7 @@ function VendorChip({
       data-testid={testId}
     >
       {slot.logoUrl ? (
-        <img
+        <BrandMarkImg
           src={slot.logoUrl}
           alt=""
           className="w-4 h-4 rounded-sm object-cover flex-shrink-0"

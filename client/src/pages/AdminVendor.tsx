@@ -39,6 +39,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { uploadImageFile } from "@/lib/adminUpload";
 import { invalidateAdminEntity } from "@/lib/adminEntityInvalidation";
 import { useToast } from "@/hooks/use-toast";
+import { BrandMarkImg } from "@/components/admin/BrandMarkImg";
 import {
   Dialog,
   DialogContent,
@@ -429,7 +430,7 @@ export function AdminVendor() {
             data-testid="button-edit-vendor-logo"
           >
             {vendor.logoUrl ? (
-              <img
+              <BrandMarkImg
                 src={vendor.logoUrl}
                 alt={vendor.name}
                 className="w-full h-full object-cover transition-transform group-hover:scale-[1.03]"
@@ -758,7 +759,7 @@ function LineagePanel({
             >
               <div className="w-9 h-9 rounded-md overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0">
                 {parent.logoUrl ? (
-                  <img
+                  <BrandMarkImg
                     src={parent.logoUrl}
                     alt=""
                     className="w-full h-full object-cover"
@@ -836,7 +837,7 @@ function LineagePanel({
                 >
                   <span className="w-6 h-6 rounded-full overflow-hidden bg-white ring-1 ring-slate-200 flex items-center justify-center">
                     {c.logoUrl ? (
-                      <img src={c.logoUrl} alt="" className="w-full h-full object-cover" />
+                      <BrandMarkImg src={c.logoUrl} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <Store className="w-3 h-3 text-slate-300" />
                     )}
@@ -1544,7 +1545,7 @@ function InstrumentsPanel({
                             data-testid={`chip-reseller-${i.id}-${r.id}`}
                           >
                             {r.logoUrl ? (
-                              <img
+                              <BrandMarkImg
                                 src={r.logoUrl}
                                 alt=""
                                 className="w-3 h-3 rounded-sm object-cover"
