@@ -287,8 +287,10 @@ export default function PressClientEstimate() {
                 }} />
               </div>
             </div>
-            {/* inner sleeve — peeking between jacket and record */}
-            <div className="absolute transition-transform duration-500 ease-out group-hover:translate-x-5" style={{ left: 26, top: 5, width: 284, height: 284, borderRadius: 3, overflow: 'hidden', border: '1px solid #222', boxShadow: '0 1px 8px rgba(0,0,0,0.4)' }} aria-hidden>
+            {/* inner sleeve — peeking between jacket and record. Sits a hair INSIDE the
+                jacket bottom (top 2 + 284 = 286 < 288) — it must never dip below the
+                cover (Bill, Aug 26 2026, pin #360). */}
+            <div className="absolute transition-transform duration-500 ease-out group-hover:translate-x-5" style={{ left: 26, top: 2, width: 284, height: 284, borderRadius: 3, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.4)' }} aria-hidden>
               <img src={innerSleeveArt} alt="" aria-hidden style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             </div>
             <img
@@ -532,7 +534,7 @@ export default function PressClientEstimate() {
             <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 40, height: 40, filter: 'brightness(0) invert(1)', opacity: 0.9 }} />
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: INK }}>Memphis Record Pressing</div>
-              <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 2 }}>3015 Brother Blvd · Memphis, TN · memphisvinyl.com</div>
+              <div style={{ fontSize: 11.5, color: SUBINK, marginTop: 2 }}>3015 Brother Blvd · Memphis, TN · memphisrecordpressing.com</div>
             </div>
           </div>
           {/* Each sentence on its own line (Bill, Aug 19 2026). */}
