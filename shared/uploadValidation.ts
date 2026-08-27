@@ -31,6 +31,33 @@ export type CheckResult = {
    * a tooltip. Currently stamped by the bleed check.
    */
   source?: string;
+  /**
+   * Task #3410 — per-font resolution entries, stamped ONLY on the
+   * `tmpl.fonts` check when the file declares live text. Additive data:
+   * the check's status/message verdict is unchanged by this field. Absent
+   * on legacy stored rows and on files with no detected fonts.
+   */
+  fonts?: CompletedFontEntry[];
+};
+
+// ─── Task #3410 — per-font resolution on the completed-art fonts check ──
+// Every detected /BaseFont gets one entry classifying what happens next:
+//   embedded — the font program ships inside the PDF; nothing to do.
+//   google   — unembedded, but the family matches the Google Fonts catalog
+//              (legally redistributable) so mockups can be rendered with
+//              the Google Fonts version. Metrics may differ slightly from
+//              the licensed original — always shown with that caveat.
+//   missing  — unembedded with no Google Fonts match (e.g. Adobe-licensed
+//              type, which can't be fetched programmatically) → the
+//              customer must upload the font file or outline the text.
+export type CompletedFontStatus = "embedded" | "google" | "missing";
+
+export type CompletedFontEntry = {
+  /** Normalized BaseFont name (subset prefix stripped) shown to the customer. */
+  name: string;
+  status: CompletedFontStatus;
+  /** Matched Google Fonts family name — set only when status is "google". */
+  googleFamily?: string;
 };
 
 export type UploadValidationKind = "art" | "audio";

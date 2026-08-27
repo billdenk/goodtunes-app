@@ -42,7 +42,7 @@
 import dns from "node:dns/promises";
 import net from "node:net";
 import zlib from "node:zlib";
-import type { CheckResult } from "@shared/uploadValidation";
+import type { CheckResult, CompletedFontEntry } from "@shared/uploadValidation";
 import type { FinishedComponentSpec } from "@shared/vendorSpecs";
 import type { OcrTextMeasurement, RasterOcrResult } from "./ocrTextSize";
 import type { GuideEdges, MeasuredTemplateGuides } from "@shared/templateGuides";
@@ -2101,6 +2101,17 @@ export function fontsCheckVerdict(
     message: `${mixed ? "Some live text uses fonts with no embedded font program." : "Live text with no embedded font program."}${namesPart} Outline the type in your design app, or upload the font files (OTF/TTF) alongside this art so the prepress team can install them.`,
   };
 }
+
+const FONT_STYLE_WORDS = new Set([
+  "regular", "plain", "normal", "roman", "book", "text", "display",
+  "bold", "semibold", "demibold", "demi", "extrabold", "ultrabold",
+  "light", "extralight", "ultralight", "thin", "hairline",
+  "medium", "black", "heavy", "poster",
+  "italic", "ital", "oblique", "slanted", "inclined", "upright",
+  "condensed", "cond", "narrow", "compressed", "compact",
+  "extended", "expanded", "wide",
+  "extra", "ultra", "semi",
+]);
 // Task #3411 — shared verdict row for an OCR-measured text size (outlined
 // PDFs and raster inputs). WARN-ONLY by contract: OCR is a heuristic, so a
 // below-floor reading warns and never fails, regardless of the press's
@@ -2193,6 +2204,13 @@ export function validateCompletedComponent(
      *  press has a min-text-size rule. Null/absent = not checked → the
      *  outlined-type advisory row stays byte-identical to today. */
     ocrText?: OcrTextMeasurement | null;
+    /**
+     * Task #3410 — Google Fonts catalog index (fontMatchKey(family) →
+     * canonical family) resolved by the caller (the fetch is async; this
+     * function stays pure). Null/absent = catalog unreachable or not
+     * consulted → unembedded fonts report "missing" (needs upload).
+     */
+    googleFonts?: ReadonlyMap<string, string> | null;
   },
 ): CheckResult[] {
   // Not a PDF → nothing else is meaningful.
@@ -2396,11 +2414,17 @@ export function validateCompletedComponent(
   // surfaces can never diverge.
   {
     const fonts = fontsCheckVerdict(scan);
+    // Task #3410 — per-font resolution entries (embedded / Google Fonts /
+    // needs upload-or-outline). Additive data only: status + message are
+    // byte-identical to the shared verdict with or without a catalog, and
+    // the field is omitted entirely when no fonts were detected.
+    const fontEntries = resolveFontEntries(scan, opts?.googleFonts);
     checks.push({
       key: "tmpl.fonts",
       label: "Fonts",
       status: fonts.status,
       message: fonts.message,
+      ...(fontEntries.length > 0 ? { fonts: fontEntries } : {}),
     });
   }
 
@@ -3180,3 +3204,109 @@ export type SpotUsageReason =
 const OBJ_LOOKAHEAD = 320; // < CARRY, so the slice is always fully present
 
 const CONTENT_CS_RE = /\/([^\s/\[\]<>()]+)\s+(?:cs|CS)(?![A-Za-z])/g;
+
+/**
+ * Derive a candidate family name + style/weight hints from a raw PDF
+ * /BaseFont value. Walks the word list from the END, consuming style words
+ * (kept as hints, in order) and foundry tags (dropped) until a real family
+ * word stops the walk. "Roman" preceded by "New" stays in the family
+ * ("Times New Roman"); elsewhere it's a style word ("Times-Roman" → Times).
+ */
+export function parseFontFamily(raw: string): { family: string; styleHints: string[] } {
+  const name = normalizeFontName(raw).replace(/-Identity-[HV]$/i, "");
+  const words = fontNameWords(name);
+  const hints: string[] = [];
+  let end = words.length;
+  while (end > 1) {
+    const w = words[end - 1];
+    const lw = w.toLowerCase();
+    if (lw === "roman" && words[end - 2]?.toLowerCase() === "new") break;
+    if (/^\d+$/.test(w) || FONT_STYLE_WORDS.has(lw)) {
+      hints.unshift(w);
+      end--;
+      continue;
+    }
+    if (FONT_FOUNDRY_WORDS.has(lw)) {
+      end--;
+      continue;
+    }
+    break;
+  }
+  return { family: words.slice(0, end).join(" "), styleHints: hints };
+}
+
+const FONT_FOUNDRY_WORDS = new Set(["mt", "ps", "psmt", "itc", "bt", "ef", "lt", "t1"]);
+
+/** Canonical catalog-match key: lowercase alphanumerics only, so spacing,
+ * hyphens, and camel-casing differences can't defeat a match. */
+export function fontMatchKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/**
+ * Match a raw PDF font name against a Google Fonts index
+ * (fontMatchKey(family) → canonical family). Tries the LONGEST candidate
+ * first — family plus its style hints re-appended in order — so
+ * "RobotoCondensed-Bold" resolves to "Roboto Condensed", not "Roboto".
+ * Exact-key matches only, no fall-back-to-closest: a wrong "match" is worse
+ * than an honest "please upload the font".
+ */
+export function matchGoogleFamily(
+  rawName: string,
+  index: ReadonlyMap<string, string>,
+): string | null {
+  const { family, styleHints } = parseFontFamily(rawName);
+  if (!family) return null;
+  const parts = [family, ...styleHints];
+  for (let n = parts.length; n >= 1; n--) {
+    const hit = index.get(fontMatchKey(parts.slice(0, n).join(" ")));
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/**
+ * Build the per-font resolution entries for a scan (Task #3410). One entry
+ * per detected /BaseFont: embedded ✓ / matched in Google Fonts (mockups can
+ * be rendered with the GF version) / missing (upload the font file or
+ * outline the text). `googleFonts` is the catalog index or null when the
+ * catalog was unreachable/not consulted — every unembedded font then
+ * honestly reports "missing" (needs upload), never blocking the scan.
+ *
+ * Mirrors fontsCheckVerdict's association canon exactly: per-font embedding
+ * is only trusted when the scan associated descriptors (hasEmbeddedFonts +
+ * unembeddedFontNames); a file-wide hasEmbeddedFonts with no unembedded
+ * names keeps every font "embedded" (legacy conservative fallback), and
+ * !hasEmbeddedFonts marks every font unembedded.
+ */
+export function resolveFontEntries(
+  scan: Pick<CompletedPdfScan, "hasFontDicts" | "hasEmbeddedFonts" | "unembeddedFontNames" | "fontNames">,
+  googleFonts?: ReadonlyMap<string, string> | null,
+): CompletedFontEntry[] {
+  if (!scan.hasFontDicts) return [];
+  const names = (scan.fontNames ?? []).filter(Boolean);
+  if (names.length === 0) return [];
+  const unembedded = new Set(
+    scan.hasEmbeddedFonts ? (scan.unembeddedFontNames ?? []) : names,
+  );
+  return names.map((name) => {
+    if (!unembedded.has(name)) return { name, status: "embedded" as const };
+    const googleFamily = googleFonts ? matchGoogleFamily(name, googleFonts) : null;
+    return googleFamily
+      ? { name, status: "google" as const, googleFamily }
+      : { name, status: "missing" as const };
+  });
+}
+
+/** Split a name into display words: hyphen/underscore/comma/space segments,
+ * then camel-case bumps and letter↔digit transitions within each. */
+function fontNameWords(name: string): string[] {
+  const words: string[] = [];
+  for (const seg of name.split(/[-_,.\s]+/)) {
+    if (!seg) continue;
+    const parts = seg.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z]+|\d+/g);
+    if (parts) words.push(...parts);
+    else words.push(seg);
+  }
+  return words;
+}

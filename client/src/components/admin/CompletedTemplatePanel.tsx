@@ -1110,6 +1110,36 @@ export function PreviewArtDialog({
                       {c.source}
                     </div>
                   )}
+                  {/* Task #3410 — per-font resolution list (fonts check
+                      only). Icon + word per row, never color alone. */}
+                  {(c.fonts?.length ?? 0) > 0 && (
+                    <ul className="mt-1 space-y-0.5" data-testid={`font-status-list-${componentId}`}>
+                      {c.fonts!.map((f, i) => (
+                        <li
+                          key={`${f.name}-${i}`}
+                          className="flex items-start gap-1.5"
+                          data-testid={`font-status-${componentId}-${i}`}
+                        >
+                          {f.status === "embedded" ? (
+                            <Check className="w-3 h-3 mt-0.5 shrink-0 text-green-600" />
+                          ) : f.status === "google" ? (
+                            <Info className="w-3 h-3 mt-0.5 shrink-0 text-blue-600" />
+                          ) : (
+                            <XCircle className="w-3 h-3 mt-0.5 shrink-0 text-red-600" />
+                          )}
+                          <span className="text-slate-600">
+                            <span className="font-medium text-slate-700">{f.name}</span>
+                            {" — "}
+                            {f.status === "embedded"
+                              ? "Embedded"
+                              : f.status === "google"
+                                ? `Available via Google Fonts (${f.googleFamily}) — we can render mockups with the Google Fonts version; metrics may differ slightly from the licensed original`
+                                : "Not embedded and not in Google Fonts — upload the font file below or outline the text"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
             );

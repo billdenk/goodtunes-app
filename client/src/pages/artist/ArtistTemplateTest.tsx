@@ -55,6 +55,8 @@ import {
   Check,
   FileImage,
   Pencil,
+  Info,
+  XCircle,
   type LucideIcon,
 } from 'lucide-react';
 import { queryClient, apiRequest } from '@/lib/queryClient';
@@ -76,6 +78,7 @@ type Theme = {
   faint: string;
   hairline: string;
   ready: string;
+  fail: string;
   readyWash: string;
   chipBorder: string;
   hoverCard: string;
@@ -100,6 +103,7 @@ const THEMES: Record<'light' | 'dark', Theme> = {
     hoverCard: 'hover:bg-slate-100',
     headerBg: 'rgba(255,255,255,0.72)',
     blue: '#0071e3',
+    fail: '#d92d20',
     dashed: '#c9c9cf',
     dot: '#d0d0d5',
   },
@@ -117,6 +121,7 @@ const THEMES: Record<'light' | 'dark', Theme> = {
     hoverCard: 'hover:bg-white/10',
     headerBg: 'rgba(22,22,24,0.72)',
     blue: '#319ed8',
+    fail: '#f2555a',
     dashed: '#46464d',
     dot: '#46464d',
   },
@@ -505,6 +510,11 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   // flagged live, non-embedded type (or fonts are already attached).
   const fontsFailed = (component?.checks ?? []).some((c) => c.key === 'tmpl.fonts' && c.status === 'fail');
   const fontFiles = component?.fontFiles ?? [];
+  // Task #3410 — per-font resolution entries stamped on the fonts check:
+  // embedded / available via Google Fonts / needs upload-or-outline.
+  const fontEntries = (component?.checks ?? []).find((c) => c.key === 'tmpl.fonts')?.fonts ?? [];
+  const googleResolved = fontEntries.filter((f) => f.status === 'google');
+  const missingFonts = fontEntries.filter((f) => f.status === 'missing');
 
   // Loading / error / unknown-slot states are explicit. A KNOWN slot with no
   // upload yet renders the full page in its "Pending — not tested yet" state
@@ -788,9 +798,48 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             <div className="text-sm font-semibold" style={{ color: t.ink }}>Fonts for this piece</div>
             {fontsFailed && (
               <p className="text-xs" style={{ marginTop: 4, color: t.subink, lineHeight: 1.5 }}>
-                This file has live text whose fonts aren&rsquo;t embedded. Either outline the type in your
-                design app and re-upload the art, or upload the font files here (OTF/TTF) so the prepress
-                team can install them.
+                This file has live text whose fonts aren&rsquo;t embedded.
+                {missingFonts.length > 0
+                  ? ' Either outline the type in your design app and re-upload the art, or upload the font files here (OTF/TTF) so the prepress team can install them.'
+                  : ' Outline the type in your design app and re-upload the art, or leave it as is \u2014 see the font status below.'}
+              </p>
+            )}
+            {/* Task #3410 — per-font resolution list. Icon + word per row,
+                never color alone (colorblind rule). */}
+            {fontEntries.length > 0 && (
+              <ul style={{ marginTop: 10 }} data-testid="font-status-list">
+                {fontEntries.map((f, i) => (
+                  <li
+                    key={`${f.name}-${i}`}
+                    className="flex items-start gap-2 text-xs"
+                    style={{ padding: '6px 0', borderTop: i === 0 ? undefined : `1px solid ${t.hairline}`, color: t.subink, lineHeight: 1.5 }}
+                    data-testid={`font-status-row-${i}`}
+                  >
+                    {f.status === 'embedded' ? (
+                      <Check className="w-3.5 h-3.5 flex-shrink-0" style={{ marginTop: 2, color: t.ready }} aria-hidden />
+                    ) : f.status === 'google' ? (
+                      <Info className="w-3.5 h-3.5 flex-shrink-0" style={{ marginTop: 2, color: t.blue }} aria-hidden />
+                    ) : (
+                      <XCircle className="w-3.5 h-3.5 flex-shrink-0" style={{ marginTop: 2, color: t.fail }} aria-hidden />
+                    )}
+                    <span className="min-w-0">
+                      <span className="font-medium" style={{ color: t.ink }}>{f.name}</span>
+                      {' \u2014 '}
+                      {f.status === 'embedded'
+                        ? 'Embedded \u2713 nothing to do.'
+                        : f.status === 'google'
+                          ? `Available via Google Fonts (${f.googleFamily}) \u2014 we can render mockups with the Google Fonts version.`
+                          : 'Not embedded and not in Google Fonts \u2014 upload the font file below or outline this text.'}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {googleResolved.length > 0 && (
+              <p className="text-xs" style={{ marginTop: 8, color: t.faint, lineHeight: 1.5 }} data-testid="text-google-fonts-caveat">
+                Google Fonts versions are legally redistributable, so we can use them for mockups &mdash;
+                but their metrics may differ slightly from the licensed original. For exact fidelity,
+                outline the type or upload your licensed font files.
               </p>
             )}
             {fontFiles.length > 0 && (

@@ -24,6 +24,7 @@ import {
 } from "@shared/vendorSpecs";
 import { rollupStatus, type CheckResult } from "@shared/uploadValidation";
 import { validateCompletedComponent, logSpotUsageFallback, measuredBleedInches, hasTrustworthyBleedBoxes, fontsCheckVerdict } from "./validators/completedTemplate";
+import { getGoogleFontsIndex } from "./googleFonts";
 import {
   measureTemplateSpecRow,
   clearTemplateSpecMeasurements,
@@ -1437,7 +1438,11 @@ export function registerPressTemplateFlowRoutes(
                 if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
               }
             }
-            const checks: CheckResult[] = validateCompletedComponent(scan, slotSpecEff, { contentBleed });
+            // Task #3410 — Google Fonts resolution for the per-font status
+            // list (cached; null on failure = fonts fall back to "needs
+            // upload"; never blocks the run).
+            const googleFonts = scan.hasFontDicts ? await getGoogleFontsIndex() : null;
+            const checks: CheckResult[] = validateCompletedComponent(scan, slotSpecEff, { contentBleed, googleFonts });
             const verdict = rollupStatus(checks);
 
             // Task #3090 — rasterize the test file's first page(s) so the client

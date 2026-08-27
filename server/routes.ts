@@ -123,6 +123,7 @@ import {
 } from "@shared/uploadValidation";
 import { validateCompletedComponent, validateRasterComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches, hasTrustworthyBleedBoxes, contentBleedMeasurement, type ContentBleedMeasurement, logSpotUsageFallback } from "./validators/completedTemplate";
 import { ocrPdfSmallestText, ocrRasterSmallestText, sniffRasterKind, type OcrTextMeasurement, type RasterOcrResult } from "./validators/ocrTextSize";
+import { getGoogleFontsIndex } from "./googleFonts";
 import { scanObjectPdf, readObjectHead, measureTemplateSpecRow, clearTemplateSpecMeasurements, mirrorExternalTemplatePdf } from "./templateSpecs";
 
 const scryptAsync = promisify(scrypt);
@@ -24617,7 +24618,7 @@ export async function registerRoutes(
     }
   });
 
-  // ============================ ASCAP staging lookup ============================
+  // ---------------------------- ASCAP staging lookup ----------------------------
   // Filtered slice of the ASCAP catalog (writers + publishers for roster titles).
   // Used by the admin Writers row to auto-fill writer-on-record + publisher chain.
   app.get("/api/admin/ascap/status", requireAdmin, async (_req, res) => {
@@ -36064,7 +36065,14 @@ export async function registerRoutes(
     } else {
       // Task #3069 — log every spot-usage fallback with its reason code.
       logSpotUsageFallback(scan!, { fileName, source: isOwnObject ? assetUrl : "external-url" });
-      checks = validateCompletedComponent(scan!, spec, { edgeBand, contentBleed, ocrText });
+
+      // Task #3410 — resolve the Google Fonts catalog (cached; null on any
+      // failure) so the fonts check can classify unembedded fonts as
+      // "available via Google Fonts" vs "upload or outline". Only consulted
+      // when the file declares live text; never blocks the scan.
+      const googleFonts = scan!.hasFontDicts ? await getGoogleFontsIndex() : null;
+
+      checks = validateCompletedComponent(scan!, spec, { edgeBand, contentBleed, ocrText, googleFonts });
     }
     const component: CompletedTemplateComponent = {
       componentId: spec.id,

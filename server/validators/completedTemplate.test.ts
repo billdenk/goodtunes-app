@@ -9,8 +9,13 @@ import {
   hasTrustworthyBleedBoxes,
   templateTrimRectInches,
   contentBleedFromRaster,
+  parseFontFamily,
+  fontMatchKey,
+  matchGoogleFamily,
+  resolveFontEntries,
   type ContentBleedMeasurement,
 } from "./completedTemplate";
+import { buildGoogleFontsIndex } from "../googleFonts";
 import { validateArt } from "./preflight";
 import {
   requiredFinishedComponents,
@@ -2061,4 +2066,167 @@ describe("Task #3388 — tmpl.text_size check gating", () => {
     assert.equal(c.tier, "advisory");
     assert.match(c.message, /outlined type isn't measured/i);
   });
+});
+
+// ─── Task #3410 — font name normalization + Google Fonts resolution ─────
+describe("Task #3410 — font name normalization (parseFontFamily)", () => {
+  const cases: [string, string, string[]][] = [
+    // [raw BaseFont, expected family, expected style hints]
+    ["ABCDEF+Helvetica-Bold", "Helvetica", ["Bold"]],
+    ["Helvetica", "Helvetica", []],
+    ["Lato-Regular", "Lato", ["Regular"]],
+    ["OpenSans-SemiBoldItalic", "Open Sans", ["Semi", "Bold", "Italic"]],
+    ["ABCDEF+Futura#20Bold", "Futura", ["Bold"]],
+    // Foundry format tags (PS/MT) are dropped, and "Roman" after "New"
+    // stays in the family name.
+    ["TimesNewRomanPS-BoldItalicMT", "Times New Roman", ["Bold", "Italic"]],
+    ["TimesNewRomanPSMT", "Times New Roman", []],
+    // ...but "Roman" elsewhere is a style word (classic Base14 name).
+    ["Times-Roman", "Times", ["Roman"]],
+    // Hyphenated multi-style + numeric weight tokens.
+    // The walk stops at the first non-style word from the end ("Std"), so
+    // interior foundry tags stay — honest no-match either way (not in GF).
+    ["Frutiger-LT-Std-55-Roman", "Frutiger LT Std", ["55", "Roman"]],
+    ["Roboto-Medium", "Roboto", ["Medium"]],
+    ["RobotoCondensed-Bold", "Roboto", ["Condensed", "Bold"]],
+    // CID encoding suffix is stripped.
+    ["ABCDEF+Roboto-Identity-H", "Roboto", []],
+  ];
+  for (const [raw, family, hints] of cases) {
+    test(`${raw} → family "${family}"`, () => {
+      const got = parseFontFamily(raw);
+      assert.equal(got.family, family);
+      assert.deepEqual(got.styleHints, hints);
+    });
+  }
+
+  test("fontMatchKey collapses case, spaces, and punctuation", () => {
+    assert.equal(fontMatchKey("Open Sans"), "opensans");
+    assert.equal(fontMatchKey("open-sans"), "opensans");
+    assert.equal(fontMatchKey("PT Sans"), "ptsans");
+  });
+});
+
+describe("Task #3410 — Google Fonts matching (matchGoogleFamily)", () => {
+  const index = buildGoogleFontsIndex([
+    "Roboto",
+    "Roboto Condensed",
+    "Open Sans",
+    "Lato",
+    "PT Sans",
+    "Source Sans Pro",
+  ]);
+
+  test("longest candidate wins: RobotoCondensed-Bold → Roboto Condensed, not Roboto", () => {
+    assert.equal(matchGoogleFamily("RobotoCondensed-Bold", index), "Roboto Condensed");
+  });
+  test("style suffixes are stripped before matching", () => {
+    assert.equal(matchGoogleFamily("ABCDEF+OpenSans-SemiBoldItalic", index), "Open Sans");
+    assert.equal(matchGoogleFamily("Roboto-Medium", index), "Roboto");
+    assert.equal(matchGoogleFamily("Lato-Regular", index), "Lato");
+  });
+  test("families whose real name keeps a 'Pro'-style word still match", () => {
+    assert.equal(matchGoogleFamily("SourceSansPro-Bold", index), "Source Sans Pro");
+  });
+  test("no exact match → null (never fall back to closest)", () => {
+    assert.equal(matchGoogleFamily("Helvetica-Bold", index), null);
+    assert.equal(matchGoogleFamily("MinionPro-Regular", index), null);
+  });
+});
+
+describe("Task #3410 — per-font resolution entries on the fonts check", () => {
+  const gfIndex = buildGoogleFontsIndex(["Bad Font", "Open Sans"]);
+  // MIXED file: GoodFont embedded (FontDescriptor + FontFile2), BadFont not.
+  const mixedBuf = Buffer.from(
+    "%PDF-1.6\n/Type /Page /MediaBox [ 0 0 1962 1944 ]\n/DeviceCMYK\n" +
+      "3 0 obj\n<< /Type /Font /BaseFont /ABCDEF+GoodFont /FontDescriptor 5 0 R >>\nendobj\n" +
+      "4 0 obj\n<< /Type /Font /BaseFont /BadFont /FontDescriptor 6 0 R >>\nendobj\n" +
+      "5 0 obj\n<< /Type /FontDescriptor /FontName /ABCDEF+GoodFont /Flags 4 /FontFile2 9 0 R >>\nendobj\n" +
+      "6 0 obj\n<< /Type /FontDescriptor /FontName /BadFont /Flags 4 >>\nendobj\n" +
+      "%%EOF",
+    "latin1",
+  );
+
+  test("mixed file: embedded ✓ / Google Fonts match, per font", () => {
+    const scan = scanBuffer(mixedBuf);
+    const entries = resolveFontEntries(scan, gfIndex);
+    assert.deepEqual(entries, [
+      { name: "BadFont", status: "google", googleFamily: "Bad Font" },
+      { name: "GoodFont", status: "embedded" },
+    ]);
+  });
+
+  test("catalog down (null) → unembedded fonts fall back to missing, scan never blocked", () => {
+    const scan = scanBuffer(mixedBuf);
+    assert.deepEqual(resolveFontEntries(scan, null), [
+      { name: "BadFont", status: "missing" },
+      { name: "GoodFont", status: "embedded" },
+    ]);
+    // Same when the caller never consulted the catalog.
+    assert.deepEqual(resolveFontEntries(scan)[0], { name: "BadFont", status: "missing" });
+  });
+
+  test("no per-font association (file-wide embedded boolean) keeps every font embedded", () => {
+    const scan = scanBuffer(fakePdf({ pages: 1, wIn: 27.25, hIn: 27.0, color: "cmyk", fonts: "embedded" }));
+    assert.deepEqual(resolveFontEntries(scan, gfIndex), [{ name: "Helvetica", status: "embedded" }]);
+  });
+
+  test("no embedded programs at all → every font unembedded (missing without a match)", () => {
+    const scan = scanBuffer(fakePdf({ pages: 1, wIn: 27.25, hIn: 27.0, color: "cmyk", fonts: "live-unembedded" }));
+    assert.deepEqual(resolveFontEntries(scan, gfIndex), [{ name: "Helvetica", status: "missing" }]);
+  });
+
+  test("outlined type (no font dicts) → no entries", () => {
+    const scan = scanBuffer(fakePdf({ pages: 1, wIn: 27.25, hIn: 27.0, color: "cmyk", fonts: "outlined" }));
+    assert.deepEqual(resolveFontEntries(scan, gfIndex), []);
+  });
+
+  test("legacy stored scan without fontNames → no entries, verdict untouched", () => {
+    const scan = scanBuffer(fakePdf({ pages: 1, wIn: 27.25, hIn: 27.0, color: "cmyk", fonts: "live-unembedded" }));
+    delete (scan as any).fontNames;
+    assert.deepEqual(resolveFontEntries(scan, gfIndex), []);
+    const c = find(validateCompletedComponent(scan, SPECS["jacket"], { googleFonts: gfIndex }), "tmpl.fonts");
+    assert.equal(c.status, "fail");
+    assert.equal("fonts" in c, false);
+  });
+
+  test("validateCompletedComponent stamps entries on tmpl.fonts without changing the verdict", () => {
+    const scan = scanBuffer(mixedBuf);
+    const withCatalog = find(validateCompletedComponent(scan, SPECS["jacket"], { googleFonts: gfIndex }), "tmpl.fonts");
+    const without = find(validateCompletedComponent(scan, SPECS["jacket"]), "tmpl.fonts");
+    // Verdict semantics byte-identical with or without a catalog.
+    assert.equal(withCatalog.status, without.status);
+    assert.equal(withCatalog.message, without.message);
+    assert.equal(withCatalog.status, "fail");
+    assert.deepEqual(withCatalog.fonts, [
+      { name: "BadFont", status: "google", googleFamily: "Bad Font" },
+      { name: "GoodFont", status: "embedded" },
+    ]);
+    assert.deepEqual(without.fonts, [
+      { name: "BadFont", status: "missing" },
+      { name: "GoodFont", status: "embedded" },
+    ]);
+  });
+
+  test("outlined file: the fonts check carries NO fonts field at all", () => {
+    const scan = scanBuffer(fakePdf({ pages: 4, wIn: 6.5, hIn: 7.6811, color: "cmyk", fonts: "outlined" }));
+    const c = find(validateCompletedComponent(scan, SPECS["labels"]), "tmpl.fonts");
+    assert.equal(c.status, "pass");
+    assert.equal("fonts" in c, false);
+  });
+
+  test("no-rules contract: spec without printRules is deepEqual, fonts entries included", () => {
+    const scan = scanBuffer(scanBufferBytesWithLiveText());
+    const before = validateCompletedComponent(scan, SPECS["labels"], { googleFonts: gfIndex });
+    const after = validateCompletedComponent(
+      scan,
+      { ...SPECS["labels"], printRules: null, pressName: null } as any,
+      { googleFonts: gfIndex },
+    );
+    assert.deepEqual(after, before);
+  });
+
+  function scanBufferBytesWithLiveText(): Buffer {
+    return fakePdf({ pages: 4, wIn: 6.5, hIn: 7.6811, color: "cmyk+spot", fonts: "live-unembedded" });
+  }
 });
