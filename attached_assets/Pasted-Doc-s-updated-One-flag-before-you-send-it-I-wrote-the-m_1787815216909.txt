@@ -1,0 +1,37 @@
+Doc's updated. **One flag before you send it:** I wrote the money-flow paragraph asserting Hellbender's own Stripe account with Hellbender as merchant of record on portal jobs, and GoodTunes as merchant of record only on fan-funded projects. That's my inference from how you described PMP's payment page — it is not something I can verify. **Confirm it with Otis before this goes out**, because it's the clause Matt will read hardest and the one you can't be wrong about.
+
+Here's what to send Otis — organized by what each answer unblocks:
+
+---
+
+**Blocking a partner LOI going out tonight**
+
+1. On a white-label portal job, whose Stripe account does the customer pay into — the plant's own connected account, or a GoodTunes platform account? If Connect, which type (Standard, Express, Custom)?
+2. Who is merchant of record on those transactions, and who bears chargeback liability?
+3. Does GoodTunes ever take custody of plant funds on portal jobs, even briefly in transit?
+4. Can we export a single plant's full configuration and data — color library, templates, component pricing, packages, customer records, order history — in a standard machine-readable format today? If not, what would it take?
+5. Is one plant's pricing, customer and order data hard-isolated from another's at the data layer, or is it row-level separation in shared tables? I've promised two plants that nothing crosses between them.
+
+**Protecting the platform (MRP is GZ-owned)**
+
+6. Can we do clickwrap terms acceptance at first admin login, tied to named individual accounts?
+7. Can we render the logged-in user's name and email as a watermark on admin screens?
+8. Do we have per-user access logging on admin views — who looked at what, and when?
+9. Any way to disable or throttle bulk export/screenshot-style access for non-owner roles?
+
+**Launch feasibility**
+
+10. Is a Hellbender-branded environment realistic to have in testing by early September and live by end of September? What's the actual critical path?
+11. What can we honestly commit to on uptime, backup and restore? I'd rather promise nothing than promise wrong.
+12. Odoo: what standard interfaces exist that we could connect to without custom work, and where does it become genuinely custom? I need to know what's fair to include in a $10K implementation versus separately quoted.
+
+**PMP punch list — dates, not estimates**
+
+13. Custom quantity entry in the builder (free entry for 250, 750) — how long?
+14. Spine split, then full front/back/spine drag-and-drop assembly — how long each?
+15. "Clear" base option in the color builder, plus an infinity-splatter swatch?
+16. Consolidated final proof — detected audio track list shown against jacket, inner sleeve and center-label track lists, one approval. Is OCR of track lists off center labels realistic, or is that a research project?
+
+---
+
+Number 16 is the one I'd flag for him as genuinely uncertain — the rest are engineering, that one might be a rabbit hole. Worth knowing before you promise Piper a validation step that can't be built.
