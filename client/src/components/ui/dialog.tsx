@@ -31,8 +31,13 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    /** Render without the built-in corner close button. For dialogs that
+     * bring their own close control (e.g. the Help & feedback handoff
+     * design) — an explicit opt-out, not a CSS specificity fight. */
+    hideCloseButton?: boolean
+  }
+>(({ className, children, hideCloseButton = false, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -50,10 +55,10 @@ const DialogContent = React.forwardRef<
       {children}
       {/* Admin: modal close is a small gray circle chip with a dark ×
           (canon "Modal close" rule). Fan keeps the quiet bare glyph. */}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [body.gt-admin_&]:h-7 [body.gt-admin_&]:w-7 [body.gt-admin_&]:rounded-full [body.gt-admin_&]:bg-[var(--apple-chip)] [body.gt-admin_&]:text-[var(--apple-ink)] [body.gt-admin_&]:opacity-100 [body.gt-admin_&]:inline-flex [body.gt-admin_&]:items-center [body.gt-admin_&]:justify-center [body.gt-admin_&]:data-[state=open]:bg-[var(--apple-chip)]">
+      {!hideCloseButton && <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [body.gt-admin_&]:h-7 [body.gt-admin_&]:w-7 [body.gt-admin_&]:rounded-full [body.gt-admin_&]:bg-[var(--apple-chip)] [body.gt-admin_&]:text-[var(--apple-ink)] [body.gt-admin_&]:opacity-100 [body.gt-admin_&]:inline-flex [body.gt-admin_&]:items-center [body.gt-admin_&]:justify-center [body.gt-admin_&]:data-[state=open]:bg-[var(--apple-chip)]">
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
+      </DialogPrimitive.Close>}
     </DialogPrimitive.Content>
   </DialogPortal>
 ))

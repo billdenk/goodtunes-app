@@ -453,13 +453,26 @@ export function FeedbackLauncher({ className }: { className?: string }) {
         onClick={openDialog}
         data-testid="button-open-feedback"
       >
-        {capturing ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquarePlus className="h-4 w-4" />}
-        <span className="hidden sm:inline">Feedback</span>
+        {capturing ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            {/* Visible at ALL breakpoints so the spinner never reads as
+                frozen — swaps back to "Feedback" the moment the dialog
+                opens (or capture fails). */}
+            <span>Preparing…</span>
+          </>
+        ) : (
+          <>
+            <MessageSquarePlus className="h-4 w-4" />
+            <span className="hidden sm:inline">Feedback</span>
+          </>
+        )}
       </Button>
 
       <UiDialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetAll(); }}>
         <DialogContent
-          className="max-w-none w-auto p-0 border-0 bg-transparent shadow-none [&>button]:hidden"
+          className="max-w-none w-auto p-0 border-0 bg-transparent shadow-none"
+          hideCloseButton
           data-feedback-dialog="true"
           aria-describedby={undefined}
         >
