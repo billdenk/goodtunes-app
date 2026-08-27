@@ -1,0 +1,17 @@
+All five files are back on main. Here's the corrected paste-ready message — the last paragraph of your screenshot version is now wrong on both counts, so use this one:
+
+---
+
+**Otis — the white-label entrances already exist as mocks; nothing to invent here.**
+
+**PMP domain (pmp.makesvinyl.com) is wearing the wrong clothes.** The dark GoodTunes-logo landing page and the white "Sign in to GoodTunes Admin" page both come out. The word "GoodTunes" never appears on a white-label domain — and the admin login is the press's back door, never the client's front door. The real screens are on main in `handoff/white-label-client-portal/` — `PressClientNextStepsPMP.tsx` (+Dark) contains both the PMP-branded sign-in gate AND the portal it reveals. Cinq and Hellbender twins are in the same folder; MRP's set was already in `handoff/memphis-client-portal/`. Verbatim copy, wire data only — README in the folder has the Must-work list. Note: the PMP files were updated today — re-pull the latest before starting.
+
+**MRP link landing.** Emailed estimate/invitation links must land directly on the portal (or the estimate page) — the link token is the auth. Right now they drop people on the sign-in gate. The gate exists only for bare-domain visits with no session, and after signing in the visitor goes straight to the portal, never back to the gate.
+
+**Google/Apple sign-in: hidden, not just inactive.** Don't render those buttons anywhere until we decide how activation works — if people can see them, they'll click them. They come back only when we say so.
+
+**PMP's color is "Clear Red" now — final, not placeholder.** The old "Ruby translucent" wording is gone from every PMP screen (it was never in PMP's line; Clear Red is their own Standard Color name). Also removed: a disc photo on the PMP estimate screens that was actually MRP's asset — the updated mocks draw the disc instead. Never reuse one press's assets on another press's screens.
+
+---
+
+That replaces the whole message in your screenshot — everything from today is folded in.
