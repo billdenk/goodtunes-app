@@ -129,6 +129,7 @@ import { getGoogleFontsIndex } from "./googleFonts";
 import { sideTracklistsFromSongs, matchTracklistChecks } from "./validators/trackOrderOcr";
 import { staleOrderCheck, vinylAssignmentChanged } from "@shared/staleArtOrder";
 import { scanObjectPdf, readObjectHead, measureTemplateSpecRow, clearTemplateSpecMeasurements, mirrorExternalTemplatePdf } from "./templateSpecs";
+import { withTemplateSpecStateLock, reconcileTemplateSpecRevisions } from "./pressTemplatesPortal";
 
 const scryptAsync = promisify(scrypt);
 
@@ -36942,49 +36943,66 @@ export async function registerRoutes(
     // ("" = applies to any jacket); labels / inner sleeves are always
     // variant-less so the unique key + resolver lookup agree.
     const variantKey = body.data.componentKey === "jacket" ? (body.data.variantKey ?? "") : "";
-    // Task #3011 — detect a template attach/replace so we can (re)measure.
-    const prevRows = await storage.listPressTemplateSpecs(req.params.id, body.data.format);
-    const prev = prevRows.find(
-      (r) =>
-        r.componentKey === body.data.componentKey &&
-        (r.variantKey ?? "") === variantKey &&
-        r.discCount === (body.data.discCount ?? 0),
-    );
-    const spec = await storage.upsertPressTemplateSpec(
-      {
-        pressId: req.params.id,
-        format: body.data.format,
-        componentKey: body.data.componentKey,
-        variantKey,
-        discCount: body.data.discCount ?? 0,
-        artboardWInches: body.data.artboardWInches ?? null,
-        artboardHInches: body.data.artboardHInches ?? null,
-        expectedPages: body.data.expectedPages ?? null,
-        color: body.data.color ?? null,
-        fontsRule: body.data.fontsRule ?? null,
-        templateFileUrl: body.data.templateFileUrl ?? null,
-        templateFileName: body.data.templateFileName ?? null,
-        minPpi: body.data.minPpi ?? null,
-        bleedLineInches: body.data.bleedLineInches ?? null,
-        printRules: body.data.printRules ?? null,
+    // Task #3407 review — this operator route is a live-file writer too, so
+    // the whole read→upsert→measure→reconcile sequence runs under the SAME
+    // per-spec lock as the press portal's replace/restore/archive/certify
+    // routes, and the revision ledger is reconciled inside it (a
+    // revision-managed spec never ends up with its live file pointing away
+    // from the sole current revision).
+    const outSpec = await withTemplateSpecStateLock(
+      req.params.id,
+      { format: body.data.format, componentKey: body.data.componentKey, variantKey, discCount: body.data.discCount ?? 0 },
+      async () => {
+        // Task #3011 — detect a template attach/replace so we can (re)measure.
+        const prevRows = await storage.listPressTemplateSpecs(req.params.id, body.data.format);
+        const prev = prevRows.find(
+          (r) =>
+            r.componentKey === body.data.componentKey &&
+            (r.variantKey ?? "") === variantKey &&
+            r.discCount === (body.data.discCount ?? 0),
+        );
+        const spec = await storage.upsertPressTemplateSpec(
+          {
+            pressId: req.params.id,
+            format: body.data.format,
+            componentKey: body.data.componentKey,
+            variantKey,
+            discCount: body.data.discCount ?? 0,
+            artboardWInches: body.data.artboardWInches ?? null,
+            artboardHInches: body.data.artboardHInches ?? null,
+            expectedPages: body.data.expectedPages ?? null,
+            color: body.data.color ?? null,
+            fontsRule: body.data.fontsRule ?? null,
+            templateFileUrl: body.data.templateFileUrl ?? null,
+            templateFileName: body.data.templateFileName ?? null,
+            minPpi: body.data.minPpi ?? null,
+            bleedLineInches: body.data.bleedLineInches ?? null,
+            printRules: body.data.printRules ?? null,
+          },
+          req.session.userId ?? null,
+        );
+        // Task #3011 — measure the attached template when it's new/changed (or
+        // was never measured). Removal/replacement clears stale measurements
+        // first. Await so the editor sees measured values on refetch; failures
+        // are recorded on the row, never thrown.
+        const newUrl = spec.templateFileUrl ?? null;
+        const urlChanged = (prev?.templateFileUrl ?? null) !== newUrl;
+        let out = spec;
+        if (!newUrl) {
+          if (urlChanged || spec.measuredAt) await clearTemplateSpecMeasurements(req.params.id, spec.id);
+        } else if (urlChanged || !spec.measuredAt) {
+          if (urlChanged) await clearTemplateSpecMeasurements(req.params.id, spec.id);
+          await measureTemplateSpecRow(req.params.id, spec.id);
+        }
+        // Task #3407 review — keep the revision ledger in step with the
+        // live file (no-op for specs without history).
+        if (urlChanged) {
+          await reconcileTemplateSpecRevisions(req.params.id, spec.id, req.session.userId ?? null);
+        }
+        out = (await storage.getPressTemplateSpecById(req.params.id, spec.id)) ?? spec;
+        return out;
       },
-      req.session.userId ?? null,
     );
-    // Task #3011 — measure the attached template when it's new/changed (or
-    // was never measured). Removal/replacement clears stale measurements
-    // first. Await so the editor sees measured values on refetch; failures
-    // are recorded on the row, never thrown.
-    const newUrl = spec.templateFileUrl ?? null;
-    const urlChanged = (prev?.templateFileUrl ?? null) !== newUrl;
-    let outSpec = spec;
-    if (!newUrl) {
-      if (urlChanged || spec.measuredAt) await clearTemplateSpecMeasurements(req.params.id, spec.id);
-      outSpec = (await storage.getPressTemplateSpecById(req.params.id, spec.id)) ?? spec;
-    } else if (urlChanged || !spec.measuredAt) {
-      if (urlChanged) await clearTemplateSpecMeasurements(req.params.id, spec.id);
-      await measureTemplateSpecRow(req.params.id, spec.id);
-      outSpec = (await storage.getPressTemplateSpecById(req.params.id, spec.id)) ?? spec;
-    }
     res.json({ spec: outSpec });
   });
 

@@ -14,3 +14,30 @@ The certify endpoints had NO client caller until Aug 2026: the live-test page (`
 **Why:** review caught that shipping the policy without the certify wiring would make an enabled press reject every client file forever with no UI recovery.
 
 **How to apply:** any new route that measures client files against template specs must thread requireCertified/certifiedSpecIds through resolveRequired; never gate the certification path itself; keep spec-mode Save submitting the server test.
+
+## Restore-by-revision (History panel)
+**Rules:** restoring an old revision mints a NEW pending revision and supersedes the previous current — history is never rewritten, and the restored template is ALWAYS Pending (certification stays pinned to the current live revision, so pre-restore passing runs 409 and must re-run). Superseded-view mode in the client is strictly read-only: every mutation affordance AND its handler gate on it.
+
+**Why:** auto-recertifying a restored file would let an old passing test vouch for a file the press never re-verified; a half-gated viewer lets a press mutate state against an old file.
+
+**Concurrency rule:** EVERY route that writes a spec's live file (replace, restore — all flavors, including the archived-slot restore) must run its full sequence (file write → re-measure → mint/flip revision → supersede) under the shared per-spec advisory lock, re-reading state inside the lock; nest it INSIDE the custom-slot lock when both apply. Otherwise interleavings leave the live file mismatched with the sole pending revision.
+
+## Revision-state lock domain (Task-3407-era reviews, Aug 2026)
+The per-spec advisory lock is only a guarantee if it covers EVERY writer of a
+spec's live file or revision status — portal replace/restore/archive/certify,
+the BACKGROUND auto-certify worker, the legacy archived-slot restore, and the
+operator god-view catalog PUT in server/routes.ts (which must also reconcile
+the revision ledger: mint pending + supersede on file change, archive currents
+on file removal, no-op for history-less specs). Validation of a target
+revision must happen INSIDE the lock on freshly re-read state, never on a
+pre-lock snapshot. Use withTemplateSpecStateLock / reconcileTemplateSpecRevisions
+(exported from pressTemplatesPortal.ts) for any out-of-module writer.
+**Why:** review rejected four times for writers left outside the lock; each
+one can leave the live file pointing away from the sole current revision.
+
+## Read-only viewer states fire no active art operations
+Superseded-revision view AND saved-run art re-hydration are purely visual:
+no auto ink/PPI inspection on load (loadArtFromFile inspect:false), retry
+control hidden and its handler guarded via artInspectionAllowed() in
+templateHistory.ts. Only a fresh deliberate art pick in the live view may
+inspect.

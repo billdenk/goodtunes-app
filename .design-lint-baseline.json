@@ -27262,12 +27262,32 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
+    "snippet": "<div className=\"min-w-0 flex-1 text-[12.5px]\" style={{ color: t.ink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
+    "snippet": "className={cn('h-8 px-3 rounded-full text-[12.5px] font-semibold transition-colors disabled:opacity-60', t.hoverWash)}"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors disabled:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
     "snippet": "className=\"w-full max-w-[520px] text-[16px] font-semibold rounded-lg px-2 py-0.5 focus:outline-none\""
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
     "snippet": "<div className=\"text-[18px] font-semibold truncate\" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={template.name}>{template.name}</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
+    "snippet": "<span className=\"flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-semibold ml-1.5\" style={{ color: t.subink }} data-testid=\"chip-template-status\">"
   },
   {
     "rule": "hardcoded-font-size",
@@ -27303,11 +27323,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
     "snippet": "className={cn('h-8 px-2.5 rounded-full text-[12.5px] font-medium transition-colors disabled:opacity-60', t.hoverWash)}"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
-    "snippet": "className=\"inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors disabled:opacity-60\""
   },
   {
     "rule": "hardcoded-font-size",
@@ -27372,7 +27387,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
-    "snippet": "<span className=\"text-[11px] font-semibold flex-shrink-0 inline-flex items-center gap-1\" style={{ color: rev.current ? t.ready : t.faint }}>"
+    "snippet": "<span className=\"text-[11px] font-semibold flex-shrink-0 inline-flex items-center gap-1\" style={{ color: rev.current ? t.ready : viewingThis ? t.blue : t.faint }}>"
   },
   {
     "rule": "hardcoded-font-size",
@@ -27382,12 +27397,12 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
-    "snippet": "<div className=\"text-[11.5px] mt-1.5\" style={{ color: t.faint }}>No art files tested</div>"
+    "snippet": "<div className=\"text-[11.5px] mt-1\" style={{ color: t.faint }}>No art files tested</div>"
   },
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
-    "snippet": "<div key={ei} className=\"mt-1.5 flex items-center gap-1.5 text-[11.5px]\" style={{ color: t.subink }}>"
+    "snippet": "'mt-0.5 w-[calc(100%+16px)] -mx-2 text-left rounded-lg px-2 py-1 flex items-center gap-1.5 text-[11.5px] transition-all duration-150',"
   },
   {
     "rule": "hardcoded-font-size",
@@ -27455,6 +27470,26 @@
     "snippet": "className=\"h-9 rounded-full text-[13px] font-semibold disabled:opacity-60\""
   },
   {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
+    "snippet": "<div className=\"text-[15px] font-semibold\" style={{ color: t.ink }}>Restore {viewingRev.name}?</div>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
+    "snippet": "<div className=\"text-[13px] mt-2 leading-relaxed\" style={{ color: t.subink }}>"
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
+    "snippet": "className=\"h-9 px-4 rounded-full text-[13px] font-semibold disabled:opacity-60\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
+    "snippet": "className=\"inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-semibold text-white disabled:opacity-60\""
+  },
+  {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
     "snippet": "className=\"absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center transition-colors hover:opacity-80\""
@@ -27472,12 +27507,12 @@
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
-    "snippet": "className=\"w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors\""
+    "snippet": "className=\"w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0\""
   },
   {
     "rule": "player-touch-target-too-small",
     "file": "client/src/pages/press-templates/PressTemplateLiveTest.tsx",
-    "snippet": "className=\"w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0\""
+    "snippet": "className=\"w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0 transition-colors\""
   },
   {
     "rule": "player-touch-target-too-small",

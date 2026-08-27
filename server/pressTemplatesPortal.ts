@@ -44,7 +44,7 @@ import {
   CUSTOM_SLOT_KEY_RE,
   type TemplateOption,
 } from "./templateOptions";
-import type { PressTemplateSpec } from "@shared/schema";
+import type { PressTemplateSpec, PressTemplateRevision } from "@shared/schema";
 import { pool } from "./db";
 
 // Task #3066 — attach vs delete on a CUSTOM slot must be mutually exclusive:
@@ -58,13 +58,28 @@ export function customSlotLockKey(pressId: string, slotKey: string): string {
   return `press_custom_slot:${pressId}:${slotKey}`;
 }
 
-async function withCustomSlotLock<T>(
+// Task #3407 review — replace AND restore-by-revision both run the same
+// multi-step transition (spec file write → re-measure → mint revision →
+// supersede the rest). Two of them interleaving can leave the live spec file
+// pointing at one revision while a DIFFERENT revision ends up the sole
+// pending one — certification would then pin runs to the wrong file. A
+// per-spec advisory lock spans the WHOLE sequence in every route that
+// replaces or restores a spec's file. Keyed on the spec's natural identity
+// (press, format, component, variant, discs) because the attach route may
+// not know the row id until it creates it. Nesting order everywhere: custom
+// slot lock OUTER, spec lock INNER — never the reverse (deadlock).
+export function templateSpecLockKey(
   pressId: string,
-  slotKey: string,
-  fn: () => Promise<T>,
-): Promise<T> {
+  format: string,
+  componentKey: string,
+  variantKey: string,
+  discCount: number,
+): string {
+  return `press_template_spec:${pressId}:${format}:${componentKey}:${variantKey}:${discCount}`;
+}
+
+async function withAdvisoryLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const client = await pool.connect();
-  const key = customSlotLockKey(pressId, slotKey);
   try {
     await client.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [key]);
     try {
@@ -75,6 +90,75 @@ async function withCustomSlotLock<T>(
   } finally {
     client.release();
   }
+}
+
+async function withCustomSlotLock<T>(
+  pressId: string,
+  slotKey: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return withAdvisoryLock(customSlotLockKey(pressId, slotKey), fn);
+}
+
+// Task #3407 review — the lock domain must cover EVERY writer of a spec's
+// live file, including the operator god-view catalog editor in
+// server/routes.ts. This wrapper is the single entry point for out-of-module
+// writers: same key, same custom-slot OUTER / spec INNER nesting.
+export async function withTemplateSpecStateLock<T>(
+  pressId: string,
+  key: { format: string; componentKey: string; variantKey?: string | null; discCount?: number | null },
+  fn: () => Promise<T>,
+): Promise<T> {
+  const lockKey = templateSpecLockKey(
+    pressId,
+    key.format,
+    key.componentKey,
+    key.variantKey ?? "",
+    key.discCount ?? 0,
+  );
+  return key.componentKey.startsWith("custom_")
+    ? withCustomSlotLock(pressId, key.componentKey, () => withAdvisoryLock(lockKey, fn))
+    : withAdvisoryLock(lockKey, fn);
+}
+
+// Task #3407 review — bring the revision ledger back in step with the live
+// file after an out-of-module write (the operator catalog PUT). MUST be
+// called INSIDE withTemplateSpecStateLock, after the file write + measure.
+// No-op for specs that never had revision history (the pre-history admin
+// flow stays byte-identical). File changed → mint a pending revision and
+// supersede the previous current, mirroring the portal replace; file
+// removed → archive the currents, mirroring the portal archive.
+export async function reconcileTemplateSpecRevisions(
+  pressId: string,
+  specId: string,
+  userId: string | null,
+): Promise<void> {
+  const revs = await storage.listPressTemplateRevisions([specId]);
+  if (revs.length === 0) return;
+  const spec = await storage.getPressTemplateSpecById(pressId, specId);
+  if (!spec) return;
+  const current = revs.filter((r) => r.status === "pending" || r.status === "certified");
+  if (!spec.templateFileUrl) {
+    for (const r of current) {
+      await storage.setPressTemplateRevisionStatus(r.id, "archived");
+    }
+    return;
+  }
+  if (current.length === 1 && current[0].fileUrl === spec.templateFileUrl) return; // already in step
+  const revision = await storage.createPressTemplateRevision({
+    specId,
+    revLabel: nextRevLabel(revs),
+    fileUrl: spec.templateFileUrl,
+    fileName: spec.templateFileName ?? null,
+    createdByUserId: userId,
+    measuredSnapshot: measuredSnapshotOf(spec),
+    note: "Replaced via operator catalog",
+  });
+  await storage.supersedePressTemplateRevisions(
+    specId,
+    revision.id,
+    `Superseded ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
+  );
 }
 
 // Same closed vocabularies as the admin template-spec routes
@@ -177,6 +261,43 @@ const testSchema = z.object({
 });
 
 /** Mint a display revision label: R-MMDDYY (+ -2, -3… on same-day re-uploads). */
+// Auto-certify a clean background test run — the same state-machine rule as
+// the explicit certify route: only the revision that is live RIGHT NOW may be
+// certified, checked and written under the shared per-spec advisory lock so a
+// concurrent restore/replace/archive can't supersede the revision between the
+// read and the certify write. Exported so the race regression can drive the
+// exact production path deterministically. Returns true only if it certified.
+export async function autoCertifyTemplateTestRun(
+  pressId: string,
+  specId: string,
+  runId: string,
+  runRevisionId: string,
+): Promise<boolean> {
+  const peek = await storage.getPressTemplateSpecById(pressId, specId);
+  if (!peek) return false;
+  const doAutoCertify = async (): Promise<boolean> => {
+    const specNow = await storage.getPressTemplateSpecById(pressId, specId);
+    const revsNow = await storage.listPressTemplateRevisions([specId]);
+    const liveNow = revsNow.find((r) => r.status === "pending" || r.status === "certified") ?? null;
+    if (!specNow?.templateFileUrl || !liveNow || liveNow.id !== runRevisionId) return false;
+    const when = new Date();
+    await storage.certifyPressTemplateTestRun(runId, when);
+    await storage.setPressTemplateRevisionStatus(liveNow.id, "certified", when);
+    return true;
+  };
+  const lockKey = templateSpecLockKey(
+    pressId,
+    peek.format,
+    peek.componentKey,
+    peek.variantKey ?? "",
+    peek.discCount ?? 0,
+  );
+  // Nesting order (matches attach/restore): custom slot lock OUTER, spec lock INNER.
+  return peek.componentKey.startsWith("custom_")
+    ? withCustomSlotLock(pressId, peek.componentKey, () => withAdvisoryLock(lockKey, doAutoCertify))
+    : withAdvisoryLock(lockKey, doAutoCertify);
+}
+
 function nextRevLabel(existing: { revLabel: string }[]): string {
   const d = new Date();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -593,18 +714,19 @@ export function registerPressTemplateFlowRoutes(
   // Stored /objects/ files redirect (already same-origin); external https
   // links (Dropbox/Drive paste flow) are proxied through the SSRF-guarded
   // fetcher — a direct browser fetch would die on CORS.
-  app.get("/api/press/:id/templates/:specId/file", requireAdmin, requirePressScope, async (req, res) => {
-    const pressId = String(req.params.id);
-    const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
-    if (!spec?.templateFileUrl) return res.status(404).json({ message: "No template file on this slot." });
-    const url = spec.templateFileUrl;
+  // Shared by the spec-file and revision-file routes: stored /objects/ paths
+  // redirect (already same-origin); external https links are proxied through
+  // the SSRF-guarded fetcher (a direct browser fetch would die on CORS); a
+  // dead/not-a-PDF link answers 422 template_link_dead (Task #3154 — client
+  // state, never a 5xx that pages ops).
+  const serveTemplatePdfSource = async (res: Response, url: string, tmpKey: string) => {
     if (url.startsWith("/")) return res.redirect(url);
     if (!/^https:\/\//i.test(url)) return res.status(409).json({ message: "This template's link can't be fetched." });
     const os = await import("node:os");
     const path = await import("node:path");
     const fs = await import("node:fs");
     const { fetchAndScanPdf } = await import("./validators/completedTemplate");
-    const tmp = path.join(os.tmpdir(), `press-template-${spec.id}-${Date.now()}.pdf`);
+    const tmp = path.join(os.tmpdir(), `press-template-${tmpKey}-${Date.now()}.pdf`);
     try {
       const fetched = await fetchAndScanPdf(url, { spoolTo: tmp });
       if (!fetched.ok) {
@@ -631,6 +753,30 @@ export function registerPressTemplateFlowRoutes(
       fs.unlink(tmp, () => {});
       if (!res.headersSent) res.status(502).json({ message: e?.message ?? "Couldn't fetch the template file." });
     }
+  };
+
+  app.get("/api/press/:id/templates/:specId/file", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+    if (!spec?.templateFileUrl) return res.status(404).json({ message: "No template file on this slot." });
+    return serveTemplatePdfSource(res, spec.templateFileUrl, spec.id);
+  });
+
+  // GET /api/press/:id/templates/:specId/revisions/:revId/file — same-origin
+  // download of a SUPERSEDED (or archived) revision's stored PDF, so the
+  // History & tests panel can load a prior version into the live-test viewer
+  // for comparison (Task #3407). Scope-checked view access, not editor —
+  // view-only roles may browse history. Never exposes raw object-storage
+  // URLs: /objects paths redirect through the authed object route, legacy
+  // external links proxy through the SSRF-guarded fetcher.
+  app.get("/api/press/:id/templates/:specId/revisions/:revId/file", requireAdmin, requirePressScope, async (req, res) => {
+    const pressId = String(req.params.id);
+    const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+    if (!spec) return res.status(404).json({ message: "Template slot not found" });
+    const revs = await storage.listPressTemplateRevisions([spec.id]);
+    const rev = revs.find((r) => r.id === String(req.params.revId));
+    if (!rev?.fileUrl) return res.status(404).json({ message: "No stored file on this revision." });
+    return serveTemplatePdfSource(res, rev.fileUrl, rev.id);
   });
 
   // GET /api/press/:id/templates/:specId/runs/:runId/file — same-origin
@@ -898,45 +1044,67 @@ export function registerPressTemplateFlowRoutes(
         );
         return { spec };
       };
+      // Task #3407 review — the whole replace sequence (file write →
+      // re-measure → mint revision → supersede) runs under the per-spec
+      // advisory lock so it can't interleave with a concurrent replace or
+      // restore-by-revision of the same slot (the live file must always
+      // match the sole pending/current revision).
+      const runReplace = async (): Promise<
+        | { spec: PressTemplateSpec; existing?: PressTemplateSpec; measured: PressTemplateSpec; revision: PressTemplateRevision }
+        | { status: number; message: string }
+      > => {
+        const attachedInner = await attach();
+        if ("status" in attachedInner) return attachedInner;
+        const { spec, existing } = attachedInner;
+        await clearTemplateSpecMeasurements(pressId, spec.id);
+        await measureTemplateSpecRow(pressId, spec.id);
+        // Task #3099 — kick off the template-page render in the background so
+        // the Test page has real artwork under the rings on next view (the
+        // lazy view-time backfill covers it either way; the in-flight set
+        // de-dupes a concurrent GET).
+        const renderKey = `spec:${spec.id}`;
+        if (!previewInFlight.has(renderKey)) {
+          previewInFlight.add(renderKey);
+          void renderTemplateSpecPreviews(pressId, spec.id)
+            .catch((e) => console.error("[template-preview] attach render failed:", e?.message ?? e))
+            .finally(() => previewInFlight.delete(renderKey));
+        }
+        const measured = (await storage.getPressTemplateSpecById(pressId, spec.id)) ?? spec;
+
+        const priorRevs = await storage.listPressTemplateRevisions([spec.id]);
+        const revision = await storage.createPressTemplateRevision({
+          specId: spec.id,
+          revLabel: nextRevLabel(priorRevs),
+          fileUrl: d.fileUrl,
+          fileName: d.fileName ?? null,
+          createdByUserId: req.session.userId ?? null,
+          measuredSnapshot: measuredSnapshotOf(measured),
+        });
+        await storage.supersedePressTemplateRevisions(
+          spec.id,
+          revision.id,
+          `Superseded ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
+        );
+        return { spec, existing, measured, revision };
+      };
+      const specLockKey = templateSpecLockKey(
+        pressId,
+        d.format,
+        d.componentKey,
+        variantKey,
+        d.discCount ?? 0,
+      );
+      // Nesting order (matches restore): custom slot lock OUTER, spec lock INNER.
       const attached = d.componentKey.startsWith("custom_")
-        ? await withCustomSlotLock(pressId, d.componentKey, attach)
-        : await attach();
+        ? await withCustomSlotLock(pressId, d.componentKey, () => withAdvisoryLock(specLockKey, runReplace))
+        : await withAdvisoryLock(specLockKey, runReplace);
       if ("status" in attached) {
         // The attach never happened (unknown custom slot etc.) — don't
         // strand the just-mirrored object.
         await deleteMirroredTemplateObject(mirroredAttachPath);
         return res.status(attached.status).json({ message: attached.message });
       }
-      const { spec, existing } = attached;
-      await clearTemplateSpecMeasurements(pressId, spec.id);
-      await measureTemplateSpecRow(pressId, spec.id);
-      // Task #3099 — kick off the template-page render in the background so
-      // the Test page has real artwork under the rings on next view (the
-      // lazy view-time backfill covers it either way; the in-flight set
-      // de-dupes a concurrent GET).
-      const renderKey = `spec:${spec.id}`;
-      if (!previewInFlight.has(renderKey)) {
-        previewInFlight.add(renderKey);
-        void renderTemplateSpecPreviews(pressId, spec.id)
-          .catch((e) => console.error("[template-preview] attach render failed:", e?.message ?? e))
-          .finally(() => previewInFlight.delete(renderKey));
-      }
-      const measured = (await storage.getPressTemplateSpecById(pressId, spec.id)) ?? spec;
-
-      const priorRevs = await storage.listPressTemplateRevisions([spec.id]);
-      const revision = await storage.createPressTemplateRevision({
-        specId: spec.id,
-        revLabel: nextRevLabel(priorRevs),
-        fileUrl: d.fileUrl,
-        fileName: d.fileName ?? null,
-        createdByUserId: req.session.userId ?? null,
-        measuredSnapshot: measuredSnapshotOf(measured),
-      });
-      await storage.supersedePressTemplateRevisions(
-        spec.id,
-        revision.id,
-        `Superseded ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
-      );
+      const { spec, existing, measured, revision } = attached;
 
       // Task #3065 — option detection: does this ONE file draw multiple
       // physical options (small vs large hole)? Best-effort text scan of
@@ -1141,17 +1309,37 @@ export function registerPressTemplateFlowRoutes(
     requirePressEditor,
     async (req, res) => {
       const pressId = String(req.params.id);
-      const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
-      if (!spec) return res.status(404).json({ message: "Template slot not found" });
-      await storage.updatePressTemplateSpecFile(pressId, spec.id, null, null, req.session.userId ?? null);
-      await clearTemplateSpecMeasurements(pressId, spec.id);
-      const revs = await storage.listPressTemplateRevisions([spec.id]);
-      for (const r of revs) {
-        if (r.status === "pending" || r.status === "certified") {
-          await storage.setPressTemplateRevisionStatus(r.id, "archived");
+      const peek = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+      if (!peek) return res.status(404).json({ message: "Template slot not found" });
+      // Same spec-lock domain as replace/restore, state re-read inside:
+      // without it, archive interleaved with a replace can mark the
+      // replacement's fresh pending revision archived while its live file
+      // stays — a live file with no current revision.
+      const doArchive = async (): Promise<{ status: number; body: unknown }> => {
+        const spec = await storage.getPressTemplateSpecById(pressId, peek.id);
+        if (!spec) return { status: 404, body: { message: "Template slot not found" } };
+        await storage.updatePressTemplateSpecFile(pressId, spec.id, null, null, req.session.userId ?? null);
+        await clearTemplateSpecMeasurements(pressId, spec.id);
+        const revs = await storage.listPressTemplateRevisions([spec.id]);
+        for (const r of revs) {
+          if (r.status === "pending" || r.status === "certified") {
+            await storage.setPressTemplateRevisionStatus(r.id, "archived");
+          }
         }
-      }
-      res.json({ ok: true });
+        return { status: 200, body: { ok: true } };
+      };
+      const lockKey = templateSpecLockKey(
+        pressId,
+        peek.format,
+        peek.componentKey,
+        peek.variantKey ?? "",
+        peek.discCount ?? 0,
+      );
+      // Nesting order (matches attach/restore): custom slot lock OUTER, spec lock INNER.
+      const out = peek.componentKey.startsWith("custom_")
+        ? await withCustomSlotLock(pressId, peek.componentKey, () => withAdvisoryLock(lockKey, doArchive))
+        : await withAdvisoryLock(lockKey, doArchive);
+      res.status(out.status).json(out.body);
     },
   );
 
@@ -1166,23 +1354,162 @@ export function registerPressTemplateFlowRoutes(
     requirePressEditor,
     async (req, res) => {
       const pressId = String(req.params.id);
-      const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
-      if (!spec) return res.status(404).json({ message: "Template slot not found" });
-      if (spec.templateFileUrl) return res.status(409).json({ message: "This template is already live." });
-      const revs = await storage.listPressTemplateRevisions([spec.id]);
-      const archived = revs.find((r) => r.status === "archived" && r.fileUrl);
-      if (!archived) return res.status(404).json({ message: "No archived revision to restore." });
-      await storage.updatePressTemplateSpecFile(
+      const peek = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+      if (!peek) return res.status(404).json({ message: "Template slot not found" });
+      // Task #3407 review — this shares the per-spec lock domain with replace
+      // and restore-by-revision, and ALL state is re-read + re-validated
+      // inside the lock: without it, a concurrent replace could mint a
+      // pending revision between this route's "no live file" check and its
+      // writes, leaving two pending revisions / a live file that doesn't
+      // match the current revision.
+      const doArchivedRestore = async (): Promise<{ status: number; body: unknown }> => {
+        const spec = await storage.getPressTemplateSpecById(pressId, peek.id);
+        if (!spec) return { status: 404, body: { message: "Template slot not found" } };
+        if (spec.templateFileUrl) return { status: 409, body: { message: "This template is already live." } };
+        const revs = await storage.listPressTemplateRevisions([spec.id]);
+        const archived = revs.find((r) => r.status === "archived" && r.fileUrl);
+        if (!archived) return { status: 404, body: { message: "No archived revision to restore." } };
+        await storage.updatePressTemplateSpecFile(
+          pressId,
+          spec.id,
+          archived.fileUrl,
+          archived.fileName ?? null,
+          req.session.userId ?? null,
+        );
+        await clearTemplateSpecMeasurements(pressId, spec.id);
+        await measureTemplateSpecRow(pressId, spec.id);
+        await storage.setPressTemplateRevisionStatus(archived.id, "pending");
+        return { status: 200, body: { ok: true } };
+      };
+      const lockKey = templateSpecLockKey(
         pressId,
-        spec.id,
-        archived.fileUrl,
-        archived.fileName ?? null,
-        req.session.userId ?? null,
+        peek.format,
+        peek.componentKey,
+        peek.variantKey ?? "",
+        peek.discCount ?? 0,
       );
-      await clearTemplateSpecMeasurements(pressId, spec.id);
-      await measureTemplateSpecRow(pressId, spec.id);
-      await storage.setPressTemplateRevisionStatus(archived.id, "pending");
-      res.json({ ok: true });
+      // Nesting order (matches attach/restore): custom slot lock OUTER, spec lock INNER.
+      const out = peek.componentKey.startsWith("custom_")
+        ? await withCustomSlotLock(pressId, peek.componentKey, () => withAdvisoryLock(lockKey, doArchivedRestore))
+        : await withAdvisoryLock(lockKey, doArchivedRestore);
+      res.status(out.status).json(out.body);
+    },
+  );
+
+  // POST /api/press/:id/templates/:specId/revisions/:revId/restore — bring a
+  // SPECIFIC superseded revision's file back as the live template (Task
+  // #3407, "Restore this version" from the History & tests panel). Mirrors
+  // the attach/replace sequence exactly: re-attach the stored file, clear +
+  // re-measure, kick the preview render, mint a NEW pending revision linked
+  // to its origin, supersede the previous current. The restored template is
+  // always Pending — certification stays tied to a passing test against the
+  // (new) live revision, so the certify route keeps rejecting runs pinned to
+  // any superseded revision, including the restore's origin.
+  app.post(
+    "/api/press/:id/templates/:specId/revisions/:revId/restore",
+    requireAdmin,
+    requirePressScope,
+    requirePressEditor,
+    async (req, res) => {
+      const pressId = String(req.params.id);
+      const peek = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+      if (!peek) return res.status(404).json({ message: "Template slot not found" });
+      // Task #3407 review — ALL target validation happens INSIDE the lock on
+      // freshly re-read state: a revision that became current (a sibling
+      // restore) or archived while this request waited must be rejected, not
+      // restored off its stale pre-lock snapshot.
+      const doRestore = async (): Promise<
+        | { spec: PressTemplateSpec; revision: unknown }
+        | { status: number; message: string; code?: string }
+      > => {
+        const spec = await storage.getPressTemplateSpecById(pressId, peek.id);
+        if (!spec) return { status: 404, message: "Template slot not found" };
+        const revs = await storage.listPressTemplateRevisions([spec.id]);
+        const rev = revs.find((r) => r.id === String(req.params.revId));
+        if (!rev) return { status: 404, message: "Revision not found" };
+        if (rev.status === "pending" || rev.status === "certified") {
+          return { status: 409, message: "That revision is already the current template." };
+        }
+        if (!rev.fileUrl) {
+          return { status: 409, message: "That revision has no stored file — it can't be restored." };
+        }
+        // Standing rule: the live template source is OUR stored object. A
+        // legacy revision that still points at an external link gets mirrored
+        // into object storage first (same policy as attach); a dead link is
+        // client state, 422 not 5xx. Bounded fetch, so holding the spec lock
+        // across it is acceptable — correctness of the validation-to-write
+        // window beats a briefly longer critical section.
+        let fileUrl = rev.fileUrl;
+        if (!fileUrl.startsWith("/")) {
+          if (!/^https:\/\//i.test(fileUrl)) {
+            return { status: 409, message: "That revision's file link can't be fetched." };
+          }
+          const mirrored = await mirrorExternalTemplatePdf(fileUrl);
+          if (!mirrored.ok) {
+            return {
+              status: 422,
+              code: "template_link_dead",
+              message: `That revision's file can no longer be fetched. ${mirrored.error}`,
+            };
+          }
+          fileUrl = mirrored.objectPath;
+        }
+        const updated = await storage.updatePressTemplateSpecFile(
+          pressId,
+          spec.id,
+          fileUrl,
+          rev.fileName ?? null,
+          req.session.userId ?? null,
+        );
+        if (!updated) return { status: 404, message: "Template slot not found" };
+        await clearTemplateSpecMeasurements(pressId, spec.id);
+        await measureTemplateSpecRow(pressId, spec.id);
+        const renderKey = `spec:${spec.id}`;
+        if (!previewInFlight.has(renderKey)) {
+          previewInFlight.add(renderKey);
+          void renderTemplateSpecPreviews(pressId, spec.id)
+            .catch((e) => console.error("[template-preview] restore render failed:", e?.message ?? e))
+            .finally(() => previewInFlight.delete(renderKey));
+        }
+        const measured = (await storage.getPressTemplateSpecById(pressId, spec.id)) ?? updated;
+        const priorRevs = await storage.listPressTemplateRevisions([spec.id]);
+        const revision = await storage.createPressTemplateRevision({
+          specId: spec.id,
+          revLabel: nextRevLabel(priorRevs),
+          fileUrl,
+          fileName: rev.fileName ?? null,
+          createdByUserId: req.session.userId ?? null,
+          measuredSnapshot: measuredSnapshotOf(measured),
+          note: `Restored from ${rev.revLabel}`,
+        });
+        await storage.supersedePressTemplateRevisions(
+          spec.id,
+          revision.id,
+          `Superseded ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`,
+        );
+        return { spec: measured, revision };
+      };
+      // Task #3407 review — same per-spec lock domain as replace: the whole
+      // restore sequence is serialized against any concurrent replace or
+      // restore of this slot so the live file and the sole pending revision
+      // can never diverge. Nesting order (matches attach): custom slot lock
+      // OUTER, spec lock INNER.
+      const specLockKey = templateSpecLockKey(
+        pressId,
+        peek.format,
+        peek.componentKey,
+        peek.variantKey ?? "",
+        peek.discCount ?? 0,
+      );
+      const out = peek.componentKey.startsWith("custom_")
+        ? await withCustomSlotLock(pressId, peek.componentKey, () => withAdvisoryLock(specLockKey, doRestore))
+        : await withAdvisoryLock(specLockKey, doRestore);
+      if ("status" in out) {
+        return res.status(out.status).json(
+          out.code ? { code: out.code, message: out.message } : { message: out.message },
+        );
+      }
+      res.json(out);
     },
   );
 
@@ -1474,15 +1801,12 @@ export function registerPressTemplateFlowRoutes(
             // state-machine guards as the explicit certify route: only the
             // revision that is live RIGHT NOW may be certified by this run.
             if (certifyOnPass && (verdict === "pass" || verdict === "warn") && run.revisionId) {
-              const specNow = await storage.getPressTemplateSpecById(pressId, spec.id);
-              const revsNow = await storage.listPressTemplateRevisions([spec.id]);
-              const liveNow =
-                revsNow.find((r) => r.status === "pending" || r.status === "certified") ?? null;
-              if (specNow?.templateFileUrl && liveNow && liveNow.id === run.revisionId) {
-                const when = new Date();
-                await storage.certifyPressTemplateTestRun(run.id, when);
-                await storage.setPressTemplateRevisionStatus(liveNow.id, "certified", when);
-              }
+              // Task #3407 review — auto-certify is a revision-state
+              // transition too; the shared helper re-reads all state under
+              // the same per-spec lock as replace/restore/archive, so a
+              // restore can't supersede the run's revision between this
+              // worker's read and its certify write.
+              await autoCertifyTemplateTestRun(pressId, spec.id, run.id, run.revisionId);
             }
           })();
           await Promise.race([
@@ -2021,36 +2345,64 @@ export function registerPressTemplateFlowRoutes(
     requirePressEditor,
     async (req, res) => {
       const pressId = String(req.params.id);
-      const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
-      if (!spec) return res.status(404).json({ message: "Template slot not found" });
-      const run = await storage.getPressTemplateTestRunById(String(req.params.runId));
-      if (!run || run.specId !== spec.id) return res.status(404).json({ message: "Test run not found" });
-      if (run.verdict !== "pass" && run.verdict !== "warn") {
-        return res.status(409).json({
-          message: "Only a passing test run can certify a template — fix the flagged checks and run the test again.",
-        });
-      }
-      // State machine: a run may only certify the revision that is live
-      // RIGHT NOW. A run pinned to a superseded/archived revision (the file
-      // was replaced or pulled since the test) — or to no revision at all —
-      // must re-test against the current template, never resurrect history.
-      if (!spec.templateFileUrl) {
-        return res.status(409).json({
-          message: "This slot no longer has a live template — attach one and run the test again.",
-        });
-      }
-      const revs = await storage.listPressTemplateRevisions([spec.id]);
-      const live = revs.find((r) => r.status === "pending" || r.status === "certified") ?? null;
-      if (!run.revisionId || !live || run.revisionId !== live.id) {
-        return res.status(409).json({
-          message:
-            "This test ran against an older template revision — the template has changed since. Run the test again on the current file.",
-        });
-      }
-      const when = new Date();
-      await storage.certifyPressTemplateTestRun(run.id, when);
-      await storage.setPressTemplateRevisionStatus(live.id, "certified", when);
-      res.json({ ok: true, certifiedAt: when.toISOString() });
+      const peek = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
+      if (!peek) return res.status(404).json({ message: "Template slot not found" });
+      // Certification is a revision-state transition, so it shares the
+      // per-spec lock domain with replace/restore/archive and re-reads all
+      // state inside the lock. Without it, a certify that validated against
+      // the pre-restore current could stamp "certified" onto a revision a
+      // concurrent restore just superseded.
+      const doCertify = async (): Promise<{ status: number; body: unknown }> => {
+        const spec = await storage.getPressTemplateSpecById(pressId, peek.id);
+        if (!spec) return { status: 404, body: { message: "Template slot not found" } };
+        const run = await storage.getPressTemplateTestRunById(String(req.params.runId));
+        if (!run || run.specId !== spec.id) return { status: 404, body: { message: "Test run not found" } };
+        if (run.verdict !== "pass" && run.verdict !== "warn") {
+          return {
+            status: 409,
+            body: {
+              message: "Only a passing test run can certify a template — fix the flagged checks and run the test again.",
+            },
+          };
+        }
+        // State machine: a run may only certify the revision that is live
+        // RIGHT NOW. A run pinned to a superseded/archived revision (the file
+        // was replaced or pulled since the test) — or to no revision at all —
+        // must re-test against the current template, never resurrect history.
+        if (!spec.templateFileUrl) {
+          return {
+            status: 409,
+            body: { message: "This slot no longer has a live template — attach one and run the test again." },
+          };
+        }
+        const revs = await storage.listPressTemplateRevisions([spec.id]);
+        const live = revs.find((r) => r.status === "pending" || r.status === "certified") ?? null;
+        if (!run.revisionId || !live || run.revisionId !== live.id) {
+          return {
+            status: 409,
+            body: {
+              message:
+                "This test ran against an older template revision — the template has changed since. Run the test again on the current file.",
+            },
+          };
+        }
+        const when = new Date();
+        await storage.certifyPressTemplateTestRun(run.id, when);
+        await storage.setPressTemplateRevisionStatus(live.id, "certified", when);
+        return { status: 200, body: { ok: true, certifiedAt: when.toISOString() } };
+      };
+      const lockKey = templateSpecLockKey(
+        pressId,
+        peek.format,
+        peek.componentKey,
+        peek.variantKey ?? "",
+        peek.discCount ?? 0,
+      );
+      // Nesting order (matches attach/restore): custom slot lock OUTER, spec lock INNER.
+      const out = peek.componentKey.startsWith("custom_")
+        ? await withCustomSlotLock(pressId, peek.componentKey, () => withAdvisoryLock(lockKey, doCertify))
+        : await withAdvisoryLock(lockKey, doCertify);
+      res.status(out.status).json(out.body);
     },
   );
 }

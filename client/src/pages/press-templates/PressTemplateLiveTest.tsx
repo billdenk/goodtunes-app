@@ -47,8 +47,18 @@ export const freshLiveSave = { flag: false };
 
 export type SavedTest = { art: string; at: string; verdict: string };
 import {
-  CheckCircle2, XCircle, MinusCircle, AlertTriangle, FileText, ChevronRight, Upload, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck,
+  CheckCircle2, XCircle, MinusCircle, AlertTriangle, FileText, ChevronRight, Upload, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck, RotateCcw,
 } from 'lucide-react';
+import {
+  specHistoryViewModel,
+  revisionRowOpenable,
+  runViewPlan,
+  fmtHistoryDate,
+  verdictWordFor,
+  artInspectionAllowed,
+  type HistoryRevisionVM,
+  type HistoryTestVM,
+} from './templateHistory';
 import { ChevronDown as NavChevron, Layers as NavLayers } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiRequest, authHeaders } from '@/lib/queryClient';
@@ -277,10 +287,18 @@ export default function PressTemplateLiveTest({
   const fileReplaced = useRef(false);
   // Already-persisted trail for a reopened shelf template — panel display
   // only, never re-sent on Save (the server APPENDS payload tests).
-  const [priorTests, setPriorTests] = useState<SavedTest[]>([]);
+  const [priorTests, setPriorTests] = useState<HistoryTestVM[]>([]);
   // One tile per template, forever (Bill, Aug 15 2026): replacing supersedes —
   // the old revision moves into history *inside the same block*, tests attached.
-  const [revisions, setRevisions] = useState<Array<{ name: string; wMm: number; hMm: number; at: string; tests: SavedTest[] }>>([]);
+  const [revisions, setRevisions] = useState<HistoryRevisionVM[]>([]);
+  // Task #3407 — superseded-view mode: a History row loaded a PRIOR revision's
+  // PDF into the viewer. Read-only (no rename/replace/certify) until "Back to
+  // current" or "Restore this version".
+  const [viewingRev, setViewingRev] = useState<{ id: string; name: string; at: string } | null>(null);
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  // Post-restore nudge: the restored file is live again but Pending — the old
+  // passing test is one re-run away.
+  const [restoredNotice, setRestoredNotice] = useState(false);
   // Task #3065 consent kept in slot mode: one file covering several options
   // (e.g. both center-hole sizes) asks before stamping the note.
   const [detected, setDetected] = useState<{ specId: string; options: Array<{ key: string; label: string }> } | null>(null);
@@ -390,6 +408,26 @@ export default function PressTemplateLiveTest({
     } finally { setBusy(null); }
   };
 
+  // Task #3407 — one mapping from a spec's server history to the panel's
+  // state, shared by the spec-open effect and the post-restore refresh.
+  // Returns the certified revision (if any) so callers can hydrate its run.
+  const applySpecHistory = (spec: import('./types').TemplateSpecWithHistory) => {
+    const certRev = spec.revisions.find((rv) => rv.status === 'certified' && rv.certifiedAt) ?? null;
+    if (certRev?.certifiedAt) {
+      const lastRun = spec.runs[0]; // newest-first from the server
+      setSavedMeta({
+        certified: fmtHistoryDate(certRev.certifiedAt),
+        lastTest: lastRun ? `${lastRun.fileName ?? 'Art file'} — ${verdictWordFor(lastRun.verdict)} · ${fmtHistoryDate(lastRun.createdAt)}` : '',
+      });
+    } else {
+      setSavedMeta(null);
+    }
+    const vm = specHistoryViewModel(spec);
+    setPriorTests(vm.priorTests);
+    setRevisions(vm.revisions);
+    return certRev;
+  };
+
   // Flow starts on the Templates page now (Bill, Aug 14 2026): its upload sheet
   // stashes the file here, and we pick it up the moment this page mounts.
   useEffect(() => {
@@ -445,55 +483,16 @@ export default function PressTemplateLiveTest({
           // (rename / test session) to the display-name PATCH instead.
           specRef.current = spec.id;
           initialName.current = spec.displayName ?? spec.templateFileName ?? null;
+          // A fresh spec open always lands on the CURRENT revision.
+          setViewingRev(null);
+          setConfirmRestore(false);
+          setRestoredNotice(false);
           // Status carries over from the tile (Bill, Aug 15 2026): only a
           // certified revision brings the badge; pending arrives "Not tested".
-          const fmt = (d: string) => new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-          const verdictWordFor = (v: string) =>
-            v === 'pass' ? 'Pass'
-            : v === 'unverified' ? 'Visual only'
-            // Task #3200 — background-scan states: in flight vs scan failure.
-            : v === 'processing' ? 'Checking…'
-            : v === 'error' ? 'Check didn\u2019t finish'
-            : 'Flagged';
-          const certRev = spec.revisions.find((rv) => rv.status === 'certified' && rv.certifiedAt);
-          if (certRev?.certifiedAt) {
-            const lastRun = spec.runs[0]; // newest-first from the server
-            setSavedMeta({
-              certified: fmt(certRev.certifiedAt),
-              lastTest: lastRun ? `${lastRun.fileName ?? 'Art file'} — ${verdictWordFor(lastRun.verdict)} · ${fmt(lastRun.createdAt)}` : '',
-            });
-          } else {
-            setSavedMeta(null);
-          }
           // History & tests must show the SERVER-logged runs too (gogoods
           // bug, Aug 16 2026: real recorded tests showed as "No art files
           // tested" because the sheet only listed this session's local log).
-          const runToTest = (run: (typeof spec.runs)[number]) => ({
-            art: run.fileName ?? 'Art file',
-            at: fmt(run.createdAt),
-            verdict: verdictWordFor(run.verdict),
-          });
-          const currentRevIds = new Set(
-            spec.revisions.filter((rv) => rv.status !== 'superseded' && rv.status !== 'archived').map((rv) => rv.id),
-          );
-          setPriorTests(
-            spec.runs
-              .filter((run) => run.revisionId === null || currentRevIds.has(run.revisionId))
-              .slice()
-              .reverse() // server is newest-first; the sheet reads oldest→newest
-              .map(runToTest),
-          );
-          setRevisions(
-            spec.revisions
-              .filter((rv) => rv.status === 'superseded' || rv.status === 'archived')
-              .map((rv) => ({
-                name: rv.fileName ?? rv.revLabel,
-                wMm: 0, // unknown for stored revisions — the sheet hides 0-size
-                hMm: 0,
-                at: fmt(rv.createdAt),
-                tests: spec.runs.filter((run) => run.revisionId === rv.id).slice().reverse().map(runToTest),
-              })),
-          );
+          const certRev = applySpecHistory(spec);
           slotTarget.current = {
             format: spec.format,
             componentKey: spec.componentKey,
@@ -554,7 +553,7 @@ export default function PressTemplateLiveTest({
                     type: isPdf ? 'application/pdf' : artBlob.type || 'image/jpeg',
                   });
                   if (!cancelled) {
-                    await loadArtFromFile(artFileObj, { markDirty: false });
+                    await loadArtFromFile(artFileObj, { markDirty: false, inspect: false });
                     // Viewed-only art must never be re-submitted/re-certified
                     // by an unrelated Save (e.g. a rename) — only a fresh
                     // deliberate pick clears this flag (review).
@@ -635,6 +634,10 @@ export default function PressTemplateLiveTest({
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
+    // Task #3407 — superseded-view mode is strictly read-only; no fresh art
+    // picks against an old file (the affordances are hidden too — this is
+    // the structural guard).
+    if (viewingRev) return;
     artIsViewedRun.current = false; // a deliberate fresh pick is submittable again
     await loadArtFromFile(f);
   };
@@ -644,10 +647,15 @@ export default function PressTemplateLiveTest({
   const artIsViewedRun = useRef(false);
 
   // Shared art loader — the picker and the saved-run rehydrate (view mode)
-  // both run the same parse + overlay + ink-inspect pipeline. markDirty=false
-  // means "just viewing a saved result": nothing to save, Close changes nothing.
-  const loadArtFromFile = async (f: File, opts?: { markDirty?: boolean }) => {
+  // both run the same parse + overlay pipeline. markDirty=false means "just
+  // viewing a saved result": nothing to save, Close changes nothing.
+  // inspect=false (Task #3407 review) makes the load purely visual: a
+  // historical run's art is never re-sent to the server ink/PPI scanner —
+  // the run already carries its recorded verdict, and superseded-view mode
+  // must not fire active art operations.
+  const loadArtFromFile = async (f: File, opts?: { markDirty?: boolean; inspect?: boolean }) => {
     const markDirty = opts?.markDirty !== false;
+    const inspect = opts?.inspect !== false;
     const myPick = ++pickSeq.current;
     setBusy('art'); setError(null);
     // Supersede any in-flight ink scan IMMEDIATELY — before the new file even
@@ -674,7 +682,7 @@ export default function PressTemplateLiveTest({
         setArt({ name: f.name, img, wMm, hMm, pageCount: doc.numPages, gtLayerNames: gtNames, emptyGtLayerNames: emptyGtNames });
         artFile.current = f;
         setShowTemplate(false);
-        runInkInspect(f, 'application/pdf');
+        if (inspect) runInkInspect(f, 'application/pdf');
       } else {
         // Raster image (JPEG/PNG/TIFF, plus best-effort PSD) — measurable too
         // (gogoods, Aug 16 2026: MRP wants art-only files at the proper
@@ -710,7 +718,7 @@ export default function PressTemplateLiveTest({
         setArt({ name: f.name, img, wMm: null, hMm: null, pageCount: null, gtLayerNames: [], emptyGtLayerNames: [] });
         artFile.current = f; // server test submission still requires a PDF and skips rasters
         setShowTemplate(false);
-        runInkInspect(f, contentType);
+        if (inspect) runInkInspect(f, contentType);
       }
       if (pickSeq.current !== myPick) return;
       if (markDirty) setDirty(true); // a loaded art result is unsaved work — Save persists it
@@ -719,6 +727,138 @@ export default function PressTemplateLiveTest({
       setArt(null);
       setError(err instanceof Error ? err.message : 'Could not read that file.');
     } finally { if (pickSeq.current === myPick) setBusy(null); }
+  };
+
+  // ── Task #3407: superseded-view mode — load a prior revision (or a past
+  // run's art) into the viewer for comparison, with an edit-gated Restore. ──
+  const fetchPdfIntoViewer = async (url: string, fallbackName: string, displayName?: string) => {
+    // Bearer + cookie (cookie-only fetches 401 under #token-hash admin logins).
+    const r = await fetch(url, { headers: { ...authHeaders() }, credentials: 'include' });
+    if (!r.ok) {
+      let msg = `Couldn't fetch that file (${r.status})`;
+      try {
+        const body = (await r.json()) as { message?: string };
+        if (body?.message) msg = body.message;
+      } catch { /* non-JSON body — keep the generic message */ }
+      throw new Error(msg);
+    }
+    const blob = await r.blob();
+    const file = new File([blob], fallbackName, { type: 'application/pdf' });
+    await loadTemplate(file, displayName);
+  };
+
+  /** Load a superseded revision's stored PDF read-only (throws on failure). */
+  const loadRevisionIntoViewer = async (rev: HistoryRevisionVM) => {
+    if (!specRef.current || !rev.id) return;
+    await fetchPdfIntoViewer(
+      `/api/press/${pressId}/templates/${specRef.current}/revisions/${rev.id}/file`,
+      rev.name || 'template.pdf',
+      rev.name || undefined,
+    );
+    setDirty(false); // pure viewing — nothing to save against an old file
+    setUploadedAt(null); // "uploaded … by you" fine print describes the live file only
+    setViewingRev({ id: rev.id, name: rev.name, at: rev.at });
+  };
+
+  const openRevisionView = (rev: HistoryRevisionVM) => {
+    setShowTests(false);
+    setHeaderMenu(false);
+    if (!rev.id || viewingRev?.id === rev.id) return;
+    setError(null);
+    void loadRevisionIntoViewer(rev).catch((err) => {
+      setError(err instanceof Error ? err.message : 'Could not load that revision.');
+    });
+  };
+
+  const backToCurrent = async () => {
+    if (!specRef.current) return;
+    setShowTests(false);
+    setError(null);
+    try {
+      await fetchPdfIntoViewer(
+        `/api/press/${pressId}/templates/${specRef.current}/file`,
+        'template.pdf',
+        initialName.current ?? undefined,
+      );
+      setDirty(false);
+      setViewingRev(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not reload the current template.');
+    }
+  };
+
+  /** Load a past run's saved art into the overlay, against the revision it
+   *  was pinned to (switching the template view first when needed). */
+  const openRunView = async (tst: HistoryTestVM) => {
+    if (!specRef.current || !tst.runId) return;
+    const plan = runViewPlan(tst, { supersededRevisions: revisions, viewingRevisionId: viewingRev?.id ?? null });
+    if (plan.kind === 'unavailable') return;
+    setShowTests(false);
+    setHeaderMenu(false);
+    setError(null);
+    try {
+      if (plan.loadRevision) await loadRevisionIntoViewer(plan.loadRevision);
+      else if (plan.backToCurrent) await backToCurrent();
+      const ar = await fetch(`/api/press/${pressId}/templates/${specRef.current}/runs/${tst.runId}/file`, {
+        headers: { ...authHeaders() },
+        credentials: 'include',
+      });
+      if (!ar.ok) throw new Error(`Couldn't fetch that test's art file (${ar.status})`);
+      const artBlob = await ar.blob();
+      const isPdf = artBlob.type === 'application/pdf' || /\.pdf$/i.test(tst.art);
+      const f = new File([artBlob], tst.art || 'Saved art file', {
+        type: isPdf ? 'application/pdf' : artBlob.type || 'image/jpeg',
+      });
+      await loadArtFromFile(f, { markDirty: false, inspect: false });
+      // Viewed-only art must never be re-submitted/re-certified by a Save —
+      // only a fresh deliberate pick clears this flag.
+      artIsViewedRun.current = true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load that test's art.");
+    }
+  };
+
+  /** "Restore this version" — the confirmed superseded file becomes the live
+   *  template again, always Pending (re-certify via the normal test flow). */
+  const restoreRevision = async () => {
+    if (!specRef.current || !viewingRev || busy !== null) return;
+    setBusy('save');
+    setError(null);
+    try {
+      const r = await fetch(
+        `/api/press/${pressId}/templates/${specRef.current}/revisions/${viewingRev.id}/restore`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() }, credentials: 'include' },
+      );
+      if (!r.ok) {
+        let msg = `Restore failed (${r.status})`;
+        try {
+          const body = (await r.json()) as { message?: string };
+          if (body?.message) msg = body.message;
+        } catch { /* keep the generic message */ }
+        throw new Error(msg);
+      }
+      setConfirmRestore(false);
+      setViewingRev(null); // the file on screen IS the restored current now
+      setSavedMeta(null); // restored = Pending, never auto-certified
+      setDirty(false);
+      setUploadedAt(new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }));
+      setRestoredNotice(true);
+      fileReplaced.current = false;
+      // Refresh the tiles + this panel's history from the server.
+      await queryClient.invalidateQueries({ queryKey: [`/api/press/${pressId}/templates`] });
+      try {
+        const payload = await queryClient.fetchQuery<import('./types').TemplatesPayload>({ queryKey: [`/api/press/${pressId}/templates`] });
+        const spec = payload.specs.find((s) => s.id === specRef.current);
+        if (spec) {
+          applySpecHistory(spec);
+          initialName.current = spec.displayName ?? spec.templateFileName ?? null;
+        }
+      } catch { /* panel refresh is best-effort — the restore itself landed */ }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not restore this version.');
+    } finally {
+      setBusy(null);
+    }
   };
 
   // Ink + PPI (and, for rasters, size/color) live on the server scanner —
@@ -962,6 +1102,10 @@ export default function PressTemplateLiveTest({
   // Re-run the server measurement on the SAME file — a network hiccup must
   // not force a page refresh + re-pick (gogoods, Aug 16 2026).
   const retryInkInspect = () => {
+    // Task #3407 review — read-only states never fire an art inspection:
+    // not while viewing a superseded revision, and not for a saved run's
+    // re-hydrated art (its verdict is already recorded on the run).
+    if (!artInspectionAllowed({ viewingSupersededRevision: !!viewingRev, viewedRunArt: artIsViewedRun.current })) return;
     const f = artFile.current;
     if (!f) return;
     const name = f.name.toLowerCase();
@@ -1650,17 +1794,20 @@ export default function PressTemplateLiveTest({
                       <div style={{ marginLeft: 48 }} className="py-3 text-[12.5px]">
                         <span style={{ color: t.faint }}>No art files tested yet.</span>
                       </div>
-                      <div className="flex items-center justify-end py-3 text-[12px]">
-                        <button
-                          type="button"
-                          onClick={() => artInput.current?.click()}
-                          className={cn('font-medium transition-colors', t.hoverInk)}
-                          style={{ color: t.subink }}
-                          data-testid="button-upload-art-pending"
-                        >
-                          Choose an art file
-                        </button>
-                      </div>
+                      {/* Task #3407 — no art mutations while viewing a superseded revision */}
+                      {!viewingRev && (
+                        <div className="flex items-center justify-end py-3 text-[12px]">
+                          <button
+                            type="button"
+                            onClick={() => artInput.current?.click()}
+                            className={cn('font-medium transition-colors', t.hoverInk)}
+                            style={{ color: t.subink }}
+                            data-testid="button-upload-art-pending"
+                          >
+                            Choose an art file
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1759,7 +1906,9 @@ export default function PressTemplateLiveTest({
                       {checks.map((row) => <CheckLine key={row.param} row={row} t={t} />)}
                     </div>
                     <div className="flex items-center justify-end gap-4 py-3 text-[12px]">
-                      {inkFailed && (
+                      {/* Task #3407 review — no re-measure affordance in read-only
+                          superseded-view mode (matching the handler guard) */}
+                      {inkFailed && !viewingRev && (
                         <button
                           type="button"
                           onClick={retryInkInspect}
@@ -1771,19 +1920,80 @@ export default function PressTemplateLiveTest({
                           Re-run measurement
                         </button>
                       )}
-                      <button
-                        type="button"
-                        onClick={() => artInput.current?.click()}
-                        className={cn('font-medium transition-colors', t.hoverInk)}
-                        style={{ color: t.subink }}
-                        data-testid="button-upload-art-again"
-                      >
-                        Try another file
-                      </button>
+                      {/* Task #3407 — no art mutations while viewing a superseded revision */}
+                      {!viewingRev && (
+                        <button
+                          type="button"
+                          onClick={() => artInput.current?.click()}
+                          className={cn('font-medium transition-colors', t.hoverInk)}
+                          style={{ color: t.subink }}
+                          data-testid="button-upload-art-again"
+                        >
+                          Try another file
+                        </button>
+                      )}
                     </div>
                   </div>
                   )}
                 </div>
+              </div>
+            )}
+            {/* Task #3407 — superseded-view banner: persistent while an old
+                revision is loaded; the only ways out are Back to current and
+                (edit-gated) Restore this version. */}
+            {viewingRev && (
+              <div className="rounded-2xl px-5 py-3 mb-4 flex items-center gap-3 flex-wrap" style={{ backgroundColor: t.soft, border: `1px solid ${t.hairline}` }} data-testid="banner-superseded-view">
+                <History style={{ width: 15, height: 15, color: t.subink, flexShrink: 0 }} />
+                <div className="min-w-0 flex-1 text-[12.5px]" style={{ color: t.ink }}>
+                  <span className="font-semibold">Viewing a superseded version</span>
+                  <span style={{ color: t.subink }}> — {viewingRev.name}{viewingRev.at ? ` · uploaded ${viewingRev.at}` : ''}. Read-only: editing and certifying are off while you compare.</span>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => void backToCurrent()}
+                    disabled={busy !== null}
+                    className={cn('h-8 px-3 rounded-full text-[12.5px] font-semibold transition-colors disabled:opacity-60', t.hoverWash)}
+                    style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
+                    data-testid="button-back-to-current"
+                  >
+                    Back to current
+                  </button>
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmRestore(true)}
+                      disabled={busy !== null}
+                      className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors disabled:opacity-60"
+                      style={{ backgroundColor: t.blue, color: '#fff' }}
+                      data-testid="button-restore-version"
+                    >
+                      <RotateCcw style={{ width: 13, height: 13 }} />
+                      Restore this version
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+            {/* Post-restore nudge — the restored file is live but Pending;
+                the old passing test is one re-run away. */}
+            {restoredNotice && !viewingRev && (
+              <div className="rounded-2xl px-5 py-3 mb-4 flex items-center gap-3" style={{ backgroundColor: t.soft, border: `1px solid ${t.hairline}` }} data-testid="banner-restored-pending">
+                <BadgeCheck style={{ width: 15, height: 15, color: t.ready, flexShrink: 0 }} />
+                <div className="min-w-0 flex-1 text-[12.5px]" style={{ color: t.ink }}>
+                  <span className="font-semibold">Restored — this version is live again as Pending.</span>
+                  <span style={{ color: t.subink }}> Your old passing test is one re-run away: run Test &amp; Certify against this file to certify it.</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRestoredNotice(false)}
+                  aria-label="Dismiss"
+                  className="w-7 h-7 rounded-full inline-flex items-center justify-center flex-shrink-0"
+                  style={{ border: `1px solid ${t.hairline}`, color: t.subink }}
+                  data-testid="button-dismiss-restored"
+                >
+                  <X style={{ width: 13, height: 13 }} />
+                </button>
               </div>
             )}
             {/* Preview card — accept actions live in the card header now (Bill, Aug 14 2026) */}
@@ -1813,7 +2023,12 @@ export default function PressTemplateLiveTest({
                       <div className="text-[18px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }} title={template.name}>{template.name}</div>
                       {/* Status rides with the name — same truth as the tile on
                           the previous screen (Bill, Aug 15 2026) */}
-                      {savedMeta ? (
+                      {viewingRev ? (
+                        <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-semibold ml-1.5" style={{ color: t.subink }} data-testid="chip-template-status">
+                          <History style={{ width: 13, height: 13 }} />
+                          Superseded version
+                        </span>
+                      ) : savedMeta ? (
                         <span className="flex-shrink-0 inline-flex items-center gap-1.5 text-[12px] font-semibold ml-1.5" style={{ color: t.ready }} data-testid="chip-template-status">
                           <BadgeCheck style={{ width: 14, height: 14 }} />
                           Certified
@@ -1825,6 +2040,7 @@ export default function PressTemplateLiveTest({
                           Not tested
                         </span>
                       )}
+                      {!viewingRev && (
                       <button
                         type="button"
                         onClick={() => { setNameDraft(template.name); setEditingName(true); }}
@@ -1835,6 +2051,7 @@ export default function PressTemplateLiveTest({
                       >
                         <Pencil style={{ width: 13, height: 13 }} />
                       </button>
+                      )}
                     </div>
                   )}
                   {originalName && template.name !== originalName && (
@@ -1899,15 +2116,15 @@ export default function PressTemplateLiveTest({
                           that persists. */}
                       <button
                         type="button"
-                        onClick={() => { if (dirty && canEdit) void saveAndExit(); else onExit(); }}
+                        onClick={() => { if (dirty && canEdit && !viewingRev) void saveAndExit(); else onExit(); }}
                         disabled={busy !== null}
                         className="inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[12.5px] font-semibold transition-colors disabled:opacity-60"
-                        style={dirty && canEdit
+                        style={dirty && canEdit && !viewingRev
                           ? { backgroundColor: t.blue, color: '#fff' }
                           : { backgroundColor: 'transparent', color: t.subink, border: `1px solid ${t.hairline}` }}
                         data-testid="button-accept-save"
                       >
-                        {busy === 'save' ? 'Saving…' : dirty && canEdit ? 'Save' : 'Close'}
+                        {busy === 'save' ? 'Saving…' : dirty && canEdit && !viewingRev ? 'Save' : 'Close'}
                       </button>
                     </>
                   )}
@@ -2015,7 +2232,7 @@ export default function PressTemplateLiveTest({
                   </div>
                   {/* Once a test is underway, "Test" gives way to
                           "Save result & test another" — a trail staff can revisit (Bill, Aug 14 2026) */}
-                      {art && (
+                      {art && !viewingRev && (
                         <button
                           type="button"
                           onClick={saveResultAndTestAnother}
@@ -2028,7 +2245,7 @@ export default function PressTemplateLiveTest({
                           Save result &amp; test another
                         </button>
                       )}
-                      {!art && (
+                      {!art && !viewingRev && (
                         // Not yet certified? The button is the next move — it pulses a
                         // gradated amber fill on the Pending banner's own 3.6s rhythm;
                         // blue stays reserved for the one filled action (Bill, Aug 16 2026).
@@ -2081,7 +2298,7 @@ export default function PressTemplateLiveTest({
                                 <History style={{ width: 14, height: 14, color: t.subink }} />
                                 History &amp; tests
                               </button>
-                              {canEdit && (
+                              {canEdit && !viewingRev && (
                                 <button
                                   type="button"
                                   role="menuitem"
@@ -2120,28 +2337,73 @@ export default function PressTemplateLiveTest({
                                 </button>
                               </div>
                               <div className="px-5 py-3 max-h-[420px] overflow-y-auto">
-                                {[{ name: template.name, wMm: template.wMm, hMm: template.hMm, at: uploadedAt ?? '', tests: [...priorTests, ...testLog], current: true }, ...revisions.map((r) => ({ ...r, current: false }))].map((rev, ri) => (
-                                  <div key={ri} className="py-3" style={{ borderBottom: `1px solid ${t.hairline}` }}>
-                                    <div className="flex items-baseline justify-between gap-3">
-                                      <span className="text-[12.5px] font-semibold truncate" style={{ color: t.ink }} title={rev.name}>{rev.name}</span>
-                                      <span className="text-[11px] font-semibold flex-shrink-0 inline-flex items-center gap-1" style={{ color: rev.current ? t.ready : t.faint }}>
-                                        {rev.current ? <><BadgeCheck style={{ width: 12, height: 12 }} /> Current</> : <><History style={{ width: 12, height: 12 }} /> Superseded</>}
-                                      </span>
-                                    </div>
-                                    <div className="text-[11.5px] mt-0.5 tabular-nums" style={{ color: t.subink }}>
-                                      {rev.wMm > 0 ? `${rev.wMm.toFixed(1)} × ${rev.hMm.toFixed(1)} mm` : ''}{rev.at ? `${rev.wMm > 0 ? ' · ' : ''}uploaded ${rev.at}` : ''}
-                                    </div>
+                                {/* Task #3407 — rows are real buttons now: a superseded
+                                    revision (with a stored file) loads read-only into the
+                                    viewer; the current row returns to the live view; a
+                                    test row loads that run's art into the overlay. */}
+                                {[
+                                  { id: undefined as string | undefined, name: template.name, wMm: template.wMm, hMm: template.hMm, at: uploadedAt ?? '', tests: [...priorTests, ...testLog] as HistoryTestVM[], hasFile: true, current: true },
+                                  ...revisions.map((r) => ({ ...r, current: false })),
+                                ].map((rev, ri) => {
+                                  const openable = rev.current || revisionRowOpenable(rev);
+                                  const viewingThis = !rev.current && !!rev.id && viewingRev?.id === rev.id;
+                                  return (
+                                  <div key={rev.id ?? `local-${ri}`} className="py-2" style={{ borderBottom: `1px solid ${t.hairline}` }}>
+                                    <button
+                                      type="button"
+                                      disabled={!openable}
+                                      onClick={() => {
+                                        if (rev.current) { if (viewingRev) void backToCurrent(); else setShowTests(false); }
+                                        else openRevisionView(rev);
+                                      }}
+                                      className={cn(
+                                        'w-[calc(100%+16px)] -mx-2 text-left rounded-lg px-2 py-1.5 transition-all duration-150',
+                                        openable && t.hoverWash,
+                                        openable && 'hover:translate-x-[2px] active:scale-[0.99]',
+                                        !openable && 'cursor-default',
+                                      )}
+                                      title={rev.current ? (viewingRev ? 'Return to the current version' : 'This is the current version') : openable ? 'View this version in the viewer' : 'No stored file for this revision'}
+                                      data-testid={rev.current ? 'button-history-current' : `button-history-revision-${ri - 1}`}
+                                    >
+                                      <div className="flex items-baseline justify-between gap-3">
+                                        <span className="text-[12.5px] font-semibold truncate" style={{ color: t.ink }} title={rev.name}>{rev.name}</span>
+                                        <span className="text-[11px] font-semibold flex-shrink-0 inline-flex items-center gap-1" style={{ color: rev.current ? t.ready : viewingThis ? t.blue : t.faint }}>
+                                          {rev.current ? <><BadgeCheck style={{ width: 12, height: 12 }} /> Current</> : viewingThis ? <><History style={{ width: 12, height: 12 }} /> Viewing</> : <><History style={{ width: 12, height: 12 }} /> Superseded</>}
+                                        </span>
+                                      </div>
+                                      <div className="text-[11.5px] mt-0.5 tabular-nums" style={{ color: t.subink }}>
+                                        {rev.wMm > 0 ? `${rev.wMm.toFixed(1)} × ${rev.hMm.toFixed(1)} mm` : ''}{rev.at ? `${rev.wMm > 0 ? ' · ' : ''}uploaded ${rev.at}` : ''}
+                                      </div>
+                                    </button>
                                     {rev.tests.length === 0 ? (
-                                      <div className="text-[11.5px] mt-1.5" style={{ color: t.faint }}>No art files tested</div>
-                                    ) : rev.tests.map((e, ei) => (
-                                      <div key={ei} className="mt-1.5 flex items-center gap-1.5 text-[11.5px]" style={{ color: t.subink }}>
+                                      <div className="text-[11.5px] mt-1" style={{ color: t.faint }}>No art files tested</div>
+                                    ) : rev.tests.map((e, ei) => {
+                                      const clickable = !!e.runId && e.hasFile === true;
+                                      return (
+                                      <button
+                                        key={e.runId ?? `local-test-${ei}`}
+                                        type="button"
+                                        disabled={!clickable}
+                                        onClick={() => { if (clickable) void openRunView(e); }}
+                                        className={cn(
+                                          'mt-0.5 w-[calc(100%+16px)] -mx-2 text-left rounded-lg px-2 py-1 flex items-center gap-1.5 text-[11.5px] transition-all duration-150',
+                                          clickable && t.hoverWash,
+                                          clickable && 'hover:translate-x-[2px] active:scale-[0.99]',
+                                          !clickable && 'cursor-default',
+                                        )}
+                                        style={{ color: t.subink }}
+                                        title={clickable ? "View this test's art in the viewer" : e.art}
+                                        data-testid={e.runId ? `button-history-run-${e.runId}` : `row-history-test-${ri}-${ei}`}
+                                      >
                                         {e.verdict === 'Pass' ? <CheckCircle2 style={{ width: 12, height: 12, color: t.ready, flexShrink: 0 }} /> : e.verdict === 'Flagged' ? <XCircle style={{ width: 12, height: 12, color: t.crit, flexShrink: 0 }} /> : <MinusCircle style={{ width: 12, height: 12, color: t.faint, flexShrink: 0 }} />}
                                         <span className="truncate" title={e.art}>{e.art}</span>
                                         <span className="flex-shrink-0" style={{ color: t.faint }}>— {e.verdict}{e.at ? ` · ${e.at}` : ''}</span>
-                                      </div>
-                                    ))}
+                                      </button>
+                                      );
+                                    })}
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           </>
@@ -2795,6 +3057,47 @@ export default function PressTemplateLiveTest({
               </>
             )}
 
+          </div>
+        )}
+
+        {/* Task #3407 — restore confirm: the restored file comes back PENDING,
+            never auto-certified; the press re-certifies via the normal test flow. */}
+        {confirmRestore && viewingRev && (
+          <div className="fixed inset-0 z-[90] flex items-center justify-center p-6" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }} role="dialog" aria-modal="true" aria-label="Restore this version" data-testid="modal-confirm-restore">
+            <div className="rounded-2xl shadow-2xl w-full max-w-[440px] overflow-hidden" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}>
+              <div className="px-6 pt-5 pb-4">
+                <div className="text-[15px] font-semibold" style={{ color: t.ink }}>Restore {viewingRev.name}?</div>
+                <div className="text-[13px] mt-2 leading-relaxed" style={{ color: t.subink }}>
+                  This file becomes the live template again. It comes back as{' '}
+                  <span className="font-semibold" style={{ color: t.ink }}>Pending</span> — not certified — and the
+                  version it replaces moves into history. To certify it, re-run a live test against this file; if it
+                  passed before, that same art is one re-run away.
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2 px-6 py-4" style={{ borderTop: `1px solid ${t.hairline}` }}>
+                <button
+                  type="button"
+                  onClick={() => setConfirmRestore(false)}
+                  disabled={busy !== null}
+                  className="h-9 px-4 rounded-full text-[13px] font-semibold disabled:opacity-60"
+                  style={{ color: t.ink, border: `1px solid ${t.hairline}` }}
+                  data-testid="button-cancel-restore"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void restoreRevision()}
+                  disabled={busy !== null}
+                  className="inline-flex items-center gap-1.5 h-9 px-4 rounded-full text-[13px] font-semibold text-white disabled:opacity-60"
+                  style={{ backgroundColor: t.blue }}
+                  data-testid="button-confirm-restore"
+                >
+                  <RotateCcw style={{ width: 13, height: 13 }} />
+                  {busy === 'save' ? 'Restoring…' : 'Restore this version'}
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
