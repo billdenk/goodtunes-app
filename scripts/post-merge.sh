@@ -13451,3 +13451,27 @@ seed_canonical_spec_tags_task_3394() {
 }
 seed_canonical_spec_tags_task_3394 dev  "${DATABASE_URL:-}"
 seed_canonical_spec_tags_task_3394 prod "${PROD_DATABASE_URL:-}"
+
+# Task #3412 — flag artwork listing an outdated track order. The vinyl-order
+# save route stamps albums.vinyl_order_changed_at only when a persisted
+# side/order value actually changed; the completed-template payload compares
+# it against each component's latest `uploaded` file event. Nullable, no
+# default — NULL means "never reordered since this shipped" (no warnings).
+# Idempotent, dev + prod, per the schema-drift conventions.
+migrate_vinyl_order_changed_at_task_3412() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping vinyl_order_changed_at migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS vinyl_order_changed_at timestamp;
+SQL
+  then
+    echo "post-merge: vinyl_order_changed_at migration ok on $label"
+  else
+    echo "post-merge: WARNING — vinyl_order_changed_at migration failed on $label (continuing)"
+  fi
+}
+migrate_vinyl_order_changed_at_task_3412 dev  "${DATABASE_URL:-}"
+migrate_vinyl_order_changed_at_task_3412 prod "${PROD_DATABASE_URL:-}"

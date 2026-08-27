@@ -166,6 +166,13 @@ export type CompletedTemplateComponent = {
    * the art. Survives re-checks; cleared only by explicit removal.
    */
   fontFiles?: CompletedFontFile[] | null;
+  /**
+   * Task #3412 — operator acknowledgment of a "track order changed after
+   * this file was uploaded" warning. Carries the acknowledged
+   * albums.vinylOrderChangedAt so a FURTHER reorder (newer timestamp)
+   * invalidates the ack; a re-upload (fresh check) resets it to null.
+   */
+  staleOrderAck?: StaleOrderAck | null;
 };
 
 /** Task #3388 — a font file attached to an art submission. */
@@ -184,12 +191,16 @@ export type UnverifiedAck = {
   at: string; // ISO timestamp
 };
 
-// Rolled-up "ready to send" verdict for a whole confirmation:
-//   ready    — every required component present + passing (or overridden)
-//   warnings — sendable but something warned / was overridden / is extra
-//   blocked  — a required component is missing or failing (not overridden)
-//   empty    — nothing configured / supplied yet
-// Both `ready` and `warnings` are sendable; only `blocked` stops a send.
+/** Task #3412 — who acknowledged a stale-track-order warning, and against
+ *  which reorder timestamp. See CompletedTemplateComponent.staleOrderAck. */
+export type StaleOrderAck = {
+  byUserId: string;
+  byDisplayName: string | null;
+  at: string; // ISO timestamp
+  /** The albums.vinylOrderChangedAt (ISO) this ack covers — a newer
+   *  reorder re-flags the component. */
+  orderChangedAt: string;
+};
 export type CompletedTemplateVerdict = "ready" | "warnings" | "blocked" | "empty";
 
 export function rollupCompletedTemplate(

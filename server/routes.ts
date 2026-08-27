@@ -124,8 +124,10 @@ import {
   type CompletedTemplateVerdict,
 } from "@shared/uploadValidation";
 import { validateCompletedComponent, validateRasterComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches, hasTrustworthyBleedBoxes, contentBleedMeasurement, type ContentBleedMeasurement, logSpotUsageFallback } from "./validators/completedTemplate";
-import { ocrPdfSmallestText, ocrRasterSmallestText, sniffRasterKind, type OcrTextMeasurement, type RasterOcrResult } from "./validators/ocrTextSize";
+import { ocrPdfSmallestText, ocrRasterSmallestText, ocrPdfWordBoxes, ocrRasterWordBoxes, smallestTextFromWords, sniffRasterKind, OCR_PDF_RENDER_DPI, type OcrTextMeasurement, type OcrWordBox, type RasterOcrResult } from "./validators/ocrTextSize";
 import { getGoogleFontsIndex } from "./googleFonts";
+import { sideTracklistsFromSongs, matchTracklistChecks } from "./validators/trackOrderOcr";
+import { staleOrderCheck, vinylAssignmentChanged } from "@shared/staleArtOrder";
 import { scanObjectPdf, readObjectHead, measureTemplateSpecRow, clearTemplateSpecMeasurements, mirrorExternalTemplatePdf } from "./templateSpecs";
 
 const scryptAsync = promisify(scrypt);
@@ -16166,6 +16168,11 @@ export async function registerRoutes(
       }
       const ownedSongs = await storage.getSongsByAlbum(albumId);
       const ownedIds = new Set(ownedSongs.map((s: any) => String(s.id)));
+      const ownedById = new Map(ownedSongs.map((s: any) => [String(s.id), s]));
+      // Task #3412 — track whether any persisted side/order value ACTUALLY
+      // changes in this save. Only then does albums.vinylOrderChangedAt
+      // move (no-op saves must never flag already-uploaded artwork).
+      let orderChanged = false;
       if (vinylFormat !== undefined) {
         if (vinylFormat !== null && !isVinylFormat(vinylFormat)) {
           return res.status(400).json({ message: "Unknown vinylFormat" });
@@ -16223,10 +16230,23 @@ export async function registerRoutes(
             message: "assignments[].vinylOrder is required when vinylSide is set",
           });
         }
+        if (
+          vinylAssignmentChanged(ownedById.get(songId) as any, {
+            vinylSide: sideFinal,
+            vinylOrder: order,
+          })
+        ) {
+          orderChanged = true;
+        }
         await storage.updateSong(songId, {
           vinylSide: sideFinal,
           vinylOrder: order,
         } as any);
+      }
+      // Task #3412 — stamp the reorder so already-uploaded completed art
+      // (labels/jacket/sleeves printed with the old order) can be flagged.
+      if (orderChanged) {
+        await storage.updateAlbum(albumId, { vinylOrderChangedAt: new Date() } as any);
       }
       return res.json({ albumId, count: assignments.length });
     },
@@ -34481,8 +34501,13 @@ export async function registerRoutes(
     }
   });
 
+  // Side-master read/attach follow the completed-art gate: operators, the
+  // album's own resolved press, or the album's own artist/label partners —
+  // never an arbitrary scoped admin poking another album's id. Remove stays
+  // operator-only (destructive, mirrors completed-art override/remove).
   app.get("/api/admin/albums/:id/side-masters", requireAdminBearer, async (req, res) => {
     try {
+      if (!(await requireOperatorOrAlbumPress(req, res, req.params.id))) return;
       const rows = await storage.listAlbumSideMasters(req.params.id);
       res.json(rows);
     } catch (e: any) {
@@ -34493,6 +34518,11 @@ export async function registerRoutes(
 
   app.post("/api/admin/albums/:id/side-masters", requireAdminBearer, async (req, res) => {
     const albumId = req.params.id;
+    // Album-scope authorization BEFORE touching the upload object: only a
+    // caller allowed to work this album's art/masters may attach an
+    // /objects/uploads path to it (uploads carry no per-object owner, so
+    // the album scope gate is the attach authorization).
+    if (!(await requireOperatorOrAlbumPress(req, res, albumId))) return;
     const schema = z.object({
       side: z.enum(["A", "B", "C", "D"]),
       assetUrl: z.string().regex(/^\/objects\/uploads\/[a-zA-Z0-9._-]+$/, "Invalid upload path"),
@@ -34551,6 +34581,7 @@ export async function registerRoutes(
   });
 
   app.delete("/api/admin/albums/:id/side-masters/:side", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperator(req, res))) return;
     const side = String(req.params.side || "").toUpperCase();
     if (!["A", "B", "C", "D"].includes(side)) {
       return res.status(400).json({ message: "Invalid side" });
@@ -35124,6 +35155,9 @@ export async function registerRoutes(
     vendorId: VendorId;
     config: CompletedTemplateConfig;
     row: Awaited<ReturnType<typeof storage.getCompletedTemplateCheck>> | null;
+    // Task #3412 — the album row rides along so the payload can compare
+    // vinylOrderChangedAt against each component's latest upload event.
+    album: Awaited<ReturnType<typeof storage.getAlbumById>> | null;
   } | null> {
     const row = (await storage.getCompletedTemplateCheck(albumId)) ?? null;
     const stored = (row?.config ?? null) as CompletedTemplateConfig | null;
@@ -35147,7 +35181,7 @@ export async function registerRoutes(
       // No active vinyl SKU — a legacy row (configured before the picker
       // was retired) keeps working so already-uploaded art stays reachable.
       if (row?.vendorId) {
-        return { vendorId: row.vendorId as VendorId, config: row.config as CompletedTemplateConfig, row };
+        return { vendorId: row.vendorId as VendorId, config: row.config as CompletedTemplateConfig, row, album: album ?? null };
       }
       return null;
     }
@@ -35213,7 +35247,7 @@ export async function registerRoutes(
       }
     }
 
-    return { vendorId, config, row };
+    return { vendorId, config, row, album: album ?? null };
   }
 
   // ── Completed-art file events + production lock (Ruby handoff, Aug 2026) ──
@@ -35315,7 +35349,7 @@ export async function registerRoutes(
     }
     const { vendorId, config, row } = ctx;
     const required = await resolveRequired(vendorId, config);
-    const { components, status } = retagCompleted(
+    let { components, status } = retagCompleted(
       (row?.components ?? []) as CompletedTemplateComponent[],
       required.map((r) => r.id),
     );
@@ -35355,6 +35389,34 @@ export async function registerRoutes(
       /* cosmetic only — never fail the payload */
     }
     const fileEvents = await completedFileEvents(albumId);
+    // Task #3412 — stale-track-order warning, computed DYNAMICALLY here
+    // (never persisted into the stored checks): compare the album's
+    // vinylOrderChangedAt against each supplied component's latest
+    // `uploaded` file event. A re-upload or a further reorder is thus
+    // reflected immediately without re-running the file check. Warn-only:
+    // the rollup can move ready → warnings (still sendable), never blocked.
+    const orderChangedAt = (ctx.album as { vinylOrderChangedAt?: Date | null } | null)?.vinylOrderChangedAt ?? null;
+    if (orderChangedAt != null) {
+      const latestUploadAt = new Map<string, string>();
+      for (const e of fileEvents) {
+        // Newest-first: keep the first `uploaded` seen per component.
+        if (e.event === "uploaded" && !latestUploadAt.has(e.componentId)) {
+          latestUploadAt.set(e.componentId, e.at);
+        }
+      }
+      components = components.map((c) => {
+        if (!c.assetUrl) return c; // no file supplied — nothing printed to go stale
+        const staleRow = staleOrderCheck({
+          orderChangedAt,
+          lastUploadedAt: latestUploadAt.get(c.componentId) ?? null,
+          ack: c.staleOrderAck ?? null,
+        });
+        if (!staleRow) return c;
+        const checks = [...(c.checks ?? []), staleRow];
+        return { ...c, checks, status: rollupStatus(checks) };
+      });
+      status = rollupCompletedTemplate(components, required.map((r) => r.id));
+    }
     return {
       configured: true,
       reason: null as string | null,
@@ -36205,7 +36267,18 @@ export async function registerRoutes(
     let ocrText: OcrTextMeasurement | null = null;
     let rasterOcr: RasterOcrResult | null = null;
     const wantsRasterOcr = minTextRule && rasterKind != null;
-    if (isOwnObject && (scan != null ? (wantsEdgeBand || wantsContentBleed || wantsOcrText) : wantsRasterOcr)) {
+    // Task #3412 — OCR tracklist matching for CENTER LABELS: read the
+    // label text and fuzzy-match it against the album's song titles per
+    // side. Only when the album actually has side assignments (no sides →
+    // no OCR run, rows byte-identical to today), and warn-only downstream.
+    // OCR failure leaves labelWords null = no rows (never a false claim).
+    const sideLists =
+      spec.id === "labels"
+        ? sideTracklistsFromSongs((await storage.getSongsByAlbum(req.params.id)) as any)
+        : [];
+    const wantsLabelOcr = sideLists.length > 0;
+    let labelWords: OcrWordBox[] | null = null;
+    if (isOwnObject && (scan != null ? (wantsEdgeBand || wantsContentBleed || wantsOcrText || wantsLabelOcr) : (wantsRasterOcr || wantsLabelOcr))) {
       const fsp = await import("node:fs/promises");
       const os = await import("node:os");
       const path = await import("node:path");
@@ -36230,16 +36303,28 @@ export async function registerRoutes(
                 trimRectOverrideInches: spec.templateCutRectInches ?? null,
               });
             }
-            if (wantsOcrText) {
-              ocrText = await ocrPdfSmallestText(srcPath, { pageCount: scan.pageCount });
+            if (wantsLabelOcr) {
+              labelWords = await ocrPdfWordBoxes(srcPath, { pageCount: scan.pageCount });
             }
-          } else if (wantsRasterOcr) {
-            // Physical scale fallback when the raster carries no resolution
-            // metadata: the component's expected flat width (template
-            // artboard when on file, else finished + bleed both sides).
-            const expectedWidthInches =
-              spec.templatePageInches?.w ?? spec.finishedInches.w + 2 * spec.bleedInches;
-            rasterOcr = await ocrRasterSmallestText(srcPath, { expectedWidthInches });
+            if (wantsOcrText) {
+              // Reuse the tracklist pass's word boxes when we have them —
+              // same render DPI, so no second tesseract run is needed.
+              ocrText =
+                labelWords != null
+                  ? smallestTextFromWords(labelWords, OCR_PDF_RENDER_DPI / 72)
+                  : await ocrPdfSmallestText(srcPath, { pageCount: scan.pageCount });
+            }
+          } else if (wantsRasterOcr || wantsLabelOcr) {
+            if (wantsRasterOcr) {
+              // Physical scale fallback when the raster carries no resolution
+              // metadata: the component's expected flat width (template
+              // artboard when on file, else finished + bleed both sides).
+              const expectedWidthInches =
+                spec.templatePageInches?.w ?? spec.finishedInches.w + 2 * spec.bleedInches;
+              rasterOcr = await ocrRasterSmallestText(srcPath, { expectedWidthInches });
+            }
+            // Task #3412 — tracklist matching needs only words, not scale.
+            if (wantsLabelOcr) labelWords = await ocrRasterWordBoxes(srcPath);
           }
         }
       } catch {
@@ -36247,6 +36332,7 @@ export async function registerRoutes(
         contentBleed = null;
         ocrText = null;
         rasterOcr = null;
+        labelWords = null;
       } finally {
         if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
       }
@@ -36267,6 +36353,13 @@ export async function registerRoutes(
 
       checks = validateCompletedComponent(scan!, spec, { edgeBand, contentBleed, ocrText, googleFonts });
     }
+    // Task #3412 — warn-only OCR tracklist advisories for center labels:
+    // which expected titles were found, which are missing, and titles
+    // appearing in a different order than the album's current vinyl order.
+    // labelWords null (OCR unavailable/failed/skipped) = no rows at all.
+    if (labelWords != null && sideLists.length > 0) {
+      checks.push(...matchTracklistChecks(labelWords, sideLists));
+    }
     const component: CompletedTemplateComponent = {
       componentId: spec.id,
       label: spec.label,
@@ -36284,6 +36377,10 @@ export async function registerRoutes(
       // Task #3030 — a fresh check always resets any prior operator
       // acknowledgment of an Unverified result (the file may have changed).
       unverifiedAck: null,
+      // Task #3412 — same reset rule: a fresh upload/check clears any
+      // stale-track-order acknowledgment (the new file supersedes it, and
+      // the fresh `uploaded` event clears the warning itself anyway).
+      staleOrderAck: null,
     };
     // Task #3388 — font files uploaded alongside the art survive a re-check
     // (the component object is rebuilt from scratch here; the fonts belong
@@ -36604,6 +36701,60 @@ export async function registerRoutes(
       byUserId: req.session.userId!,
       byDisplayName: user?.displayName ?? null,
       at: new Date().toISOString(),
+    };
+    const { vendorId, config } = ctx;
+    const required = await resolveRequired(vendorId, config);
+    const { components: retagged, status } = retagCompleted(components, required.map((r) => r.id));
+    await storage.saveCompletedTemplateCheck({
+      albumId: req.params.id,
+      vendorId,
+      config,
+      components: retagged,
+      status,
+    });
+    res.json(await completedTemplatePayload(req.params.id));
+  });
+
+  // Task #3412 — operator acknowledgment of a STALE TRACK ORDER warning
+  // (the album's vinyl side/order changed after this component's file was
+  // uploaded). Stamps who + when + WHICH reorder timestamp was covered, so
+  // a further reorder (newer vinylOrderChangedAt) re-flags the component
+  // and a re-upload resets the ack entirely. Mirrors ack-unverified.
+  app.post("/api/admin/albums/:id/completed-template/ack-stale-order", requireAdminBearer, async (req, res) => {
+    if (!(await requireOperator(req, res))) return;
+    const body = z.object({ componentId: z.string().trim().min(1) }).safeParse(req.body);
+    if (!body.success) return res.status(400).json({ message: body.error.message });
+    const ctx = await resolveCompletedContext(req.params.id);
+    if (!ctx || !ctx.row) return res.status(404).json({ message: "Nothing to acknowledge yet." });
+    const orderChangedAt =
+      (ctx.album as { vinylOrderChangedAt?: Date | null } | null)?.vinylOrderChangedAt ?? null;
+    if (!orderChangedAt) {
+      return res.status(400).json({ message: "The album's track order hasn't changed — nothing to acknowledge." });
+    }
+    const components = (ctx.row.components ?? []) as CompletedTemplateComponent[];
+    const target = components.find((c) => c.componentId === body.data.componentId);
+    if (!target || !target.assetUrl) {
+      return res.status(404).json({ message: "No file matched to that component yet." });
+    }
+    // Only acknowledge a warning that is actually active right now (same
+    // computation the payload uses — file-event trail vs the reorder stamp).
+    const events = await completedFileEvents(req.params.id);
+    const lastUploadedAt =
+      events.find((e) => e.event === "uploaded" && e.componentId === body.data.componentId)?.at ?? null;
+    const active = staleOrderCheck({
+      orderChangedAt,
+      lastUploadedAt,
+      ack: target.staleOrderAck ?? null,
+    });
+    if (!active || active.status !== "warn") {
+      return res.status(400).json({ message: "That component has no stale track-order warning to acknowledge." });
+    }
+    const user = await storage.getUser(req.session.userId!);
+    target.staleOrderAck = {
+      byUserId: req.session.userId!,
+      byDisplayName: user?.displayName ?? null,
+      at: new Date().toISOString(),
+      orderChangedAt: new Date(orderChangedAt).toISOString(),
     };
     const { vendorId, config } = ctx;
     const required = await resolveRequired(vendorId, config);

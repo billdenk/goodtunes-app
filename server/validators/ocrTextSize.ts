@@ -209,6 +209,96 @@ export async function ocrPdfSmallestText(
   }
 }
 
+/**
+ * Task #3412 — collect ALL recognized word boxes from a local PDF (same
+ * pdftoppm render + tesseract pass as ocrPdfSmallestText, but returning
+ * the raw words in page order for tracklist matching instead of reducing
+ * to the smallest measurement). Null on any failure (missing binaries,
+ * render error) — the caller emits nothing rather than a false claim.
+ * Callers that also need the smallest-text measurement can derive it via
+ * smallestTextFromWords(words, OCR_PDF_RENDER_DPI / 72) without a second
+ * OCR pass.
+ */
+export async function ocrPdfWordBoxes(
+  pdfPath: string,
+  opts?: { pageCount?: number | null },
+): Promise<OcrWordBox[] | null> {
+  const fsp = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  let tmpDir: string | null = null;
+  try {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const run = promisify(execFile);
+    const lastPage = Math.min(
+      opts?.pageCount != null && opts.pageCount > 0 ? opts.pageCount : MAX_OCR_PAGES,
+      MAX_OCR_PAGES,
+    );
+    tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "ocr-words-"));
+    const outBase = path.join(tmpDir, "pg");
+    await run(
+      "pdftoppm",
+      ["-f", "1", "-l", String(lastPage), "-png", "-gray", "-r", String(OCR_PDF_RENDER_DPI), pdfPath, outBase],
+      { timeout: 120_000 },
+    );
+    const files = (await fsp.readdir(tmpDir))
+      .filter((f) => f.startsWith("pg") && f.endsWith(".png"))
+      .sort();
+    if (files.length === 0) return null;
+    const out: OcrWordBox[] = [];
+    for (const f of files) {
+      const m = /-(\d+)\.png$/.exec(f);
+      const page = m ? parseInt(m[1], 10) : 1;
+      const tsv = await runTesseractTsv(path.join(tmpDir, f));
+      if (tsv == null) continue;
+      out.push(...parseTesseractTsv(tsv, page));
+    }
+    return out;
+  } catch (e) {
+    console.warn(`[ocr-text] pdf word-box OCR failed for ${pdfPath}`, (e as Error)?.message ?? e);
+    return null;
+  } finally {
+    if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
+ * Task #3412 — recognized word boxes from a raster (TIFF/JPG) label file.
+ * Unlike ocrRasterSmallestText, no physical scale is needed — tracklist
+ * matching only cares about the words and their order — so files with no
+ * resolution metadata still get matched. Null on any failure.
+ */
+export async function ocrRasterWordBoxes(filePath: string): Promise<OcrWordBox[] | null> {
+  const fsp = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  let tmpDir: string | null = null;
+  try {
+    const sharp = (await import("sharp")).default;
+    const meta = await sharp(filePath).metadata();
+    const pxW = meta.width ?? 0;
+    const pxH = meta.height ?? 0;
+    if (pxW < 8 || pxH < 8) return null;
+    let scale = 1;
+    const maxEdge = Math.max(pxW, pxH);
+    if (maxEdge > MAX_RASTER_EDGE_PX) scale = MAX_RASTER_EDGE_PX / maxEdge;
+    tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "ocr-raster-words-"));
+    const normPath = path.join(tmpDir, "norm.png");
+    let pipeline = sharp(filePath).flatten({ background: "#ffffff" }).toColourspace("srgb");
+    if (scale < 1) pipeline = pipeline.resize(Math.round(pxW * scale), Math.round(pxH * scale), { fit: "fill" });
+    await pipeline.png().toFile(normPath);
+    const tsv = await runTesseractTsv(normPath);
+    if (tsv == null) return null;
+    return parseTesseractTsv(tsv, 1);
+  } catch (e) {
+    console.warn(`[ocr-text] raster word-box OCR failed for ${filePath}`, (e as Error)?.message ?? e);
+    return null;
+  } finally {
+    if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 export type RasterOcrResult = {
   measurement: OcrTextMeasurement | null;
   /** The DPI the pt conversion used, and where it came from — threaded into

@@ -594,6 +594,14 @@ export const albums = pgTable("albums", {
   // from the album title in VinylOrderPanel.
   // e.g. { "A": "LLT-001-A", "B": "LLT-001-B" }
   vinylSideCatalogNumbers: jsonb("vinyl_side_catalog_numbers").$type<Record<string, string>>(),
+  // Task #3412 — when the album's vinyl side/order assignments last
+  // ACTUALLY changed (the vinyl-order save route stamps this only when a
+  // persisted side/order value differs — no-op saves never move it).
+  // Compared against each completed-art component's latest `uploaded`
+  // file event to warn that already-uploaded labels/jackets/sleeves may
+  // list an outdated track order. NULL = never reordered since this
+  // shipped → no warnings, by construction.
+  vinylOrderChangedAt: timestamp("vinyl_order_changed_at"),
   // Task #429 — Anticipated track count used to drive the Sell-panel
   // Publishing estimate (`N × $0.254`) BEFORE any masters have been
   // uploaded. NULL means "fall back to the live song count" — the

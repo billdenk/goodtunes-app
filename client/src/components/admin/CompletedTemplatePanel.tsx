@@ -128,6 +128,7 @@ import type {
   CompletedTemplateVerdict,
   CheckStatus,
 } from "@shared/uploadValidation";
+import { STALE_ORDER_CHECK_KEY } from "@shared/staleArtOrder";
 
 export type CompletedTemplateResponse = {
   configured: boolean;
@@ -1003,12 +1004,36 @@ export function PreviewArtDialog({
       toast({ title: "Couldn't acknowledge", description: e?.message, variant: "destructive" }),
   });
 
+  // Task #3412 — acknowledge a stale-track-order warning (the album's
+  // vinyl order changed after this file was uploaded). Server stamps
+  // who/when + the covered reorder timestamp; a further reorder re-flags,
+  // a re-upload resets.
+  const ackStale = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/albums/${albumId}/completed-template/ack-stale-order`, {
+        componentId,
+      });
+      return r.json() as Promise<CompletedTemplateResponse>;
+    },
+    onSuccess: (resp) => {
+      queryClient.setQueryData(["/api/admin/albums", albumId, "completed-template"], resp);
+      toast({ title: "Track-order warning acknowledged" });
+    },
+    onError: (e: any) =>
+      toast({ title: "Couldn't acknowledge", description: e?.message, variant: "destructive" }),
+  });
+
   if (!component) return null;
   // Override is an operator-only verb (the server 403s press accounts) —
   // hide the affordance entirely when the viewer can't operate.
   const canOverride = canOperate && (status === "fail" || status === "warn") && !component.override;
   // Task #3030 — Unverified acknowledgment (operator-only, like override).
   const hasUnverified = (component.checks ?? []).some((c) => c.status === "unverified");
+  // Task #3412 — active stale-track-order warning (dynamic row injected by
+  // the server payload; the acknowledged state renders as an advisory row).
+  const hasStaleOrder = (component.checks ?? []).some(
+    (c) => c.key === STALE_ORDER_CHECK_KEY && c.status === "warn",
+  );
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
@@ -1208,6 +1233,22 @@ export function PreviewArtDialog({
           >
             {ack.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <HelpCircle className="w-3.5 h-3.5" />}
             Acknowledge unverified result
+          </button>
+        )}
+
+        {/* Task #3412 — the track order changed after this file was
+            uploaded: acknowledge after verifying the artwork against the
+            current side order. Re-uploading also clears the warning. */}
+        {hasStaleOrder && canOperate && (
+          <button
+            type="button"
+            onClick={() => ackStale.mutate()}
+            disabled={ackStale.isPending}
+            className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs font-semibold hover:brightness-110 disabled:opacity-50"
+            data-testid={`button-completed-ack-stale-order-${componentId}`}
+          >
+            {ackStale.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <HelpCircle className="w-3.5 h-3.5" />}
+            Acknowledge — artwork checked against current track order
           </button>
         )}
 
