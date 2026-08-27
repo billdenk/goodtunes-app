@@ -1622,14 +1622,14 @@ export function SellPanel({
         <div className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
           <div className="min-w-0">
             <div className="text-sm font-semibold text-slate-800">
-              Share these quotes with the artist
+              Share these estimates with the artist
             </div>
             <div className="text-xs text-slate-500">
               {primaryArtistId
                 ? configuredFormats.length > 0
-                  ? `Send ${artistName || "the artist"} a link — they sign in and land here with your saved quotes waiting.`
+                  ? `Send ${artistName || "the artist"} a link — they sign in and land here with your saved estimates waiting.`
                   : "Save at least one format to share it."
-                : "Link this album to a primary artist to share quotes."}
+                : "Link this album to a primary artist to share estimates."}
             </div>
           </div>
           <ShareQuoteWithArtist
@@ -1795,11 +1795,11 @@ export function PrinterAndPressPanel({
   // effective press derived from saved SKUs and show it read-only.
   if (!selectedChip) {
     const effectivePress = invited?.effectivePress ?? null;
-    if (effectivePress && !isSuperAdmin) {
+    if (effectivePress) {
       return (
         <div className="mb-4" data-testid="panel-printer-and-press">
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-slate-500">Printer</span>
+            <span className="text-slate-500">Press</span>
             <span className="font-semibold text-slate-900" data-testid="text-selected-printer">
               {effectivePress.name}
             </span>
@@ -1818,7 +1818,7 @@ export function PrinterAndPressPanel({
   return (
     <div className="mb-4" data-testid="panel-printer-and-press">
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-slate-500">Printer</span>
+        <span className="text-slate-500">Press</span>
         <span
           className="font-semibold text-slate-900"
           data-testid="text-selected-printer"
@@ -4900,8 +4900,8 @@ function SkuRow({
                 ].join(" ")}
                 aria-label={
                   isLocked
-                    ? "Unlock pressing quote for this format"
-                    : "Lock pressing quote for this format"
+                    ? "Unlock pressing estimate for this format"
+                    : "Lock pressing estimate for this format"
                 }
                 aria-pressed={isLocked}
                 title={
@@ -4911,10 +4911,10 @@ function SkuRow({
                      freezes the per-format pressing quote (price /
                      quantity / color) on this SKU row. */
                   !rowLocked && !!albumQuoteLockedAt
-                    ? "Pressing quote is locked at the album level — unlock it to edit this row."
+                    ? "Pressing estimate is locked at the album level — unlock it to edit this row."
                     : isLocked
-                      ? "Pressing quote locked for this format. Click to unlock (reversible until the run goes to press)."
-                      : "Lock pressing quote for this format (price, quantity, color)."
+                      ? "Pressing estimate locked for this format. Click to unlock (reversible until the run goes to press)."
+                      : "Lock pressing estimate for this format (price, quantity, color)."
                 }
                 data-testid={`button-lock-sku-${format}`}
               >
@@ -5658,7 +5658,7 @@ function SkuRow({
                         {usingCatalog
                           ? `No confirmed price rung for ${pickedTier?.name ?? "this tier"} at ${opts.blockQty.toLocaleString()} pcs on ${invitedPressItself?.name ?? "this press"}. Confirm the rung in Admin → Presses.`
                           : invitedPressItself
-                            ? `No quote yet from ${invitedPressItself.name} for this format. Add an estimate in the Quotes section below.`
+                            ? `No estimate yet from ${invitedPressItself.name} for this format. Add an estimate in the Estimates section below.`
                             : `No confirmed rates for this format at ${opts.blockQty.toLocaleString()} pcs — add rates for the chosen press in Admin → Presses, or invite a press that has a confirmed catalog.`}
                       </div>
                     )}
@@ -5793,7 +5793,7 @@ function SkuRow({
           const trk = breakdown?.publishingTrackCount ?? null;
           const primary = blockEconomics(priceStr, parsedQty, true);
           out.push({
-            label: pricingBlocks.length > 0 ? "Option 1" : "Quote",
+            label: pricingBlocks.length > 0 ? "Option 1" : "Estimate",
             priceCents: primary.priceCents,
             qty: parsedQty,
             manufacturingCents: primary.mfg,
@@ -5852,12 +5852,12 @@ function SkuRow({
             const url = URL.createObjectURL(blob);
             const a = document.createElement("a");
             a.href = url;
-            a.download = `GoodTunes-Quote-${format}.pdf`;
+            a.download = `GoodTunes-Estimate-${format}.pdf`;
             document.body.appendChild(a);
             a.click();
             a.remove();
             URL.revokeObjectURL(url);
-            toast({ title: "Quote PDF downloaded" });
+            toast({ title: "Estimate PDF downloaded" });
           } catch (e: any) {
             toast({
               title: "Couldn't export PDF",
@@ -6471,7 +6471,7 @@ function SkuRow({
               <Tooltip>
                 <TooltipTrigger asChild>
                   <AddEntityButton
-                    label="Export quote"
+                    label="Export estimate"
                     icon={exportingPdf ? Loader2 : Share}
                     iconClassName={exportingPdf ? "w-3 h-3 animate-spin" : "w-3 h-3"}
                     onClick={handleExportPdf}
@@ -6479,7 +6479,7 @@ function SkuRow({
                     testId={`button-export-quote-pdf-${format}`}
                   />
                 </TooltipTrigger>
-                <TooltipContent>Export quote as PDF</TooltipContent>
+                <TooltipContent>Export estimate as PDF</TooltipContent>
               </Tooltip>
               )}
             </div>
@@ -6725,11 +6725,11 @@ function SkuRow({
                     type="button"
                     onClick={params.onDuplicate}
                     className="w-6 h-6 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 inline-flex items-center justify-center"
-                    title="Duplicate quote"
+                    title="Duplicate estimate"
                     data-testid={`button-quote-duplicate-${format}-${params.key}`}
                   >
                     <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span className="sr-only">Duplicate quote</span>
+                    <span className="sr-only">Duplicate estimate</span>
                   </button>
                 )}
                 {params.onDelete && (
@@ -6737,11 +6737,11 @@ function SkuRow({
                     type="button"
                     onClick={params.onDelete}
                     className="w-6 h-6 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 inline-flex items-center justify-center"
-                    title="Remove quote"
+                    title="Remove estimate"
                     data-testid={`button-quote-delete-${format}-${params.key}`}
                   >
                     <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span className="sr-only">Remove quote</span>
+                    <span className="sr-only">Remove estimate</span>
                   </button>
                 )}
               </div>
@@ -6829,7 +6829,7 @@ function SkuRow({
             <div className="flex items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Quotes
+                  Estimates
                 </span>
                 <span className="text-xs text-slate-400">
                   Operator scratchpad — not shown to fans
@@ -6841,7 +6841,7 @@ function SkuRow({
                   onClick={matchAcrossPresses}
                   disabled={otherQualified.length === 0}
                   className="h-7 px-2.5 rounded-md text-xs font-medium border border-slate-200 text-slate-700 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Quote this same color + qty on every qualified press"
+                  title="Estimate this same color + qty on every qualified press"
                   data-testid={`button-match-presses-${format}`}
                 >
                   Match across presses
@@ -7140,7 +7140,7 @@ function SkuRow({
           <AddonQuotePill
             icon={BookOpen}
             title="7×7 Booklet"
-            description="A 7.125″ × 7.125″, 16-page full-colour booklet tucked in with the record. Priced today on 7″ / cassette releases (PMP, MRP); ask the press for a quote on this format."
+            description="A 7.125″ × 7.125″, 16-page full-colour booklet tucked in with the record. Priced today on 7″ / cassette releases (PMP, MRP); ask the press for an estimate on this format."
             testKey="booklet-quote"
             open={openUpsell === "booklet-quote"}
             onToggle={() =>
@@ -8043,7 +8043,7 @@ function AddonQuotePill({
         icon={icon}
         title={title}
         subtitle={
-          <span data-testid={`text-${testKey}-summary`}>Request a quote</span>
+          <span data-testid={`text-${testKey}-summary`}>Request an estimate</span>
         }
         active={open}
         onClick={onToggle}

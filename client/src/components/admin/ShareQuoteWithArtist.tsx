@@ -113,7 +113,7 @@ export function ShareQuoteWithArtist({
         });
       } else {
         toast({
-          title: data.emailDelivered ? "Quote link sent" : "Quote link ready",
+          title: data.emailDelivered ? "Estimate link sent" : "Estimate link ready",
           description: data.emailDelivered
             ? `Emailed ${data.email} — or copy the link below.`
             : "Copy the link below and send it however you like.",
@@ -156,7 +156,7 @@ export function ShareQuoteWithArtist({
             ? "Link this album to a primary artist first"
             : savedQuoteCount === 0
               ? "Save at least one format before sharing"
-              : "Send the artist a link with these quotes waiting"
+              : "Send the artist a link with these estimates waiting"
         }
       >
         <Send className="w-3 h-3" />
@@ -166,7 +166,7 @@ export function ShareQuoteWithArtist({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent data-testid="dialog-share-quote">
           <DialogHeader>
-            <DialogTitle>Send these quotes to {artistName || "the artist"}</DialogTitle>
+            <DialogTitle>Send these estimates to {artistName || "the artist"}</DialogTitle>
             <DialogDescription>
               They'll get a one-time link to create their account and land
               right on <span className="font-medium text-slate-700">{albumTitle || "this album"}</span>{" "}
@@ -269,7 +269,7 @@ export function ShareQuoteWithArtist({
                   onChange={(e) => setNote(e.target.value)}
                   rows={3}
                   maxLength={1000}
-                  placeholder={`Hey ${artistName || "there"} — here are the Double LP quotes you asked about. Create your login and they'll be waiting.`}
+                  placeholder={`Hey ${artistName || "there"} — here are the Double LP estimates you asked about. Create your login and they'll be waiting.`}
                   className="mt-1 text-sm"
                   data-testid="textarea-share-quote-note"
                 />

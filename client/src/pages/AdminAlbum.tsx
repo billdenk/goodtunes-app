@@ -141,6 +141,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { Switch } from "@/components/ui/switch";
 import { PlayerDock } from "@/components/ui/PlayerDock";
 import { SellPanel } from "@/components/admin/SellPanel";
+import { OperatorPackageGlass } from "@/components/admin/OperatorPackageGlass";
 import { PressAlbumPackageBuilder } from "@/pages/PressAlbumPackageBuilder";
 import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
@@ -577,6 +578,10 @@ export function AdminAlbum({
   });
   const isArtist = adminRoleInfo?.role === "artist";
   const isLabel = adminRoleInfo?.role === "label";
+  // Ruby's rule (Aug 26) — operators get the artist's exact Package page
+  // under glass (OperatorPackageGlass), never a separate admin rendering.
+  const isOperatorRole =
+    adminRoleInfo?.role === "super_admin" || adminRoleInfo?.role === "admin";
   // Task #2253 — a press partner (role==='manufacturer') opening an album
   // homed to their press keeps the Physical/manufacturing surface (that's
   // their job) but loses the fan-facing Customers + Early-access tabs and the
@@ -1978,9 +1983,12 @@ export function AdminAlbum({
                   }
                 />
               )}
-              {/* Handoff v2 — artist viewers get the "Design your package"
-                  builder on the Package tab; operators/press keep the full
-                  SellPanel untouched (Bill's split decision). */}
+              {/* Ruby's ratified rule (Aug 15, re-affirmed Aug 26) — one
+                  body, two chromes: artists AND operators render the same
+                  "Design your Package" builder (operators get it under
+                  glass with admin-only chrome via OperatorPackageGlass).
+                  SellPanel remains only for press/label partner roles and
+                  Shopify-mode albums. */}
               {safeTab === "sell" && allowed.has("sell") && isArtist && (
                 <PressAlbumPackageBuilder
                   albumId={album.id}
@@ -1990,7 +1998,27 @@ export function AdminAlbum({
                   trackCount={album.songs.length}
                 />
               )}
-              {safeTab === "sell" && allowed.has("sell") && !isArtist && (
+              {safeTab === "sell" &&
+                allowed.has("sell") &&
+                !isArtist &&
+                isOperatorRole &&
+                (album.sellMode ?? null) !== "shopify" && (
+                  <OperatorPackageGlass
+                    albumId={album.id}
+                    albumTitle={album.title}
+                    artistName={album.artist}
+                    artworkUrl={album.artwork}
+                    trackCount={album.songs.length}
+                    primaryArtistId={album.primaryArtistId ?? null}
+                    onChangeMode={() => setModeDialogOpen(true)}
+                    changeModeDisabled={modeChangeBlocked}
+                    changeModeDisabledReason={modeChangeBlockedReason}
+                  />
+                )}
+              {safeTab === "sell" &&
+                allowed.has("sell") &&
+                !isArtist &&
+                !(isOperatorRole && (album.sellMode ?? null) !== "shopify") && (
                 <SellPanel
                   albumId={album.id}
                   albumTitle={album.title}
