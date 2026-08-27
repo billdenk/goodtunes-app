@@ -14,13 +14,15 @@
 // the q-word. Self-contained per handoff rules.
 
 import { useState } from 'react';
-import californialandCover from './assets/californialand-cover.jpg';
-import mrpLogoAsset from './assets/mrp-logo.svg';
-import goodtunesLogo from './assets/goodtunes-logo.png';
+import { MessageSquarePlus, UserPen, UserPlus, LogOut } from 'lucide-react';
+import californialandCover from '../assets/californialand-cover.jpg';
+import niinaPhoto from '../assets/niina-soleil.webp';
+import mrpLogoAsset from '../assets/mrp-logo.svg';
+import goodtunesLogo from '../assets/goodtunes-logo.png';
 
 // ─── Mock data — Niina's running pressing project ────────────────────
 const MOCK_CLIENT_FIRST = 'Niina';
-const MOCK_PROJECT = 'CUSTOMSLAND';
+const MOCK_PROJECT = 'CALIFORNIALAND';
 const MOCK_ESTIMATE_NO = '071500-02';
 const MOCK_QTY = '1,000 units';
 const MOCK_UNIT = '$8.37 /unit';
@@ -35,7 +37,7 @@ const SUBINK = '#6e6e73';
 const HAIRLINE = 'rgba(0,0,0,0.10)';
 const GOLD = '#D9C153'; // the ONE earned fill on this page
 
-// ─── Albums — same content as the charcoal original, Customsland run ─
+// ─── Albums — same content as the charcoal original, Californialand run ─
 type AlbumStatus = 'priced' | 'pressing' | 'draft' | 'archived';
 
 type Album = {
@@ -157,59 +159,88 @@ function RailRow({ name, active }: { name: string; active: boolean }) {
   );
 }
 
-// ─── MRP's real site chrome — copied from the MRP reference shells ───
-const MRP_NAV = ['Home', 'About MRP', 'Products', 'Resources', 'MRP TV', 'MRP University', 'News', 'Shop', 'Contact'];
+// ─── MRP's signed-in chrome — marketing nav drops away after login ───
+// (Canon spec, Bill Aug 24 2026: artist photo + name left; quiet
+// Feedback + account avatar with the canon dropdown right. No press
+// mark, no bell, no name label beside the avatar.)
+
+const MOCK_CLIENT_FULL = 'Niina Soleil';
+const MOCK_CLIENT_EMAIL = 'niina@niinasoleil.com';
+type Appearance = 'Light' | 'Dark' | 'System';
+
+function AccountMenu() {
+  const [open, setOpen] = useState(false);
+  const [appearance, setAppearance] = useState<Appearance>('Light');
+  return (
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Account menu"
+        aria-expanded={open}
+        data-testid="button-user-menu"
+        style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', border: `1px solid ${HAIRLINE}`, padding: 0, cursor: 'pointer', background: 'transparent', display: 'block' }}
+      >
+        <img src={niinaPhoto} alt={MOCK_CLIENT_FULL} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 60, width: 300, background: CARD, border: `1px solid ${HAIRLINE}`, borderRadius: 0, boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }} data-testid="menu-user">
+          <div style={{ padding: '12px 14px', borderBottom: `1px solid ${HAIRLINE}` }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: INK }}>{MOCK_CLIENT_FULL}</div>
+            <div style={{ fontSize: 11.5, color: SUBINK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{MOCK_CLIENT_EMAIL}</div>
+          </div>
+          <div style={{ padding: '4px 0' }}>
+            {[{ label: 'Edit profile', icon: UserPen }, { label: 'Invite teammate', icon: UserPlus }].map(({ label, icon: Icon }) => (
+              <button key={label} type="button" data-testid={`menu-item-${label.toLowerCase().replace(/\s+/g, '-')}`} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', height: 34, fontSize: 13, color: INK, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+                <Icon style={{ width: 15, height: 15, flexShrink: 0, color: SUBINK }} />
+                {label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderTop: `1px solid ${HAIRLINE}` }}>
+            <span style={{ fontSize: 13, color: INK }}>Appearance</span>
+            <div role="radiogroup" aria-label="Appearance" style={{ display: 'flex', border: `1px solid ${HAIRLINE}`, borderRadius: 0, padding: 2 }}>
+              {(['Light', 'Dark', 'System'] as Appearance[]).map((m) => {
+                const active = m === appearance;
+                return (
+                  <button key={m} type="button" role="radio" aria-checked={active} onClick={() => setAppearance(m)} data-testid={`appearance-${m.toLowerCase()}`} style={{ padding: '3px 9px', borderRadius: 0, fontSize: 11.5, fontWeight: active ? 600 : 500, cursor: 'pointer', background: active ? CARD_RAISED : 'transparent', border: active ? `1px solid ${HAIRLINE}` : '1px solid transparent', color: active ? INK : SUBINK, fontFamily: 'inherit' }}>
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ padding: '4px 0', borderTop: `1px solid ${HAIRLINE}` }}>
+            <button type="button" data-testid="menu-item-sign-out" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', height: 34, fontSize: 13, color: INK, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+              <LogOut style={{ width: 15, height: 15, flexShrink: 0, color: SUBINK }} />
+              Sign out
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function MrpSiteHeader() {
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
-      {/* Utility bar — 40px row, 12px / 400 / 0.07em, #333 ink */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: 40, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}`, fontSize: 12, fontWeight: 400, letterSpacing: '0.07em', color: '#333333' }}>
-        <span>Let&rsquo;s talk about your project</span>
-        <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: HAIRLINE }} />
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: '#333333' }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-            <rect x="2" y="4.5" width="20" height="15" rx="2" />
-            <path d="M2.5 6.5L12 13l9.5-6.5" />
-          </svg>
-          help@memphisvinyl.com
-        </span>
-        <span style={{ flex: 1 }} />
-      </div>
+    <div style={{ position: 'sticky', top: 0, zIndex: 30, background: CANVAS }}>
       {/* Poppins rides with the header — the real MRP face. */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
-        .mrp-nav-link { position: relative; transition: color 0.2s ease; }
-        .mrp-nav-link::after {
-          content: ''; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px;
-          background: ${GOLD}; transform: scaleX(0); transform-origin: left center;
-          transition: transform 0.25s ease;
-        }
-        .mrp-nav-link:hover { color: #111111; }
-        .mrp-nav-link:hover::after { transform: scaleX(1); }
       `}</style>
-      {/* Main nav — logo left; signed in, the account chip rides right */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 34, height: 80, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}` }}>
-        <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 60, height: 60 }} />
-        <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 30, fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-          {MRP_NAV.map((l) => (
-            <a
-              key={l}
-              href="#"
-              onClick={(e) => e.preventDefault()}
-              className="mrp-nav-link"
-              style={{ color: 'rgba(51,51,51,0.5)', textDecoration: 'none' }}
-            >
-              {l}
-            </a>
-          ))}
-        </nav>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: SUBINK }}>
-          <span style={{ width: 28, height: 28, borderRadius: '50%', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: INK }}>
-            N
-          </span>
-          {MOCK_CLIENT_FIRST}
-        </span>
+      {/* Signed-in header — artist brand left; quiet Feedback + avatar right */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, height: 56, padding: '0 20px 0 12px', borderBottom: `1px solid ${HAIRLINE}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+           <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 34, height: 34, objectFit: 'contain', flexShrink: 0 }} />
+           <span style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap', color: INK }}>Memphis Record Pressing</span>
+        </div>
+        <span style={{ flex: 1 }} />
+        <button type="button" data-testid="button-feedback" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 0, background: 'transparent', border: 'none', color: SUBINK, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+          <MessageSquarePlus style={{ width: 14, height: 14 }} />
+          Feedback
+        </button>
+        <AccountMenu />
       </div>
     </div>
   );
@@ -341,7 +372,7 @@ export default function ArtistProjectHomeMRP() {
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
         {/* ── Left rail — artist nav canon, Team pinned at the bottom ── */}
-        <nav style={{ width: 218, flexShrink: 0, borderRight: `1px solid ${HAIRLINE}`, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav style={{ width: 218, flexShrink: 0, background: CANVAS, borderRight: `1px solid ${GOLD}`, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div style={{ position: 'relative', marginBottom: 12 }}>
             <input
               placeholder="Search"
@@ -353,7 +384,7 @@ export default function ArtistProjectHomeMRP() {
             </span>
           </div>
           {RAIL_ITEMS.map((r) => <RailRow key={r} name={r} active={r === 'Releases'} />)}
-          <div style={{ flex: 1 }} />
+          <div style={{ borderTop: `1px solid ${GOLD}`, margin: '8px 12px 6px' }} />
           <RailRow name="Team" active={false} />
         </nav>
 
@@ -364,7 +395,7 @@ export default function ArtistProjectHomeMRP() {
             {/* Breadcrumb — uppercase 11px, configurator style */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: SUBINK }}>
               <a href="#" onClick={(e) => e.preventDefault()} style={{ color: SUBINK, textDecoration: 'none' }}>
-                Projects
+                Releases
               </a>
               <span aria-hidden style={{ color: 'rgba(0,0,0,0.25)' }}>&rsaquo;</span>
               <span style={{ color: INK }}>{MOCK_PROJECT}</span>
@@ -375,7 +406,7 @@ export default function ArtistProjectHomeMRP() {
               {MOCK_PROJECT}. <span style={{ color: SUBINK, fontWeight: 500 }}>Your project home.</span>
             </h1>
             <p style={{ fontSize: 13, color: SUBINK, margin: '6px 0 0' }}>
-              Running with Memphis Record Pressing via mrp.pressesvinyl.com — {MOCK_QTY} at {MOCK_UNIT} · {MOCK_TOTAL} · Estimate <span style={{ fontWeight: 600, color: INK }}>{MOCK_ESTIMATE_NO}</span>
+              Running with Memphis Record Pressing via memphisrecordpressing.com — {MOCK_QTY} at {MOCK_UNIT} · {MOCK_TOTAL} · Estimate <span style={{ fontWeight: 600, color: INK }}>{MOCK_ESTIMATE_NO}</span>
             </p>
 
             {/* ── Albums ── */}
