@@ -710,7 +710,15 @@ export function PersonPicker({
             </div>
           ) : spotify.isError ? (
             <div className="px-2 py-1.5 text-xs text-slate-500">
-              Spotify lookup failed.
+              {/* Task #3439 — apiRequest throws with the response body text,
+                  so the route's structured reason/message ride along. The
+                  premium-required suspension needs account action, not a
+                  retry — say so instead of the generic copy. */}
+              {/premium_required|premium\s+subscription/i.test(
+                String((spotify.error as any)?.message ?? ""),
+              )
+                ? "Spotify has suspended this app's API access — the app owner's Spotify Premium subscription must be active."
+                : "Spotify lookup failed."}
             </div>
           ) : (spotify.data?.candidates ?? []).length === 0 ? (
             <div className="px-2 py-1.5 text-xs text-slate-500">

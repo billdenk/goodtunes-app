@@ -56,6 +56,16 @@ test("classifyProbe: transient hiccup logs but never alerts", () => {
   assert.match((d as any).line, /check skipped/);
 });
 
+test("classifyProbe: healthy live-probe only logs, never alerts", () => {
+  // Task #3439 — sources with no expiry to watch (e.g. Spotify client creds)
+  // probe "healthy" when the upstream accepts calls; the twice-a-day tick
+  // must leave a log line but never page.
+  const d = classifyProbe(source, { kind: "healthy", note: "API accepting calls" }, NOW);
+  assert.equal(d.action, "log");
+  assert.match((d as any).line, /healthy/);
+  assert.match((d as any).line, /API accepting calls/);
+});
+
 test("classifyProbe: rejected pages immediately", () => {
   const d = classifyProbe(source, { kind: "rejected", reason: "HTTP 401" }, NOW);
   assert.equal(d.action, "alert");

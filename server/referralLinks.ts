@@ -21,7 +21,7 @@ import { randomBytes } from "crypto";
 import { z } from "zod";
 import * as dns from "dns/promises";
 import * as net from "net";
-import { searchArtistCandidatesDetailed, spotifyConfigured } from "./lib/spotify";
+import { searchArtistCandidatesDetailed, spotifyConfigured, spotifyLookupFailureMessage } from "./lib/spotify";
 
 const REFERRAL_KINDS = ["artist", "non_profit", "manufacturer", "label", "ambassador"] as const;
 type ReferralKind = (typeof REFERRAL_KINDS)[number];
@@ -544,7 +544,9 @@ export function registerReferralLinkRoutes(
     if (!q) return res.json({ query: "", candidates: [] });
     const result = await searchArtistCandidatesDetailed(q, 6, { withReleases: false });
     if (!result.ok) {
-      return res.status(502).json({ message: "Spotify lookup failed.", reason: result.reason });
+      // Task #3439 — inherit the clearer message (e.g. the premium-required
+      // suspension names the fix) while keeping the same response shape.
+      return res.status(502).json({ message: spotifyLookupFailureMessage(result.reason), reason: result.reason });
     }
     return res.json({ query: q, candidates: result.candidates });
   });

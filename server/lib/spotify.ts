@@ -375,7 +375,47 @@ export function decideImportMatch(
 // callers stick with the simple shape below.
 export type SpotifyCandidatesResult =
   | { ok: true; candidates: SpotifyArtistCandidate[] }
-  | { ok: false; reason: "no_token" | "fetch_error" | "upstream_error" | "parse_error"; status?: number; detail?: string };
+  | { ok: false; reason: SpotifyFailureReason; status?: number; detail?: string };
+
+// Task #3439 — every way a detailed Spotify lookup can fail. `premium_required`
+// is its own reason (not a generic `upstream_error`) because it has a specific
+// operator action: Spotify suspends ALL Web API access for an app when the
+// app owner's Spotify Premium subscription lapses — the API keeps minting
+// tokens (200 on the token endpoint) but answers every call with
+// 403 "Active premium subscription required for the owner of the app".
+// Retrying is pointless; renewing Premium on the owning account fixes it.
+export type SpotifyFailureReason =
+  | "no_token"
+  | "fetch_error"
+  | "upstream_error"
+  | "premium_required"
+  | "parse_error";
+
+// Human-facing copy for the premium-required suspension. Shared by the admin
+// artist-search route, the ops health probe, and the client dialogs so the
+// operator sees the same actionable message everywhere.
+export const SPOTIFY_PREMIUM_REQUIRED_MESSAGE =
+  "Spotify has suspended this app's API access — the app owner's Spotify Premium subscription must be active.";
+
+// Pure classifier for a non-OK Spotify Web API response, unit-testable
+// without a network. The premium-suspension 403's body reads
+// {"error":{"status":403,"message":"Active premium subscription required
+// for the owner of the app"}} — match on the phrase, not just the status,
+// so ordinary endpoint-level 403s (e.g. /top-tracks for this token tier)
+// keep reading as upstream_error.
+export function classifySpotifyApiError(
+  status: number,
+  bodyText: string,
+): "premium_required" | "upstream_error" {
+  if (status === 403 && /premium\s+subscription/i.test(bodyText)) return "premium_required";
+  return "upstream_error";
+}
+
+// Message the lookup routes put in the JSON error body. Generic reasons keep
+// the legacy copy; the premium suspension names the actual operator action.
+export function spotifyLookupFailureMessage(reason: SpotifyFailureReason): string {
+  return reason === "premium_required" ? SPOTIFY_PREMIUM_REQUIRED_MESSAGE : "Spotify lookup failed.";
+}
 
 // Largest per-request page size this app's token accepts. Spotify
 // rejects `limit=20` for our client-credentials token with a
@@ -401,7 +441,7 @@ type SpotifyRawArtist = {
 
 type SpotifyPageResult =
   | { ok: true; items: SpotifyRawArtist[] }
-  | { ok: false; reason: "no_token" | "fetch_error" | "upstream_error" | "parse_error"; status?: number; detail?: string };
+  | { ok: false; reason: SpotifyFailureReason; status?: number; detail?: string };
 
 export async function searchArtistCandidatesDetailed(
   rawName: string,
@@ -485,8 +525,13 @@ export async function searchArtistCandidatesDetailed(
     }
     if (!res.ok) {
       const body = await res.text().catch(() => "");
-      console.warn("[spotify] candidates: upstream_error", res.status, body.slice(0, 200), "name=", name, "offset=", offset);
-      return { ok: false, reason: "upstream_error", status: res.status, detail: body.slice(0, 200) };
+      // Task #3439 — a hard 403 "premium subscription required" is Spotify
+      // suspending the whole app (owner's Premium lapsed), not a flaky
+      // upstream. Surface it as its own reason so the route/UI can tell the
+      // operator the actual fix instead of "try again".
+      const reason = classifySpotifyApiError(res.status, body);
+      console.warn(`[spotify] candidates: ${reason}`, res.status, body.slice(0, 200), "name=", name, "offset=", offset);
+      return { ok: false, reason, status: res.status, detail: body.slice(0, 200) };
     }
 
     let json: any;
@@ -623,6 +668,68 @@ export async function searchArtistCandidates(
 ): Promise<SpotifyArtistCandidate[]> {
   const r = await searchArtistCandidatesDetailed(rawName, limit);
   return r.ok ? r.candidates : [];
+}
+
+// ── Task #3439 — proactive Spotify health probe ─────────────────────────
+//
+// Feeds the credential-expiry watcher (server/credentialExpiry.ts) so ops
+// get ONE throttled page when Spotify starts rejecting API calls — instead
+// of only finding out via per-search 502 pages when an admin happens to
+// search. Mints a token and makes one cheap search call:
+//   • not configured        → stay silent (unused integration adds no noise)
+//   • 200                   → healthy (logged by the watcher, never paged)
+//   • 403 premium-required  → rejected, naming the Premium-lapse fix
+//   • 401/other 403         → rejected (creds revoked / auth rejected)
+//   • token-mint failure,
+//     429/5xx, network      → transient (logged, never paged)
+export type SpotifyHealthProbe =
+  | { kind: "not-configured" }
+  | { kind: "healthy"; note?: string }
+  | { kind: "rejected"; reason: string }
+  | { kind: "transient"; reason: string };
+
+export async function probeSpotifyHealth(): Promise<SpotifyHealthProbe> {
+  if (!spotifyConfigured()) return { kind: "not-configured" };
+
+  // Force a fresh token so a healthy cached token can't mask a revoked
+  // credential; the probe runs twice a day so the extra mint is cheap.
+  let token: string | null;
+  try {
+    token = await getAccessToken(true);
+  } catch (e: any) {
+    return { kind: "transient", reason: `token mint threw: ${e?.message ?? e}` };
+  }
+  if (!token) {
+    // getAccessToken already retried transient token-endpoint failures and
+    // logged the specifics; without the raw status here we can't tell a
+    // network blip from bad creds, so log-don't-page.
+    return { kind: "transient", reason: "token mint failed (see [spotify] token logs)" };
+  }
+
+  const url = `${SEARCH_URL}?q=${encodeURIComponent("a")}&type=artist&limit=1`;
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, { headers: { Authorization: `Bearer ${token}` } }, SEARCH_TIMEOUT_MS);
+  } catch (e: any) {
+    return { kind: "transient", reason: `probe fetch errored: ${e?.message ?? e}` };
+  }
+
+  if (res.ok) return { kind: "healthy", note: "token minted and Web API accepting calls" };
+
+  const body = await res.text().catch(() => "");
+  if (classifySpotifyApiError(res.status, body) === "premium_required") {
+    return { kind: "rejected", reason: SPOTIFY_PREMIUM_REQUIRED_MESSAGE };
+  }
+  if (res.status === 401 || res.status === 403) {
+    // A 401 straight after a fresh mint (or a non-premium 403 on plain
+    // search) is a real auth rejection, not a stale-token race.
+    return {
+      kind: "rejected",
+      reason: `Spotify Web API rejected the probe with HTTP ${res.status}: ${body.slice(0, 200)}`,
+    };
+  }
+  // 429 / 5xx / anything else — transient upstream weather. Logged, never paged.
+  return { kind: "transient", reason: `probe got HTTP ${res.status}: ${body.slice(0, 120)}` };
 }
 
 // Task #734 — stream-elsewhere track lookup. When Bill adds a

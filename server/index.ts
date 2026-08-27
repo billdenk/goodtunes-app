@@ -136,6 +136,26 @@ app.use(express.urlencoded({ extended: false }));
 // remaining `import { log } from "./index"` consumers.
 export { log };
 
+// Task #3439 — compact, size-capped rendering of a captured JSON error body
+// for the ops 5xx alert email. The routes already put structured fields in the
+// body (e.g. `reason: "premium_required"`, upstream `status`) that the old
+// message-only extraction dropped. Returns null for empty/unserializable
+// bodies so the email simply omits the line. Callers apply the auth-path
+// redaction rule BEFORE calling this — no auth payload ever reaches it.
+const OPS_ALERT_BODY_MAX_CHARS = 600;
+function compactJsonBody(body: Record<string, any> | undefined): string | null {
+  if (!body || typeof body !== "object") return null;
+  try {
+    const s = JSON.stringify(body);
+    if (!s || s === "{}" || s === "[]") return null;
+    return s.length > OPS_ALERT_BODY_MAX_CHARS
+      ? `${s.slice(0, OPS_ALERT_BODY_MAX_CHARS)}… (truncated)`
+      : s;
+  } catch {
+    return null;
+  }
+}
+
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -231,6 +251,13 @@ app.use((req, res, next) => {
         // on res.locals so the alert email names the exact failure (SQLSTATE
         // + message + detail/constraint), not just drizzle's "Failed query:".
         const dbErr: DbErrorInfo | undefined = (res.locals as any)?.dbError;
+        // Task #3439 — include the response body's structured fields (e.g. a
+        // Spotify route's `reason: "premium_required"` + upstream `status`)
+        // so the email itself names the failure instead of just the generic
+        // `message`. Same redaction rule as the request log above: never a
+        // body from an auth path. Size-capped so a pathological body can't
+        // bloat the email.
+        const bodySnippet = !isAuthPath ? compactJsonBody(capturedJsonResponse) : null;
         const detail = [
           `When:    ${new Date().toISOString()}`,
           `Where:   ${req.method} ${path}`,
@@ -238,6 +265,7 @@ app.use((req, res, next) => {
           `Took:    ${duration}ms`,
           `Host:    ${req.headers.host ?? "(unknown)"}`,
           `Message: ${errMsg}`,
+          ...(bodySnippet ? [`Body:    ${bodySnippet}`] : []),
           ...(dbErr
             ? [
                 `DB code: ${dbErr.code ?? "(none)"}`,

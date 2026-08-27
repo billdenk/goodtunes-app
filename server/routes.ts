@@ -85,7 +85,7 @@ import {
 } from "@shared/jobAlerts";
 import { ascapStatus, lookupTitle, searchWriter } from "./ascap";
 import { geoFromRequest, forwardToPostHog, isPostHogEnabled } from "./analytics";
-import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, namesMatchStrict, spotifyConfigured, fetchSpotifyTrackByUrl, searchTrackCandidates, resolveSpotifyAlbumUrl, resolveSpotifyAlbumUrlsForReleases, type SpotifyArtistCandidate } from "./lib/spotify";
+import { searchArtistCandidates, searchArtistCandidatesDetailed, searchArtistForImport, namesMatchStrict, spotifyConfigured, spotifyLookupFailureMessage, fetchSpotifyTrackByUrl, searchTrackCandidates, resolveSpotifyAlbumUrl, resolveSpotifyAlbumUrlsForReleases, type SpotifyArtistCandidate } from "./lib/spotify";
 import { resolveStreamingLinksFromAppleCollectionId, resolveStreamingLinksForCollections, hasAnyResolvedLink, appleCollectionIdFromUrl, appleCountryFromUrl } from "./lib/streamingLinks";
 import { adminLoginPasswordOk, isLinkableEmail, isProviderVerifiedEmailForLink } from "./auth/identityLink";
 import { applyAppleFirstAuthName } from "./auth/appleName";
@@ -18119,11 +18119,13 @@ export async function registerRoutes(
     if (!q) return res.json({ query: "", candidates: [] });
     const result = await searchArtistCandidatesDetailed(q, 8, { withReleases: true });
     if (!result.ok) {
-      // Upstream errored (timeout, 5xx, parse, no_token). Surface a 502
-      // with the reason so the client can show "Spotify lookup failed"
-      // instead of falsely claiming there are no results.
+      // Upstream errored (timeout, 5xx, parse, no_token, premium_required).
+      // Surface a 502 with the reason so the client can show an honest error
+      // instead of falsely claiming there are no results. Task #3439: the
+      // message names the actual fix when Spotify has suspended the app
+      // (owner's Premium lapsed) — a retry can't help there.
       return res.status(502).json({
-        message: "Spotify lookup failed.",
+        message: spotifyLookupFailureMessage(result.reason),
         reason: result.reason,
         status: result.status ?? null,
       });

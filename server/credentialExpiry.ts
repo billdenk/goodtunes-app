@@ -31,6 +31,7 @@
 
 import { X509Certificate } from "node:crypto";
 import { alertOps } from "./opsAlert";
+import { probeSpotifyHealth } from "./lib/spotify";
 
 // `log` lives in server/index.ts, whose module top-level boots the server. Pull
 // it in lazily so importing this module (e.g. from a unit test) stays
@@ -59,6 +60,11 @@ export type ExpiryProbe =
   // The credential is actively being rejected (e.g. a 401 from its API) — it has
   // almost certainly already lapsed or been revoked. Page immediately.
   | { kind: "rejected"; reason: string }
+  // Task #3439 — a LIVE probe verified the credential is currently accepted
+  // upstream. Logged (so the twice-a-day tick leaves an audit line), never
+  // paged. Used by sources with no expiry date to watch (e.g. Spotify client
+  // credentials, which fail only when Spotify suspends the app).
+  | { kind: "healthy"; note?: string }
   // A transient hiccup reading the expiry (network, 5xx, parse). Log only so a
   // flaky upstream edge doesn't fan out alerts.
   | { kind: "transient"; reason: string }
@@ -241,6 +247,25 @@ async function buildRegistry(): Promise<CredentialSource[]> {
         dateEnvVar: "STRIPE_WEBHOOK_SECRET_EXPIRES_AT",
       }),
     },
+
+    // LIVE — Task #3439: Spotify Web API access (client credentials). There is
+    // no expiry date to watch: the credentials fail when Spotify suspends the
+    // app, which happened live on 2026-08-27 — the token endpoint kept
+    // answering 200 while every Web API call got 403 "Active premium
+    // subscription required for the owner of the app" (the app owner's
+    // Premium lapsed). This probe mints a token and makes one cheap search
+    // call twice a day: healthy logs, a premium-required 403 (or other hard
+    // auth rejection) pages once (throttled via alertOps) naming the fix,
+    // token/network hiccups only log, unconfigured stays silent.
+    {
+      id: "spotify-api-access",
+      label: "Spotify Web API access (client credentials)",
+      impact:
+        "Admin artist search, credits-import Spotify enrichment, artist photo refresh, and per-release Spotify link resolution all fail — every admin lookup surfaces a 502 one page at a time.",
+      rotationRunbook:
+        "If the reason names a Premium subscription: renew Spotify Premium on the account that owns this app on developer.spotify.com — no code or secret change needed. If credentials were revoked/rotated: update SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET from the app's dashboard.",
+      probe: probeSpotifyHealth,
+    },
   ];
 }
 
@@ -276,6 +301,12 @@ export function classifyProbe(
 
     case "transient":
       return { action: "log", line: `cred-expiry: ${source.id} check skipped — ${probe.reason}` };
+
+    case "healthy":
+      return {
+        action: "log",
+        line: `cred-expiry: ${source.id} healthy — ${probe.note ?? "credential accepted upstream"}`,
+      };
 
     case "rejected": {
       const headline = `${source.label} is REJECTED (likely already expired/revoked)`;

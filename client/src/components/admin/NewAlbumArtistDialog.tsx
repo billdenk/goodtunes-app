@@ -298,7 +298,11 @@ export function NewAlbumArtistDialog({
     links: Array<{ kind: string; url: string }>;
   } | null>(null);
   const [hasSearchedStreaming, setHasSearchedStreaming] = useState(false);
-  const [spotifyError, setSpotifyError] = useState<"configured" | "failed" | null>(null);
+  // Task #3439 — "premium" = Spotify has suspended this app's Web API access
+  // because the app owner's Premium subscription lapsed. Distinct from
+  // "failed" (transient upstream weather) because retrying can't help: the
+  // fix is account action on the owning Spotify account.
+  const [spotifyError, setSpotifyError] = useState<"configured" | "failed" | "premium" | null>(null);
   const [picked, setPicked] = useState<SpotifyCandidate | null>(null);
   const [appleCandidate, setAppleCandidate] = useState<AppleCandidate | null>(null);
   // Task #3191 — how confident the Apple link is. "exact" = raw-name match
@@ -414,6 +418,11 @@ export function NewAlbumArtistDialog({
   // Spotify (because Spotify's accounts edge was throttled). We still
   // render the same picker grid; only a small banner changes.
   const [fellBackToApple, setFellBackToApple] = useState(false);
+  // Task #3439 — remembered separately from spotifyError (which the Apple
+  // fallback clears when it produces results) so the fallback banner can
+  // name the real cause: Spotify suspended the app (owner's Premium lapsed),
+  // not transient throttling.
+  const [premiumSuspended, setPremiumSuspended] = useState(false);
 
   /**
    * Apple iTunes Search fallback. Runs when Spotify's accounts edge is
@@ -457,6 +466,7 @@ export function NewAlbumArtistDialog({
     setSpotifyError(null);
     setSpotifyCandidates([]);
     setFellBackToApple(false);
+    setPremiumSuspended(false);
     let spotifyOk = false;
     try {
       const token = getAuthToken();
@@ -474,7 +484,17 @@ export function NewAlbumArtistDialog({
         // showing a dead end — try it.
         setSpotifyError("configured");
       } else if (!res.ok) {
-        setSpotifyError("failed");
+        // Task #3439 — the route returns a structured `reason`; the
+        // premium-required suspension gets its own copy (account action,
+        // not a retry). Any parse failure falls back to the generic state.
+        let reason: string | null = null;
+        try {
+          reason = ((await res.json()) as any)?.reason ?? null;
+        } catch {
+          /* non-JSON body — treat as generic failure */
+        }
+        if (reason === "premium_required") setPremiumSuspended(true);
+        setSpotifyError(reason === "premium_required" ? "premium" : "failed");
       } else {
         const json = (await res.json()) as { candidates: SpotifyCandidate[] };
         const list = (json.candidates ?? []).map<SpotifyCandidate>((c) => ({
@@ -1315,7 +1335,9 @@ export function NewAlbumArtistDialog({
             </div>
             {fellBackToApple && (
               <div className="text-[11.5px] text-slate-500 leading-snug -mt-1">
-                Spotify is throttling our edge right now — Apple Music results are below. You can match Spotify later from the artist's profile.
+                {premiumSuspended
+                  ? "Spotify has suspended this app's API access — the app owner's Spotify Premium subscription must be active. Apple Music results are below; you can match Spotify later from the artist's profile."
+                  : "Spotify is throttling our edge right now — Apple Music results are below. You can match Spotify later from the artist's profile."}
               </div>
             )}
 
@@ -1328,12 +1350,16 @@ export function NewAlbumArtistDialog({
                 <div className="text-[13px] text-amber-900 font-semibold">
                   {spotifyError === "configured"
                     ? "Spotify isn't connected yet."
-                    : "Spotify lookup failed."}
+                    : spotifyError === "premium"
+                      ? "Spotify has suspended this app's API access."
+                      : "Spotify lookup failed."}
                 </div>
                 <div className="text-[11.5px] text-amber-800 mt-1 leading-snug">
                   {spotifyError === "configured"
                     ? "Add a Spotify client ID and secret to enable streaming search. You can still add the artist manually."
-                    : "Couldn't reach Spotify just now. Try again, or add the artist manually."}
+                    : spotifyError === "premium"
+                      ? "The app owner's Spotify Premium subscription must be active — renew it on the Spotify account that owns this developer app. Retrying won't help; you can still add the artist manually."
+                      : "Couldn't reach Spotify just now. Try again, or add the artist manually."}
                 </div>
                 <div className="flex gap-2 mt-3">
                   {spotifyError === "failed" && (
