@@ -33,6 +33,21 @@ export async function scanObjectPdf(objectPath: string): Promise<CompletedPdfSca
   return scanner.finish();
 }
 
+// Task #3411 — read just the first bytes of an own-storage object (format
+// sniffing before deciding how to scan it). Throws ObjectNotFoundError like
+// scanObjectPdf when the object is missing.
+export async function readObjectHead(objectPath: string, bytes = 16): Promise<Buffer> {
+  const file = await objectStorage.getObjectEntityFile(objectPath);
+  const chunks: Buffer[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const rs = file.createReadStream({ start: 0, end: Math.max(0, bytes - 1) });
+    rs.on("data", (chunk: Buffer) => chunks.push(chunk));
+    rs.on("end", () => resolve());
+    rs.on("error", (e: Error) => reject(e));
+  });
+  return Buffer.concat(chunks);
+}
+
 // gogoods, Aug 15 2026 — scan a PDF arriving as a raw request stream (the
 // live-test page posts the picked art file directly, before any Save), same
 // bounded scanner as every other path.

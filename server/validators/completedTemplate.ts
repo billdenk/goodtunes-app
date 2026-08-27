@@ -44,6 +44,7 @@ import net from "node:net";
 import zlib from "node:zlib";
 import type { CheckResult } from "@shared/uploadValidation";
 import type { FinishedComponentSpec } from "@shared/vendorSpecs";
+import type { OcrTextMeasurement, RasterOcrResult } from "./ocrTextSize";
 import type { GuideEdges, MeasuredTemplateGuides } from "@shared/templateGuides";
 
 // ─── Scanner ──────────────────────────────────────────────────────────
@@ -2100,10 +2101,99 @@ export function fontsCheckVerdict(
     message: `${mixed ? "Some live text uses fonts with no embedded font program." : "Live text with no embedded font program."}${namesPart} Outline the type in your design app, or upload the font files (OTF/TTF) alongside this art so the prepress team can install them.`,
   };
 }
+// Task #3411 — shared verdict row for an OCR-measured text size (outlined
+// PDFs and raster inputs). WARN-ONLY by contract: OCR is a heuristic, so a
+// below-floor reading warns and never fails, regardless of the press's
+// minTextPointSizeBlocking flag.
+function ocrTextSizeCheckRow(
+  ocr: OcrTextMeasurement,
+  opts: { floor: number; pressWord: string; unit: "page" | "face"; kind: "outlined" | "raster" },
+): CheckResult {
+  const { floor, pressWord, unit, kind } = opts;
+  const label = `Text size (min ${floor} pt)`;
+  const where = kind === "raster" ? "" : ` on ${unit} ${ocr.page}`;
+  const noun = kind === "raster" ? "rasterized" : "outlined";
+  const meets = ocr.minPt >= floor - 0.05;
+  if (meets) {
+    return {
+      key: "tmpl.text_size",
+      label,
+      status: "pass",
+      tier: "advisory",
+      message: `Smallest rendered text ≈${ocr.minPt} pt ("${ocr.text}"${where}, OCR estimate of ${noun} type) — meets ${pressWord}'s ${floor} pt minimum.`,
+    };
+  }
+  return {
+    key: "tmpl.text_size",
+    label,
+    status: "warn",
+    message: `Smallest rendered text ≈${ocr.minPt} pt ("${ocr.text}"${where}) — below ${pressWord}'s ${floor} pt minimum. OCR estimate of ${noun} type (advisory — verify and enlarge the smallest type).`,
+  };
+}
+
+// Task #3411 — checks for a RASTER completed-art upload (TIFF/JPG). A raster
+// can't run the structural PDF checks, so the file-type row says exactly
+// that (warn — most plants expect a print-ready PDF), and when the press has
+// a minimum-text-size rule the OCR measurement supplies the same warn-only
+// text-size row the outlined-PDF path gets. No min-text rule → just the
+// file-type row (no new noise).
+export function validateRasterComponent(
+  kind: "tiff" | "jpeg",
+  spec: FinishedComponentSpec,
+  opts?: { ocr?: RasterOcrResult | null },
+): CheckResult[] {
+  const rules = spec.printRules ?? null;
+  const pressWord = spec.pressName || "the press";
+  const kindWord = kind === "tiff" ? "TIFF" : "JPEG";
+  const checks: CheckResult[] = [
+    {
+      key: "tmpl.filetype",
+      label: "File type",
+      status: "warn",
+      message: `${kindWord} (raster image) supplied — structural checks (pages, artboard size, color mode, fonts, bleed) can't run on a raster; verify them against ${pressWord}'s spec. Most plants expect a print-ready PDF.`,
+    },
+  ];
+  if (rules?.minTextPointSize != null && rules.minTextPointSize > 0) {
+    const floor = rules.minTextPointSize;
+    const ocr = opts?.ocr ?? null;
+    if (ocr?.measurement) {
+      const row = ocrTextSizeCheckRow(ocr.measurement, {
+        floor,
+        pressWord,
+        unit: spec.id === "labels" ? "face" : "page",
+        kind: "raster",
+      });
+      // Be honest about the scale basis when it came from the component's
+      // expected size rather than embedded resolution metadata.
+      if (ocr.dpiSource === "expected-size") {
+        row.message += ` Scale assumed from the component's expected size (no resolution metadata in the file).`;
+      }
+      checks.push(row);
+    } else {
+      checks.push({
+        key: "tmpl.text_size",
+        label: `Text size (min ${floor} pt)`,
+        status: "pass",
+        tier: "advisory",
+        message: `Text size couldn't be measured from this raster file — keep all type at least ${floor} pt (${pressWord} minimum).`,
+      });
+    }
+  }
+  return checks;
+}
+
 export function validateCompletedComponent(
   scan: CompletedPdfScan,
   spec: FinishedComponentSpec,
-  opts?: { edgeBand?: EdgeBandVerdict; contentBleed?: ContentBleedMeasurement | null },
+  opts?: {
+    edgeBand?: EdgeBandVerdict;
+    contentBleed?: ContentBleedMeasurement | null;
+    /** Task #3411 — OCR measurement of rendered pages, supplied by the
+     *  route ONLY when the file has no live text (outlined type) and the
+     *  press has a min-text-size rule. Null/absent = not checked → the
+     *  outlined-type advisory row stays byte-identical to today. */
+    ocrText?: OcrTextMeasurement | null;
+  },
 ): CheckResult[] {
   // Not a PDF → nothing else is meaningful.
   if (!scan.isPdf) {
@@ -2601,13 +2691,26 @@ export function validateCompletedComponent(
     const label = `Text size (min ${floor} pt)`;
     const measured = scan.minTextSizePt ?? null;
     if (!scan.hasFontDicts) {
-      checks.push({
-        key: "tmpl.text_size",
-        label,
-        status: "pass",
-        tier: "advisory",
-        message: `No live text detected — outlined type isn't measured. Keep all type at least ${floor} pt (${pressWord} minimum) when designing.`,
-      });
+      // Task #3411 — outlined type: when the route ran the OCR pass over
+      // the rendered pages, report what it found. WARN-ONLY, never fail,
+      // even when minTextPointSizeBlocking is set — OCR misreads decorative
+      // type, and false failures train operators to ignore the check. No
+      // OCR data (failed, skipped, or no text found) = today's advisory
+      // row, byte-identical.
+      const ocr = opts?.ocrText ?? null;
+      if (ocr) {
+        checks.push(
+          ocrTextSizeCheckRow(ocr, { floor, pressWord, unit, kind: "outlined" }),
+        );
+      } else {
+        checks.push({
+          key: "tmpl.text_size",
+          label,
+          status: "pass",
+          tier: "advisory",
+          message: `No live text detected — outlined type isn't measured. Keep all type at least ${floor} pt (${pressWord} minimum) when designing.`,
+        });
+      }
     } else if (measured == null) {
       checks.push({
         key: "tmpl.text_size",

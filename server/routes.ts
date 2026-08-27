@@ -117,11 +117,13 @@ import {
 import {
   rollupCompletedTemplate,
   rollupStatus,
+  type CheckResult,
   type CompletedTemplateComponent,
   type CompletedTemplateVerdict,
 } from "@shared/uploadValidation";
-import { validateCompletedComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches, hasTrustworthyBleedBoxes, contentBleedMeasurement, type ContentBleedMeasurement, logSpotUsageFallback } from "./validators/completedTemplate";
-import { scanObjectPdf, measureTemplateSpecRow, clearTemplateSpecMeasurements, mirrorExternalTemplatePdf } from "./templateSpecs";
+import { validateCompletedComponent, validateRasterComponent, fetchAndScanPdf, CompletedPdfScanner, edgeBandContent, measuredBleedInches, hasTrustworthyBleedBoxes, contentBleedMeasurement, type ContentBleedMeasurement, logSpotUsageFallback } from "./validators/completedTemplate";
+import { ocrPdfSmallestText, ocrRasterSmallestText, sniffRasterKind, type OcrTextMeasurement, type RasterOcrResult } from "./validators/ocrTextSize";
+import { scanObjectPdf, readObjectHead, measureTemplateSpecRow, clearTemplateSpecMeasurements, mirrorExternalTemplatePdf } from "./templateSpecs";
 
 const scryptAsync = promisify(scrypt);
 
@@ -35914,7 +35916,7 @@ export async function registerRoutes(
     // storage (scan the object stream, then rasterize a real first-page
     // thumbnail) vs. a pasted external URL (SSRF-guarded streamed fetch,
     // no preview — the client shows a generic PDF tile, never a fake).
-    let scan: Awaited<ReturnType<typeof scanObjectPdf>>;
+    let scan: Awaited<ReturnType<typeof scanObjectPdf>> | null = null;
     let assetUrl: string;
     let fileName: string | null;
     let previewUrl: string | null = null;
@@ -35922,10 +35924,15 @@ export async function registerRoutes(
     let fullPreviewUrl: string | null = null;
     let fullPreviewWMm: number | null = null;
     let fullPreviewHMm: number | null = null;
+    // Task #3411 — TIFF/JPG completed-art uploads are accepted (raster
+    // path: no structural PDF checks, warn-only OCR text-size check).
+    // Only for our own direct uploads — pasted external links stay PDF-only.
+    let rasterKind: "tiff" | "jpeg" | null = null;
     let isOwnObject = /^\/objects\/uploads\/[a-zA-Z0-9._-]+$/.test(body.data.url);
     if (isOwnObject) {
       try {
-        scan = await scanObjectPdf(body.data.url);
+        rasterKind = sniffRasterKind(await readObjectHead(body.data.url));
+        if (!rasterKind) scan = await scanObjectPdf(body.data.url);
       } catch (e) {
         if (e instanceof ObjectNotFoundError) {
           return res.status(404).json({ message: "That uploaded file could not be found." });
@@ -35933,17 +35940,20 @@ export async function registerRoutes(
         console.error("[completed-art] object scan failed", e);
         return res.status(500).json({ message: "Couldn't read the uploaded file — try again." });
       }
-      if (!scan.isPdf) return res.status(400).json({ message: "That file isn't a PDF — supply the print-ready PDF." });
+      if (scan && !scan.isPdf) return res.status(400).json({ message: "That file isn't a PDF — supply the print-ready PDF." });
       assetUrl = body.data.url;
       fileName = body.data.fileName || null;
-      // Task #3020 — trim-area preview (front panel / label trim square),
-      // with a second face for center labels.
-      const previews = await generateCompletedPreview(body.data.url, spec);
-      previewUrl = previews.previewUrl;
-      previewUrl2 = previews.previewUrl2;
-      fullPreviewUrl = previews.fullPreviewUrl;
-      fullPreviewWMm = previews.fullPreviewWMm;
-      fullPreviewHMm = previews.fullPreviewHMm;
+      if (!rasterKind) {
+        // Task #3020 — trim-area preview (front panel / label trim square),
+        // with a second face for center labels. PDF only — raster uploads
+        // keep the client's generic tile.
+        const previews = await generateCompletedPreview(body.data.url, spec);
+        previewUrl = previews.previewUrl;
+        previewUrl2 = previews.previewUrl2;
+        fullPreviewUrl = previews.fullPreviewUrl;
+        fullPreviewWMm = previews.fullPreviewWMm;
+        fullPreviewHMm = previews.fullPreviewHMm;
+      }
     } else {
       // Task #3184 — pasted external links are MIRRORED into our object
       // storage at check time (standing rule: external file links never
@@ -35984,48 +35994,78 @@ export async function registerRoutes(
     // the template layer stripped), measure bleed from the RENDERED content
     // vs the template-derived trim rectangle instead.
     let contentBleed: ContentBleedMeasurement | null = null;
+    const minTextRule =
+      spec.printRules?.minTextPointSize != null && spec.printRules.minTextPointSize > 0;
     const wantsEdgeBand =
       spec.printRules?.bleedMinInches != null || spec.printRules?.bleedRecommendedInches != null;
     const certLine = spec.templateBleedLineInches ?? null;
     const wantsContentBleed =
+      scan != null &&
       certLine != null && certLine > 0 && spec.templatePageInches != null && !hasTrustworthyBleedBoxes(scan);
-    if (isOwnObject && (wantsEdgeBand || wantsContentBleed)) {
+    // Task #3411 — OCR text-size pass for OUTLINED PDFs (no font dicts →
+    // the live-text check can't see anything) and raster uploads. Gated on
+    // the press actually having a min-text-size rule (no rule → no OCR run,
+    // rows byte-identical to today), and warn-only downstream. Any failure
+    // leaves the measurement null = "not checked".
+    const wantsOcrText = minTextRule && scan != null && !scan.hasFontDicts;
+    let ocrText: OcrTextMeasurement | null = null;
+    let rasterOcr: RasterOcrResult | null = null;
+    const wantsRasterOcr = minTextRule && rasterKind != null;
+    if (isOwnObject && (scan != null ? (wantsEdgeBand || wantsContentBleed || wantsOcrText) : wantsRasterOcr)) {
       const fsp = await import("node:fs/promises");
       const os = await import("node:os");
       const path = await import("node:path");
       let tmpDir: string | null = null;
       try {
-        const file = await objectStorage.getObjectEntityFile(body.data.url);
+        const file = await objectStorage.getObjectEntityFile(assetUrl);
         const [meta] = await file.getMetadata();
         const size = Number(meta?.size ?? 0);
         if (Number.isFinite(size) && size > 0 && size <= PREVIEW_MAX_SOURCE_BYTES) {
           tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "edge-band-src-"));
-          const pdfPath = path.join(tmpDir, "src.pdf");
-          await file.download({ destination: pdfPath });
-          if (wantsEdgeBand) edgeBand = await edgeBandContent(pdfPath, scan);
-          if (wantsContentBleed) {
-            // Cut-rect parity with the press live-test (CALIFORNIALAND fix,
-            // Aug 18 2026): full-artboard exports (Trim==Bleed) need the
-            // press-persisted GT-layer cut rect or bleed measures ≈0. Server
-            // spec rect ONLY — client-supplied rects were review-rejected
-            // (artists could forge an inset rect to fake sufficient bleed).
-            contentBleed = await contentBleedMeasurement(pdfPath, scan, spec, {
-              trimRectOverrideInches: spec.templateCutRectInches ?? null,
-            });
+          const srcPath = path.join(tmpDir, rasterKind ? "src.img" : "src.pdf");
+          await file.download({ destination: srcPath });
+          if (scan != null) {
+            if (wantsEdgeBand) edgeBand = await edgeBandContent(srcPath, scan);
+            if (wantsContentBleed) {
+              // Cut-rect parity with the press live-test (CALIFORNIALAND fix,
+              // Aug 18 2026): full-artboard exports (Trim==Bleed) need the
+              // press-persisted GT-layer cut rect or bleed measures ≈0. Server
+              // spec rect ONLY — client-supplied rects were review-rejected
+              // (artists could forge an inset rect to fake sufficient bleed).
+              contentBleed = await contentBleedMeasurement(srcPath, scan, spec, {
+                trimRectOverrideInches: spec.templateCutRectInches ?? null,
+              });
+            }
+            if (wantsOcrText) {
+              ocrText = await ocrPdfSmallestText(srcPath, { pageCount: scan.pageCount });
+            }
+          } else if (wantsRasterOcr) {
+            // Physical scale fallback when the raster carries no resolution
+            // metadata: the component's expected flat width (template
+            // artboard when on file, else finished + bleed both sides).
+            const expectedWidthInches =
+              spec.templatePageInches?.w ?? spec.finishedInches.w + 2 * spec.bleedInches;
+            rasterOcr = await ocrRasterSmallestText(srcPath, { expectedWidthInches });
           }
         }
       } catch {
         edgeBand = null;
         contentBleed = null;
+        ocrText = null;
+        rasterOcr = null;
       } finally {
         if (tmpDir) fsp.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
       }
     }
 
-    // Task #3069 — log every spot-usage fallback with its reason code.
-    logSpotUsageFallback(scan, { fileName, source: isOwnObject ? assetUrl : "external-url" });
-
-    const checks = validateCompletedComponent(scan, spec, { edgeBand, contentBleed });
+    let checks: CheckResult[];
+    if (rasterKind) {
+      checks = validateRasterComponent(rasterKind, spec, { ocr: rasterOcr });
+    } else {
+      // Task #3069 — log every spot-usage fallback with its reason code.
+      logSpotUsageFallback(scan!, { fileName, source: isOwnObject ? assetUrl : "external-url" });
+      checks = validateCompletedComponent(scan!, spec, { edgeBand, contentBleed, ocrText });
+    }
     const component: CompletedTemplateComponent = {
       componentId: spec.id,
       label: spec.label,
@@ -36066,7 +36106,7 @@ export async function registerRoutes(
     // Ruby handoff Aug 2026 — append the upload to the file-events audit
     // trail (never deleted; the artist Test page's "File history" card).
     try {
-      const first = scan.pageSizesInches[0] ?? null;
+      const first = scan?.pageSizesInches[0] ?? null;
       const dims = first ? `${(first.w * 25.4).toFixed(1)} \u00d7 ${(first.h * 25.4).toFixed(1)} mm` : null;
       await db.insert(completedTemplateFileEvents).values({
         albumId: req.params.id,
