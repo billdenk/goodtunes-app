@@ -188,7 +188,7 @@ function PmpSiteHeader({ signedIn }: { signedIn: boolean }) {
             <rect x="2" y="4.5" width="20" height="15" rx="2" />
             <path d="M2.5 6.5L12 13l9.5-6.5" />
           </svg>
-          help@pmp.makesvinyl.com
+          help@physicalmusicproducts.com
         </span>
         <span style={{ flex: 1 }} />
         {/* Their real social glyphs (Instagram · Facebook · YouTube), green like
@@ -340,7 +340,7 @@ function PmpSiteFooter({ compact = false }: { compact?: boolean }) {
         {/* Dark artwork sits as-is on green; on black, brightness(0) first
             forces true white (plain invert leaves a tint — Bill caught it twice). */}
         <img src={pmpLogoAsset} alt="" aria-hidden style={{ width: 26, height: 26, filter: onGreen ? 'none' : 'brightness(0) invert(1)', opacity: onGreen ? 0.9 : 0.85 }} />
-        Physical Music Products · pmp.makesvinyl.com
+        Physical Music Products · physicalmusicproducts.com
         <span style={{ flex: 1 }} />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: ink }}>
           Powered by
