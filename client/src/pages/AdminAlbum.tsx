@@ -2015,9 +2015,13 @@ export function AdminAlbum({
                     changeModeDisabledReason={modeChangeBlockedReason}
                   />
                 )}
+              {/* Wait for the role to resolve before picking a Package
+                  surface — otherwise an operator flashes (and mounts) the
+                  SellPanel they're no longer supposed to see. */}
               {safeTab === "sell" &&
                 allowed.has("sell") &&
                 !isArtist &&
+                !!adminRoleInfo &&
                 !(isOperatorRole && (album.sellMode ?? null) !== "shopify") && (
                 <SellPanel
                   albumId={album.id}

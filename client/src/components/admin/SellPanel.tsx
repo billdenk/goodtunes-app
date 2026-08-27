@@ -7247,10 +7247,10 @@ function SkuRow({
                   ? (breakdown?.usingSnapshot ? "locked · catalog" : "live · catalog")
                   : isVinyl
                     ? (breakdown?.needsQuote
-                        ? "needs quote"
+                        ? "needs estimate"
                         : breakdown?.usingSnapshot
                           ? "locked · saved"
-                          : "needs quote")
+                          : "needs estimate")
                     : "placeholder"})
               </span>
             </span>
@@ -7277,7 +7277,7 @@ function SkuRow({
             >
               {invitedPressRow?.press && !catalogFormat
                 ? `${invitedPressRow.press.name} doesn't press ${ALBUM_FORMAT_LABEL[format]} — set a ${ALBUM_FORMAT_LABEL[format]}-capable plant on the artist page to get a real cost.`
-                : `Quoted manually — no plant with ${ALBUM_FORMAT_LABEL[format]} pricing is set yet.`}
+                : `Estimated manually — no plant with ${ALBUM_FORMAT_LABEL[format]} pricing is set yet.`}
             </div>
           )}
           {(isVinyl || usingCatalog) && breakdown?.needsQuote && (
@@ -7416,7 +7416,7 @@ function SkuRow({
                         >
                           {r.netCents === null ? (
                             <span className="text-[color:var(--brand-blue)]">
-                              Needs quote
+                              Needs estimate
                             </span>
                           ) : (
                             signedDollars(r.netCents)
@@ -8063,13 +8063,13 @@ function AddonQuotePill({
                 data-testid={`row-${testKey}-quote`}
               >
                 <span className="text-xs font-medium text-amber-700">
-                  Ask the press / request a quote
+                  Ask the press / request an estimate
                 </span>
                 <span className="text-xs text-amber-600 tabular-nums">TBD</span>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">
                 No manufacturer has confirmed pricing for this add-on yet, so it
-                doesn't affect any totals. Once a press quotes it, this becomes a
+                doesn't affect any totals. Once a press prices it, this becomes a
                 live, priced option.
               </p>
             </UpsellPanelCard>,
@@ -8750,8 +8750,8 @@ function BookletPill({
                     testId="info-booklet-qty"
                     text={
                       preview?.vendorLabel === "MRP"
-                        ? "MRP only quotes 500 / 1000 / 2000 runs. Anything else snaps UP to the next rung; over 2000 stays at the 2000 price."
-                        : "PMP only quotes 500 / 1000 / 2000 / 5000 runs. Anything else snaps UP to the next rung."
+                        ? "MRP only prices 500 / 1000 / 2000 runs. Anything else snaps UP to the next rung; over 2000 stays at the 2000 price."
+                        : "PMP only prices 500 / 1000 / 2000 / 5000 runs. Anything else snaps UP to the next rung."
                     }
                   />
                 </div>
