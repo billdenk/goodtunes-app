@@ -385,6 +385,11 @@ export default function PressClientEstimate() {
     );
   }
 
+  // Task #3423 — a press with its own client skin (PMP/Cinq/Hellbender)
+  // must never show another press's assets: the MRP ruby-disc PHOTO is
+  // Memphis's, so skinned presses get a neutral drawn disc instead.
+  const pressSkinned = !!data.brand?.skin;
+
   return (
     <div style={{ minHeight: '100vh', background: CANVAS, color: INK, fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif" }}>
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '48px 24px 80px' }}>
@@ -424,7 +429,14 @@ export default function PressClientEstimate() {
             >
               <div style={{ position: 'relative', width: 280, height: 280, borderRadius: '50%', overflow: 'hidden' }}>
                 <div ref={spin.bodyRef} style={{ position: 'absolute', inset: 0, borderRadius: '50%', overflow: 'hidden', willChange: 'transform' }}>
-                  <img src={rubyVinylPhoto} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.13)' }} />
+                  {pressSkinned ? (
+                    // Neutral drawn vinyl face — no other press's photo here.
+                    <div aria-hidden style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'radial-gradient(circle at 50% 50%, #2c2c2f 0%, #17171a 52%, #0c0c0e 100%)' }}>
+                      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.045) 0 1px, transparent 1px 6px)' }} />
+                    </div>
+                  ) : (
+                    <img src={rubyVinylPhoto} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.13)' }} />
+                  )}
                   {/* label — covers the photo's baked-in label, spins with the record */}
                   <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '40%', height: '40%', borderRadius: '50%', overflow: 'hidden' }}>
                     <img src={niinaLabelArt} alt="" aria-hidden style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -896,11 +908,23 @@ export default function PressClientEstimate() {
             style={{ position: 'relative', width: 520, maxWidth: '90vw', overflow: 'hidden', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, boxShadow: '0 32px 80px rgba(0,0,0,0.7)' }}
           >
             <div style={{ position: 'relative', height: 280, overflow: 'hidden' }} aria-hidden>
-              <img
-                src={rubyVinylPhoto}
-                alt=""
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.15)' }}
-              />
+              {pressSkinned ? (
+                // Neutral drawn disc hero — Memphis's ruby photo never
+                // appears on another press's screens (Task #3423).
+                <div style={{ position: 'absolute', inset: 0, background: '#0e0e10' }}>
+                  <div style={{ position: 'absolute', left: '50%', top: '58%', transform: 'translate(-50%, -50%)', width: 360, height: 360, borderRadius: '50%', background: 'radial-gradient(circle at 50% 50%, #2c2c2f 0%, #17171a 52%, #0c0c0e 100%)' }}>
+                    <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.045) 0 1px, transparent 1px 6px)' }} />
+                    <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 120, height: 120, borderRadius: '50%', background: '#232326', border: '1px solid rgba(255,255,255,0.08)' }} />
+                    <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 10, height: 10, borderRadius: '50%', background: '#0c0c0e' }} />
+                  </div>
+                </div>
+              ) : (
+                <img
+                  src={rubyVinylPhoto}
+                  alt=""
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.15)' }}
+                />
+              )}
               <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, rgba(0,0,0,0) 45%, ${CARD_RAISED} 100%)` }} />
             </div>
             <CloseX onClose={() => setHookOpen(false)} testid="button-goodtunes-close" />

@@ -23800,6 +23800,26 @@
     "snippet": "<div className=\"w-10 h-10 rounded-full border-2 border-white/20 border-t-[#319ED8] animate-spin\" />"
   },
   {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/hellbender/PressClientNextStepsHellbender.tsx",
+    "snippet": "<button type=\"button\" className=\"hb-icon-btn\" aria-label=\"Search\" data-testid=\"signin-search\"><Search size={20} strokeWidth={1.5} /></button>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/hellbender/PressClientNextStepsHellbender.tsx",
+    "snippet": "<button type=\"button\" className=\"hb-icon-btn\" aria-label=\"Account\" data-testid=\"signin-account\"><User size={20} strokeWidth={1.5} /></button>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/hellbender/PressClientNextStepsHellbender.tsx",
+    "snippet": "<button type=\"button\" className=\"hb-icon-btn\" aria-label=\"Cart\" data-testid=\"signin-bag\"><ShoppingBag size={20} strokeWidth={1.5} /></button>"
+  },
+  {
+    "rule": "naked-icon-button",
+    "file": "client/src/pages/hellbender/PressClientNextStepsHellbender.tsx",
+    "snippet": "<button type=\"button\" aria-label=\"Subscribe\" data-testid=\"signin-newsletter-submit\" style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', width: 34, height: 37, borderRad"
+  },
+  {
     "rule": "brand-hex-literal",
     "file": "client/src/pages/InstrumentDetail.tsx",
     "snippet": "<main className=\"relative h-screen w-full flex justify-center overflow-hidden\" style={{ background: \"#00062B\" }}>"
@@ -26473,26 +26493,6 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
     "snippet": "<div className=\"flex items-center gap-2 text-[13px] font-semibold\" style={{ color: '#34a853' }} data-testid=\"package-saved-note\">"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "className=\"rounded-full text-[13px] focus:outline-none\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "className=\"text-[13.5px] font-medium transition-opacity hover:opacity-70\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "className=\"rounded-full text-[13.5px] font-semibold transition-all\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
-    "snippet": "<p className=\"text-[11.5px]\" style={{ color: '#e0245e' }} data-testid=\"package-name-required\">"
   },
   {
     "rule": "brand-hex-literal",
@@ -30132,27 +30132,7 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/WhitelabelLanding.tsx",
-    "snippet": "<p className=\"text-[15px]\" style={{ color: MRP_SUBINK }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/WhitelabelLanding.tsx",
-    "snippet": "className=\"mt-8 inline-flex items-center justify-center px-8 h-11 text-[15px] font-semibold\""
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/WhitelabelLanding.tsx",
-    "snippet": "<p className=\"mt-10 text-[12.5px]\" style={{ color: MRP_SUBINK }}>{brand.contactLine}</p>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/WhitelabelLanding.tsx",
     "snippet": "<p className=\"text-[15px]\" style={{ color: \"#a1a1a6\" }}>"
-  },
-  {
-    "rule": "hardcoded-font-size",
-    "file": "client/src/pages/WhitelabelLanding.tsx",
-    "snippet": "className=\"mt-8 inline-flex items-center justify-center px-8 h-11 text-[15px] font-semibold text-white\""
   },
   {
     "rule": "hardcoded-font-size",

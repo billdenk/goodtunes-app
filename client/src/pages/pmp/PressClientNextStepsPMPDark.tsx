@@ -1,18 +1,18 @@
-// CORNER RULING (Bill, Aug 21 2026): Memphis's corner token = SQUARE and
-// it applies across the whole MRP skin — inputs, buttons, cards, pills —
+// CORNER RULING (Bill, Aug 21 2026): the press's corner token = SQUARE and
+// it applies across the whole PMP skin — inputs, buttons, cards, pills —
 // not just chrome. Only true circles (avatars, status icons) stay round.
-// PressClientNextStepsMRP — where "Start this project" lands, now as the
-// FULL flow (Bill, Aug 21 2026): an MRP-branded login screen, then the
+// PressClientNextStepsPMP — where "Start this project" lands, now as the
+// FULL flow (Bill, Aug 21 2026): a PMP-branded login screen, then the
 // GoodTunes artist portal (artist tier, NOT super admin — same database,
-// same accounts) wearing MRP's white-label skin, with the next-steps
+// same accounts) wearing PMP's white-label skin, with the next-steps
 // overview Bill liked as the landing content inside the shell.
 // Shell = top bar + left rail per the artist nav canon (Aug 16 2026):
 // Dashboard, Releases, Audience, Acquisition, Orders, Buyers, Referrals,
 // Shopify, Reports — Team pinned at the rail bottom, no Overview, ⌘K chip
 // flush right inside the rail search.
-// Canon: MRP white-label = the press's own LIGHT canvas — pure white
-// #FFFFFF (Andrew, Aug 21 2026), gold #D9C153 with dark ink on the one
-// filled action, black hairlines, MRP logo black. Statuses are always
+// Canon: PMP white-label = the press's own LIGHT canvas — pure white
+// #FFFFFF (Andrew, Aug 21 2026), green #6CA460 with dark ink on the one
+// filled action, black hairlines, PMP logo black. Statuses are always
 // word + icon, never color alone (Bill is colorblind). "Estimate", never
 // the q-word. Self-contained per handoff rules.
 
@@ -21,54 +21,24 @@ import { useMemo, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import californialandCover from './assets/californialand-cover.jpg';
-import mrpLogoAsset from './assets/mrp-logo.svg';
+import pmpLogoAsset from './assets/pmp-icon.svg';
 import goodtunesLogo from './assets/goodtunes-logo.png';
-import brandonPhoto from './assets/brandon-seavers.png';
-import { withDevWlParam as wlParam } from "@/hooks/useAuthKind";
+import jonathanPhoto from './assets/jonathan-hibma.png';
+import { portalUrl, type PortalData } from '../mrp/PressClientNextStepsMRP';
 
-// ─── Real portal payload (MOCK_* retired — GET /api/press-client/portal) ──
-export type PortalEstimate = {
-  id: string;
-  estimateNo: string | null;
-  title: string | null;
-  status: string;
-  pressName: string | null;
-  build: string | null;
-  totalCents: number | null;
-  quantity: number | null;
-  sentAt: string | null;
-  acceptedAt: string | null;
-  shareToken: string | null;
-  preparedBy: string | null;
-};
-export type PortalData = {
-  client: { id: string; displayName: string | null; email: string | null };
-  estimates: PortalEstimate[];
-  // Emailed-link visitor (?e= share token, no session): view-only —
-  // mutating actions (file upload) become a sign-in affordance.
-  tokenOnly?: boolean;
-};
+// ─── Real portal payload (MOCK_* retired — GET /api/press-client/portal,
+// wired exactly like the MRP screens; Task #3423) ─────────────────────
 const SETUP_TOTAL_DOLLARS = 1295; // fixed setup block — same anchor as the estimate page
 const moneyFmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
-// Emailed estimate links land here with ?e=<token> — the link IS the auth
-// (Task #3423), so the portal query threads it through and the sign-in gate
-// never interposes for tokened visitors, session or not.
-export const portalUrl = () => {
-  const base = wlParam('/api/press-client/portal');
-  const e = new URLSearchParams(window.location.search).get('e');
-  if (!e || !/^[A-Za-z0-9_-]{10,}$/.test(e)) return base;
-  return base + (base.includes('?') ? '&' : '?') + 'e=' + encodeURIComponent(e);
-};
-
-// ─── Palette — MRP light canon (twin of PressClientEstimateMRP) ──────
-const CANVAS = '#ffffff';
-const CARD = '#ffffff';
-const CARD_RAISED = '#fbfaf7';
-const INK = '#1d1d1f';
-const SUBINK = '#6e6e73';
-const HAIRLINE = 'rgba(0,0,0,0.10)';
-const GOLD = '#D9C153'; // MRP's site gold (Andrew, Aug 21 2026)
+// ─── Palette — PMP dark canon (twin of PressClientEstimatePMP) ──────
+const CANVAS = '#101012';
+const CARD = '#17171a';
+const CARD_RAISED = '#1d1d20';
+const INK = '#f5f5f7';
+const SUBINK = 'rgba(245,245,247,0.62)';
+const HAIRLINE = 'rgba(255,255,255,0.12)';
+const GREEN = '#6CA460'; // PMP's site green (Andrew, Aug 21 2026)
 
 // ─── Status grammar — word + icon, never color alone ─────────────────
 type StepStatus = 'done' | 'next' | 'waiting';
@@ -104,8 +74,8 @@ function StatusPill({ status }: { status: StepStatus }) {
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 11px',
         borderRadius: 0, fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
-        border: `1px solid ${status === 'next' ? 'rgba(0,0,0,0.28)' : HAIRLINE}`,
-        background: status === 'next' ? 'rgba(217,193,83,0.14)' : 'transparent',
+        border: `1px solid ${status === 'next' ? 'rgba(255,255,255,0.34)' : HAIRLINE}`,
+        background: status === 'next' ? 'rgba(108,164,96,0.14)' : 'transparent',
         color: status === 'waiting' ? SUBINK : INK,
       }}
     >
@@ -146,7 +116,7 @@ const buildSteps = (estimateNo: string, preparerFirst: string, depositLabel: str
   {
     id: 'shipping', status: 'waiting',
     title: 'Shipping',
-    body: 'Finished records leave Memphis with tracking the day they clear final inspection.',
+    body: 'Finished records leave the plant with tracking the day they clear final inspection.',
   },
 ];
 
@@ -170,24 +140,18 @@ function RailIcon({ name, active }: { name: string; active: boolean }) {
   }
 }
 
-// Rows with a real page navigate; the rest stay inert until their screens
-// are built (Aug 24 2026, Andrew's Memphis demo).
-const RAIL_LINKS: Record<string, string> = { Dashboard: '/dashboard', Releases: '/projects' };
-
 function RailRow({ name, active }: { name: string; active: boolean }) {
-  const [, navigate] = useLocation();
-  const to = RAIL_LINKS[name];
   return (
     <a
-      href={to ?? '#'}
-      onClick={(e) => { e.preventDefault(); if (to) navigate(to); }}
+      href="#"
+      onClick={(e) => e.preventDefault()}
       data-testid={`rail-${name.toLowerCase()}`}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 0,
         fontSize: 13, fontWeight: active ? 600 : 500, color: active ? INK : SUBINK,
         background: active ? CARD_RAISED : 'transparent',
         border: active ? `1px solid ${HAIRLINE}` : '1px solid transparent',
-        textDecoration: 'none', cursor: to ? 'pointer' : 'default',
+        textDecoration: 'none',
       }}
     >
       <RailIcon name={name} active={active} />
@@ -196,18 +160,20 @@ function RailRow({ name, active }: { name: string; active: boolean }) {
   );
 }
 
-// ─── MRP's real site chrome (Bill, Aug 21 2026: "wouldn't it have their
-// header and footer? like memphisrecordpressing.com/our-story") — pulled
-// from their live site: utility bar + logo-left nav with the gold squared
+// ─── PMP's real site chrome (Bill, Aug 21 2026: "wouldn't it have their
+// header and footer? like physicalmusicproducts.com/our-story") — pulled
+// from their live site: utility bar + logo-left nav with the green squared
 // button, and the dark link-columns footer. Nav links are decorative site
 // chrome here; the account chip is the portal's. ───────────────────────
 // Full nav from their live site (Bill's screenshot, Aug 21 2026): we'd
-// missed About MRP, MRP TV, and News.
-const MRP_NAV = ['Home', 'About MRP', 'Products', 'Resources', 'MRP TV', 'MRP University', 'News', 'Shop', 'Contact'];
+// missed About PMP, PMP TV, and News.
+const PMP_NAV = ['Home', 'About PMP', 'Products', 'Resources', 'PMP TV', 'PMP University', 'News', 'Shop', 'Contact'];
 
-export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean; firstName?: string }) {
-  // Signed in, the marketing nav drops away (Andrew, Aug 24 2026) — the
-  // account chip stays and opens a small menu with Sign out.
+// Andrew (Aug 26 2026): the logged-in chrome keeps this structure but the
+// bar goes BLACK — the site's style, not its structure. White ink, green stays.
+function PmpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean; firstName?: string }) {
+  // Signed in, the account chip opens a small menu with Sign out — same
+  // wiring as the MRP portal header (Task #3423).
   const [menuOpen, setMenuOpen] = useState(false);
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
@@ -218,88 +184,86 @@ export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean;
     navigate('/next-steps');
   };
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
+    <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#000000' }}>
       {/* Utility bar */}
       {/* Utility bar — values pulled from their live stylesheet (Bill, Aug 21
-          2026): 40px row, 12px / 400 / 0.07em body type, #333 ink. Marketing
-          chrome for the logged-out front door only — signed in, the whole
-          strip drops away (task, Aug 25 2026). */}
-      {!signedIn && (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: 40, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}`, fontSize: 12, fontWeight: 400, letterSpacing: '0.07em', color: '#333333' }}>
+          2026): 40px row, 12px / 400 / 0.07em body type, #333 ink. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: 40, padding: '0 26px', borderBottom: '1px solid rgba(255,255,255,0.14)', fontSize: 12, fontWeight: 400, letterSpacing: '0.07em', color: 'rgba(255,255,255,0.72)' }}>
         <span>Let&rsquo;s talk about your project</span>
-        <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: HAIRLINE }} />
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: '#333333' }}>
+        <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.14)' }} />
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: 'rgba(255,255,255,0.72)' }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
             <rect x="2" y="4.5" width="20" height="15" rx="2" />
             <path d="M2.5 6.5L12 13l9.5-6.5" />
           </svg>
-          help@memphisvinyl.com
+          help@pmp.makesvinyl.com
         </span>
         <span style={{ flex: 1 }} />
-        {/* Their real social glyphs (Instagram · Facebook · YouTube), gold like
-            the live site — front-door chrome only, like the whole bar now
-            (Bill, Aug 21 2026). */}
-        {/* Sized + celled like the live site: larger glyphs, hairline
-            dividers between each (Bill, Aug 21 2026 screenshot). */}
-        <span style={{ display: 'flex', alignItems: 'stretch', alignSelf: 'stretch' }} aria-hidden>
-            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(0,0,0,0.12)' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8">
+        {/* Their real social glyphs (Instagram · Facebook · YouTube), green like
+            the live site — front-door chrome only. Signed in, they drop away
+            so nothing pulls off the page's intent (Bill, Aug 21 2026). */}
+        {!signedIn && (
+          /* Sized + celled like the live site: larger glyphs, hairline
+             dividers between each (Bill, Aug 21 2026 screenshot). */
+          <span style={{ display: 'flex', alignItems: 'stretch', alignSelf: 'stretch' }} aria-hidden>
+            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(255,255,255,0.16)' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GREEN} strokeWidth="1.8">
                 <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" />
                 <circle cx="12" cy="12" r="4.2" />
-                <circle cx="17.6" cy="6.4" r="1.2" fill={GOLD} stroke="none" />
+                <circle cx="17.6" cy="6.4" r="1.2" fill={GREEN} stroke="none" />
               </svg>
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(0,0,0,0.12)' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill={GOLD}>
+            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(255,255,255,0.16)' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={GREEN}>
                 <path d="M14 22v-8h2.8l.5-3.4H14V8.4c0-1 .3-1.7 1.7-1.7h1.8V3.6c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v2.6H7.6V14h2.9v8h3.5z" />
               </svg>
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(0,0,0,0.12)' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill={GOLD}>
+            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(255,255,255,0.16)' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={GREEN}>
                 <path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.5 12 4.5 12 4.5s-7 0-8.9.6A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12 31 31 0 0 0 1 16.8a3 3 0 0 0 2.1 2.1c1.9.6 8.9.6 8.9.6s7 0 8.9-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 23.5 12 31 31 0 0 0 23 7.2zM9.8 15.3V8.7l6 3.3-6 3.3z" />
               </svg>
             </span>
-        </span>
+          </span>
+        )}
       </div>
-      )}
-      {/* Poppins rides with the header so both stages get the real MRP face. */}
+      {/* Poppins rides with the header so both stages get the real PMP face. */}
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
-        /* Their site's hover: ink darkens and the gold rule draws in
+        /* Their site's hover: ink darkens and the green rule draws in
            left-to-right — every item, flyout or not (Bill, Aug 21 2026). */
-        .mrp-nav-link { position: relative; transition: color 0.2s ease; }
-        .mrp-nav-link::after {
+        .pmp-nav-link { position: relative; transition: color 0.2s ease; }
+        .pmp-nav-link::after {
           content: ''; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px;
-          background: ${GOLD}; transform: scaleX(0); transform-origin: left center;
+          background: ${GREEN}; transform: scaleX(0); transform-origin: left center;
           transition: transform 0.25s ease;
         }
-        .mrp-nav-link:hover { color: #111111; }
-        .mrp-nav-link:hover::after, .mrp-nav-link.is-active::after { transform: scaleX(1); }
+        .pmp-nav-link:hover { color: #ffffff; }
+        .pmp-nav-link:hover::after, .pmp-nav-link.is-active::after { transform: scaleX(1); }
       `}</style>
-      {/* Main nav — logo left, links, gold squared button (their site pattern) */}
+      {/* Main nav — logo left, links, green squared button (their site pattern) */}
       {/* Sizing matched to the live site (Bill, Aug 21 2026): taller row,
           smaller lighter gray nav with wider tracking and roomier gaps.
-          The gold estimate button stays exactly as it was. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 34, height: 80, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}` }}>
-        <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 60, height: 60 }} />
+          The green estimate button stays exactly as it was. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 34, height: 80, padding: '0 26px', borderBottom: '1px solid rgba(255,255,255,0.14)' }}>
+        {/* Dark artwork → true white via brightness(0) first (Bill caught plain invert's tint twice). */}
+        <img src={pmpLogoAsset} alt="Physical Music Products" style={{ width: 60, height: 60, filter: 'brightness(0) invert(1)' }} />
         {/* Nav — real values from their stylesheet (Bill, Aug 21 2026):
             12px / 600 / 0.05em uppercase, centered; resting ink is the
             skin's rgba(51,51,51,0.5) — the mid gray, NOT bold #333 (that
             was the top bar's rule). Hover goes near-black on their site. */}
         <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 30, fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
           {/* "Sign in" rides last and wears the site's active treatment —
-              near-black with the gold rule under it (Bill, Aug 21 2026).
-              Signed in, the marketing links drop away entirely. */}
-          {(signedIn ? [] : [...MRP_NAV, 'Sign in']).map((l) => {
+              near-black with the green rule under it (Bill, Aug 21 2026). */}
+          {[...PMP_NAV, 'Sign in'].map((l) => {
             const active = l === 'Sign in';
             return (
               <a
                 key={l}
                 href="#"
                 onClick={(e) => e.preventDefault()}
-                className={`mrp-nav-link${active ? ' is-active' : ''}`}
+                className={`pmp-nav-link${active ? ' is-active' : ''}`}
                 style={{
-                  color: active ? '#111111' : 'rgba(51,51,51,0.5)', textDecoration: 'none',
+                  color: active ? '#ffffff' : 'rgba(255,255,255,0.55)', textDecoration: 'none',
                   fontWeight: active ? 700 : undefined,
                 }}
               >
@@ -308,29 +272,29 @@ export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean;
             );
           })}
         </nav>
-        {/* Their site's gold rectangle — squared, not our pill. Shell-only
+        {/* Their site's green rectangle — squared, not our pill. Shell-only
             chrome for visitors arriving from the main site; once signed in
             it steps aside for the account chip (Bill, Aug 21 2026). */}
         {!signedIn && (
-          <span style={{ padding: '11px 20px', background: GOLD, color: INK, fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
+          <span style={{ padding: '11px 20px', background: GREEN, color: INK, fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
             Get an estimate
           </span>
         )}
         {signedIn && (
-          <span style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: SUBINK }}>
+          <span style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: 'rgba(255,255,255,0.8)' }}>
             <button
               type="button"
               aria-label="Account menu"
               aria-expanded={menuOpen}
               onClick={() => setMenuOpen((v) => !v)}
               data-testid="button-account-menu"
-              style={{ width: 28, height: 28, borderRadius: '50%', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: INK, cursor: 'pointer', padding: 0 }}
+              style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: '#ffffff', cursor: 'pointer', padding: 0 }}
             >
               {(firstName || '?').slice(0, 1).toUpperCase()}
             </button>
             {firstName}
             {menuOpen && (
-              <div data-testid="menu-account" style={{ position: 'absolute', top: 38, right: 0, minWidth: 150, background: '#ffffff', border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.10)', padding: '6px 0', zIndex: 40 }}>
+              <div data-testid="menu-account" style={{ position: 'absolute', top: 38, right: 0, minWidth: 150, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.35)', padding: '6px 0', zIndex: 40 }}>
                 <button
                   type="button"
                   data-testid="button-sign-out"
@@ -348,53 +312,77 @@ export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean;
   );
 }
 
-const MRP_FOOTER_COLS: { head: string; rows: string[] }[] = [
-  { head: 'Most used links', rows: ['Vinyl Records', 'Deluxe Vinyl Packaging', 'Short-Run Record Pressing', 'Forms & Templates', 'Audio File Prep', 'Art File Prep'] },
-  { head: 'Contact us', rows: ['Phone: (901) 821-9099', 'Email: help@memphisvinyl.com', 'Careers'] },
-  { head: 'Privacy & security', rows: ['Privacy Notice'] },
-  { head: 'Locations', rows: ['Pressing & Customer Service: 3015 Brother Blvd, Bartlett, TN 38133', 'Packaging & Shipping: 7625 Appling Center Dr #103, Memphis, TN 38133'] },
-];
-
-// Inside the app the footer reduces to just the black bar — Memphis and us.
-// The full column footer belongs to the site/login only (Bill, Aug 21 2026).
-export function MrpSiteFooter({ compact = false }: { compact?: boolean }) {
+// ─── The site's real front door (Andrew's screenshot, Aug 26 2026):
+// solid black bar, white groove mark + wordmark, then About us · Instagram ·
+// Facebook · cart, and the OUTLINED green "Get in touch". The sign-in page
+// wears exactly this; the portal keeps its logged-in chrome. ───────────
+function PmpSiteHeaderBlack() {
   return (
-    <footer style={{ background: '#111112', color: '#f5f5f7', padding: compact ? '18px 26px' : '44px 26px 36px' }}>
-      {!compact && (
-      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 30 }}>
-        {MRP_FOOTER_COLS.map((c) => (
-          <div key={c.head}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: GOLD }}>{c.head}</div>
-            <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
-              {c.rows.map((r) => (
-                <div key={r} style={{ fontSize: 12.5, color: 'rgba(245,245,247,0.75)', lineHeight: 1.55 }}>{r}</div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-      )}
-      <div style={{ maxWidth: 1080, margin: compact ? '0 auto' : '34px auto 0', paddingTop: compact ? 0 : 18, borderTop: compact ? 'none' : '1px solid rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(245,245,247,0.55)' }}>
-        {/* brightness(0) first forces true white — plain invert leaves a
-            non-brand tint on non-pure-black pixels (Bill caught it twice). */}
-        <img src={mrpLogoAsset} alt="" aria-hidden style={{ width: 26, height: 26, filter: 'brightness(0) invert(1)', opacity: 0.85 }} />
-        Memphis Record Pressing · memphisvinyl.com
+    <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#000000', display: 'flex', alignItems: 'center', height: 64, padding: '0 22px' }}>
+      {/* pmp-icon.svg is dark artwork — brightness(0) first forces true
+          white (plain invert leaves a tint; Bill caught it twice). */}
+      <img src={pmpLogoAsset} alt="" aria-hidden style={{ width: 42, height: 42, filter: 'brightness(0) invert(1)' }} />
+      <span style={{ marginLeft: 14, fontSize: 16, fontWeight: 600, letterSpacing: 0.2, color: '#ffffff' }}>Physical Music Products</span>
+      <span style={{ flex: 1 }} />
+      <a href="#" onClick={(e) => e.preventDefault()} style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: '#ffffff', textDecoration: 'none' }}>
+        About us
+      </a>
+      {/* Socials ride white on black up here (the utility-bar green ones
+          belong to the light chrome). */}
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.8" aria-hidden style={{ marginLeft: 22 }}>
+        <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" />
+        <circle cx="12" cy="12" r="4.2" />
+        <circle cx="17.6" cy="6.4" r="1.2" fill="#ffffff" stroke="none" />
+      </svg>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="#ffffff" aria-hidden style={{ marginLeft: 16 }}>
+        <path d="M14 22v-8h2.8l.5-3.4H14V8.4c0-1 .3-1.7 1.7-1.7h1.8V3.6c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v2.6H7.6V14h2.9v8h3.5z" />
+      </svg>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#ffffff', marginLeft: 20 }} aria-hidden>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="1.8">
+          <circle cx="9.2" cy="20" r="1.3" />
+          <circle cx="17.3" cy="20" r="1.3" />
+          <path d="M2.5 3.5h3L8 15.5h10.4l2.1-8.6H6.1" />
+        </svg>
+        <span style={{ fontSize: 12.5, fontWeight: 600 }}>0</span>
+      </span>
+      {/* Their outlined rectangle — green rule + green ink on black, squared.
+          Not a filled action, so the page's one green fill stays Sign in. */}
+      <span style={{ marginLeft: 22, padding: '11px 20px', border: `1px solid ${GREEN}`, color: GREEN, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        Get in touch
+      </span>
+    </div>
+  );
+}
+
+// Footer, two lives (Andrew, Aug 26 2026): the sign-in page's footer goes
+// GREEN and carries ONLY the mark, the name, the domain, and "powered by
+// GoodTunes" — the link columns are gone. Signed in, it stays the compact
+// black bar — the press and us.
+function PmpSiteFooter({ compact = false }: { compact?: boolean }) {
+  const onGreen = !compact;
+  const ink = onGreen ? 'rgba(0,0,0,0.78)' : 'rgba(245,245,247,0.55)';
+  return (
+    <footer style={{ background: onGreen ? GREEN : '#111112', padding: onGreen ? '24px 26px' : '18px 26px' }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: ink }}>
+        {/* Dark artwork sits as-is on green; on black, brightness(0) first
+            forces true white (plain invert leaves a tint — Bill caught it twice). */}
+        <img src={pmpLogoAsset} alt="" aria-hidden style={{ width: 26, height: 26, filter: onGreen ? 'none' : 'brightness(0) invert(1)', opacity: onGreen ? 0.9 : 0.85 }} />
+        Physical Music Products · pmp.makesvinyl.com
         <span style={{ flex: 1 }} />
-        {/* Powered by GoodTunes® — right side, under the rule (Bill,
-            Aug 21 2026). White logo via CSS invert (only dark assets exist). */}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: ink }}>
           Powered by
-          <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 15, width: 'auto', filter: 'invert(1) brightness(2)', opacity: 0.85 }} />
+          <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 15, width: 'auto', filter: onGreen ? 'none' : 'brightness(0) invert(1)', opacity: onGreen ? 0.9 : 0.85 }} />
         </span>
       </div>
     </footer>
   );
 }
 
-export default function PressClientNextStepsMRP() {
+export default function PressClientNextStepsPMPDark() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
-  // Real session check — 401 means the login stage renders.
+  // Real session check — 401 means the login stage renders. An emailed
+  // ?e= link token is auth on its own (the gate never interposes).
   const { data: portal, isLoading } = useQuery<PortalData>({
     queryKey: [portalUrl()],
     retry: false,
@@ -489,19 +477,20 @@ export default function PressClientNextStepsMRP() {
 
   const earned = password.trim() !== '';
   /* Their real stylesheet is Poppins throughout (Bill, Aug 21 2026) —
-     the whole MRP-skinned page wears it, not our SF stack. */
+     the whole PMP-skinned page wears it, not our SF stack. */
   const font = "'Poppins', -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif";
 
   if (isLoading) {
     return <div style={{ minHeight: '100dvh', background: CANVAS }} />;
   }
 
-  // ── Stage 1 — MRP-branded login. Same GoodTunes account system, same
+  // ── Stage 1 — PMP-branded login. Same GoodTunes account system, same
   // database — only the skin belongs to the press. ──
   if (stage === 'login') {
     return (
       <div style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: font, display: 'flex', flexDirection: 'column' }}>
-        <MrpSiteHeader signedIn={false} />
+        {/* Sign-in wears the site's exact black header (Andrew, Aug 26 2026). */}
+        <PmpSiteHeaderBlack />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px 64px' }}>
         <div style={{ width: 380, maxWidth: '100%', textAlign: 'center' }}>
           {/* No logo on the card — the site header already carries it (Bill, Aug 21 2026). */}
@@ -527,7 +516,7 @@ export default function PressClientNextStepsMRP() {
               data-testid="input-login-password"
             />
           </div>
-          {/* Earns its gold once a password is typed (canon). */}
+          {/* Earns its green once a password is typed (canon). */}
           <button
             type="button"
             disabled={!earned}
@@ -536,7 +525,7 @@ export default function PressClientNextStepsMRP() {
             style={{
               marginTop: 18, width: '100%', padding: '12px 0', borderRadius: 0, fontSize: 14, fontWeight: 700,
               cursor: earned ? 'pointer' : 'not-allowed',
-              background: earned ? GOLD : 'transparent',
+              background: earned ? GREEN : 'transparent',
               border: earned ? '1px solid transparent' : `1px solid ${HAIRLINE}`,
               color: earned ? INK : SUBINK,
             }}
@@ -547,18 +536,18 @@ export default function PressClientNextStepsMRP() {
           <div style={{ marginTop: 14, fontSize: 12, color: SUBINK }}>Forgot your password?</div>
         </div>
         </div>
-        <MrpSiteFooter />
+        <PmpSiteFooter />
       </div>
     );
   }
 
-  // ── Stage 2 — the artist portal, MRP skin: top bar + left rail wrap
+  // ── Stage 2 — the artist portal, PMP skin: top bar + left rail wrap
   // the next-steps overview. ──
   return (
     <div style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: font, display: 'flex', flexDirection: 'column' }}>
 
-      {/* ── MRP's own site header wears the portal (Bill, Aug 21 2026) ── */}
-      <MrpSiteHeader signedIn firstName={clientFirst} />
+      {/* ── PMP's own site header wears the portal (Bill, Aug 21 2026) ── */}
+      <PmpSiteHeader signedIn firstName={clientFirst} />
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
@@ -593,8 +582,10 @@ export default function PressClientNextStepsMRP() {
             )}
           </div>
           {RAIL_ITEMS.map((r) => <RailRow key={r} name={r} active={r === 'Dashboard'} />)}
-          <div style={{ flex: 1 }} />
-          {/* Team pinned at rail bottom (artist nav canon) */}
+          {/* Team follows the list — the pushed-to-bottom spacer left a big
+              empty stretch Andrew flagged (Aug 26 2026). Hairline keeps the
+              separation. */}
+          <div aria-hidden style={{ height: 1, background: HAIRLINE, margin: '10px 4px' }} />
           <RailRow name="Team" active={false} />
         </nav>
 
@@ -610,11 +601,11 @@ export default function PressClientNextStepsMRP() {
                 Welcome, {clientFirst}.
               </h1>
               <p style={{ fontSize: 15, color: SUBINK, margin: '10px 0 0', lineHeight: 1.6 }}>
-                {jobTitle} is underway at {project?.pressName ?? 'the press'}.
+                {jobTitle} is underway at {project?.pressName ?? 'Physical Music Products'}.
               </p>
 
               {/* Project card — the estimate carried forward */}
-              <div style={{ marginTop: 28, borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.06)', padding: 20, display: 'flex', alignItems: 'center', gap: 16, textAlign: 'left' }}>
+              <div style={{ marginTop: 28, borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.55)', padding: 20, display: 'flex', alignItems: 'center', gap: 16, textAlign: 'left' }}>
                 <img src={californialandCover} alt={`${jobTitle} cover art`} style={{ width: 64, height: 64, borderRadius: 0, objectFit: 'cover', border: `1px solid ${HAIRLINE}` }} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: -0.2 }}>{jobTitle}</div>
@@ -638,7 +629,7 @@ export default function PressClientNextStepsMRP() {
             {/* ── Next steps — word + icon status, one filled action ── */}
             <section style={{ marginTop: 40 }}>
               <h2 style={{ fontSize: 19, fontWeight: 700, letterSpacing: -0.3, margin: 0 }}>What happens next</h2>
-              <div style={{ marginTop: 16, borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+              <div style={{ marginTop: 16, borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.55)', overflow: 'hidden' }}>
                 {steps.map((s, i) => (
                   <div key={s.id} data-testid={`step-${s.id}`}>
                     {i > 0 && <div aria-hidden style={{ height: 1, background: HAIRLINE, margin: '0 18px' }} />}
@@ -671,13 +662,13 @@ export default function PressClientNextStepsMRP() {
                               onClick={() => { if (portal?.tokenOnly) { navigate('/next-steps'); return; } fileRef.current?.click(); }}
                               style={{
                                 padding: '10px 22px', borderRadius: 0, border: 'none', cursor: 'pointer',
-                                background: GOLD, color: INK, fontSize: 13.5, fontWeight: 700,
+                                background: GREEN, color: INK, fontSize: 13.5, fontWeight: 700,
                               }}
                             >
                               {uploadBusy ? 'Uploading…' : portal?.tokenOnly ? 'Sign in to upload files' : <>Upload audio &amp; artwork</>}
                             </button>
                             {uploadError && (
-                              <span data-testid="text-upload-error" style={{ fontSize: 12.5, fontWeight: 600, color: '#C62828' }}>{uploadError}</span>
+                              <span data-testid="text-upload-error" style={{ fontSize: 12.5, fontWeight: 600, color: '#FF8A80' }}>{uploadError}</span>
                             )}
                             {uploaded && (
                               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: SUBINK }}>
@@ -694,10 +685,10 @@ export default function PressClientNextStepsMRP() {
               </div>
             </section>
 
-            {/* ── Brandon — the human on the other end ── */}
+            {/* ── Jonathan — the human on the other end ── */}
             <section style={{ marginTop: 28, borderRadius: 0, background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, padding: 18, display: 'flex', alignItems: 'center', gap: 14 }}>
               <span style={{ width: 46, height: 46, borderRadius: 0, overflow: 'hidden', flexShrink: 0, border: `1px solid ${HAIRLINE}` }}>
-                <img src={brandonPhoto} alt={preparedBy} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={jonathanPhoto} alt={preparedBy} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600 }}>{preparedBy} is your contact for this run.</div>
@@ -706,7 +697,7 @@ export default function PressClientNextStepsMRP() {
               {/* Quiet gray-outline — side actions never take the fill. */}
               <button
                 type="button"
-                data-testid="button-ask-brandon"
+                data-testid="button-ask-jonathan"
                 onClick={() => { setAskOpen(true); setAskSent(false); setAskMsg(''); }}
                 style={{ padding: '8px 16px', borderRadius: 0, background: 'transparent', border: `1px solid ${HAIRLINE}`, color: INK, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
               >
@@ -719,7 +710,7 @@ export default function PressClientNextStepsMRP() {
               <div
                 style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)', padding: 24 }}
                 onClick={() => setAskOpen(false)}
-                data-testid="sheet-ask-brandon"
+                data-testid="sheet-ask-contact"
               >
                 <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} style={{ position: 'relative', width: 400, maxWidth: '100%', borderRadius: 0, background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, boxShadow: '0 32px 80px rgba(0,0,0,0.18)', padding: 26 }}>
                   {askSent ? (
@@ -732,15 +723,15 @@ export default function PressClientNextStepsMRP() {
                         placeholder="Ask about pricing, timing, specs — anything"
                         value={askMsg}
                         onChange={(e) => setAskMsg(e.target.value)}
-                        data-testid="input-ask-brandon-message"
+                        data-testid="input-ask-contact-message"
                       />
                       <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
                         <button
                           type="button"
                           disabled={askMsg.trim() === ''}
                           onClick={sendAsk}
-                          style={{ padding: '10px 22px', borderRadius: 0, fontSize: 13.5, fontWeight: 600, cursor: askMsg.trim() ? 'pointer' : 'not-allowed', background: askMsg.trim() ? GOLD : 'transparent', border: askMsg.trim() ? '1px solid transparent' : `1px solid ${HAIRLINE}`, color: askMsg.trim() ? INK : SUBINK }}
-                          data-testid="button-ask-brandon-send"
+                          style={{ padding: '10px 22px', borderRadius: 0, fontSize: 13.5, fontWeight: 600, cursor: askMsg.trim() ? 'pointer' : 'not-allowed', background: askMsg.trim() ? GREEN : 'transparent', border: askMsg.trim() ? '1px solid transparent' : `1px solid ${HAIRLINE}`, color: askMsg.trim() ? INK : SUBINK }}
+                          data-testid="button-ask-contact-send"
                         >
                           Send
                         </button>
@@ -755,8 +746,8 @@ export default function PressClientNextStepsMRP() {
         </main>
       </div>
 
-      {/* ── In-app, the footer is just the black bar — Memphis and us ── */}
-      <MrpSiteFooter compact />
+      {/* ── In-app, the footer is just the black bar — the press and us ── */}
+      <PmpSiteFooter compact />
     </div>
   );
 }

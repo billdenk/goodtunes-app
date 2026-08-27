@@ -1,74 +1,44 @@
-// CORNER RULING (Bill, Aug 21 2026): Memphis's corner token = SQUARE and
-// it applies across the whole MRP skin — inputs, buttons, cards, pills —
-// not just chrome. Only true circles (avatars, status icons) stay round.
-// PressClientNextStepsMRP — where "Start this project" lands, now as the
-// FULL flow (Bill, Aug 21 2026): an MRP-branded login screen, then the
-// GoodTunes artist portal (artist tier, NOT super admin — same database,
-// same accounts) wearing MRP's white-label skin, with the next-steps
-// overview Bill liked as the landing content inside the shell.
+// CORNER RULING (Cinq skin): Cinq Music's corner token = SQUARE, radius 0
+// everywhere — inputs, buttons, cards, pills. Only true circles (avatars,
+// status dots) stay round. Matches cinqmusic.com's real site.
+// PressClientNextStepsCinq — the Cinq Music white-label twin of
+// PressClientNextStepsMRP: a Cinq-branded login screen, then the GoodTunes
+// artist portal (artist tier, same database, same accounts) wearing Cinq's
+// dark white-label skin, with the next-steps overview as landing content.
 // Shell = top bar + left rail per the artist nav canon (Aug 16 2026):
 // Dashboard, Releases, Audience, Acquisition, Orders, Buyers, Referrals,
-// Shopify, Reports — Team pinned at the rail bottom, no Overview, ⌘K chip
-// flush right inside the rail search.
-// Canon: MRP white-label = the press's own LIGHT canvas — pure white
-// #FFFFFF (Andrew, Aug 21 2026), gold #D9C153 with dark ink on the one
-// filled action, black hairlines, MRP logo black. Statuses are always
-// word + icon, never color alone (Bill is colorblind). "Estimate", never
-// the q-word. Self-contained per handoff rules.
+// Shopify, Reports — Team pinned at the rail bottom, ⌘K chip flush right.
+// Canon: Cinq white-label = DARK canvas near-black #0C0C0D, deep navy
+// #001C30 panels, white text, white hairlines at 14%, headings big
+// condensed uppercase (Anton stands in for ABC Gravity Condensed).
+// Buttons: 0 radius, uppercase label — outlined white for quiet actions,
+// the ONE filled primary per page is solid white with black text.
+// Statuses are always word + icon, never color alone (Bill is colorblind).
+// "Estimate", never the q-word. Self-contained per handoff rules.
 
 import { setAuthToken } from "@/lib/queryClient";
 import { useMemo, useRef, useState } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import californialandCover from './assets/californialand-cover.jpg';
-import mrpLogoAsset from './assets/mrp-logo.svg';
+import californialandCover from './assets/soulchef-escapism-cover.webp';
+import dougPhoto from './assets/doug-reinart.png';
+import cinqLogo from './assets/cinq-logo.svg';
 import goodtunesLogo from './assets/goodtunes-logo.png';
-import brandonPhoto from './assets/brandon-seavers.png';
-import { withDevWlParam as wlParam } from "@/hooks/useAuthKind";
+import { portalUrl, type PortalData } from '../mrp/PressClientNextStepsMRP';
 
-// ─── Real portal payload (MOCK_* retired — GET /api/press-client/portal) ──
-export type PortalEstimate = {
-  id: string;
-  estimateNo: string | null;
-  title: string | null;
-  status: string;
-  pressName: string | null;
-  build: string | null;
-  totalCents: number | null;
-  quantity: number | null;
-  sentAt: string | null;
-  acceptedAt: string | null;
-  shareToken: string | null;
-  preparedBy: string | null;
-};
-export type PortalData = {
-  client: { id: string; displayName: string | null; email: string | null };
-  estimates: PortalEstimate[];
-  // Emailed-link visitor (?e= share token, no session): view-only —
-  // mutating actions (file upload) become a sign-in affordance.
-  tokenOnly?: boolean;
-};
+// ─── Real portal payload (MOCK_* retired — GET /api/press-client/portal,
+// wired exactly like the MRP screens; Task #3423) ─────────────────────
 const SETUP_TOTAL_DOLLARS = 1295; // fixed setup block — same anchor as the estimate page
 const moneyFmt = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
-// Emailed estimate links land here with ?e=<token> — the link IS the auth
-// (Task #3423), so the portal query threads it through and the sign-in gate
-// never interposes for tokened visitors, session or not.
-export const portalUrl = () => {
-  const base = wlParam('/api/press-client/portal');
-  const e = new URLSearchParams(window.location.search).get('e');
-  if (!e || !/^[A-Za-z0-9_-]{10,}$/.test(e)) return base;
-  return base + (base.includes('?') ? '&' : '?') + 'e=' + encodeURIComponent(e);
-};
-
-// ─── Palette — MRP light canon (twin of PressClientEstimateMRP) ──────
-const CANVAS = '#ffffff';
-const CARD = '#ffffff';
-const CARD_RAISED = '#fbfaf7';
-const INK = '#1d1d1f';
-const SUBINK = '#6e6e73';
-const HAIRLINE = 'rgba(0,0,0,0.10)';
-const GOLD = '#D9C153'; // MRP's site gold (Andrew, Aug 21 2026)
+// ─── Palette — Cinq dark canon (from cinqmusic.com) ──────────────────
+const CANVAS = '#0C0C0D';
+const CARD = '#001C30'; // Cinq's deep navy — feature panels/cards
+const CARD_RAISED = 'rgba(255,255,255,0.05)';
+const INK = '#FFFFFF';
+const SUBINK = 'rgba(255,255,255,0.65)';
+const HAIRLINE = 'rgba(255,255,255,0.14)';
+const NAVY = '#001C30';
 
 // ─── Status grammar — word + icon, never color alone ─────────────────
 type StepStatus = 'done' | 'next' | 'waiting';
@@ -104,8 +74,8 @@ function StatusPill({ status }: { status: StepStatus }) {
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 11px',
         borderRadius: 0, fontSize: 11.5, fontWeight: 600, whiteSpace: 'nowrap',
-        border: `1px solid ${status === 'next' ? 'rgba(0,0,0,0.28)' : HAIRLINE}`,
-        background: status === 'next' ? 'rgba(217,193,83,0.14)' : 'transparent',
+        border: `1px solid ${status === 'next' ? 'rgba(255,255,255,0.45)' : HAIRLINE}`,
+        background: status === 'next' ? 'rgba(255,255,255,0.10)' : 'transparent',
         color: status === 'waiting' ? SUBINK : INK,
       }}
     >
@@ -146,7 +116,7 @@ const buildSteps = (estimateNo: string, preparerFirst: string, depositLabel: str
   {
     id: 'shipping', status: 'waiting',
     title: 'Shipping',
-    body: 'Finished records leave Memphis with tracking the day they clear final inspection.',
+    body: 'Finished records leave the plant with tracking the day they clear final inspection.',
   },
 ];
 
@@ -170,24 +140,18 @@ function RailIcon({ name, active }: { name: string; active: boolean }) {
   }
 }
 
-// Rows with a real page navigate; the rest stay inert until their screens
-// are built (Aug 24 2026, Andrew's Memphis demo).
-const RAIL_LINKS: Record<string, string> = { Dashboard: '/dashboard', Releases: '/projects' };
-
 function RailRow({ name, active }: { name: string; active: boolean }) {
-  const [, navigate] = useLocation();
-  const to = RAIL_LINKS[name];
   return (
     <a
-      href={to ?? '#'}
-      onClick={(e) => { e.preventDefault(); if (to) navigate(to); }}
+      href="#"
+      onClick={(e) => e.preventDefault()}
       data-testid={`rail-${name.toLowerCase()}`}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 0,
         fontSize: 13, fontWeight: active ? 600 : 500, color: active ? INK : SUBINK,
         background: active ? CARD_RAISED : 'transparent',
         border: active ? `1px solid ${HAIRLINE}` : '1px solid transparent',
-        textDecoration: 'none', cursor: to ? 'pointer' : 'default',
+        textDecoration: 'none',
       }}
     >
       <RailIcon name={name} active={active} />
@@ -196,18 +160,16 @@ function RailRow({ name, active }: { name: string; active: boolean }) {
   );
 }
 
-// ─── MRP's real site chrome (Bill, Aug 21 2026: "wouldn't it have their
-// header and footer? like memphisrecordpressing.com/our-story") — pulled
-// from their live site: utility bar + logo-left nav with the gold squared
-// button, and the dark link-columns footer. Nav links are decorative site
-// chrome here; the account chip is the portal's. ───────────────────────
-// Full nav from their live site (Bill's screenshot, Aug 21 2026): we'd
-// missed About MRP, MRP TV, and News.
-const MRP_NAV = ['Home', 'About MRP', 'Products', 'Resources', 'MRP TV', 'MRP University', 'News', 'Shop', 'Contact'];
+// ─── Cinq's real site chrome — from cinqmusic.com: black bar, uppercase
+// 12px nav split around the centered round Cinq mark with "CINQ" tiny
+// under it; CONTACT US and an outlined LOG IN button on the right.
+// Nav links are decorative site chrome here; the account chip is the
+// portal's. ────────────────────────────────────────────────────────────
+const CINQ_NAV_LEFT = ['Home', 'Services', 'About', 'News'];
 
-export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean; firstName?: string }) {
-  // Signed in, the marketing nav drops away (Andrew, Aug 24 2026) — the
-  // account chip stays and opens a small menu with Sign out.
+function CinqSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean; firstName?: string }) {
+  // Signed in, the account chip opens a small menu with Sign out — same
+  // wiring as the MRP portal header (Task #3423).
   const [menuOpen, setMenuOpen] = useState(false);
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
@@ -218,183 +180,151 @@ export function MrpSiteHeader({ signedIn, firstName = '' }: { signedIn: boolean;
     navigate('/next-steps');
   };
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#ffffff' }}>
-      {/* Utility bar */}
-      {/* Utility bar — values pulled from their live stylesheet (Bill, Aug 21
-          2026): 40px row, 12px / 400 / 0.07em body type, #333 ink. Marketing
-          chrome for the logged-out front door only — signed in, the whole
-          strip drops away (task, Aug 25 2026). */}
-      {!signedIn && (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 18, height: 40, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}`, fontSize: 12, fontWeight: 400, letterSpacing: '0.07em', color: '#333333' }}>
-        <span>Let&rsquo;s talk about your project</span>
-        <span aria-hidden style={{ width: 1, alignSelf: 'stretch', background: HAIRLINE }} />
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, color: '#333333' }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-            <rect x="2" y="4.5" width="20" height="15" rx="2" />
-            <path d="M2.5 6.5L12 13l9.5-6.5" />
-          </svg>
-          help@memphisvinyl.com
-        </span>
-        <span style={{ flex: 1 }} />
-        {/* Their real social glyphs (Instagram · Facebook · YouTube), gold like
-            the live site — front-door chrome only, like the whole bar now
-            (Bill, Aug 21 2026). */}
-        {/* Sized + celled like the live site: larger glyphs, hairline
-            dividers between each (Bill, Aug 21 2026 screenshot). */}
-        <span style={{ display: 'flex', alignItems: 'stretch', alignSelf: 'stretch' }} aria-hidden>
-            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(0,0,0,0.12)' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={GOLD} strokeWidth="1.8">
-                <rect x="2.5" y="2.5" width="19" height="19" rx="5.5" />
-                <circle cx="12" cy="12" r="4.2" />
-                <circle cx="17.6" cy="6.4" r="1.2" fill={GOLD} stroke="none" />
-              </svg>
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(0,0,0,0.12)' }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill={GOLD}>
-                <path d="M14 22v-8h2.8l.5-3.4H14V8.4c0-1 .3-1.7 1.7-1.7h1.8V3.6c-.3 0-1.4-.1-2.6-.1-2.6 0-4.4 1.6-4.4 4.5v2.6H7.6V14h2.9v8h3.5z" />
-              </svg>
-            </span>
-            <span style={{ display: 'flex', alignItems: 'center', padding: '0 18px', borderLeft: '1px solid rgba(0,0,0,0.12)' }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill={GOLD}>
-                <path d="M23 7.2a3 3 0 0 0-2.1-2.1C19 4.5 12 4.5 12 4.5s-7 0-8.9.6A3 3 0 0 0 1 7.2 31 31 0 0 0 .5 12 31 31 0 0 0 1 16.8a3 3 0 0 0 2.1 2.1c1.9.6 8.9.6 8.9.6s7 0 8.9-.6a3 3 0 0 0 2.1-2.1A31 31 0 0 0 23.5 12 31 31 0 0 0 23 7.2zM9.8 15.3V8.7l6 3.3-6 3.3z" />
-              </svg>
-            </span>
-        </span>
-      </div>
-      )}
-      {/* Poppins rides with the header so both stages get the real MRP face. */}
+    <div style={{ position: 'sticky', top: 0, zIndex: 30, background: '#000000', borderBottom: `1px solid ${HAIRLINE}` }}>
+      {/* Inter body + Anton headings ride with the header so both stages
+          get the Cinq face. Anton stands in for ABC Gravity Condensed. */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
-        /* Their site's hover: ink darkens and the gold rule draws in
-           left-to-right — every item, flyout or not (Bill, Aug 21 2026). */
-        .mrp-nav-link { position: relative; transition: color 0.2s ease; }
-        .mrp-nav-link::after {
-          content: ''; position: absolute; left: 0; right: 0; bottom: -6px; height: 2px;
-          background: ${GOLD}; transform: scaleX(0); transform-origin: left center;
-          transition: transform 0.25s ease;
-        }
-        .mrp-nav-link:hover { color: #111111; }
-        .mrp-nav-link:hover::after, .mrp-nav-link.is-active::after { transform: scaleX(1); }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Anton&display=swap');
+        .cinq-nav-link { transition: opacity 0.2s ease; }
+        .cinq-nav-link:hover { opacity: 1; }
       `}</style>
-      {/* Main nav — logo left, links, gold squared button (their site pattern) */}
-      {/* Sizing matched to the live site (Bill, Aug 21 2026): taller row,
-          smaller lighter gray nav with wider tracking and roomier gaps.
-          The gold estimate button stays exactly as it was. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 34, height: 80, padding: '0 26px', borderBottom: `1px solid ${HAIRLINE}` }}>
-        <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 60, height: 60 }} />
-        {/* Nav — real values from their stylesheet (Bill, Aug 21 2026):
-            12px / 600 / 0.05em uppercase, centered; resting ink is the
-            skin's rgba(51,51,51,0.5) — the mid gray, NOT bold #333 (that
-            was the top bar's rule). Hover goes near-black on their site. */}
-        <nav style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 30, fontSize: 12, fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-          {/* "Sign in" rides last and wears the site's active treatment —
-              near-black with the gold rule under it (Bill, Aug 21 2026).
-              Signed in, the marketing links drop away entirely. */}
-          {(signedIn ? [] : [...MRP_NAV, 'Sign in']).map((l) => {
-            const active = l === 'Sign in';
-            return (
+      <div style={{ display: 'flex', alignItems: 'center', height: 76, padding: '0 26px' }}>
+        {/* Left nav — uppercase 12px, like their live site */}
+        <nav style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 26, fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          {CINQ_NAV_LEFT.map((l) => (
+            <a
+              key={l}
+              href="#"
+              onClick={(e) => e.preventDefault()}
+              className="cinq-nav-link"
+              style={{ color: INK, opacity: 0.7, textDecoration: 'none' }}
+            >
+              {l}
+            </a>
+          ))}
+        </nav>
+        {/* Centered round Cinq mark with tiny "CINQ" under it — never invert;
+            the mark is white on transparent, made for dark. */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+          <img src={cinqLogo} alt="Cinq Music" style={{ width: 40, height: 40 }} />
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.3em', textTransform: 'uppercase', color: INK }}>Cinq</span>
+        </div>
+        {/* Right side — CONTACT US, then the outlined LOG IN button (their
+            grammar). Signed in, they step aside for the account chip. */}
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 26 }}>
+          {!signedIn && (
+            <>
               <a
-                key={l}
                 href="#"
                 onClick={(e) => e.preventDefault()}
-                className={`mrp-nav-link${active ? ' is-active' : ''}`}
-                style={{
-                  color: active ? '#111111' : 'rgba(51,51,51,0.5)', textDecoration: 'none',
-                  fontWeight: active ? 700 : undefined,
-                }}
+                className="cinq-nav-link"
+                style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: INK, opacity: 0.7, textDecoration: 'none' }}
               >
-                {l}
+                Contact us
               </a>
-            );
-          })}
-        </nav>
-        {/* Their site's gold rectangle — squared, not our pill. Shell-only
-            chrome for visitors arriving from the main site; once signed in
-            it steps aside for the account chip (Bill, Aug 21 2026). */}
-        {!signedIn && (
-          <span style={{ padding: '11px 20px', background: GOLD, color: INK, fontSize: 12, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase' }}>
-            Get an estimate
-          </span>
-        )}
-        {signedIn && (
-          <span style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: SUBINK }}>
-            <button
-              type="button"
-              aria-label="Account menu"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((v) => !v)}
-              data-testid="button-account-menu"
-              style={{ width: 28, height: 28, borderRadius: '50%', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: INK, cursor: 'pointer', padding: 0 }}
-            >
-              {(firstName || '?').slice(0, 1).toUpperCase()}
-            </button>
-            {firstName}
-            {menuOpen && (
-              <div data-testid="menu-account" style={{ position: 'absolute', top: 38, right: 0, minWidth: 150, background: '#ffffff', border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.10)', padding: '6px 0', zIndex: 40 }}>
-                <button
-                  type="button"
-                  data-testid="button-sign-out"
-                  onClick={signOut}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: 13, color: INK, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
-                >
-                  Sign out
-                </button>
-              </div>
-            )}
-          </span>
-        )}
+              <span style={{ padding: '10px 20px', border: `1px solid rgba(255,255,255,0.55)`, color: INK, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', borderRadius: 0 }}>
+                Log in
+              </span>
+            </>
+          )}
+          {signedIn && (
+            <span style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 9, fontSize: 12.5, color: SUBINK }}>
+              <button
+                type="button"
+                aria-label="Account menu"
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((v) => !v)}
+                data-testid="button-account-menu"
+                style={{ width: 28, height: 28, borderRadius: '50%', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 600, color: INK, cursor: 'pointer', padding: 0 }}
+              >
+                {(firstName || '?').slice(0, 1).toUpperCase()}
+              </button>
+              {firstName}
+              {menuOpen && (
+                <div data-testid="menu-account" style={{ position: 'absolute', top: 38, right: 0, minWidth: 150, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.55)', padding: '6px 0', zIndex: 40 }}>
+                  <button
+                    type="button"
+                    data-testid="button-sign-out"
+                    onClick={signOut}
+                    style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', fontSize: 13, color: INK, background: 'transparent', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}
+                  >
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-const MRP_FOOTER_COLS: { head: string; rows: string[] }[] = [
-  { head: 'Most used links', rows: ['Vinyl Records', 'Deluxe Vinyl Packaging', 'Short-Run Record Pressing', 'Forms & Templates', 'Audio File Prep', 'Art File Prep'] },
-  { head: 'Contact us', rows: ['Phone: (901) 821-9099', 'Email: help@memphisvinyl.com', 'Careers'] },
-  { head: 'Privacy & security', rows: ['Privacy Notice'] },
-  { head: 'Locations', rows: ['Pressing & Customer Service: 3015 Brother Blvd, Bartlett, TN 38133', 'Packaging & Shipping: 7625 Appling Center Dr #103, Memphis, TN 38133'] },
+const CINQ_FOOTER_COLS: { head: string; rows: string[] }[] = [
+  { head: 'Company', rows: ['Services', 'About', 'News'] },
+  { head: 'Requests', rows: ['General request', 'Artist request', 'Synch license', 'Catalogs', 'Press contact'] },
+  { head: 'Social', rows: ['Instagram', 'YouTube', 'X', 'LinkedIn'] },
+  { head: 'Legal', rows: ['Privacy', 'Terms'] },
 ];
 
-// Inside the app the footer reduces to just the black bar — Memphis and us.
-// The full column footer belongs to the site/login only (Bill, Aug 21 2026).
-export function MrpSiteFooter({ compact = false }: { compact?: boolean }) {
+// Inside the app the footer reduces to just the compact black bar — Cinq
+// and us. The full navy column footer belongs to the site/login only.
+function CinqSiteFooter({ compact = false }: { compact?: boolean }) {
+  if (compact) {
+    return (
+      <footer style={{ background: '#000000', color: INK, padding: '18px 26px' }}>
+        <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,0.55)' }}>
+          <img src={cinqLogo} alt="" aria-hidden style={{ width: 26, height: 26, opacity: 0.85 }} />
+          Cinq Music · cinqmusic.com
+          <span style={{ flex: 1 }} />
+          {/* Powered by GoodTunes® — whitened for the dark bar; brightness(0)
+              first forces true white, plain invert leaves a tint. */}
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>
+            Powered by
+            <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 15, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.85 }} />
+          </span>
+        </div>
+      </footer>
+    );
+  }
   return (
-    <footer style={{ background: '#111112', color: '#f5f5f7', padding: compact ? '18px 26px' : '44px 26px 36px' }}>
-      {!compact && (
-      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 30 }}>
-        {MRP_FOOTER_COLS.map((c) => (
+    <footer style={{ background: NAVY, color: INK, padding: '44px 26px 36px' }}>
+      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'grid', gridTemplateColumns: 'minmax(220px, 1.2fr) repeat(auto-fit, minmax(140px, 1fr))', gap: 30 }}>
+        {/* Cinq mark + cities line, left — from their real footer */}
+        <div>
+          <img src={cinqLogo} alt="Cinq Music" style={{ width: 44, height: 44 }} />
+          <div style={{ marginTop: 14, fontSize: 12.5, color: SUBINK, lineHeight: 1.7, maxWidth: 240 }}>
+            Los Angeles, New York, Orlando, Bogota, Medellin, Seoul, Minsk, Colombo
+          </div>
+        </div>
+        {CINQ_FOOTER_COLS.map((c) => (
           <div key={c.head}>
-            <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: GOLD }}>{c.head}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: INK }}>{c.head}</div>
             <div style={{ marginTop: 12, display: 'grid', gap: 8 }}>
               {c.rows.map((r) => (
-                <div key={r} style={{ fontSize: 12.5, color: 'rgba(245,245,247,0.75)', lineHeight: 1.55 }}>{r}</div>
+                <div key={r} style={{ fontSize: 12.5, color: SUBINK, lineHeight: 1.55 }}>{r}</div>
               ))}
             </div>
           </div>
         ))}
       </div>
-      )}
-      <div style={{ maxWidth: 1080, margin: compact ? '0 auto' : '34px auto 0', paddingTop: compact ? 0 : 18, borderTop: compact ? 'none' : '1px solid rgba(255,255,255,0.12)', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(245,245,247,0.55)' }}>
-        {/* brightness(0) first forces true white — plain invert leaves a
-            non-brand tint on non-pure-black pixels (Bill caught it twice). */}
-        <img src={mrpLogoAsset} alt="" aria-hidden style={{ width: 26, height: 26, filter: 'brightness(0) invert(1)', opacity: 0.85 }} />
-        Memphis Record Pressing · memphisvinyl.com
+      <div style={{ maxWidth: 1080, margin: '34px auto 0', paddingTop: 18, borderTop: `1px solid ${HAIRLINE}`, display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,0.55)' }}>
+        Cinq Music · cinqmusic.com
         <span style={{ flex: 1 }} />
-        {/* Powered by GoodTunes® — right side, under the rule (Bill,
-            Aug 21 2026). White logo via CSS invert (only dark assets exist). */}
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(245,245,247,0.55)' }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.55)' }}>
           Powered by
-          <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 15, width: 'auto', filter: 'invert(1) brightness(2)', opacity: 0.85 }} />
+          <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 15, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.85 }} />
         </span>
       </div>
     </footer>
   );
 }
 
-export default function PressClientNextStepsMRP() {
+export default function PressClientNextStepsCinq() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
-  // Real session check — 401 means the login stage renders.
+  // Real session check — 401 means the login stage renders. An emailed
+  // ?e= link token is auth on its own (the gate never interposes).
   const { data: portal, isLoading } = useQuery<PortalData>({
     queryKey: [portalUrl()],
     retry: false,
@@ -488,25 +418,26 @@ export default function PressClientNextStepsMRP() {
   };
 
   const earned = password.trim() !== '';
-  /* Their real stylesheet is Poppins throughout (Bill, Aug 21 2026) —
-     the whole MRP-skinned page wears it, not our SF stack. */
-  const font = "'Poppins', -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif";
+  // Inter throughout — Cinq's body face; Anton reserved for the big
+  // condensed uppercase headings.
+  const font = "'Inter', -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif";
+  const headingFont = "'Anton', 'Arial Narrow', sans-serif";
 
   if (isLoading) {
     return <div style={{ minHeight: '100dvh', background: CANVAS }} />;
   }
 
-  // ── Stage 1 — MRP-branded login. Same GoodTunes account system, same
-  // database — only the skin belongs to the press. ──
+  // ── Stage 1 — Cinq-branded login. Same GoodTunes account system, same
+  // database — only the skin belongs to the label. ──
   if (stage === 'login') {
     return (
       <div style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: font, display: 'flex', flexDirection: 'column' }}>
-        <MrpSiteHeader signedIn={false} />
+        <CinqSiteHeader signedIn={false} />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '48px 24px 64px' }}>
         <div style={{ width: 380, maxWidth: '100%', textAlign: 'center' }}>
-          {/* No logo on the card — the site header already carries it (Bill, Aug 21 2026). */}
-          <h1 style={{ fontSize: 26, fontWeight: 700, letterSpacing: -0.5, margin: 0 }}>Sign in</h1>
-          <p style={{ fontSize: 13.5, color: SUBINK, margin: '8px 0 0', lineHeight: 1.6 }}>
+          {/* No logo on the card — the site header already carries it. */}
+          <h1 style={{ fontFamily: headingFont, fontSize: 40, fontWeight: 700, letterSpacing: '-0.01em', textTransform: 'uppercase', margin: 0, lineHeight: 0.95 }}>Sign in</h1>
+          <p style={{ fontSize: 13.5, color: SUBINK, margin: '10px 0 0', lineHeight: 1.6 }}>
             Your account was created when you started your project.
           </p>
           <div style={{ marginTop: 26, display: 'grid', gap: 10, textAlign: 'left' }}>
@@ -527,43 +458,45 @@ export default function PressClientNextStepsMRP() {
               data-testid="input-login-password"
             />
           </div>
-          {/* Earns its gold once a password is typed (canon). */}
+          {/* Earns its white fill once a password is typed (canon) — the
+              page's one filled action: solid white, black text. */}
           <button
             type="button"
             disabled={!earned}
             onClick={doLogin}
             data-testid="button-login"
             style={{
-              marginTop: 18, width: '100%', padding: '12px 0', borderRadius: 0, fontSize: 14, fontWeight: 700,
+              marginTop: 18, width: '100%', padding: '12px 0', borderRadius: 0, fontSize: 13, fontWeight: 700,
+              letterSpacing: '0.08em', textTransform: 'uppercase',
               cursor: earned ? 'pointer' : 'not-allowed',
-              background: earned ? GOLD : 'transparent',
+              background: earned ? '#FFFFFF' : 'transparent',
               border: earned ? '1px solid transparent' : `1px solid ${HAIRLINE}`,
-              color: earned ? INK : SUBINK,
+              color: earned ? '#000000' : SUBINK,
             }}
           >
             {loginBusy ? 'Signing in…' : 'Sign in'}
           </button>
-          {loginError && <div style={{ marginTop: 12, fontSize: 12, color: '#b3261e' }}>{loginError}</div>}
+          {loginError && <div style={{ marginTop: 12, fontSize: 12, color: '#ff8a80' }}>{loginError}</div>}
           <div style={{ marginTop: 14, fontSize: 12, color: SUBINK }}>Forgot your password?</div>
         </div>
         </div>
-        <MrpSiteFooter />
+        <CinqSiteFooter />
       </div>
     );
   }
 
-  // ── Stage 2 — the artist portal, MRP skin: top bar + left rail wrap
+  // ── Stage 2 — the artist portal, Cinq skin: top bar + left rail wrap
   // the next-steps overview. ──
   return (
     <div style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: font, display: 'flex', flexDirection: 'column' }}>
 
-      {/* ── MRP's own site header wears the portal (Bill, Aug 21 2026) ── */}
-      <MrpSiteHeader signedIn firstName={clientFirst} />
+      {/* ── Cinq's own site header wears the portal ── */}
+      <CinqSiteHeader signedIn firstName={clientFirst} />
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
         {/* ── Left rail — artist nav canon, Team pinned at the bottom ── */}
-        <nav style={{ width: 218, flexShrink: 0, borderRight: `1px solid ${HAIRLINE}`, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav style={{ width: 218, flexShrink: 0, background: CANVAS, borderRight: `1px solid ${HAIRLINE}`, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {/* Canon search — ⌘K chip flush right INSIDE the bar */}
           <div style={{ position: 'relative', marginBottom: 12 }}>
             <input
@@ -577,7 +510,7 @@ export default function PressClientNextStepsMRP() {
               ⌘K
             </span>
             {searchHits.length > 0 && (
-              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 4, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.10)' }} data-testid="rail-search-results">
+              <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 20, marginTop: 4, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.55)' }} data-testid="rail-search-results">
                 {searchHits.map((h) => (
                   <button
                     key={h.id}
@@ -593,12 +526,12 @@ export default function PressClientNextStepsMRP() {
             )}
           </div>
           {RAIL_ITEMS.map((r) => <RailRow key={r} name={r} active={r === 'Dashboard'} />)}
-          <div style={{ flex: 1 }} />
-          {/* Team pinned at rail bottom (artist nav canon) */}
-          <RailRow name="Team" active={false} />
+          <div style={{ borderTop: `1px solid ${HAIRLINE}`, marginTop: 8, paddingTop: 8 }}>
+            <RailRow name="Team" active={false} />
+          </div>
         </nav>
 
-        {/* ── Main — the next-steps overview Bill liked ── */}
+        {/* ── Main — the next-steps overview ── */}
         <main style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
           <div style={{ maxWidth: 660, margin: '0 auto', padding: '0 24px 60px' }}>
 
@@ -606,15 +539,16 @@ export default function PressClientNextStepsMRP() {
               <div style={{ fontSize: 12, fontWeight: 600, letterSpacing: 1.4, textTransform: 'uppercase', color: SUBINK }}>
                 Your project is live
               </div>
-              <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: -0.8, margin: '10px 0 0', lineHeight: 1.15 }}>
+              {/* Their h1s are enormous — big condensed uppercase */}
+              <h1 style={{ fontFamily: headingFont, fontSize: 48, fontWeight: 700, letterSpacing: '-0.01em', textTransform: 'uppercase', margin: '10px 0 0', lineHeight: 0.95 }}>
                 Welcome, {clientFirst}.
               </h1>
               <p style={{ fontSize: 15, color: SUBINK, margin: '10px 0 0', lineHeight: 1.6 }}>
-                {jobTitle} is underway at {project?.pressName ?? 'the press'}.
+                {jobTitle} is underway at {project?.pressName ?? 'Cinq Music'}.
               </p>
 
-              {/* Project card — the estimate carried forward */}
-              <div style={{ marginTop: 28, borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.06)', padding: 20, display: 'flex', alignItems: 'center', gap: 16, textAlign: 'left' }}>
+              {/* Project card — the estimate carried forward, on navy */}
+              <div style={{ marginTop: 28, borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.45)', padding: 20, display: 'flex', alignItems: 'center', gap: 16, textAlign: 'left' }}>
                 <img src={californialandCover} alt={`${jobTitle} cover art`} style={{ width: 64, height: 64, borderRadius: 0, objectFit: 'cover', border: `1px solid ${HAIRLINE}` }} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 16, fontWeight: 700, letterSpacing: -0.2 }}>{jobTitle}</div>
@@ -623,12 +557,12 @@ export default function PressClientNextStepsMRP() {
                     {[qtyLabel, unitLabel].filter(Boolean).join(' · ')}{(qtyLabel || unitLabel) ? ' · ' : ''}Estimate <span style={{ fontWeight: 600, color: INK }}>{estimateNo}</span>
                   </div>
                 </div>
-                {/* Quiet — the estimate stays one click away inside the portal. */}
+                {/* Quiet — outlined white, uppercase, Cinq's button grammar. */}
                 <button
                   type="button"
                   data-testid="button-view-estimate"
                   onClick={() => { if (project?.shareToken) navigate(`/e/${project.shareToken}`); }}
-                  style={{ padding: '8px 16px', borderRadius: 0, background: 'transparent', border: `1px solid ${HAIRLINE}`, color: INK, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  style={{ padding: '8px 16px', borderRadius: 0, background: 'transparent', border: `1px solid rgba(255,255,255,0.45)`, color: INK, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap' }}
                 >
                   View estimate
                 </button>
@@ -637,12 +571,12 @@ export default function PressClientNextStepsMRP() {
 
             {/* ── Next steps — word + icon status, one filled action ── */}
             <section style={{ marginTop: 40 }}>
-              <h2 style={{ fontSize: 19, fontWeight: 700, letterSpacing: -0.3, margin: 0 }}>What happens next</h2>
-              <div style={{ marginTop: 16, borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.06)', overflow: 'hidden' }}>
+              <h2 style={{ fontFamily: headingFont, fontSize: 26, fontWeight: 600, letterSpacing: '-0.005em', textTransform: 'uppercase', margin: 0 }}>What happens next</h2>
+              <div style={{ marginTop: 16, borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 12px 32px rgba(0,0,0,0.45)', overflow: 'hidden' }}>
                 {steps.map((s, i) => (
                   <div key={s.id} data-testid={`step-${s.id}`}>
                     {i > 0 && <div aria-hidden style={{ height: 1, background: HAIRLINE, margin: '0 18px' }} />}
-                    <div style={{ padding: '18px 18px 18px', display: 'flex', gap: 14, alignItems: 'flex-start', background: s.status === 'next' ? CARD_RAISED : 'transparent' }}>
+                    <div style={{ padding: '18px 18px 18px', display: 'flex', gap: 14, alignItems: 'flex-start', background: s.status === 'next' ? 'rgba(255,255,255,0.06)' : 'transparent' }}>
                       <div style={{ width: 22, textAlign: 'center', fontSize: 12.5, fontWeight: 600, color: s.status === 'waiting' ? SUBINK : INK, paddingTop: 2 }}>
                         {i + 1}
                       </div>
@@ -655,7 +589,8 @@ export default function PressClientNextStepsMRP() {
                         {s.meta && (
                           <div style={{ fontSize: 12.5, fontWeight: 600, color: INK, marginTop: 6 }}>{s.meta}</div>
                         )}
-                        {/* The page's ONE filled action lives on the up-next step. */}
+                        {/* The page's ONE filled action lives on the up-next
+                            step — solid white, black text, uppercase. */}
                         {s.id === 'assets' && (
                           <div style={{ marginTop: 14, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                             <input
@@ -671,7 +606,8 @@ export default function PressClientNextStepsMRP() {
                               onClick={() => { if (portal?.tokenOnly) { navigate('/next-steps'); return; } fileRef.current?.click(); }}
                               style={{
                                 padding: '10px 22px', borderRadius: 0, border: 'none', cursor: 'pointer',
-                                background: GOLD, color: INK, fontSize: 13.5, fontWeight: 700,
+                                background: '#FFFFFF', color: '#000000', fontSize: 12, fontWeight: 700,
+                                letterSpacing: '0.08em', textTransform: 'uppercase',
                               }}
                             >
                               {uploadBusy ? 'Uploading…' : portal?.tokenOnly ? 'Sign in to upload files' : <>Upload audio &amp; artwork</>}
@@ -694,21 +630,22 @@ export default function PressClientNextStepsMRP() {
               </div>
             </section>
 
-            {/* ── Brandon — the human on the other end ── */}
-            <section style={{ marginTop: 28, borderRadius: 0, background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, padding: 18, display: 'flex', alignItems: 'center', gap: 14 }}>
-              <span style={{ width: 46, height: 46, borderRadius: 0, overflow: 'hidden', flexShrink: 0, border: `1px solid ${HAIRLINE}` }}>
-                <img src={brandonPhoto} alt={preparedBy} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {/* ── Doug — the human on the other end ── */}
+            <section style={{ marginTop: 28, borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, padding: 18, display: 'flex', alignItems: 'center', gap: 14 }}>
+              {/* Doug's headshot — true circle (Bill, Aug 21 2026). */}
+              <span style={{ width: 46, height: 46, borderRadius: '50%', flexShrink: 0, border: `1px solid ${HAIRLINE}`, overflow: 'hidden', display: 'flex' }}>
+                <img src={dougPhoto} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               </span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 600 }}>{preparedBy} is your contact for this run.</div>
                 <div style={{ fontSize: 12, color: SUBINK, marginTop: 2 }}>Replies within 1 business day · {project?.pressName ?? ''}</div>
               </div>
-              {/* Quiet gray-outline — side actions never take the fill. */}
+              {/* Quiet outlined — side actions never take the fill. */}
               <button
                 type="button"
-                data-testid="button-ask-brandon"
+                data-testid="button-ask-doug.reinart"
                 onClick={() => { setAskOpen(true); setAskSent(false); setAskMsg(''); }}
-                style={{ padding: '8px 16px', borderRadius: 0, background: 'transparent', border: `1px solid ${HAIRLINE}`, color: INK, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                style={{ padding: '8px 16px', borderRadius: 0, background: 'transparent', border: `1px solid rgba(255,255,255,0.45)`, color: INK, fontSize: 11.5, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: 'pointer', whiteSpace: 'nowrap' }}
               >
                 Ask {firstName} a question
               </button>
@@ -717,30 +654,30 @@ export default function PressClientNextStepsMRP() {
             {/* ── Ask sheet — same message channel as the estimate page ── */}
             {askOpen && (
               <div
-                style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.55)', padding: 24 }}
+                style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.65)', padding: 24 }}
                 onClick={() => setAskOpen(false)}
-                data-testid="sheet-ask-brandon"
+                data-testid="sheet-ask-contact"
               >
-                <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} style={{ position: 'relative', width: 400, maxWidth: '100%', borderRadius: 0, background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, boxShadow: '0 32px 80px rgba(0,0,0,0.18)', padding: 26 }}>
+                <div role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()} style={{ position: 'relative', width: 400, maxWidth: '100%', borderRadius: 0, background: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 32px 80px rgba(0,0,0,0.6)', padding: 26 }}>
                   {askSent ? (
                     <div style={{ textAlign: 'center', padding: '6px 0', fontSize: 15.5, fontWeight: 600 }}>Your message has been sent to {firstName}.</div>
                   ) : (
                     <>
                       <div style={{ fontSize: 17, fontWeight: 700, letterSpacing: -0.2 }}>How can I help?</div>
                       <textarea
-                        style={{ width: '100%', height: 96, borderRadius: 0, padding: '10px 12px', fontSize: 13.5, background: CANVAS, border: `1px solid ${HAIRLINE}`, color: INK, outline: 'none', resize: 'none', marginTop: 16, lineHeight: 1.5 }}
+                        style={{ width: '100%', height: 96, borderRadius: 0, padding: '10px 12px', fontSize: 13.5, background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, color: INK, outline: 'none', resize: 'none', marginTop: 16, lineHeight: 1.5 }}
                         placeholder="Ask about pricing, timing, specs — anything"
                         value={askMsg}
                         onChange={(e) => setAskMsg(e.target.value)}
-                        data-testid="input-ask-brandon-message"
+                        data-testid="input-ask-contact-message"
                       />
                       <div style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end' }}>
                         <button
                           type="button"
                           disabled={askMsg.trim() === ''}
                           onClick={sendAsk}
-                          style={{ padding: '10px 22px', borderRadius: 0, fontSize: 13.5, fontWeight: 600, cursor: askMsg.trim() ? 'pointer' : 'not-allowed', background: askMsg.trim() ? GOLD : 'transparent', border: askMsg.trim() ? '1px solid transparent' : `1px solid ${HAIRLINE}`, color: askMsg.trim() ? INK : SUBINK }}
-                          data-testid="button-ask-brandon-send"
+                          style={{ padding: '10px 22px', borderRadius: 0, fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', cursor: askMsg.trim() ? 'pointer' : 'not-allowed', background: askMsg.trim() ? '#FFFFFF' : 'transparent', border: askMsg.trim() ? '1px solid transparent' : `1px solid ${HAIRLINE}`, color: askMsg.trim() ? '#000000' : SUBINK }}
+                          data-testid="button-ask-contact-send"
                         >
                           Send
                         </button>
@@ -755,8 +692,8 @@ export default function PressClientNextStepsMRP() {
         </main>
       </div>
 
-      {/* ── In-app, the footer is just the black bar — Memphis and us ── */}
-      <MrpSiteFooter compact />
+      {/* ── In-app, the footer is just the compact black bar — Cinq and us ── */}
+      <CinqSiteFooter compact />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { useQueryClient } from "@tanstack/react-query";
 import { setAuthToken } from "@/lib/queryClient";
+import { onWhitelabelHost } from "@/hooks/useAuthKind";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 import { TERMS_URL, PRIVACY_POLICY_URL } from "@shared/schema";
 
@@ -348,6 +349,9 @@ export default function AcceptInvite() {
             of setting a password. The server (handleProviderCallback)
             requires identity.email to match invite.email exactly so a
             forwarded invite link can't be hijacked from another account. */}
+        {/* Task #3423 — Google/Apple stay OFF white-label hosts (not
+            rendered at all) until activation is decided (#3278). */}
+        {!onWhitelabelHost() && (<>
         <div className="my-5 flex items-center gap-3">
           <div className="flex-1 h-px bg-slate-200" />
           <span className="text-[11px] uppercase tracking-wide text-slate-400">or sign in with</span>
@@ -381,6 +385,7 @@ export default function AcceptInvite() {
         <p className="mt-3 text-[11px] text-slate-500 text-center">
           The Google/Apple account email must match <span className="font-semibold">{data.email}</span>.
         </p>
+        </>)}
 
         {/* Task #860 — Terms acceptance at sign-up. Industry-standard
             inline microcopy (no checkbox); covers both the password and

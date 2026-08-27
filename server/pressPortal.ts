@@ -1191,7 +1191,7 @@ export function registerPressPortalRoutes(
       SELECT id, name, logo_url, light_logo_url, nav_logo_url, light_nav_logo_url,
              square_logo_url, light_square_logo_url,
              brand_accent_color, brand_corner_style, brand_contact_line,
-             email_branding,
+             email_branding, client_portal_skin,
              (lower(white_label_slug) = ${slug}) AS current_match
       FROM manufacturers
       WHERE lower(white_label_slug) = ${slug}
@@ -1214,11 +1214,12 @@ export function registerPressPortalRoutes(
       contactLine: m.brand_contact_line ?? null,
       // Tab identity (favicon) — square mark preferred, any logo as fallback.
       squareLogoUrl: m.square_logo_url ?? m.light_square_logo_url ?? m.logo_url ?? m.light_logo_url ?? null,
-      // Ruby handoff b912fb6 — presses with email branding configured get
-      // the light MRP skin on their customer-facing surfaces (landing,
-      // sign-in, estimate page, client portal). Data-driven, never a
-      // press-name string match. Null = current dark/neutral surfaces.
-      skin: m.email_branding ? "mrp-light" : null,
+      // Task #3423 — per-press client-portal skin, data-driven off
+      // manufacturers.client_portal_skin ("mrp-light" / "pmp" / "cinq" /
+      // "hellbender"), never a press-name string match. Legacy fallback:
+      // presses with email branding configured keep the light MRP skin
+      // (Ruby handoff b912fb6). Null = neutral surfaces.
+      skin: m.client_portal_skin ?? (m.email_branding ? "mrp-light" : null),
     });
   });
 
@@ -2872,6 +2873,7 @@ export function registerPressPortalRoutes(
     brandContactLine: string | null;
     whiteLabelSlug: string | null;
     previousWhiteLabelSlug: string | null;
+    clientPortalSkin: string | null;
   } | null> {
     // Task #3257 — also carry the white-label brand fields so the send
     // paths can skin customer-facing emails without a second lookup.
@@ -2893,6 +2895,9 @@ export function registerPressPortalRoutes(
         // Task #3280 — carried so the branding PUT can park the outgoing
         // slug as the previous-slug alias on rename.
         previousWhiteLabelSlug: manufacturers.previousWhiteLabelSlug,
+        // Task #3423 — skinned presses land emailed estimate links on their
+        // portal entrance (/next-steps?e=<token>) instead of /e/<token>.
+        clientPortalSkin: manufacturers.clientPortalSkin,
       })
       .from(manufacturers)
       .where(eq(manufacturers.id, pressId))
@@ -3110,6 +3115,7 @@ export function registerPressPortalRoutes(
              m.brand_corner_style AS brand_corner_style,
              m.brand_contact_line AS brand_contact_line,
              m.email_branding AS email_branding,
+             m.client_portal_skin AS client_portal_skin,
              m.location AS press_location,
              m.website_url AS press_website_url
       FROM press_estimates e
@@ -3153,9 +3159,10 @@ export function registerPressPortalRoutes(
         accentColor: row.brand_accent_color ?? null,
         cornerStyle: row.brand_corner_style ?? null,
         contactLine: row.brand_contact_line ?? null,
-        // Ruby handoff b912fb6 — light MRP skin for presses with email
-        // branding set. Data-driven, never a press-name match.
-        skin: row.email_branding ? "mrp-light" : null,
+        // Task #3423 — per-press client-portal skin (client_portal_skin),
+        // with the legacy email_branding → mrp-light fallback (Ruby handoff
+        // b912fb6). Data-driven, never a press-name match.
+        skin: row.client_portal_skin ?? (row.email_branding ? "mrp-light" : null),
         locationLine: [row.press_location, String(row.press_website_url ?? "").replace(/^https?:\/\//i, "").replace(/\/.*$/, "").trim()].filter(Boolean).join(" · ") || null,
       },
     });
@@ -3342,13 +3349,26 @@ export function registerPressPortalRoutes(
       SELECT e.*, m.id AS press_id, m.name AS press_name, m.contact_email AS press_contact_email,
              m.email_branding AS email_branding, m.logo_url AS press_logo_url,
              m.location AS press_location, m.website_url AS press_website_url,
-             m.white_label_slug AS white_label_slug
+             m.white_label_slug AS white_label_slug, m.client_portal_skin AS client_portal_skin
       FROM press_estimates e
       JOIN manufacturers m ON m.id = e.press_id
       WHERE e.kind = 'estimate' AND e.payload->>'shareToken' = ${token}
       LIMIT 1
     `);
     return ((found as any).rows ?? [])[0] ?? null;
+  };
+  // Task #3423 — emailed estimate links on a SKINNED press land on that
+  // press's portal entrance (/next-steps?e=<token>, token is the auth; the
+  // portal links each estimate back to /e/<token> for review/accept), so the
+  // client delivery path reaches the white-label portal and never the
+  // sign-in gate. Unskinned presses keep the plain /e/<token> estimate page.
+  // Skin is data-driven (client_portal_skin, legacy email_branding→mrp-light
+  // fallback) — never a press-name check.
+  const emailedEstimatePath = (press: any, token: string) => {
+    const skin =
+      (press?.clientPortalSkin ?? press?.client_portal_skin) ??
+      ((press?.emailBranding ?? press?.email_branding) ? "mrp-light" : null);
+    return skin ? `/next-steps?e=${encodeURIComponent(token)}` : `/e/${token}`;
   };
   const estimateLinkUrl = (req: Request, row: any, token: string) => {
     const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https";
@@ -3435,7 +3455,9 @@ export function registerPressPortalRoutes(
       pressName: row.press_name,
       jobTitle: String(row.title ?? "your record").trim() || "your record",
       specLine: typeof payload.build === "string" && payload.build.trim() ? payload.build.trim() : null,
-      linkUrl: estimateLinkUrl(req, row, token),
+      // Client-facing estimate email — skinned presses land on their portal
+      // entrance (Task #3423), same as the operator send/resend paths.
+      linkUrl: `${whitelabelOriginForPress({ whiteLabelSlug: row.white_label_slug } as any) ?? `${((req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https")}://${((req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host"))}`}${emailedEstimatePath(row, token)}`,
       breakdown,
       accent,
       skin: row.email_branding ? ("light" as const) : ("dark" as const),
@@ -3767,10 +3789,46 @@ export function registerPressPortalRoutes(
         if (t && t.kind === "customer") customer = await storage.getCustomer(t.userId);
       }
     }
-    if (!customer) return res.status(401).json({ message: "Unauthorized" });
+    // Task #3423 — emailed-link landing: the estimate share token IS the
+    // auth. A visitor arriving from an emailed /e/:token link can open the
+    // portal (?e=<shareToken>) without a session; the view is scoped to the
+    // client identity the tokened estimate names (accepting customer or
+    // sentTo recipient) and ONLY within the host press — view-only in the
+    // same sense as the estimate page itself. Session/bearer wins when present.
+    // Auth semantics come first: an anonymous caller with no token gets 401
+    // regardless of host (the host-scoping 404 only guards authed reads).
+    const eTok = !customer ? String(req.query.e ?? "").trim() : "";
+    const eTokValid = !!eTok && /^[A-Za-z0-9_-]{10,}$/.test(eTok);
+    if (!customer && !eTokValid) return res.status(401).json({ message: "Unauthorized" });
     const hostPress = await resolvePortalPressForRequest(req);
     if (!hostPress) return res.status(404).json({ message: "Not found" });
-    const email = String(customer.email ?? "").toLowerCase();
+    let tokenClient: { id: string | null; displayName: string | null; email: string | null } | null = null;
+    if (!customer) {
+      if (eTokValid) {
+        const tr = await db.execute<any>(sql`
+          SELECT e.payload FROM press_estimates e
+          WHERE e.kind = 'estimate' AND e.press_id = ${hostPress.id}
+            AND e.payload->>'shareToken' = ${eTok}
+          LIMIT 1
+        `);
+        const trow = ((tr as any).rows ?? [])[0];
+        if (trow) {
+          const p = (trow.payload ?? {}) as Record<string, any>;
+          const acceptedBy = typeof p.acceptedByCustomerId === "string" ? p.acceptedByCustomerId : null;
+          if (acceptedBy) {
+            const c = await storage.getCustomer(acceptedBy);
+            if (c) tokenClient = { id: c.id, displayName: (c as any).displayName ?? null, email: c.email ?? null };
+          }
+          if (!tokenClient) {
+            const rec = Array.isArray(p.sentTo) ? p.sentTo.find((r: any) => String(r?.email ?? "").includes("@")) : null;
+            if (rec) tokenClient = { id: null, displayName: (rec.name ?? null) || null, email: String(rec.email) };
+          }
+        }
+      }
+      if (!tokenClient) return res.status(401).json({ message: "Unauthorized" });
+    }
+    const email = String((customer ? customer.email : tokenClient?.email) ?? "").toLowerCase();
+    const clientId = customer ? customer.id : (tokenClient?.id ?? "");
     const rows = await db.execute<any>(sql`
       SELECT e.id, e.display_id, e.title, e.status, e.created_at, e.updated_at, e.payload,
              m.name AS press_name, m.email_branding AS email_branding
@@ -3778,7 +3836,7 @@ export function registerPressPortalRoutes(
       JOIN manufacturers m ON m.id = e.press_id
       WHERE e.kind = 'estimate'
         AND e.press_id = ${hostPress.id}
-        AND (e.payload->>'acceptedByCustomerId' = ${customer.id}
+        AND (e.payload->>'acceptedByCustomerId' = ${clientId}
              OR EXISTS (
                SELECT 1 FROM jsonb_array_elements(COALESCE(e.payload->'sentTo','[]'::jsonb)) r
                WHERE lower(r->>'email') = ${email}
@@ -3804,8 +3862,14 @@ export function registerPressPortalRoutes(
       };
     });
     res.json({
-      client: { id: customer.id, displayName: customer.displayName, email: customer.email },
+      client: customer
+        ? { id: customer.id, displayName: customer.displayName, email: customer.email }
+        : { id: tokenClient?.id ?? null, displayName: tokenClient?.displayName ?? null, email: tokenClient?.email ?? null },
       estimates: list,
+      // Task #3423 — emailed-link visitors are token-authorized (view-only):
+      // mutating actions (file upload) require a signed-in customer session,
+      // so the portal UI hides them and offers sign-in instead.
+      tokenOnly: !customer,
     });
   });
 
@@ -4149,7 +4213,7 @@ export function registerPressPortalRoutes(
       const proto0 = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https";
       const host0 = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
       const base0 = whitelabelOriginForPress(press) ?? `${proto0}://${host0}`;
-      const linkUrl0 = `${base0}/e/${existingToken}`;
+      const linkUrl0 = `${base0}${emailedEstimatePath(press, existingToken)}`;
       const mockupUrl0 = await mockupUrlFor(base0, existingToken, freshPayload);
       const recipients0 = body.data.recipients.map((r) => ({ name: r.name, email: r.email }));
       const results0 = await Promise.all(
@@ -4234,7 +4298,7 @@ export function registerPressPortalRoutes(
     // the client route (/e/:token) ships in the same SPA bundle on every host.
     const proto = (req.headers["x-forwarded-proto"] as string)?.split(",")[0] || req.protocol || "https";
     const host = (req.headers["x-forwarded-host"] as string)?.split(",")[0] || req.get("host");
-    const linkUrl = `${whitelabelOriginForPress(press) ?? `${proto}://${host}`}/e/${shareToken}`;
+    const linkUrl = `${whitelabelOriginForPress(press) ?? `${proto}://${host}`}${emailedEstimatePath(press, shareToken)}`;
 
     // Best-effort mail — a transport failure must not lose the Sent state,
     // but the caller needs to know (mail.ts records failures for ops).

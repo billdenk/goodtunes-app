@@ -13475,3 +13475,67 @@ SQL
 }
 migrate_vinyl_order_changed_at_task_3412 dev  "${DATABASE_URL:-}"
 migrate_vinyl_order_changed_at_task_3412 prod "${PROD_DATABASE_URL:-}"
+# Task #3423 — white-label client entrances (PMP, Cinq, Hellbender). Adds the
+# data-driven per-press client-portal skin column and seeds skin + slug for
+# the onboarded presses. Exact-name candidate matching, never ILIKE-first-row
+# (prod carries decoy rows — see memory viryl-prod-press-split). Slug writes
+# only fill EMPTY slugs and never steal a slug already claimed by another
+# press. Cinq Music has no manufacturer row yet in either DB — created
+# minimally (name + slug + skin) so its entrance can exist; operators flesh
+# out the rest in god-view. Idempotent, dev + prod.
+migrate_client_portal_skins_task_3423() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping client-portal skin migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE manufacturers ADD COLUMN IF NOT EXISTS client_portal_skin text;
+
+-- Memphis: skin mrp-light (matches the legacy email_branding derivation),
+-- slug memphis (already set in prod; dev clones lag).
+UPDATE manufacturers m SET client_portal_skin = 'mrp-light'
+  WHERE m.name IN ('Memphis Record Pressing')
+    AND (m.client_portal_skin IS NULL OR m.client_portal_skin = '');
+UPDATE manufacturers m SET white_label_slug = 'memphis'
+  WHERE m.name IN ('Memphis Record Pressing')
+    AND (m.white_label_slug IS NULL OR m.white_label_slug = '')
+    AND NOT EXISTS (SELECT 1 FROM manufacturers x WHERE lower(x.white_label_slug) = 'memphis' AND x.id <> m.id);
+
+-- PMP
+UPDATE manufacturers m SET client_portal_skin = 'pmp'
+  WHERE m.name IN ('Physical Music Products')
+    AND (m.client_portal_skin IS NULL OR m.client_portal_skin = '');
+UPDATE manufacturers m SET white_label_slug = 'pmp'
+  WHERE m.name IN ('Physical Music Products')
+    AND (m.white_label_slug IS NULL OR m.white_label_slug = '')
+    AND NOT EXISTS (SELECT 1 FROM manufacturers x WHERE lower(x.white_label_slug) = 'pmp' AND x.id <> m.id);
+
+-- Hellbender
+UPDATE manufacturers m SET client_portal_skin = 'hellbender'
+  WHERE m.name IN ('Hellbender Vinyl')
+    AND (m.client_portal_skin IS NULL OR m.client_portal_skin = '');
+UPDATE manufacturers m SET white_label_slug = 'hellbender'
+  WHERE m.name IN ('Hellbender Vinyl')
+    AND (m.white_label_slug IS NULL OR m.white_label_slug = '')
+    AND NOT EXISTS (SELECT 1 FROM manufacturers x WHERE lower(x.white_label_slug) = 'hellbender' AND x.id <> m.id);
+
+-- Cinq Music: create minimally if absent (idempotent by exact name).
+INSERT INTO manufacturers (name, white_label_slug, client_portal_skin)
+SELECT 'Cinq Music', 'cinq', 'cinq'
+WHERE NOT EXISTS (SELECT 1 FROM manufacturers WHERE name = 'Cinq Music')
+  AND NOT EXISTS (SELECT 1 FROM manufacturers WHERE lower(white_label_slug) = 'cinq');
+UPDATE manufacturers m SET client_portal_skin = 'cinq'
+  WHERE m.name IN ('Cinq Music')
+    AND (m.client_portal_skin IS NULL OR m.client_portal_skin = '');
+COMMIT;
+SQL
+  then
+    echo "post-merge: client-portal skin migration ok on $label"
+  else
+    echo "post-merge: WARNING — client-portal skin migration failed on $label (continuing)"
+  fi
+}
+migrate_client_portal_skins_task_3423 dev  "${DATABASE_URL:-}"
+migrate_client_portal_skins_task_3423 prod "${PROD_DATABASE_URL:-}"

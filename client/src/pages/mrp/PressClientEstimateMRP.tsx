@@ -806,7 +806,11 @@ export default function PressClientEstimateMRP() {
               <button
                 type="button"
                 data-testid="button-see-next-steps"
-                onClick={() => navigate('/next-steps')}
+                // Task #3423 — carry the estimate link token: the portal
+                // accepts ?e= as auth, so this lands on the portal directly
+                // even before the fresh session cookie settles — never the
+                // sign-in gate.
+                onClick={() => navigate(token ? `/next-steps?e=${encodeURIComponent(token)}` : '/next-steps')}
                 style={{
                   marginTop: 18, padding: '11px 24px', borderRadius: 0, border: 'none', cursor: 'pointer',
                   background: BLUE, color: '#1d1d1f', fontSize: 13.5, fontWeight: 700,

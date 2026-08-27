@@ -453,7 +453,9 @@ export function Login() {
   // login chrome never renders there. Admin (press-partner) login keeps its
   // light admin chrome with the press mark.
   useEffect(() => {
-    if (!isAdmin && onWhitelabelLoginHost && whitelabelBrand?.skin === "mrp-light") {
+    // Task #3423 — ANY skinned press (data-driven skin id, not just MRP)
+    // sends customers to its own portal gate, never the GoodTunes login.
+    if (!isAdmin && onWhitelabelLoginHost && whitelabelBrand?.skin) {
       navigate("/next-steps", { replace: true });
     }
   }, [isAdmin, onWhitelabelLoginHost, whitelabelBrand?.skin, navigate]);
@@ -1649,7 +1651,7 @@ export function Login() {
                 className={s.input} style={inputBg} required data-testid="input-login-username"
               />
             </div>
-            {lookupProvider === "google" || lookupProvider === "apple" ? (
+            {!onWhitelabelLoginHost && (lookupProvider === "google" || lookupProvider === "apple") ? (
               <div className="flex flex-col gap-2.5" data-testid="oauth-swap">
                 <div className={`text-sm ${isAdmin ? "text-slate-600" : "text-white/70"}`} data-testid="text-oauth-hint">
                   This email signs in with <strong>{lookupProvider === "google" ? "Google" : "Apple"}</strong> — use the button below.
@@ -2020,7 +2022,9 @@ export function Login() {
           </div>
         )}
 
-        {!(mode === "register" && (step === 2 || step === "verify" || step === "exists")) && (
+        {/* Task #3423 — Google/Apple sign-in stays OFF white-label hosts
+            (not rendered at all) until activation is decided (#3278). */}
+        {!onWhitelabelLoginHost && !(mode === "register" && (step === 2 || step === "verify" || step === "exists")) && (
           <>
             <div className="flex items-center gap-3 my-5">
               <div className={s.divider} />

@@ -5197,6 +5197,12 @@ export const manufacturers = pgTable("manufacturers", {
   // public branding lookup falls back to it (current slugs always win). A
   // press claiming a slug clears any other press's alias on that slug.
   previousWhiteLabelSlug: text("previous_white_label_slug"),
+  // Task #3423 — data-driven client-portal skin identifier ("mrp-light",
+  // "pmp", "cinq", "hellbender"). Drives which press-branded sign-in gate +
+  // portal the white-label subdomain mounts. NULL = neutral fallback (or the
+  // legacy email_branding → mrp-light derivation, kept as a fallback so MRP
+  // keeps its skin even before the seed runs). Never a press-name string match.
+  clientPortalSkin: text("client_portal_skin"),
   // handoff/cd-cassette-catalog — per-press CD and cassette catalogs. CD and
   // cassette have a FIXED product structure (CD: case → print → booklet →
   // run pricing; cassette: case → shell → imprint → run pricing), so unlike
@@ -6462,8 +6468,8 @@ export const uploadValidations = pgTable("upload_validations", {
   templateId: text("template_id"), // null for audio rows
   assetUrl: text("asset_url").notNull(),
   fileName: text("file_name"),
-  status: text("status").notNull(), // "pass" | "warn" | "fail"
-  checks: jsonb("checks").$type<Array<{ key: string; label: string; status: "pass" | "warn" | "fail"; message: string }>>().notNull(),
+  status: text("status").notNull(), // "pass" | "warn" | "fail" | "unverified"
+  checks: jsonb("checks").$type<Array<{ key: string; label: string; status: "pass" | "warn" | "fail" | "unverified"; message: string }>>().notNull(),
   overrideJustification: text("override_justification"),
   overrideByUserId: varchar("override_by_user_id"),
   overrideAt: timestamp("override_at"),

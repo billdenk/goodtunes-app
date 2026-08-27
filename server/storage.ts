@@ -1257,8 +1257,8 @@ export type UploadValidationRow = {
   templateId: string | null;
   assetUrl: string;
   fileName: string | null;
-  status: "pass" | "warn" | "fail";
-  checks: Array<{ key: string; label: string; status: "pass" | "warn" | "fail"; message: string }>;
+  status: "pass" | "warn" | "fail" | "unverified";
+  checks: Array<{ key: string; label: string; status: "pass" | "warn" | "fail" | "unverified"; message: string }>;
   overrideJustification: string | null;
   overrideByUserId: string | null;
   overrideAt: Date | null;
@@ -6609,7 +6609,7 @@ function toUploadValidationRow(row: typeof uploadValidations.$inferSelect): Uplo
     templateId: row.templateId,
     assetUrl: row.assetUrl,
     fileName: row.fileName,
-    status: row.status as "pass" | "warn" | "fail",
+    status: row.status as "pass" | "warn" | "fail" | "unverified",
     checks: (row.checks ?? []) as UploadValidationRow["checks"],
     overrideJustification: row.overrideJustification,
     overrideByUserId: row.overrideByUserId,

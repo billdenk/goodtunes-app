@@ -118,6 +118,7 @@ import ArtistDashboardMRP from "@/pages/mrp/ArtistDashboardMRP";
 import ArtistDashboardNextStepsMRP from "@/pages/mrp/ArtistDashboardNextStepsMRP";
 import ArtistProjectHomeMRP from "@/pages/mrp/ArtistProjectHomeMRP";
 import MrpSkinGate from "@/pages/mrp/MrpSkinGate";
+import PressClientNextStepsBySkin from "@/pages/PressClientNextStepsBySkin";
 // Task #3394 — cross-press project import (wired, held OFF).
 import PressClientImportMRP from "@/pages/mrp/PressClientImportMRP";
 import MyProjects from "@/pages/MyProjects";
@@ -897,9 +898,12 @@ function Router() {
             the white-label host family so goodtunes.music hosts keep their
             current routing (these paths fall through to the slug resolver
             elsewhere). Light-only screens by design. */}
+        {/* Task #3423 — /next-steps resolves the press's OWN client entrance
+            by its data-driven skin (MRP, PMP light+dark, Cinq, Hellbender);
+            unskinned presses redirect home to the neutral fallback. */}
         {onWhitelabelHost() && (
           <Route path="/next-steps">
-            <MrpSkinGate><PressClientNextStepsMRP /></MrpSkinGate>
+            <PressClientNextStepsBySkin />
           </Route>
         )}
         {onWhitelabelHost() && (
