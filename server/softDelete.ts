@@ -517,27 +517,48 @@ export async function sweepExpiredTrash(
     Date.now() - olderThanDays * 24 * 60 * 60 * 1000,
   ).toISOString();
   const results: SweepResult[] = [];
-  // Purge parents first so DB cascade handles the bulk of children; the
-  // second pass catches orphan child rows whose parent was restored
-  // but they themselves are still past cutoff.
-  const tables = Object.values(TABLE_NAMES);
-  for (const table of tables) {
+  const failures: string[] = [];
+  // Purge CHILDREN before parents. `songs → albums` (and
+  // `playlist_songs → songs`) are NO ACTION FKs — there is no DB
+  // cascade there, so deleting an expired album while its soft-deleted
+  // songs still exist raises an FK violation (this aborted every
+  // nightly sweep in prod). All other child links cascade or SET NULL,
+  // so a leaf-first order plus a manual playlist_songs cleanup makes
+  // every delete safe. One pass over all expired rows (regardless of
+  // deleted_via_parent_id — cascaded children past cutoff go with
+  // their parent; a restored parent re-cleared its children, so no
+  // live parent loses a child here).
+  const PURGE_ORDER: string[] = [
+    "track_writers",
+    "track_performers",
+    "songs",
+    "album_videos",
+    "album_photos",
+    "campaign_gallery_items",
+    "album_credits",
+    "albums",
+    "band_members",
+    "people",
+    "instruments",
+    "labels",
+    "managers",
+    "vendors",
+    "manufacturers",
+    "fulfillment_partners",
+  ];
+  for (const table of PURGE_ORDER) {
     try {
-      const res = await pool.query(
-        `DELETE FROM ${table}
-          WHERE deleted_at IS NOT NULL
-            AND deleted_at < $1
-            AND deleted_via_parent_id IS NULL`,
-        [cutoff],
-      );
-      if (res.rowCount && res.rowCount > 0)
-        results.push({ table, purged: res.rowCount });
-    } catch (e: any) {
-      if (!/column .* does not exist/i.test(String(e?.message ?? e))) throw e;
-    }
-  }
-  for (const table of tables) {
-    try {
+      if (table === "songs") {
+        // playlist_songs has no soft-delete column and a NO ACTION FK
+        // onto songs — clear the join rows for the songs about to go.
+        await pool.query(
+          `DELETE FROM playlist_songs
+            WHERE song_id IN (
+              SELECT id FROM songs
+               WHERE deleted_at IS NOT NULL AND deleted_at < $1)`,
+          [cutoff],
+        );
+      }
       const res = await pool.query(
         `DELETE FROM ${table}
           WHERE deleted_at IS NOT NULL
@@ -545,10 +566,21 @@ export async function sweepExpiredTrash(
         [cutoff],
       );
       if (res.rowCount && res.rowCount > 0)
-        results.push({ table: `${table} (orphan children)`, purged: res.rowCount });
+        results.push({ table, purged: res.rowCount });
     } catch (e: any) {
-      if (!/column .* does not exist/i.test(String(e?.message ?? e))) throw e;
+      const msg = String(e?.message ?? e);
+      // A table whose soft-delete migration hasn't run yet is fine to
+      // skip silently; anything else is recorded but must NOT abort
+      // the remaining tables (one bad row shouldn't stall all trash).
+      if (!/column .* does not exist/i.test(msg)) {
+        failures.push(`${table}: ${msg}`);
+      }
     }
+  }
+  if (failures.length > 0) {
+    throw new Error(
+      `purged ${results.reduce((n, r) => n + r.purged, 0)} row(s) but ${failures.length} table(s) failed — ${failures.join("; ")}`,
+    );
   }
   return results;
 }
