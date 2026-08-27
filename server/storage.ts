@@ -164,6 +164,9 @@ import {
   pressAudioSpecs,
   type PressAudioSpec,
   type InsertPressAudioSpec,
+  albumSideMasters,
+  type AlbumSideMaster,
+  type InsertAlbumSideMaster,
   fulfillmentDestinations,
   type FulfillmentDestination,
   type InsertFulfillmentDestination,
@@ -1160,6 +1163,14 @@ export interface IStorage {
     updatedByUserId: string | null,
   ): Promise<PressAudioSpec>;
   deletePressAudioSpec(pressId: string): Promise<void>;
+
+  // ---- Task #3413 — per-side master files (Side A / Side B) ---------
+  // One row per (album, side); a re-attach replaces the row. Duration +
+  // silence measurements are taken at attach time and stored so preflight
+  // stays buffer-free.
+  listAlbumSideMasters(albumId: string): Promise<AlbumSideMaster[]>;
+  upsertAlbumSideMaster(input: InsertAlbumSideMaster): Promise<AlbumSideMaster>;
+  deleteAlbumSideMaster(albumId: string, side: string): Promise<void>;
 
   // ---- Task #225 — Pressing-order requests --------------------------
   listPressingOrderRequests(opts: {
@@ -6177,6 +6188,7 @@ export class DbStorage implements IStorage {
           requiredBitDepth: values.requiredBitDepth ?? null,
           requiredSampleRateHz: values.requiredSampleRateHz ?? null,
           maxSideSeconds: values.maxSideSeconds ?? null,
+          interTrackGapSeconds: values.interTrackGapSeconds ?? null,
           notes: values.notes ?? null,
           updatedByUserId,
           updatedAt: new Date(),
@@ -6187,6 +6199,42 @@ export class DbStorage implements IStorage {
   }
   async deletePressAudioSpec(pressId: string): Promise<void> {
     await db.delete(pressAudioSpecs).where(eq(pressAudioSpecs.pressId, pressId));
+  }
+
+  // ---- Task #3413 — per-side master files ("Side A file / Side B file") --
+  async listAlbumSideMasters(albumId: string): Promise<AlbumSideMaster[]> {
+    return db
+      .select()
+      .from(albumSideMasters)
+      .where(eq(albumSideMasters.albumId, albumId))
+      .orderBy(albumSideMasters.side);
+  }
+  async upsertAlbumSideMaster(input: InsertAlbumSideMaster): Promise<AlbumSideMaster> {
+    const [row] = await db
+      .insert(albumSideMasters)
+      .values(input)
+      .onConflictDoUpdate({
+        target: [albumSideMasters.albumId, albumSideMasters.side],
+        set: {
+          assetUrl: input.assetUrl,
+          fileName: input.fileName ?? null,
+          durationSeconds: input.durationSeconds ?? null,
+          audioFormat: input.audioFormat ?? null,
+          sampleRate: input.sampleRate ?? null,
+          bitDepth: input.bitDepth ?? null,
+          bytes: input.bytes ?? null,
+          silences: input.silences ?? null,
+          uploadedByUserId: input.uploadedByUserId ?? null,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+  async deleteAlbumSideMaster(albumId: string, side: string): Promise<void> {
+    await db
+      .delete(albumSideMasters)
+      .where(and(eq(albumSideMasters.albumId, albumId), eq(albumSideMasters.side, side)));
   }
 
   // ---- Task #225 — Pressing-order requests --------------------------

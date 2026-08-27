@@ -41,9 +41,167 @@ import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { FulfillmentAssignmentPanel } from "@/components/admin/FulfillmentAssignmentPanel";
 import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
 import { SegmentedPillToggle } from "@/components/admin/SegmentedPillToggle";
-import type { VinylFormat } from "@shared/vinylFormatRules";
+import { VINYL_FORMAT_RULES, type VinylFormat } from "@shared/vinylFormatRules";
+import { useUploadManager, useUploadStore } from "@/context/UploadManagerContext";
 import { PHYSICAL_FORMAT_TO_ALBUM_FORMAT } from "@shared/schema";
 import type { AlbumPhysicalFormat, AlbumFormat } from "@shared/schema";
+
+// Task #3413 — attach one master file per vinyl side. Bytes ride the
+// background upload manager (survives dialog close / navigation); the
+// attach endpoint probes duration + inter-track silences server-side and
+// the masters preflight consumes the stored measurements.
+type SideMasterRow = {
+  id: string;
+  side: "A" | "B" | "C" | "D";
+  assetUrl: string;
+  fileName: string | null;
+  durationSeconds: number | null;
+  silences: Array<{ start: number; end: number; duration: number }> | null;
+};
+
+function SideMastersCard({
+  albumId,
+  vinylFormat,
+  physicalFormat,
+}: {
+  albumId: string;
+  vinylFormat: VinylFormat | null;
+  physicalFormat: AlbumPhysicalFormat | null;
+}) {
+  const { toast } = useToast();
+  const { enqueueSideMasterBatch } = useUploadManager();
+  const uploadState = useUploadStore();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingSide, setPendingSide] = useState<"A" | "B" | "C" | "D" | null>(null);
+
+  // Sides come from the vinyl-cut format (falls back to the Sell-panel
+  // physical format the same way VinylOrderPanel defaults).
+  const effectiveFormat: VinylFormat =
+    vinylFormat ?? (physicalFormat === "double_lp" ? "12_33_double" : physicalFormat === "seven_inch" ? "7_45" : "12_33_single");
+  const sideCount = VINYL_FORMAT_RULES[effectiveFormat].sides.length;
+  const sides = (["A", "B", "C", "D"] as const).slice(0, sideCount);
+
+  const { data: rows = [] } = useQuery<SideMasterRow[]>({
+    queryKey: ["/api/admin/albums", albumId, "side-masters"],
+  });
+  const bySide = new Map(rows.map((r) => [r.side, r]));
+
+  // In-flight uploads for this album so the row shows progress instead
+  // of looking unattached while bytes are still moving.
+  const inFlightBySide = new Map<string, { pct: number; status: string }>();
+  for (const b of uploadState.batches) {
+    if (b.kind !== "side-master" || b.albumId !== albumId) continue;
+    for (const i of b.items) {
+      if (i.side && (i.status === "queued" || i.status === "uploading" || i.status === "saving")) {
+        inFlightBySide.set(i.side, { pct: i.pct, status: i.status });
+      }
+    }
+  }
+
+  const removeMut = useMutation({
+    mutationFn: (side: string) =>
+      apiRequest("DELETE", `/api/admin/albums/${albumId}/side-masters/${side}`),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/albums", albumId, "side-masters"] }),
+    onError: (e: any) =>
+      toast({ title: "Couldn't remove the side master", description: e?.message, variant: "destructive" }),
+  });
+
+  function pickFor(side: "A" | "B" | "C" | "D") {
+    setPendingSide(side);
+    fileInputRef.current?.click();
+  }
+  function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !pendingSide) return;
+    enqueueSideMasterBatch({ albumId, items: [{ file, side: pendingSide }] });
+    toast({
+      title: `Uploading Side ${pendingSide} master`,
+      description: "Runs in the background — duration and gaps are measured when it lands.",
+    });
+    setPendingSide(null);
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-slate-200 bg-white" data-testid="card-side-masters">
+      <div className="px-4 py-3 border-b border-slate-100">
+        <div className="text-sm font-semibold text-slate-900">Side master files</div>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Optional — if the masters were delivered as one file per side, attach them
+          here. Preflight compares each file's length against the tracklist, flags a
+          probable missing track, and measures the real gaps between tracks.
+        </p>
+      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="audio/*,.wav,.aif,.aiff,.flac"
+        className="hidden"
+        onChange={onFilePicked}
+        data-testid="input-side-master-file"
+      />
+      <ul>
+        {sides.map((side) => {
+          const row = bySide.get(side);
+          const inFlight = inFlightBySide.get(side);
+          return (
+            <li
+              key={side}
+              className="flex items-center gap-3 px-4 py-2.5 border-t border-slate-100 first:border-t-0"
+              data-testid={`row-side-master-${side}`}
+            >
+              <div className="w-14 text-sm font-semibold text-slate-700 shrink-0">
+                Side {side}
+              </div>
+              {inFlight ? (
+                <div className="flex-1 min-w-0 flex items-center gap-2 text-sm text-slate-500">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                  {inFlight.status === "saving"
+                    ? "Measuring duration and gaps…"
+                    : `Uploading… ${inFlight.pct}%`}
+                </div>
+              ) : row ? (
+                <>
+                  <div className="flex-1 min-w-0 text-sm text-slate-700 truncate" data-testid={`text-side-master-name-${side}`}>
+                    {row.fileName ?? "Master file"}
+                  </div>
+                  <div className="text-sm tabular-nums text-slate-500 shrink-0">
+                    {fmtDur(row.durationSeconds)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeMut.mutate(side)}
+                    disabled={removeMut.isPending}
+                    className="shrink-0 text-slate-400 hover:text-rose-600 disabled:opacity-50"
+                    aria-label={`Remove Side ${side} master`}
+                    data-testid={`button-remove-side-master-${side}`}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex-1 min-w-0 text-sm text-slate-400">
+                    No side file attached
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => pickFor(side)}
+                    className="shrink-0 inline-flex items-center px-3 h-8 rounded-full border border-slate-200 bg-white text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    data-testid={`button-attach-side-master-${side}`}
+                  >
+                    Attach file
+                  </button>
+                </>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 export type PressPanelSong = {
   id: string;
@@ -625,6 +783,15 @@ export function PressPanel({
   const [vinylSize, setVinylSize] = useState<'7"' | '10"' | '12"'>('12"');
   const [rpm, setRpm] = useState<33 | 45>(33);
 
+  // Task #3413 — the press's inter-track gap spec (press_audio_specs
+  // override merged over the vendorSpecs baseline, resolved server-side).
+  // Passed to VinylOrderPanel so the per-side runtime it shows matches
+  // the gap-aware side-length preflight math. null = no spec → raw sums.
+  const { data: gapData } = useQuery<{ interTrackGapSeconds: number | null }>({
+    queryKey: ["/api/admin/vendor-audio-gap", vendorId],
+  });
+  const interTrackGapSeconds = gapData?.interTrackGapSeconds ?? null;
+
   const reprobe = useMutation({
     mutationFn: async (songIds: string[] | undefined) => {
       const r = await apiRequest("POST", `/api/admin/albums/${albumId}/reprobe-masters`, {
@@ -987,6 +1154,7 @@ export function PressPanel({
                   vinylFormat={vinylFormat ?? null}
                   physicalFormat={physicalFormat ?? null}
                   vinylSideCatalogNumbers={vinylSideCatalogNumbers ?? null}
+                  interTrackGapSeconds={interTrackGapSeconds}
                 />
               ) : (
                 <p className="text-xs text-slate-500" data-testid="text-no-side-breaks">
@@ -994,6 +1162,19 @@ export function PressPanel({
                     ? "No tracks on this album yet — add tracks on the Tracks tab to plan side breaks."
                     : "This album's physical format has no sides to cut — side breaks apply to vinyl formats."}
                 </p>
+              )}
+              {/* Task #3413 — optional single-file-per-side masters. When a
+                  professional delivery is one Side A file + one Side B file,
+                  attach them here; preflight then verifies each file's
+                  duration against the tracklist (+ press gaps), flags a
+                  probable missing track, and measures real inter-track gaps
+                  against the press's spacing spec. */}
+              {showVinylSides && (
+                <SideMastersCard
+                  albumId={albumId}
+                  vinylFormat={vinylFormat ?? null}
+                  physicalFormat={physicalFormat ?? null}
+                />
               )}
             </div>
           </div>

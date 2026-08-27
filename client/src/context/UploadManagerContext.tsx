@@ -48,6 +48,8 @@ export interface UploadItem {
   stage: UploadStage;
   // audio
   trackNumber?: number;
+  // side-master (Task #3413) — which vinyl side this file masters
+  side?: "A" | "B" | "C" | "D";
   // video
   title?: string;
   description?: string | null;
@@ -64,7 +66,11 @@ export interface UploadItem {
 
 export interface UploadBatch {
   id: string;
-  kind: "audio" | "video";
+  // "side-master" (Task #3413) = one master file per vinyl side; bytes
+  // ride the audio sign→PUT pipeline but SKIP finalize (no transcode or
+  // public ACL — the server reads the private object at attach time to
+  // probe duration + silences).
+  kind: "audio" | "video" | "side-master";
   albumId: string;
   items: UploadItem[];
   startedAt: number;
@@ -154,12 +160,13 @@ function authHeaders(): Record<string, string> {
 
 /* ── Low-level upload steps (self-contained; no dialog dependency) ── */
 async function signUpload(
-  kind: "audio" | "video",
+  kind: "audio" | "video" | "side-master",
   file: File,
 ): Promise<{ uploadUrl: string; finalPath: string; contentType: string }> {
+  // Side masters are audio files — they ride the audio sign endpoint.
   const endpoint =
-    kind === "audio" ? "/api/admin/upload-audio/sign" : "/api/admin/upload-video/sign";
-  const contentType = file.type || (kind === "audio" ? "audio/mpeg" : "video/mp4");
+    kind === "video" ? "/api/admin/upload-video/sign" : "/api/admin/upload-audio/sign";
+  const contentType = file.type || (kind === "video" ? "video/mp4" : "audio/mpeg");
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeaders() },
@@ -266,7 +273,12 @@ async function runItem(batch: UploadBatch, itemId: string) {
           item.file,
           (pct) => patchItem(batch.id, itemId, { pct }),
         );
-        patchItem(batch.id, itemId, { pct: 100, stage: "finalize" });
+        // Side masters skip finalize entirely — no transcode/ACL flip;
+        // the attach endpoint probes the private object server-side.
+        patchItem(batch.id, itemId, {
+          pct: 100,
+          stage: batch.kind === "side-master" ? "create" : "finalize",
+        });
       } finally {
         netSem.release();
       }
@@ -312,6 +324,19 @@ async function runItem(batch: UploadBatch, itemId: string) {
 }
 
 async function createRow(batch: UploadBatch, item: UploadItem) {
+  if (batch.kind === "side-master") {
+    // Attach is an UPSERT keyed (album, side) server-side, so a retry
+    // after an ambiguous timeout can't duplicate a row — no dedup
+    // pre-check needed. The server probes duration + silences here,
+    // which can take a while on a big WAV; serverSem already serializes.
+    patchItem(batch.id, item.id, { createStarted: true });
+    await apiRequest("POST", `/api/admin/albums/${batch.albumId}/side-masters`, {
+      side: item.side,
+      assetUrl: item.finalPath,
+      fileName: item.name,
+    });
+    return;
+  }
   if (batch.kind === "audio") {
     const r = item.finalizeResult as Awaited<ReturnType<typeof finalizeAudio>>;
     // Retry-after-ambiguous-timeout guard: if a create was already
@@ -378,6 +403,12 @@ async function videoRowExists(albumId: string, videoUrl: string): Promise<boolea
 }
 
 function invalidateForBatch(batch: UploadBatch) {
+  if (batch.kind === "side-master") {
+    queryClient.invalidateQueries({
+      queryKey: ["/api/admin/albums", batch.albumId, "side-masters"],
+    });
+    return;
+  }
   if (batch.kind === "audio") {
     queryClient.invalidateQueries({ queryKey: [`/api/albums/${batch.albumId}`] });
     queryClient.invalidateQueries({ queryKey: ["/api/albums", batch.albumId] });
@@ -406,7 +437,8 @@ function maybeSettleBatch(batchId: string) {
   const failed = batch.items.filter((i) => i.status === "error").length;
   invalidateForBatch(batch);
 
-  const noun = batch.kind === "audio" ? "track" : "video";
+  const noun =
+    batch.kind === "audio" ? "track" : batch.kind === "video" ? "video" : "side master";
   if (ok === 0 && failed > 0) {
     toast({
       title: `No ${noun}s were added`,
@@ -498,6 +530,38 @@ export function enqueueVideoBatch(input: {
   return batchId;
 }
 
+// Task #3413 — one master file per vinyl side. Bytes ride the audio
+// sign→PUT pipeline; finalize is skipped (runItem advances straight to
+// "create", which POSTs the attach endpoint — an upsert per side).
+export function enqueueSideMasterBatch(input: {
+  albumId: string;
+  items: Array<{ file: File; side: "A" | "B" | "C" | "D" }>;
+}): string {
+  const { albumId, items: inItems } = input;
+  if (inItems.length === 0) return "";
+  const batchId = crypto.randomUUID();
+  const items: UploadItem[] = inItems.map((v) => ({
+    id: crypto.randomUUID(),
+    name: v.file.name,
+    status: "queued",
+    pct: 0,
+    file: v.file,
+    stage: "sign",
+    side: v.side,
+  }));
+  const batch: UploadBatch = {
+    id: batchId,
+    kind: "side-master",
+    albumId,
+    items,
+    startedAt: Date.now(),
+  };
+  state.batches = [...state.batches, batch];
+  emit();
+  for (const item of items) void runItem(batch, item.id);
+  return batchId;
+}
+
 export function retryItem(batchId: string, itemId: string) {
   const batch = state.batches.find((b) => b.id === batchId);
   const item = findItem(batchId, itemId);
@@ -543,6 +607,7 @@ export interface UploadManagerValue {
   batches: UploadBatch[];
   enqueueAudioBatch: typeof enqueueAudioBatch;
   enqueueVideoBatch: typeof enqueueVideoBatch;
+  enqueueSideMasterBatch: typeof enqueueSideMasterBatch;
   retryItem: typeof retryItem;
   retryBatchFailures: typeof retryBatchFailures;
   dismissBatch: typeof dismissBatch;
@@ -576,6 +641,7 @@ export function UploadManagerProvider({ children }: { children: ReactNode }) {
     batches: snapshot.batches,
     enqueueAudioBatch,
     enqueueVideoBatch,
+    enqueueSideMasterBatch,
     retryItem,
     retryBatchFailures,
     dismissBatch,

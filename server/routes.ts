@@ -107,9 +107,11 @@ import {
   matchInvitedPressToVendor,
   resolveVendorIdForPress,
   resolveAudioSpec,
+  getVendorSpec,
   defaultCompletedTemplateConfig,
   VENDOR_IDS,
   type VendorId,
+  type VinylSize,
   type CompletedTemplateConfig,
   type AudioSpecOverride,
   type FinishedComponentSpec,
@@ -11624,6 +11626,33 @@ export async function registerRoutes(
       return Number.isFinite(silenceEnd) ? silenceEnd : 0;
     } catch {
       return 0;
+    }
+  }
+
+  // Task #3413 — Measure ALL silences in a local audio file with ffmpeg's
+  // silencedetect. Unlike `measureLeadingSilence` above this scans the WHOLE
+  // file (a side-file gap scan capped at 30 s would miss every real
+  // inter-track gap) and uses d=1.0 so quiet passages inside a song don't
+  // read as track gaps. Returns null when the scan itself fails (callers
+  // store NULL = "scan unavailable", never fabricate an empty result).
+  async function measureSilences(
+    filePath: string,
+    totalDuration: number | null,
+  ): Promise<Array<{ start: number; end: number; duration: number }> | null> {
+    try {
+      const { parseSilencedetectOutput } = await import("./validators/preflight");
+      const { stderr } = await runAudioToolWithStallGuard(
+        "ffmpeg",
+        [
+          "-i", filePath,
+          "-af", "silencedetect=noise=-50dB:d=1.0",
+          "-f", "null", "-",
+        ],
+        { stallMs: AUDIO_PROBE_STALL_MS, label: "Detecting inter-track silences" },
+      );
+      return parseSilencedetectOutput(stderr, totalDuration);
+    } catch {
+      return null;
     }
   }
 
@@ -34335,6 +34364,58 @@ export async function registerRoutes(
         });
         validated++;
       }
+      // Task #3413 — side-file master analysis. When an operator attached a
+      // single Side A / Side B master file, compare its measured duration
+      // against the tracklist total (+ press gaps) to flag a probable
+      // missing track, check measured inter-track gaps against the press's
+      // spacing spec, and verify the file's real length against the format
+      // limit. Rows are keyed "Side X · <file>" so they render beside the
+      // per-track rows; albums with no side files skip this entirely.
+      const sideMasterRows = await storage.listAlbumSideMasters(albumId);
+      if (sideMasterRows.length > 0) {
+        const { analyzeSideFile } = await import("./validators/preflight");
+        const resolvedAudio = resolveAudioSpec(vendorId, audioOverride);
+        const gapSeconds = resolvedAudio?.interTrackGapSeconds ?? null;
+        const maxSideSeconds =
+          resolvedAudio?.maxSideSecondsBySizeRpm?.[vinylSize as VinylSize]?.[rpm as 33 | 45] ?? null;
+        const pressLabel =
+          preflightPressName ?? getVendorSpec(vendorId)?.label ?? vendorId;
+        const genericNote =
+          vendorId === "generic" && preflightPressName
+            ? ` (general vinyl spec — no plant-specific specs on file for ${preflightPressName})`
+            : "";
+        for (const sm of sideMasterRows) {
+          const expectedTrackSeconds =
+            sideBreaks?.find((sb) => sb.side === sm.side)?.trackTimesSeconds ?? [];
+          const checks = analyzeSideFile(
+            {
+              side: sm.side,
+              durationSeconds: sm.durationSeconds ?? null,
+              silences: (sm.silences as Array<{ start: number; end: number; duration: number }> | null) ?? null,
+            },
+            {
+              expectedTrackSeconds,
+              gapSeconds,
+              maxSideSeconds,
+              pressName: pressLabel,
+              vinylSize: vinylSize as VinylSize,
+              rpm: rpm as 33 | 45,
+              genericNote,
+            },
+          );
+          await storage.insertUploadValidation({
+            albumId,
+            kind: "audio",
+            vendorId,
+            templateId: null,
+            assetUrl: sm.assetUrl,
+            fileName: `Side ${sm.side} · ${sm.fileName ?? "master file"}`,
+            status: rollupStatus(checks),
+            checks,
+          });
+          validated++;
+        }
+      }
       // Task #3248 — album-level UPC check (warning only, never blocks).
       // Persisted as its own `upload_validations` row so it renders in the
       // same masters-preflight panel and rides `rollupPreflightForAlbum`
@@ -34371,6 +34452,115 @@ export async function registerRoutes(
     } catch (e: any) {
       console.error("[preflight-masters]", e);
       res.status(500).json({ message: e?.message ?? "Preflight failed" });
+    }
+  });
+
+  // ─── Task #3413 — per-side master files (Side A / Side B) ────────────
+  // Professional artists often deliver one master file per vinyl side.
+  // Operators attach them here (bytes ride the existing signed-upload
+  // pipeline: /api/admin/upload-audio/sign → PUT to GCS → this attach).
+  // Duration (ffprobe) and inter-track silences (ffmpeg silencedetect,
+  // full-file scan) are measured ONCE at attach time and stored on the
+  // row; the masters preflight consumes the stored numbers. Fan playback
+  // is untouched — these files never feed Mux or the per-song pipeline.
+  // Task #3413 — resolved inter-track gap spec for a vendor (press
+  // override merged over the vendorSpecs baseline). The Physical tab's
+  // Side breaks panel reads this so the per-side runtime it displays
+  // agrees with the gap-aware side-length preflight math. null = no
+  // spec on file → the panel shows raw track sums (unchanged behavior).
+  app.get("/api/admin/vendor-audio-gap/:vendorId", requireAdminBearer, async (req, res) => {
+    const parsed = z.enum(VENDOR_IDS).safeParse(req.params.vendorId);
+    if (!parsed.success) return res.status(400).json({ message: "Unknown vendor" });
+    try {
+      const override = await audioOverrideForVendor(parsed.data);
+      const resolved = resolveAudioSpec(parsed.data, override);
+      res.json({ interTrackGapSeconds: resolved?.interTrackGapSeconds ?? null });
+    } catch (e: any) {
+      console.error("[vendor-audio-gap]", e);
+      res.status(500).json({ message: e?.message ?? "Could not resolve gap spec" });
+    }
+  });
+
+  app.get("/api/admin/albums/:id/side-masters", requireAdminBearer, async (req, res) => {
+    try {
+      const rows = await storage.listAlbumSideMasters(req.params.id);
+      res.json(rows);
+    } catch (e: any) {
+      console.error("[side-masters:list]", e);
+      res.status(500).json({ message: e?.message ?? "Could not list side masters" });
+    }
+  });
+
+  app.post("/api/admin/albums/:id/side-masters", requireAdminBearer, async (req, res) => {
+    const albumId = req.params.id;
+    const schema = z.object({
+      side: z.enum(["A", "B", "C", "D"]),
+      assetUrl: z.string().regex(/^\/objects\/uploads\/[a-zA-Z0-9._-]+$/, "Invalid upload path"),
+      fileName: z.string().trim().max(300).nullable().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: parsed.error.message });
+    const { side, assetUrl, fileName } = parsed.data;
+    const album = await storage.getAlbumById(albumId, { includeHidden: true });
+    if (!album) return res.status(404).json({ message: "Album not found" });
+
+    // Stream the uploaded object to a tempfile (side files can be
+    // multi-hundred-MB WAVs — never buffer them in memory) and measure.
+    const fsp = await import("node:fs/promises");
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const { pipeline } = await import("node:stream/promises");
+    const ext = (assetUrl.match(/\.(\w+)$/)?.[0] || ".bin").toLowerCase();
+    const tmp = path.join(os.tmpdir(), `${randomUUID()}${ext}`);
+    try {
+      const file = await objectStorage.getObjectEntityFile(assetUrl);
+      await pipeline(file.createReadStream(), fs.createWriteStream(tmp));
+      const specs = await probeAudioSpecs(tmp);
+      if (specs.duration == null) {
+        // A side master we can't even measure is useless to preflight —
+        // fail loudly instead of storing a row that can never be analyzed.
+        return res.status(422).json({
+          message:
+            "Couldn't read the file's duration — it may be corrupt or not an audio file. Re-export and re-upload.",
+        });
+      }
+      // Full-file silence scan; NULL = scan failed (preflight then skips
+      // the gap check honestly instead of reporting 'no gaps').
+      const silences = await measureSilences(tmp, specs.duration);
+      const row = await storage.upsertAlbumSideMaster({
+        albumId,
+        side,
+        assetUrl,
+        fileName: fileName ?? null,
+        durationSeconds: specs.duration,
+        audioFormat: specs.format,
+        sampleRate: specs.sampleRate,
+        bitDepth: specs.bitDepth,
+        bytes: specs.bytes,
+        silences,
+        uploadedByUserId: req.session.userId ?? null,
+      });
+      res.json(row);
+    } catch (e: any) {
+      console.error("[side-masters:attach]", e);
+      res.status(500).json({ message: e?.message ?? "Could not attach the side master" });
+    } finally {
+      try { await fsp.unlink(tmp); } catch {}
+    }
+  });
+
+  app.delete("/api/admin/albums/:id/side-masters/:side", requireAdminBearer, async (req, res) => {
+    const side = String(req.params.side || "").toUpperCase();
+    if (!["A", "B", "C", "D"].includes(side)) {
+      return res.status(400).json({ message: "Invalid side" });
+    }
+    try {
+      await storage.deleteAlbumSideMaster(req.params.id, side);
+      res.json({ ok: true });
+    } catch (e: any) {
+      console.error("[side-masters:delete]", e);
+      res.status(500).json({ message: e?.message ?? "Could not remove the side master" });
     }
   });
 
@@ -34607,6 +34797,9 @@ export async function registerRoutes(
       requiredBitDepth: row.requiredBitDepth,
       requiredSampleRateHz: row.requiredSampleRateHz,
       maxSideSeconds: row.maxSideSeconds ?? null,
+      // Task #3413 — press-specified spacing between tracks, folded into
+      // the side-length math (gap × (tracks − 1)).
+      interTrackGapSeconds: row.interTrackGapSeconds ?? null,
     };
   }
 
@@ -36697,6 +36890,9 @@ export async function registerRoutes(
       .partial()
       .nullable()
       .optional(),
+    // Task #3413 — expected/max inter-track gap seconds the press cuts
+    // between tracks. NULL = no spec → gap-free side-length math.
+    interTrackGapSeconds: z.number().min(0).max(120).nullable().optional(),
     notes: z.string().trim().max(1000).nullable().optional(),
   });
 
@@ -36716,6 +36912,7 @@ export async function registerRoutes(
             requiredBitDepth: base.requiredBitDepth ?? null,
             requiredSampleRateHz: base.requiredSampleRateHz ?? null,
             maxSideSeconds: base.maxSideSecondsBySizeRpm ?? null,
+            interTrackGapSeconds: base.interTrackGapSeconds ?? null,
           }
         : null;
       res.json({ spec: await storage.getPressAudioSpec(req.params.id), baseline });
@@ -36753,6 +36950,7 @@ export async function registerRoutes(
           requiredBitDepth: body.data.requiredBitDepth ?? null,
           requiredSampleRateHz: body.data.requiredSampleRateHz ?? null,
           maxSideSeconds: maxSideSeconds as any,
+          interTrackGapSeconds: body.data.interTrackGapSeconds ?? null,
           notes: body.data.notes ?? null,
         },
         req.session.userId ?? null,

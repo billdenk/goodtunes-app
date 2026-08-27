@@ -76,6 +76,17 @@ export type VendorSpec = {
     requiredSampleRateHz?: number | null;
     /** Per-side max length (in seconds) per size + rpm. null = not stated. */
     maxSideSecondsBySizeRpm: Partial<Record<VinylSize, Partial<Record<VinylRpm, number>>>> | null;
+    /**
+     * Task #3413 — expected/max spacing the press cuts BETWEEN tracks on a
+     * side, in seconds. Folded into the side-length math as
+     * gap × (tracks − 1) so a side that only fits with zero spacing fails
+     * honestly. Optional/absent = no published gap → side-length math is
+     * unchanged (raw track sums, as today). No plant publishes one in its
+     * public docs, so every baseline leaves this undefined; per-press
+     * values arrive via the operator-editable press_audio_specs override
+     * (see resolveAudioSpec).
+     */
+    interTrackGapSeconds?: number | null;
     /** Hard rule: one audio file per side. */
     oneFilePerSide: boolean;
     /** Tracklist with side breaks and per-track times must be supplied. */
@@ -295,6 +306,9 @@ export type AudioSpecOverride = {
   requiredBitDepth?: number | null;
   requiredSampleRateHz?: number | null;
   maxSideSeconds?: Partial<Record<VinylSize, Partial<Record<VinylRpm, number>>>> | null;
+  // Task #3413 — expected/max inter-track gap seconds. Blank inherits the
+  // baseline (undefined everywhere today), so absent = gap-free math.
+  interTrackGapSeconds?: number | null;
 };
 
 const ALL_VINYL_SIZES: VinylSize[] = ['7"', '10"', '12"'];
@@ -338,6 +352,10 @@ export function resolveAudioSpec(
         ? override.requiredSampleRateHz
         : (base.requiredSampleRateHz ?? null),
     maxSideSecondsBySizeRpm: maxSide,
+    interTrackGapSeconds:
+      override.interTrackGapSeconds != null
+        ? override.interTrackGapSeconds
+        : (base.interTrackGapSeconds ?? null),
   };
 }
 

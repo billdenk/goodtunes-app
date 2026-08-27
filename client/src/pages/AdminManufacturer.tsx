@@ -4233,6 +4233,8 @@ type AudioBaseline = {
   requiredBitDepth: number | null;
   requiredSampleRateHz: number | null;
   maxSideSeconds: Record<string, Record<string, number>> | null;
+  // Task #3413 — press-specified spacing between tracks (seconds).
+  interTrackGapSeconds: number | null;
 };
 
 export function PressAudioSpecCard({ pressId }: { pressId: string }) {
@@ -4248,6 +4250,7 @@ export function PressAudioSpecCard({ pressId }: { pressId: string }) {
   const [bitDepth, setBitDepth] = useState("");
   const [sampleKhz, setSampleKhz] = useState("");
   const [grid, setGrid] = useState<Record<string, Record<string, string>>>({});
+  const [gapSecs, setGapSecs] = useState("");
   const [notes, setNotes] = useState("");
 
   // Rehydrate the draft from the saved row whenever it (re)loads. Seconds
@@ -4267,6 +4270,9 @@ export function PressAudioSpecCard({ pressId }: { pressId: string }) {
       }
     }
     setGrid(g);
+    setGapSecs(
+      (spec as any)?.interTrackGapSeconds != null ? String((spec as any).interTrackGapSeconds) : "",
+    );
     setNotes(spec?.notes ?? "");
   }, [spec]);
 
@@ -4284,10 +4290,12 @@ export function PressAudioSpecCard({ pressId }: { pressId: string }) {
       }
       const bd = bitDepth.trim() !== "" ? Number(bitDepth) : NaN;
       const khz = sampleKhz.trim() !== "" ? Number(sampleKhz) : NaN;
+      const gap = gapSecs.trim() !== "" ? Number(gapSecs) : NaN;
       const res = await apiRequest("PUT", `/api/admin/manufacturers/${pressId}/audio-spec`, {
         requiredBitDepth: Number.isFinite(bd) ? Math.round(bd) : null,
         requiredSampleRateHz: Number.isFinite(khz) ? Math.round(khz * 1000) : null,
         maxSideSeconds: Object.keys(maxSideSeconds).length > 0 ? maxSideSeconds : null,
+        interTrackGapSeconds: Number.isFinite(gap) && gap >= 0 ? gap : null,
         notes: notes.trim() !== "" ? notes.trim() : null,
       });
       return res.json();
@@ -4374,6 +4382,27 @@ export function PressAudioSpecCard({ pressId }: { pressId: string }) {
           />
           <span className="text-xs text-slate-400" data-testid="text-audio-sample-rate-default">
             Default: {rateDefault}
+          </span>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">Gap between tracks (seconds)</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="0.5"
+            min={0}
+            max={120}
+            value={gapSecs}
+            disabled={busy}
+            onChange={(e) => setGapSecs(e.target.value)}
+            placeholder="none"
+            className="w-32 rounded-md border border-slate-200 px-2 py-1 text-sm text-slate-800 focus:border-slate-400 focus:outline-none disabled:opacity-50"
+            data-testid="input-audio-gap-seconds"
+          />
+          <span className="text-xs text-slate-400" data-testid="text-audio-gap-default">
+            {baseline?.interTrackGapSeconds != null
+              ? `Default: ${baseline.interTrackGapSeconds}s`
+              : "Blank = side lengths sum tracks only"}
           </span>
         </label>
       </div>

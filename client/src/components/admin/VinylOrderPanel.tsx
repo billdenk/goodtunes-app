@@ -63,6 +63,12 @@ interface Props {
   // Task #2583 — previously-saved per-side catalog number overrides.
   // When a key is absent the side falls back to the auto-generated suggestion.
   vinylSideCatalogNumbers?: Record<string, string> | null;
+  // Task #3413 — press-specified spacing between tracks, in seconds
+  // (from the press's audio spec). Folded into each side's displayed
+  // runtime as gap × (tracks − 1) so this panel and the preflight
+  // check agree on the honest side length. null/undefined = no spec →
+  // raw track sums, exactly the pre-gap behavior.
+  interTrackGapSeconds?: number | null;
 }
 
 // Task #2583 — Build the catalog number stem from the album title.
@@ -216,6 +222,7 @@ export function VinylOrderPanel({
   vinylFormat,
   physicalFormat,
   vinylSideCatalogNumbers,
+  interTrackGapSeconds,
 }: Props) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -628,6 +635,16 @@ export function VinylOrderPanel({
       const s = songsById.get(id);
       return sum + (s?.duration ?? 0);
     }, 0);
+  // Task #3413 — honest side length: real sides need press-specified
+  // spacing between tracks, so fold gap × (tracks − 1) into the runtime
+  // this panel displays and warns on. Matches the preflight validator's
+  // gapAwareSideSeconds math exactly. No press gap spec = raw sums.
+  const gapSec =
+    typeof interTrackGapSeconds === "number" && interTrackGapSeconds > 0
+      ? interTrackGapSeconds
+      : null;
+  const sideEffectiveSeconds = (side: VinylSide): number =>
+    sideTotalSeconds(side) + (gapSec ?? 0) * Math.max(0, working[side].length - 1);
 
   // Task #593 — solver lives in `shared/vinylSideSolver.ts`. The panel
   // only renders copy here; every suggestion the helper returns, if
@@ -689,7 +706,7 @@ export function VinylOrderPanel({
       {/* Per-side groups */}
       <div className="space-y-4">
         {sides.map((side) => {
-          const totalSec = sideTotalSeconds(side);
+          const totalSec = sideEffectiveSeconds(side);
           const overBudget = totalSec / 60 > rule.maxMinutesPerSide;
           const ids = working[side];
           // Task #2701 — the circle badge shows the DISC number (sides
@@ -793,6 +810,15 @@ export function VinylOrderPanel({
                     data-testid={`text-side-runtime-${side}`}
                   >
                     {formatRuntime(totalSec)} / {rule.maxMinutesPerSide}:00 max
+                    {gapSec != null && working[side].length > 1 && (
+                      <span
+                        className="ml-1 text-xs text-slate-400 font-normal"
+                        title={`Includes ${gapSec}s of press-specified spacing between each pair of tracks (${working[side].length - 1} × ${gapSec}s).`}
+                        data-testid={`text-side-gap-note-${side}`}
+                      >
+                        (incl. {gapSec}s gaps)
+                      </span>
+                    )}
                   </span>
                   {overBudget && (
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
@@ -883,7 +909,11 @@ export function VinylOrderPanel({
         className="flex items-center justify-between gap-3"
         data-testid="toolbar-vinyl-history"
       >
-        <p className="text-xs text-slate-400">Thresholds are industry defaults.</p>
+        <p className="text-xs text-slate-400">
+          {gapSec != null
+            ? `Runtimes include the press's ${gapSec}s spacing between tracks.`
+            : "Thresholds are industry defaults."}
+        </p>
         {!resetConfirm ? (
           <div className="flex items-center gap-1.5">
             <Button

@@ -8735,6 +8735,50 @@ SQL
 migrate_press_audio_specs dev  "${DATABASE_URL:-}"
 migrate_press_audio_specs prod "${PROD_DATABASE_URL:-}"
 
+# Task #3413 — honest side lengths: (1) per-press expected/max inter-track
+# gap seconds on press_audio_specs (folded into the side-length preflight
+# math as gap × (tracks − 1); NULL = unchanged gap-free math), and (2)
+# album_side_masters — one master file per vinyl side with duration +
+# silence measurements taken at attach time, consumed by preflight to flag
+# probable missing tracks and oversized gaps.
+migrate_side_length_honesty() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping side-length-honesty migration on $label (no URL set)"
+    return 0
+  fi
+  if psql "$url" -v ON_ERROR_STOP=1 <<'SQL' >/dev/null 2>&1
+BEGIN;
+ALTER TABLE press_audio_specs
+  ADD COLUMN IF NOT EXISTS inter_track_gap_seconds double precision;
+CREATE TABLE IF NOT EXISTS album_side_masters (
+  id                  varchar PRIMARY KEY DEFAULT gen_random_uuid(),
+  album_id            varchar NOT NULL,
+  side                varchar NOT NULL,
+  asset_url           text NOT NULL,
+  file_name           text,
+  duration_seconds    double precision,
+  audio_format        text,
+  sample_rate         integer,
+  bit_depth           integer,
+  bytes               integer,
+  silences            jsonb,
+  uploaded_by_user_id varchar,
+  created_at          timestamp NOT NULL DEFAULT now(),
+  updated_at          timestamp NOT NULL DEFAULT now(),
+  CONSTRAINT album_side_masters_album_side_uniq UNIQUE (album_id, side)
+);
+COMMIT;
+SQL
+  then
+    echo "post-merge: side-length-honesty migration ok on $label"
+  else
+    echo "post-merge: WARNING — side-length-honesty migration failed on $label (continuing)"
+  fi
+}
+migrate_side_length_honesty dev  "${DATABASE_URL:-}"
+migrate_side_length_honesty prod "${PROD_DATABASE_URL:-}"
+
 # Task #2109 — ONE-TIME seed: migrate MRP's measured artboard sizes (real
 # Nov-2025 print-ready files) into Memphis Record Pressing's catalog so the
 # one press we have confirmed data for is genuinely catalog-backed, not

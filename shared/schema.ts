@@ -3190,6 +3190,10 @@ export const pressAudioSpecs = pgTable("press_audio_specs", {
   maxSideSeconds: jsonb("max_side_seconds").$type<
     Partial<Record<VinylSize, Partial<Record<VinylRpm, number>>>>
   >(),
+  // Task #3413 — expected/max spacing the press cuts between tracks on a
+  // side, in seconds. Folded into the side-length preflight math as
+  // gap × (tracks − 1). NULL = no spec → gap-free math (unchanged results).
+  interTrackGapSeconds: doublePrecision("inter_track_gap_seconds"),
   notes: text("notes"),
   updatedByUserId: varchar("updated_by_user_id"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -3200,6 +3204,42 @@ export const insertPressAudioSpecSchema = createInsertSchema(pressAudioSpecs).om
   updatedAt: true,
 });
 export type InsertPressAudioSpec = z.infer<typeof insertPressAudioSpecSchema>;
+
+// Task #3413 — one master file per vinyl side ("Side A file / Side B file"),
+// the way professional artists usually deliver. Duration + silence scan are
+// measured ONCE at attach time (ffprobe + ffmpeg silencedetect) and stored
+// here; the masters preflight consumes the stored numbers (buffer-free, same
+// philosophy as songs.audio_* columns). One row per (album, side) — a
+// re-attach replaces the row.
+export const albumSideMasters = pgTable(
+  "album_side_masters",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    albumId: varchar("album_id").notNull(),
+    side: varchar("side").notNull(), // "A" | "B" | "C" | "D"
+    assetUrl: text("asset_url").notNull(), // /objects/uploads/<id>
+    fileName: text("file_name"),
+    durationSeconds: doublePrecision("duration_seconds"),
+    audioFormat: text("audio_format"), // ffprobe codec_name
+    sampleRate: integer("sample_rate"),
+    bitDepth: integer("bit_depth"),
+    bytes: integer("bytes"),
+    // Measured silences from ffmpeg silencedetect (full-file scan).
+    // NULL = scan never ran / failed; [] = scan ran, no silences found.
+    silences: jsonb("silences").$type<Array<{ start: number; end: number; duration: number }> | null>(),
+    uploadedByUserId: varchar("uploaded_by_user_id"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => ({
+    albumSideUniq: unique("album_side_masters_album_side_uniq").on(t.albumId, t.side),
+  }),
+);
+export type AlbumSideMaster = typeof albumSideMasters.$inferSelect;
+export type InsertAlbumSideMaster = Omit<
+  typeof albumSideMasters.$inferInsert,
+  "id" | "createdAt" | "updatedAt"
+>;
 
 // Task #670 — audit log for automated pricing imports (Hellbender's
 // Shopify scrape today; future MRP/PMP sync rows land here too).

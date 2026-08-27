@@ -315,6 +315,65 @@ export type SideBreakInput = {
   trackTimesSeconds: number[]; // per-track durations on this side
 };
 
+// Task #3413 — one shared side-length evaluator so `validateAudio` and
+// `validateAudioFromSpecs` can never drift apart. When the resolved spec
+// carries an inter-track gap (press_audio_specs override), each side's
+// effective length is sum(tracks) + gap × (tracks − 1) — the spacing the
+// press will actually cut. When no gap is on file (every press today
+// unless an operator records one) the math and the message text are
+// byte-identical to the pre-gap behavior.
+export function gapAwareSideSeconds(
+  trackTimesSeconds: number[],
+  gapSeconds: number | null | undefined,
+): number {
+  const raw = trackTimesSeconds.reduce((a, b) => a + b, 0);
+  const gap = gapSeconds ?? 0;
+  return raw + gap * Math.max(0, trackTimesSeconds.length - 1);
+}
+
+function sideLengthCheck(
+  sideBreaks: SideBreakInput[] | undefined,
+  maxSide: number | null,
+  gapSeconds: number | null | undefined,
+  ctx: { pressName: string; vinylSize: VinylSize; rpm: VinylRpm; genericNote: string },
+): CheckResult | null {
+  const { pressName, vinylSize, rpm, genericNote } = ctx;
+  const gap = gapSeconds ?? null;
+  if (sideBreaks && sideBreaks.length > 0 && maxSide != null) {
+    let worstOver = 0;
+    let worstSide = "";
+    let worstGapCount = 0;
+    for (const sb of sideBreaks) {
+      const total = gapAwareSideSeconds(sb.trackTimesSeconds, gap);
+      if (total > maxSide && total - maxSide > worstOver) {
+        worstOver = total - maxSide;
+        worstSide = sb.side;
+        worstGapCount = Math.max(0, sb.trackTimesSeconds.length - 1);
+      }
+    }
+    // Only mention gaps when a press gap spec actually shaped the math.
+    const gapNote =
+      gap != null && gap > 0
+        ? ` (incl. ${pressName}'s ${gap}s spacing between tracks)`
+        : "";
+    if (worstOver > 0) {
+      const failGapNote =
+        gap != null && gap > 0 && worstGapCount > 0
+          ? ` (incl. ${worstGapCount} × ${gap}s spacing between tracks)`
+          : "";
+      return { key: "audio.side_length", label: "Side length", status: "fail",
+        message: `Side ${worstSide} exceeds ${pressName}'s ${fmtMinSec(maxSide)} max for ${vinylSize} @ ${rpm} RPM by ${fmtMinSec(worstOver)}${failGapNote}.${genericNote}` };
+    }
+    return { key: "audio.side_length", label: "Side length", status: "pass",
+      message: `All sides within ${fmtMinSec(maxSide)} max for ${vinylSize} @ ${rpm} RPM${gapNote}.` };
+  }
+  if (maxSide != null) {
+    return { key: "audio.side_length", label: "Side length", status: "warn",
+      message: `Supply a side-break tracklist to verify against ${fmtMinSec(maxSide)} max for ${vinylSize} @ ${rpm} RPM.` };
+  }
+  return null;
+}
+
 export type ValidateAudioOpts = {
   vendorId: VendorId;
   vinylSize: VinylSize;
@@ -424,30 +483,14 @@ export async function validateAudio(buf: Buffer, opts: ValidateAudioOpts): Promi
       message: "Sample rate not declared in the file header." });
   }
 
-  // 4. Per-side length (when we have a side-breaks tracklist)
+  // 4. Per-side length (when we have a side-breaks tracklist) — Task
+  // #3413: folds the press's inter-track gap spec into the math.
   const maxTable = audio.maxSideSecondsBySizeRpm;
   const maxSide = maxTable?.[opts.vinylSize]?.[opts.rpm] ?? null;
-  if (opts.sideBreaks && opts.sideBreaks.length > 0 && maxSide != null) {
-    let worstOver = 0;
-    let worstSide = "";
-    for (const sb of opts.sideBreaks) {
-      const total = sb.trackTimesSeconds.reduce((a, b) => a + b, 0);
-      if (total > maxSide && total - maxSide > worstOver) {
-        worstOver = total - maxSide;
-        worstSide = sb.side;
-      }
-    }
-    if (worstOver > 0) {
-      checks.push({ key: "audio.side_length", label: "Side length", status: "fail",
-        message: `Side ${worstSide} exceeds ${pressName}'s ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM by ${fmtMinSec(worstOver)}.${genericNote}` });
-    } else {
-      checks.push({ key: "audio.side_length", label: "Side length", status: "pass",
-        message: `All sides within ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM.` });
-    }
-  } else if (maxSide != null) {
-    checks.push({ key: "audio.side_length", label: "Side length", status: "warn",
-      message: `Supply a side-break tracklist to verify against ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM.` });
-  }
+  const sideLen = sideLengthCheck(opts.sideBreaks, maxSide, audio.interTrackGapSeconds ?? null, {
+    pressName, vinylSize: opts.vinylSize, rpm: opts.rpm, genericNote,
+  });
+  if (sideLen) checks.push(sideLen);
 
   // 5. One file per side — we can't enforce across uploads in a single
   // call, but if `side` is missing we surface a warn.
@@ -620,30 +663,14 @@ export function validateAudioFromSpecs(
       message: "Sample rate not on file — re-probe the master." });
   }
 
-  // 4. Per-side length (when caller supplies side-breaks)
+  // 4. Per-side length (when caller supplies side-breaks) — Task #3413:
+  // folds the press's inter-track gap spec into the math.
   const maxTable = audio.maxSideSecondsBySizeRpm;
   const maxSide = maxTable?.[opts.vinylSize]?.[opts.rpm] ?? null;
-  if (opts.sideBreaks && opts.sideBreaks.length > 0 && maxSide != null) {
-    let worstOver = 0;
-    let worstSide = "";
-    for (const sb of opts.sideBreaks) {
-      const total = sb.trackTimesSeconds.reduce((a, b) => a + b, 0);
-      if (total > maxSide && total - maxSide > worstOver) {
-        worstOver = total - maxSide;
-        worstSide = sb.side;
-      }
-    }
-    if (worstOver > 0) {
-      checks.push({ key: "audio.side_length", label: "Side length", status: "fail",
-        message: `Side ${worstSide} exceeds ${pressName}'s ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM by ${fmtMinSec(worstOver)}.${genericNote}` });
-    } else {
-      checks.push({ key: "audio.side_length", label: "Side length", status: "pass",
-        message: `All sides within ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM.` });
-    }
-  } else if (maxSide != null) {
-    checks.push({ key: "audio.side_length", label: "Side length", status: "warn",
-      message: `Supply a side-break tracklist to verify against ${fmtMinSec(maxSide)} max for ${opts.vinylSize} @ ${opts.rpm} RPM.` });
-  }
+  const sideLen = sideLengthCheck(opts.sideBreaks, maxSide, audio.interTrackGapSeconds ?? null, {
+    pressName, vinylSize: opts.vinylSize, rpm: opts.rpm, genericNote,
+  });
+  if (sideLen) checks.push(sideLen);
 
   // 5. One file per side
   if (audio.oneFilePerSide) {
@@ -703,6 +730,177 @@ export function upcPreflightCheck(
     message:
       "No UPC on the vinyl SKU. Retail/distribution jackets usually need a UPC-A barcode printed on the packaging — add one on the Package tab's format row before pressing. (Warning only — pressing is not blocked.)",
   };
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Task #3413 — side-file master analysis. Professional artists often
+// deliver ONE file per vinyl side instead of per-song masters. These pure
+// functions compare a measured side file against the expected tracklist so
+// preflight can flag a probably-missing track and gaps cut wider than the
+// press's spacing spec. The route measures (ffprobe duration + ffmpeg
+// silencedetect) at attach time and stores the numbers; analysis here is
+// deterministic and testable with no audio tooling.
+
+export type MeasuredSilence = {
+  start: number; // seconds from file start
+  end: number;
+  duration: number;
+};
+
+// Parse ffmpeg silencedetect stderr into measured silences. Lines look like:
+//   [silencedetect @ 0x...] silence_start: 245.13
+//   [silencedetect @ 0x...] silence_end: 255.21 | silence_duration: 10.08
+// A trailing silence_start with no matching end (file ends silent) is
+// closed at `totalDuration` when provided, else dropped.
+export function parseSilencedetectOutput(
+  stderr: string,
+  totalDuration?: number | null,
+): MeasuredSilence[] {
+  const out: MeasuredSilence[] = [];
+  let pendingStart: number | null = null;
+  const re = /silence_(start|end):\s*(-?[\d.]+)(?:\s*\|\s*silence_duration:\s*([\d.]+))?/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(stderr)) !== null) {
+    const kind = m[1];
+    const v = parseFloat(m[2]);
+    if (!Number.isFinite(v)) continue;
+    if (kind === "start") {
+      pendingStart = Math.max(0, v);
+    } else {
+      const dur = m[3] != null ? parseFloat(m[3]) : pendingStart != null ? v - pendingStart : NaN;
+      const start = pendingStart != null ? pendingStart : Number.isFinite(dur) ? v - dur : null;
+      if (start != null && Number.isFinite(dur) && dur > 0) {
+        out.push({ start, end: v, duration: dur });
+      }
+      pendingStart = null;
+    }
+  }
+  if (pendingStart != null && totalDuration != null && totalDuration > pendingStart) {
+    out.push({ start: pendingStart, end: totalDuration, duration: totalDuration - pendingStart });
+  }
+  return out;
+}
+
+// Silences that sit BETWEEN tracks — ignore lead-in and run-out quiet at
+// the very edges of the side file so a mastered 2s lead-in doesn't read
+// as an oversized gap.
+export function interiorSilences(
+  silences: MeasuredSilence[],
+  totalDuration: number | null,
+): MeasuredSilence[] {
+  return silences.filter((s) => {
+    if (s.start <= 0.5) return false; // lead-in
+    if (totalDuration != null && s.end >= totalDuration - 0.5) return false; // run-out
+    return true;
+  });
+}
+
+export type SideFileAnalysisInput = {
+  side: string; // "A", "B", …
+  durationSeconds: number | null; // measured file duration (ffprobe)
+  silences: MeasuredSilence[] | null; // measured silences (silencedetect), null = scan unavailable
+};
+
+export type SideFileAnalysisOpts = {
+  /** Durations of this side's tracks, in vinyl order (from the tracklist). */
+  expectedTrackSeconds: number[];
+  /** Press inter-track gap spec seconds; null = no spec on file. */
+  gapSeconds: number | null;
+  /** Format limit for this size+rpm; null = no published limit. */
+  maxSideSeconds: number | null;
+  pressName: string;
+  vinylSize: VinylSize;
+  rpm: VinylRpm;
+  genericNote?: string;
+};
+
+// Tolerance for "matches the expected total": scales gently with track
+// count so a 12-track side isn't held to single-second precision.
+function durationToleranceSeconds(trackCount: number): number {
+  return Math.max(8, 2 * trackCount);
+}
+
+export function analyzeSideFile(
+  input: SideFileAnalysisInput,
+  opts: SideFileAnalysisOpts,
+): CheckResult[] {
+  const checks: CheckResult[] = [];
+  const side = input.side;
+  const genericNote = opts.genericNote ?? "";
+  const tracks = opts.expectedTrackSeconds;
+  const gap = opts.gapSeconds;
+  const measured = input.durationSeconds;
+
+  // 1. Duration vs the expected tracklist total (tracks + press gaps).
+  const expected = gapAwareSideSeconds(tracks, gap);
+  if (measured == null) {
+    checks.push({ key: "sidefile.duration", label: `Side ${side} file duration`, status: "warn",
+      message: `Couldn't measure the Side ${side} master file's duration — verify the file isn't corrupt.` });
+  } else if (tracks.length === 0) {
+    checks.push({ key: "sidefile.duration", label: `Side ${side} file duration`, status: "warn",
+      message: `Side ${side} master runs ${fmtMinSec(measured)}, but no tracks are assigned to Side ${side} in the vinyl order — assign tracks so the file can be verified.` });
+  } else {
+    const tol = durationToleranceSeconds(tracks.length);
+    const deficit = expected - measured;
+    if (deficit > tol) {
+      // Short side — does the shortfall look like a whole track?
+      const matchesATrack = tracks.some(
+        (t) => t > 0 && Math.abs(deficit - t) <= Math.max(10, 0.25 * t),
+      );
+      const gapNote = gap != null && gap > 0 ? ` incl. ${gap}s gaps` : "";
+      if (matchesATrack || deficit > Math.min(...tracks.filter((t) => t > 0), Infinity)) {
+        checks.push({ key: "sidefile.duration", label: `Side ${side} file duration`, status: "fail",
+          message: `A track may be missing from Side ${side} — the master file runs ${fmtMinSec(measured)} but the tracklist expects ${fmtMinSec(expected)}${gapNote} (short by ${fmtMinSec(deficit)}, about one track's length). Please verify every track is in the file.${genericNote}` });
+      } else {
+        checks.push({ key: "sidefile.duration", label: `Side ${side} file duration`, status: "warn",
+          message: `Side ${side} master runs ${fmtMinSec(measured)} — ${fmtMinSec(deficit)} shorter than the tracklist total of ${fmtMinSec(expected)}${gapNote}. Verify track times and spacing.${genericNote}` });
+      }
+    } else if (measured - expected > tol) {
+      checks.push({ key: "sidefile.duration", label: `Side ${side} file duration`, status: "warn",
+        message: `Side ${side} master runs ${fmtMinSec(measured)} — ${fmtMinSec(measured - expected)} longer than the tracklist total of ${fmtMinSec(expected)}${gap != null && gap > 0 ? ` incl. ${gap}s gaps` : ""}. Check for extra material or wider-than-spec gaps.${genericNote}` });
+    } else {
+      checks.push({ key: "sidefile.duration", label: `Side ${side} file duration`, status: "pass",
+        message: `Side ${side} master runs ${fmtMinSec(measured)} — matches the tracklist total of ${fmtMinSec(expected)}${gap != null && gap > 0 ? ` incl. ${gap}s gaps` : ""}.` });
+    }
+  }
+
+  // 2. Measured inter-track gaps vs the press's spacing spec.
+  if (input.silences != null) {
+    const interior = interiorSilences(input.silences, measured);
+    if (gap != null && gap > 0) {
+      const over = interior.filter((s) => s.duration > gap + 1); // 1s grace
+      if (over.length > 0) {
+        const longest = Math.max(...over.map((s) => s.duration));
+        const at = over
+          .slice(0, 4)
+          .map((s) => `${fmtMinSec(s.start)} (${s.duration.toFixed(1)}s)`)
+          .join(", ");
+        checks.push({ key: "sidefile.gaps", label: `Side ${side} track gaps`, status: "warn",
+          message: `${over.length} gap${over.length === 1 ? "" : "s"} between tracks on Side ${side} exceed${over.length === 1 ? "s" : ""} ${opts.pressName}'s ${gap}s spacing spec (longest ${longest.toFixed(1)}s; at ${at}).${measured != null ? ` Effective side length ${fmtMinSec(measured)}.` : ""}${genericNote}` });
+      } else {
+        checks.push({ key: "sidefile.gaps", label: `Side ${side} track gaps`, status: "pass",
+          message: `Measured gaps between tracks on Side ${side} are within ${opts.pressName}'s ${gap}s spacing spec.` });
+      }
+    } else if (interior.length > 0) {
+      const longest = Math.max(...interior.map((s) => s.duration));
+      checks.push({ key: "sidefile.gaps", label: `Side ${side} track gaps`, status: "pass",
+        message: `${interior.length} gap${interior.length === 1 ? "" : "s"} measured between tracks on Side ${side} (longest ${longest.toFixed(1)}s). No press spacing spec on file.` });
+    }
+  }
+
+  // 3. Measured side length vs the format limit — the file IS the side,
+  // so its duration is the honest side length regardless of tracklist math.
+  if (measured != null && opts.maxSideSeconds != null) {
+    if (measured > opts.maxSideSeconds) {
+      checks.push({ key: "sidefile.side_length", label: `Side ${side} measured length`, status: "fail",
+        message: `Side ${side} master runs ${fmtMinSec(measured)} — exceeds ${opts.pressName}'s ${fmtMinSec(opts.maxSideSeconds)} max for ${opts.vinylSize} @ ${opts.rpm} RPM by ${fmtMinSec(measured - opts.maxSideSeconds)}.${genericNote}` });
+    } else {
+      checks.push({ key: "sidefile.side_length", label: `Side ${side} measured length`, status: "pass",
+        message: `Side ${side} master runs ${fmtMinSec(measured)} of ${fmtMinSec(opts.maxSideSeconds)} max for ${opts.vinylSize} @ ${opts.rpm} RPM.` });
+    }
+  }
+
+  return checks;
 }
 
 export { rollupStatus };
