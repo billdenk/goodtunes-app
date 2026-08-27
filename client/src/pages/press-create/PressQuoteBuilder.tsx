@@ -30,7 +30,7 @@ import { useAdminDark } from '@/lib/adminAppearance';
 import { PRESS_MARK_ON_DARK, PRESS_MARK_ON_LIGHT } from '@/lib/pressMark';
 import type { PressComponentsPayload } from '@shared/pressComponents';
 import { makeQuotePricer, pendingLines, scaledUnitDollars, computeSetupLines, polyBagUnitLine, type QuoteLine } from './quotePricing';
-import { PressLogoImg, usePressBrand, usePressCatalogSwatches } from './PressPackageBuilder';
+import { PressLogoImg, usePressBrand, usePressCatalogSwatches, QtyStageFitScale, QTY_STAGE_W } from './PressPackageBuilder';
 import californialandCover from './assets/californialand-cover.jpg';
 import californialandInnerSleeve from './assets/californialand-inner-sleeve.png';
 import rubyVinylPhoto from './assets/mrp-ruby-translucent.png';
@@ -3595,7 +3595,8 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                     up front, inner sleeve a sliver + record peeking like the
                     Niina/Californialand card. Hover slides the sleeve out to a
                     full peek and the record further; off-hover they tuck back. */}
-                <div className="relative group" style={{ width: JS_BASE + 140, maxWidth: '100%', height: JS_BASE + 12, overflow: 'clip' }} data-testid="qty-album-stage">
+                <QtyStageFitScale naturalWidth={QTY_STAGE_W}>
+                <div className="relative group" style={{ width: QTY_STAGE_W, height: JS_BASE + 12, overflow: 'clip' }} data-testid="qty-album-stage">
                   {/* record — the real VinylDisc render of the chosen color
                       (splatter layers and all), peeking right of the jacket */}
                   <div
@@ -3673,6 +3674,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                     )}
                   </div>
                 </div>
+                </QtyStageFitScale>
                 <p className="text-[12px] text-center" style={{ marginTop: 6, maxWidth: 360, color: '#a1a1a6' }}>
                   {useArtistArt ? 'Artist temp artwork for this estimate' : `${pressBrandName} house artwork by default`}
                   <span className="qty-hover-instruction"> — hover to slide the sleeve and record out.</span>

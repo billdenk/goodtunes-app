@@ -15,7 +15,7 @@
 // A frosted running-total bar stays pinned at the top.
 // Components below are copied verbatim from their donor files.
 
-import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, createContext, useContext, type ReactNode, type CSSProperties } from 'react';
 import {
   RotateCcw,
   Eye,
@@ -804,7 +804,37 @@ const JACKET_CATALOG: Record<string, JacketOption[]> = {
 
 const GATEFOLD_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)';
 const JS_BASE = 321;
+// Qty-step album stage width: must fit the record's fully-slid-out hover
+// position (left 140 + disc width (JS_BASE - 16) + 44px hover slide + 8px
+// rewind-button overhang) or the stage's `overflow: clip` slices the disc.
+export const QTY_STAGE_W = JS_BASE + 176;
 const THUMB = 64;
+
+// Fixed-px stages must scale down as a unit when the column is narrower than
+// the stage, instead of letting absolutely-positioned children overflow the
+// clip box (same pattern as the press catalog's FitScale). Exported so the
+// Quote Builder's verbatim qty-step copy stays in lockstep.
+export function QtyStageFitScale({ naturalWidth, children }: { naturalWidth: number; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      setScale(w > 0 ? Math.min(1, w / naturalWidth) : 1);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [naturalWidth]);
+  return (
+    <div ref={ref} className="w-full min-w-0 flex justify-center">
+      <div style={scale < 1 ? ({ zoom: scale } as CSSProperties) : undefined}>{children}</div>
+    </div>
+  );
+}
 const THUMB_LOGO = 0.52;
 
 function JacketThumbnail({ jacket, size = THUMB }: { jacket: JacketOption; size?: number }) {
@@ -4020,7 +4050,8 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                     up front, inner sleeve a sliver + record peeking like the
                     Niina/Californialand card. Hover slides the sleeve out to a
                     full peek and the record further; off-hover they tuck back. */}
-                <div className="relative group" style={{ width: JS_BASE + 140, maxWidth: '100%', height: JS_BASE + 12, overflow: 'clip' }} data-testid="qty-album-stage">
+                <QtyStageFitScale naturalWidth={QTY_STAGE_W}>
+                <div className="relative group" style={{ width: QTY_STAGE_W, height: JS_BASE + 12, overflow: 'clip' }} data-testid="qty-album-stage">
                   {/* record — the real VinylDisc render of the chosen color
                       (splatter layers and all), peeking right of the jacket */}
                   <div
@@ -4098,6 +4129,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                     )}
                   </div>
                 </div>
+                </QtyStageFitScale>
                 <p className="text-[12px] text-center" style={{ marginTop: 6, maxWidth: 360, color: '#a1a1a6' }}>
                   {useArtistArt ? 'Artist temp artwork for this estimate' : `${pressBrandName} house artwork by default`}
                   <span className="qty-hover-instruction"> — hover to slide the sleeve and record out.</span>
