@@ -26232,6 +26232,11 @@
   {
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "className=\"text-[12px] font-medium text-center\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
     "snippet": "<p className=\"text-[12.5px]\" style={{ marginTop: 10, color: SUBINK }}>"
   },
   {
@@ -26278,6 +26283,11 @@
     "rule": "hardcoded-font-size",
     "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
     "snippet": "className=\"text-[13px] font-medium focus:outline-none\""
+  },
+  {
+    "rule": "hardcoded-font-size",
+    "file": "client/src/pages/press-create/PressPackageBuilder.tsx",
+    "snippet": "className=\"text-[12.5px] font-medium\""
   },
   {
     "rule": "hardcoded-font-size",

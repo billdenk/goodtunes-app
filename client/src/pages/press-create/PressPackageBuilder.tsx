@@ -684,7 +684,22 @@ export function usePressCatalogSwatches(): { colors: QuoteSwatch[]; types: { id:
   );
 }
 
-// Type card — mini disc + name + color count (mirrors the color-setup type row).
+export function resolveSavedSwatch(
+  catalog: QuoteSwatch[],
+  savedId: string | null | undefined,
+  savedName?: string | null,
+): QuoteSwatch | null {
+  if (savedId) {
+    const byId = catalog.find((c) => c.id === savedId);
+    if (byId) return byId;
+  }
+  const name = savedName?.trim().toLowerCase();
+  if (name) {
+    const byName = catalog.find((c) => c.name.trim().toLowerCase() === name);
+    if (byName) return byName;
+  }
+  return null;
+}
 function TypeCard({ name, count, swatch, active, onSelect }: {
   name: string; count: number; swatch: QuoteSwatch; active: boolean; onSelect: () => void;
 }) {
@@ -2911,7 +2926,7 @@ type EstimateRow = {
   displayId?: string;
   title: string;
   status: string;
-  payload?: { builderState?: BuilderState; summary?: string; perUnitCents?: number; note?: string } | null;
+  payload?: { builderState?: BuilderState; summary?: string; perUnitCents?: number; note?: string; colorSnapshot?: { name?: string; base?: string; photo?: string } | null } | null;
   updatedAt?: string;
 };
 
@@ -2928,13 +2943,25 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
   const pricingTable = applyComponentPricing(components);
 
   // Existing package rows (for hydrate-on-open + save/PUT).
-  const { data: packageList } = useQuery<{ rows: EstimateRow[] }>({
+  const { data: packageList, isFetching: packageListFetching } = useQuery<{ rows: EstimateRow[] }>({
     queryKey: [packagesKey],
   });
 
   // The persisted row id we PUT against once created/opened.
   const [rowId, setRowId] = useState<string | null>(packageId);
   const hydratedRef = useRef(false);
+  // Hydration completion as STATE (not just the ref): effects that must run
+  // strictly AFTER the restored selections have rendered (the catalog snap
+  // below) gate on this. A ref flips synchronously inside the same commit,
+  // so a sibling effect would still see the PRE-hydration colorId and snap
+  // the saved color away to the first catalog color (Task #3437 — PMP's
+  // "250 Special" opened Classic Black instead of the saved Clear Red).
+  const [hydrated, setHydrated] = useState(false);
+  // Saved-color snapshot from the opened row (id + kind from builderState,
+  // name/swatch from payload.colorSnapshot or the summary line) — keeps the
+  // saved color resolvable by name and honestly displayable if the catalog
+  // no longer carries it.
+  const [savedColorSnapshot, setSavedColorSnapshot] = useState<SavedColorSnapshot | null>(null);
 
   // ── Shared state — the record size flows through every section ──
   const [sizeId, setSizeId] = useState<SizeId>('12');
@@ -3015,13 +3042,23 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
   // ── Hydrate on open: find the row by id, restore builderState if present ──
   useEffect(() => {
     if (hydratedRef.current) return;
-    if (packageId == null) { hydratedRef.current = true; return; }
+    if (packageId == null) { hydratedRef.current = true; setHydrated(true); return; }
     const rows = packageList?.rows;
     if (!rows) return; // list not loaded yet
     const row = rows.find((r) => r.id === packageId);
+    if (!row) {
+      // Latch fix (Task #3437): a stale/partial cached list may not carry the
+      // target row yet. Only give up once the fetch has settled and the row
+      // is definitively absent — latching on a stale cache would skip
+      // hydration forever and open the builder on the fresh defaults.
+      if (packageListFetching) return;
+      hydratedRef.current = true;
+      setHydrated(true);
+      return;
+    }
     hydratedRef.current = true;
-    const bs = row?.payload?.builderState;
-    if (!bs) return; // no saved state -> start fresh
+    const bs = row.payload?.builderState;
+    if (!bs) { setHydrated(true); return; } // no saved state -> start fresh
     setRowId(row!.id);
     setSizeId(bs.sizeId);
     setDiscs(bs.discs);
@@ -3047,10 +3084,28 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
     setCardSell(bs.cardSell ?? '');
     setCardCoverId(bs.cardCoverId ?? 'match');
     setCustomUploaded(bs.customUploaded ?? bs.cardCoverId === 'custom');
+    // Remember what the saved color WAS (name/swatch), independent of what
+    // the live catalog carries today. New saves write payload.colorSnapshot;
+    // legacy rows fall back to the color name embedded in the summary line.
+    const snap = row.payload?.colorSnapshot;
+    // Name fallback chain: explicit snapshot → summary line → the demo set
+    // (very old rows saved demo ids like BK1/SP2 before presses had real
+    // catalogs; the demo set still knows those ids' names).
+    setSavedColorSnapshot({
+      id: bs.colorId,
+      kind: bs.colorKind,
+      name:
+        snap?.name ??
+        parseSummaryColorName(row.payload?.summary) ??
+        CATALOG_COLORS.find((c) => c.id === bs.colorId)?.name,
+      base: snap?.base,
+      photo: snap?.photo,
+    });
     // Edit mode opens with the type grid folded and edit-mode header grammar.
     setTypeOpen(false);
     setOpenedRow({ title: row!.title, status: row!.status, updatedAt: row!.updatedAt });
-  }, [packageId, packageList]);
+    setHydrated(true);
+  }, [packageId, packageList, packageListFetching]);
 
   // First-time picks glide the page down to the step that just unlocked.
   const goTo = (id: string) => {
@@ -3063,25 +3118,54 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
   // ── Derived options per size ── (colors come from the press's own catalog)
   const { colors: pressColors, types: pressColorTypes, fromCatalog, resolved: catalogResolved } = usePressCatalogSwatches();
   const colors = pressColors.filter((c) => c.sizes.includes(sizeId));
-  const color = colors.find((c) => c.id === colorId) ?? colors[0] ?? pressColors[0] ?? CATALOG_COLORS[0];
+  // Resolve the CURRENT selection the same way the Packages index card does —
+  // by id against the FULL catalog (never just the size-filtered slice), then
+  // by the saved name snapshot (Task #3437). The old size-filtered
+  // `colors.find(...) ?? colors[0]` silently displayed the first catalog
+  // color whenever the size filter disagreed with the card's lookup.
+  const savedNameForCurrent = savedColorSnapshot && savedColorSnapshot.id === colorId ? savedColorSnapshot.name : undefined;
+  const resolvedColor = resolveSavedSwatch(pressColors, colorId, savedNameForCurrent);
+  // A saved color the catalog no longer carries AT ALL is never substituted:
+  // show the saved snapshot with a "no longer offered" note until the press
+  // explicitly picks a replacement.
+  const savedGhost =
+    !resolvedColor && savedColorSnapshot && savedColorSnapshot.id === colorId
+      ? savedSnapshotSwatch(savedColorSnapshot, sizeId)
+      : null;
+  const color = resolvedColor ?? savedGhost ?? colors[0] ?? pressColors[0] ?? CATALOG_COLORS[0];
+  const colorUnavailable = Boolean(savedGhost);
 
   // Snap a stale/foreign selection (e.g. the old MRP demo ids) onto this
   // press's catalog — but ONLY after both the saved state has hydrated and
   // the catalog fetch has settled, or a slow fetch would clobber a valid
-  // saved color with the demo fallback (and vice versa).
+  // saved color with the demo fallback (and vice versa). Gates on the
+  // `hydrated` STATE so it can never run in the same commit as hydration
+  // with the pre-hydration colorId still in its closure (Task #3437).
   useEffect(() => {
-    if (!catalogResolved || !hydratedRef.current) return;
+    if (!catalogResolved || !hydrated) return;
     if (pressColors.length === 0) return;
-    const current = pressColors.find((c) => c.id === colorId);
-    if (!current) {
-      const fb = pressColors.find((c) => c.sizes.includes(sizeId)) ?? pressColors[0];
-      setColorId(fb.id);
-      setColorKind(fb.kind);
-    } else if (current.kind !== colorKind) {
-      setColorKind(current.kind);
+    const match = resolveSavedSwatch(
+      pressColors,
+      colorId,
+      savedColorSnapshot && savedColorSnapshot.id === colorId ? savedColorSnapshot.name : undefined,
+    );
+    if (match) {
+      // Name-matched under a drifted id — adopt the live catalog id so the
+      // swatch grid highlights it and the next save points at a real row.
+      if (match.id !== colorId) setColorId(match.id);
+      if (match.kind !== colorKind) setColorKind(match.kind);
+      return;
     }
+    // No match by id OR name. If this is the package's saved color, keep it
+    // (the snapshot ghost + note render instead) — NEVER silently substitute.
+    if (savedColorSnapshot && savedColorSnapshot.id === colorId) return;
+    // Otherwise (fresh builder's demo default, or a foreign id with nothing
+    // to display) — snap onto the catalog as before.
+    const fb = pressColors.find((c) => c.sizes.includes(sizeId)) ?? pressColors[0];
+    setColorId(fb.id);
+    setColorKind(fb.kind);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [catalogResolved, pressColors, colorId, colorKind, sizeId]);
+  }, [catalogResolved, hydrated, pressColors, colorId, colorKind, sizeId, savedColorSnapshot]);
 
   const jacketOptions = JACKET_CATALOG[sizeId] ?? JACKET_CATALOG['12'];
   const jacketType = jacketOptions.find((j) => j.id === jacketId) ?? jacketOptions[0];
@@ -3117,8 +3201,17 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
     advance('size', 'step-discs');
     mark('size');
     touch();
-    // colors: fall back to Classic Black when the color doesn't press this size
-    if (!pressColors.find((c) => c.id === colorId)?.sizes.includes(id)) {
+    // colors: fall back to the first available color when the current color
+    // doesn't press this size (a user-driven size change, not a silent swap).
+    // A "no longer offered" saved ghost stays put — the note keeps prompting
+    // for an explicit replacement instead of picking one behind their back.
+    const currentSwatch = resolveSavedSwatch(
+      pressColors,
+      colorId,
+      savedColorSnapshot && savedColorSnapshot.id === colorId ? savedColorSnapshot.name : undefined,
+    );
+    const keepGhost = !currentSwatch && savedColorSnapshot && savedColorSnapshot.id === colorId;
+    if (!keepGhost && !currentSwatch?.sizes.includes(id)) {
       const fb = pressColors.find((c) => c.sizes.includes(id)) ?? pressColors[0];
       if (fb) { setColorId(fb.id); setColorKind(fb.kind); }
     }
@@ -3359,6 +3452,11 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
           payload: {
             builderState,
             summary: buildSummary,
+            // Durable color snapshot (Task #3437) — name + swatch of the
+            // chosen color, OUTSIDE builderState (its shape stays put), so a
+            // reopen can resolve by name if the catalog id ever drifts and
+            // honestly display the color if the catalog drops it.
+            colorSnapshot: { name: color.name, base: color.base, ...(color.photo ? { photo: color.photo } : {}) },
             perUnitCents: Math.round(perUnit * 100),
             // Top-level card fields the packages index reads directly.
             sell: cardSell.trim(),
@@ -3424,7 +3522,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
               {picked('discs') && discs > 1 && (<><span style={{ color: '#d0d0d5' }}>·</span><span>{discs} LP</span></>)}
               {picked('qty') && (<><span style={{ color: '#d0d0d5' }}>·</span><span>{qty.toLocaleString()} units</span></>)}
               {picked('weight') && (<><span style={{ color: '#d0d0d5' }}>·</span><span>{weightId}g</span></>)}
-              {picked('color') && (<><span style={{ color: '#d0d0d5' }}>·</span><span className="truncate">{color.name}</span></>)}
+              {picked('color') && (<><span style={{ color: '#d0d0d5' }}>·</span><span className="truncate">{colorUnavailable ? `${color.name} (no longer offered)` : color.name}</span></>)}
               {picked('jacket') && (<><span style={{ color: '#d0d0d5' }}>·</span><span className="truncate">{jacketType.name}</span></>)}
             </>
           ) : (
@@ -3547,6 +3645,16 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                     <p className="text-[12px] text-center" style={{ marginTop: (picked('ctype') || picked('weight')) ? 6 : 28, color: '#a1a1a6' }}>
                       {sizeLabel}{picked('qty') ? ` · ${qty.toLocaleString()} units` : ''}
                     </p>
+                    {colorUnavailable && (
+                      <div
+                        className="text-[12px] font-medium text-center"
+                        style={{ marginTop: 10, maxWidth: 300, color: '#b45309' }}
+                        data-testid="color-unavailable-note"
+                      >
+                        &ldquo;{color.name}&rdquo; is no longer in your catalog. It stays
+                        selected until you pick a replacement below.
+                      </div>
+                    )}
                   </>
                 )}
                 </div>
@@ -3659,7 +3767,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                         <VinylDisc size={44} swatch={color} />
                         <div className="flex-1" style={{ minWidth: 0 }}>
                           <div className="text-[14px] font-semibold" style={{ color: INK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {pressColorTypes.find((t) => t.id === colorKind)?.name}
+                            {pressColorTypes.find((t) => t.id === colorKind)?.name ?? color.kindNote}
                           </div>
                           <div className="text-[11.5px]" style={{ marginTop: 1, color: '#a1a1a6' }}>
                             Type · {colors.filter((c) => c.kind === colorKind).length} colors
@@ -3718,9 +3826,19 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                   <StepHeading lead="Pick a color." rest="From your catalog." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     {picked('ctype')
-                      ? `${pressColorTypes.find((t) => t.id === colorKind)?.name} · ${colors.filter((c) => c.kind === colorKind).length} colors`
+                      ? `${pressColorTypes.find((t) => t.id === colorKind)?.name ?? color.kindNote} · ${colors.filter((c) => c.kind === colorKind).length} colors`
                       : 'Pick a type first.'}
                   </p>
+                  {colorUnavailable && (
+                    <p
+                      className="text-[12.5px] font-medium"
+                      style={{ marginTop: 8, color: '#b45309' }}
+                      data-testid="color-unavailable-note-picker"
+                    >
+                      Your saved color &ldquo;{color.name}&rdquo; is no longer offered — pick a
+                      replacement to update this package.
+                    </p>
+                  )}
                   <div style={{ marginTop: 16, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 12 }}>
                     {colors.filter((c) => c.kind === colorKind).map((c) => (
                       <ColorBallCard
@@ -4746,3 +4864,24 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
 }
 
 export default PressPackageBuilder;
+
+export function savedSnapshotSwatch(snap: SavedColorSnapshot, sizeId: SizeId): QuoteSwatch {
+  return {
+    id: snap.id,
+    name: snap.name ?? 'Saved color',
+    kind: snap.kind,
+    kindNote: 'No longer offered',
+    base: snap.base ?? '#111114',
+    photo: snap.photo,
+    sizes: [sizeId],
+    price: KIND_PRICE[snap.kind] ?? 2.6,
+  };
+}
+
+export type SavedColorSnapshot = { id: string; kind: SwatchKind; name?: string; base?: string; photo?: string };
+
+export function parseSummaryColorName(summary: string | null | undefined): string | undefined {
+  const first = (summary ?? '').split('·')[0] ?? '';
+  const m = /^\s*\d+\s*g\s+(.+?)\s+vinyl\s*$/i.exec(first.trim());
+  return m ? m[1].trim() : undefined;
+}

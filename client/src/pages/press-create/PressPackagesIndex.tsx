@@ -23,6 +23,9 @@ import {
   DEFAULT_KIND_MIN_QTY,
   usePressBrand,
   usePressCatalogSwatches,
+  resolveSavedSwatch,
+  savedSnapshotSwatch,
+  parseSummaryColorName,
 } from './PressPackageBuilder';
 
 type Swatch = (typeof CATALOG_COLORS)[number];
@@ -96,7 +99,26 @@ function fmt(n: number): string {
 function rowToPkg(row: EstimateRow, catalog: Swatch[]): Pkg {
   const p = row.payload ?? {};
   const bs = p.builderState ?? {};
-  const swatch = catalog.find((c) => c.id === bs.colorId) ?? CATALOG_COLORS.find((c) => c.id === bs.colorId) ?? catalog[0] ?? CATALOG_COLORS[0];
+  // Shared saved-color resolution (Task #3437) — same lookup the builder
+  // uses on Edit: id against the full catalog, then the saved name snapshot
+  // (payload.colorSnapshot on new saves, summary-line name on legacy rows).
+  // A color the catalog dropped entirely renders from its snapshot instead
+  // of silently borrowing another color's swatch.
+  const savedName: string | undefined =
+    p.colorSnapshot?.name ??
+    parseSummaryColorName(p.summary) ??
+    CATALOG_COLORS.find((c) => c.id === bs.colorId)?.name;
+  const swatch =
+    resolveSavedSwatch(catalog, bs.colorId, savedName) ??
+    CATALOG_COLORS.find((c) => c.id === bs.colorId) ??
+    (bs.colorId && bs.colorKind
+      ? savedSnapshotSwatch(
+          { id: bs.colorId, kind: bs.colorKind, name: savedName, base: p.colorSnapshot?.base, photo: p.colorSnapshot?.photo },
+          bs.sizeId ?? '12',
+        )
+      : null) ??
+    catalog[0] ??
+    CATALOG_COLORS[0];
   const minRun = Number(p.minRun ?? bs.minRunQty ?? DEFAULT_KIND_MIN_QTY[swatch.kind] ?? 300) || 300;
   const perUnitCents = Number(p.minPerUnitCents ?? p.perUnitCents ?? 0) || 0;
   const status: PkgStatus = row.status === 'live' ? 'live' : row.status === 'archived' ? 'archived' : 'draft';
