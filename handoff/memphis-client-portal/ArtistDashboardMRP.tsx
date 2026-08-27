@@ -21,7 +21,7 @@
 //   • ONE filled gold action on the page — the up-next step's upload.
 //   • "Estimate", never the q-word. Real ® character. No emojis.
 //
-// Client persona: artist Niina Soleil, project Customsland, 1,000 units at
+// Client persona: artist Niina Soleil, project Californialand, 1,000 units at
 // $8.37/unit, estimate 071500-02, run with Memphis Record Pressing via
 // mrp.pressesvinyl.com. Self-contained: MOCK_ constants, no imports from
 // other mockups, default-export component so routes auto-discover.
@@ -50,24 +50,25 @@ import {
   UserCheck,
   BarChart3,
   Store,
-  Bell,
   TrendingUp,
   Receipt,
   Award,
   MessageSquarePlus,
+  UserPen,
+  LogOut,
   Music2,
   Headphones,
 } from 'lucide-react';
-import goodtunesLogo from './assets/goodtunes-logo.png';
-import mrpLogo from './assets/mrp-logo.svg';
-import niinaPhoto from './assets/niina-soleil.webp';
-import californialandCover from './assets/californialand-cover.jpg';
+import goodtunesLogo from '../assets/goodtunes-logo.png';
+import mrpLogoAsset from '../assets/mrp-logo.svg';
+import niinaPhoto from '../assets/niina-soleil.webp';
+import californialandCover from '../assets/californialand-cover.jpg';
 
 // ─── Palette — MRP white-label light canon ───────────────────────────
 const CANVAS = '#ffffff';
 const CARD = '#ffffff';
 const CARD_RAISED = '#fbfaf7';
-const RAIL_BG = '#fbfaf7';
+const RAIL_BG = '#ffffff';
 const INK = '#1d1d1f';
 const SUBINK = '#6e6e73';
 const HAIRLINE = 'rgba(0,0,0,0.10)';
@@ -80,7 +81,7 @@ const FONT = "'Poppins', -apple-system, 'Helvetica Neue', Helvetica, Arial, sans
 // ─── Mock persona / project ──────────────────────────────────────────
 const MOCK_CLIENT_FIRST = 'Niina';
 const MOCK_CLIENT_FULL = 'Niina Soleil';
-const MOCK_JOB = 'Customsland';
+const MOCK_JOB = 'Californialand';
 const MOCK_ESTIMATE_NO = '071500-02';
 const MOCK_PREPARED_BY = 'Brandon Seavers';
 const MOCK_QTY = '1,000 units';
@@ -261,7 +262,7 @@ function StatusPill({ status }: { status: StepStatus }) {
   );
 }
 
-// ─── The lifecycle steps — Customsland, the estimate carried forward ─
+// ─── The lifecycle steps — Californialand, the estimate carried forward ─
 const MOCK_STEPS: { id: string; title: string; body: string; status: StepStatus; meta?: string }[] = [
   { id: 'created', status: 'done', title: 'Project created', body: `Estimate ${MOCK_ESTIMATE_NO} locked as your working numbers — ${MOCK_PREPARED_BY.split(' ')[0]} has been notified. ${MOCK_QTY} · ${MOCK_UNIT} · ${MOCK_TOTAL} working total.` },
   { id: 'assets', status: 'next', title: 'Audio & artwork', body: 'Upload your master audio and print-ready art. Every file is checked before anything is cut.' },
@@ -274,9 +275,7 @@ const MOCK_STEPS: { id: string; title: string; body: string; status: StepStatus;
 // ─── Rail — the artist portal's nav, verbatim order ──────────────────
 const ARTIST_NAV: { label: string; icon: typeof LayoutDashboard; active?: boolean }[] = [
   { label: 'Dashboard', icon: LayoutDashboard, active: true },
-  { label: 'People', icon: User },
-  { label: 'Projects', icon: Disc3 },
-  { label: 'Overview', icon: Activity },
+  { label: 'Releases', icon: Disc3 },
   { label: 'Audience', icon: Users },
   { label: 'Acquisition', icon: Megaphone },
   { label: 'Orders', icon: ShoppingBag },
@@ -551,6 +550,65 @@ function GivingCard() {
   );
 }
 
+// ─── Canon account dropdown (Bill, Aug 24 2026) — local popover, square
+// MRP skin. Words + icons always, never color alone. ──────────────────
+const MOCK_CLIENT_EMAIL = 'niina@niinasoleil.com';
+type Appearance = 'Light' | 'Dark' | 'System';
+
+function AccountMenu() {
+  const [open, setOpen] = useState(false);
+  const [appearance, setAppearance] = useState<Appearance>('Light');
+  return (
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label="Account menu"
+        aria-expanded={open}
+        data-testid="button-user-menu"
+        style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', border: `1px solid ${HAIRLINE}`, padding: 0, cursor: 'pointer', background: 'transparent', display: 'block' }}
+      >
+        <img src={niinaPhoto} alt={MOCK_CLIENT_FULL} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 60, width: 300, background: CARD, border: `1px solid ${HAIRLINE}`, borderRadius: 0, boxShadow: '0 12px 32px rgba(0,0,0,0.12)' }} data-testid="menu-user">
+          <div style={{ padding: '12px 14px', borderBottom: `1px solid ${HAIRLINE}` }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: INK }}>{MOCK_CLIENT_FULL}</div>
+            <div style={{ fontSize: 11.5, color: SUBINK, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{MOCK_CLIENT_EMAIL}</div>
+          </div>
+          <div style={{ padding: '4px 0' }}>
+            {[{ label: 'Edit profile', icon: UserPen }, { label: 'Invite teammate', icon: UserPlus }].map(({ label, icon: Icon }) => (
+              <button key={label} type="button" data-testid={`menu-item-${label.toLowerCase().replace(/\s+/g, '-')}`} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', height: 34, fontSize: 13, color: INK, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: FONT }}>
+                <Icon style={{ width: 15, height: 15, flexShrink: 0, color: SUBINK }} />
+                {label}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '10px 14px', borderTop: `1px solid ${HAIRLINE}` }}>
+            <span style={{ fontSize: 13, color: INK }}>Appearance</span>
+            <div role="radiogroup" aria-label="Appearance" style={{ display: 'flex', border: `1px solid ${HAIRLINE}`, borderRadius: 0, padding: 2 }}>
+              {(['Light', 'Dark', 'System'] as Appearance[]).map((m) => {
+                const active = m === appearance;
+                return (
+                  <button key={m} type="button" role="radio" aria-checked={active} onClick={() => setAppearance(m)} data-testid={`appearance-${m.toLowerCase()}`} style={{ padding: '3px 9px', borderRadius: 0, fontSize: 11.5, fontWeight: active ? 600 : 500, cursor: 'pointer', background: active ? CARD_RAISED : 'transparent', border: active ? `1px solid ${HAIRLINE}` : '1px solid transparent', color: active ? INK : SUBINK, fontFamily: FONT }}>
+                    {m}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div style={{ padding: '4px 0', borderTop: `1px solid ${HAIRLINE}` }}>
+            <button type="button" data-testid="menu-item-sign-out" style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', height: 34, fontSize: 13, color: INK, background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: FONT }}>
+              <LogOut style={{ width: 15, height: 15, flexShrink: 0, color: SUBINK }} />
+              Sign out
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Page ────────────────────────────────────────────────────────────
 export default function ArtistDashboardMRP() {
   // The strip opens on first visit — a live project is exactly when it has
@@ -566,33 +624,26 @@ export default function ArtistDashboardMRP() {
       {/* Poppins — MRP's real face rides with the skin. */}
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');`}</style>
 
-      {/* ── Top bar — artist brand left; Feedback / bell / avatar right,
-          the press's mark quietly beside them (NextStepsMRP pattern). ── */}
+      {/* ── Top bar — artist brand left; quiet Feedback + account avatar
+          right, nothing else (canon, Bill Aug 24 2026). ── */}
       <header style={{ height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 20px 0 12px', background: CANVAS, borderBottom: `1px solid ${HAIRLINE}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <img src={niinaPhoto} alt={MOCK_CLIENT_FULL} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', border: `1px solid ${HAIRLINE}`, flexShrink: 0 }} />
-          <span style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{MOCK_CLIENT_FULL}</span>
+          <img src={mrpLogoAsset} alt="Memphis Record Pressing" style={{ width: 34, height: 34, objectFit: 'contain', flexShrink: 0 }} />
+          <span style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap' }}>Memphis Record Pressing</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
-          <button type="button" data-testid="button-feedback" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 0, background: 'transparent', border: `1px solid ${HAIRLINE}`, color: SUBINK, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+          <button type="button" data-testid="button-feedback" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 12px', borderRadius: 0, background: 'transparent', border: 'none', color: SUBINK, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
             <MessageSquarePlus style={{ width: 14, height: 14 }} />
             Feedback
           </button>
-          <button type="button" aria-label="Notifications" data-testid="button-notifications" style={{ width: 32, height: 32, borderRadius: 0, background: 'transparent', border: 'none', color: SUBINK, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Bell style={{ width: 16, height: 16 }} />
-          </button>
-          <button type="button" aria-label="Account menu" data-testid="button-user-menu" style={{ width: 32, height: 32, borderRadius: '50%', overflow: 'hidden', border: `1px solid ${HAIRLINE}`, padding: 0, cursor: 'pointer', background: 'transparent' }}>
-            <img src={niinaPhoto} alt="NS" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          </button>
-          {/* The press's mark, quietly top right (Bill, Aug 21 2026). */}
-          <img src={mrpLogo} alt="Memphis Record Pressing" data-testid="img-press-mark" style={{ width: 34, height: 34 }} />
+          <AccountMenu />
         </div>
       </header>
 
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
         {/* ── Left rail — artist nav, POWERED BY GoodTunes at the bottom ── */}
-        <nav style={{ width: 218, flexShrink: 0, background: RAIL_BG, borderRight: `1px solid ${HAIRLINE}`, padding: '14px 10px', display: 'flex', flexDirection: 'column', gap: 2, position: 'sticky', top: 0, height: 'calc(100dvh - 56px)', overflowY: 'auto' }}>
+        <nav style={{ width: 218, flexShrink: 0, background: RAIL_BG, borderRight: `1px solid ${GOLD}`, padding: '14px 10px', display: 'flex', flexDirection: 'column', gap: 2, position: 'sticky', top: 0, height: 'calc(100dvh - 56px)', overflowY: 'auto' }}>
           <div style={{ position: 'relative', marginBottom: 10 }}>
             <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 13, height: 13, color: SUBINK }} />
             <input
@@ -605,7 +656,8 @@ export default function ArtistDashboardMRP() {
             </span>
           </div>
           {ARTIST_NAV.map((item) => <NavRow key={item.label} {...item} />)}
-          <div style={{ flex: 1 }} />
+          <div style={{ borderTop: `1px solid ${GOLD}`, margin: '8px 12px 6px' }} />
+          <NavRow label="Team" icon={User} />
           {/* Platform attribution — GoodTunes recedes to a "powered by" mark. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '12px 12px 4px', borderTop: `1px solid ${HAIRLINE}`, marginTop: 8 }}>
             <span style={{ fontSize: 9, fontWeight: 600, letterSpacing: 1, color: SUBINK }}>POWERED BY</span>
@@ -744,7 +796,7 @@ export default function ArtistDashboardMRP() {
 
             {/* Quiet provenance line — the run's home. */}
             <p style={{ marginTop: 26, fontSize: 11.5, color: SUBINK }}>
-              {MOCK_JOB} is running with Memphis Record Pressing · mrp.pressesvinyl.com
+              {MOCK_JOB} is running with Memphis Record Pressing · memphisrecordpressing.com
             </p>
           </div>
         </main>
