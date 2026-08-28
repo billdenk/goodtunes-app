@@ -106,7 +106,7 @@ export default function HellbenderGoodStudioReview() {
             Hellbender Vinyl × GoodTunes®
           </div>
           <h1 className="hb-review-title" style={{ margin: '16px 0 0', fontSize: 58, lineHeight: 0.98, letterSpacing: -2.4, fontWeight: 700 }}>
-            Your GoodTune<span style={{ position: 'relative', display: 'inline-block' }}>s<sup style={{ position: 'absolute', left: '100%', top: '0.48em', marginLeft: '0.08em', fontSize: '0.25em', lineHeight: 1, letterSpacing: 0 }}>®</sup></span> Journey
+            Your GoodTune<span style={{ position: 'relative', display: 'inline-block' }}>s<sup style={{ position: 'absolute', left: '100%', top: '1.7em', marginLeft: '0.02em', fontSize: '0.19em', lineHeight: 1, letterSpacing: 0 }}>®</sup></span> Journey
           </h1>
           <p style={{ margin: '24px 0 0', maxWidth: 680, fontSize: 18, lineHeight: 1.55, color: SUBINK }}>
             A working preview of the Hellbender experience, from the first estimate email through the artist portal and press catalog.
