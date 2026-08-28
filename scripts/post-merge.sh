@@ -13539,3 +13539,25 @@ SQL
 }
 migrate_client_portal_skins_task_3423 dev  "${DATABASE_URL:-}"
 migrate_client_portal_skins_task_3423 prod "${PROD_DATABASE_URL:-}"
+
+# Task #3451 — MRP "Translucent" group renders as generated translucent vinyl.
+# One-time normalize of Memphis's persisted Vinyl component: gen-less swatches
+# in the EXACT "Translucent" category gain a Standard→Translucent generator
+# spec from their saved hex; photos kept as rebuild/compare reference. Marker
+# post_merge_data_backfills 'task_3451_mrp_translucent_gen' inside the script;
+# operator generator edits are never overwritten; fresh seeds match via
+# seedVinylFromPackages. Idempotent, dev + prod.
+backfill_mrp_translucent_gen_task_3451() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping mrp-translucent-gen backfill on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/backfill-mrp-translucent-gen.ts; then
+    echo "post-merge: mrp-translucent-gen backfill ok on $label"
+  else
+    echo "post-merge: WARNING — mrp-translucent-gen backfill failed on $label (continuing)"
+  fi
+}
+backfill_mrp_translucent_gen_task_3451 dev  "${DATABASE_URL:-}"
+backfill_mrp_translucent_gen_task_3451 prod "${PROD_DATABASE_URL:-}"

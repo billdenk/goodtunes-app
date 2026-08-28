@@ -36,6 +36,8 @@ import {
   type StickersComponentConfig,
   type PricingComponentConfig,
   type PricingRow,
+  isMemphisPress,
+  applyMrpTranslucentStandardGen,
 } from "@shared/pressComponents";
 import { getPressCatalog } from "./pressCatalog";
 import { storage } from "./storage";
@@ -184,12 +186,19 @@ export async function seedVinylFromPackages(pressId: string): Promise<VinylCompo
     cat.sizes.sort((a, b) => sizeSort[a] - sizeSort[b]);
     for (const sw of cat.swatches) sw.sizes.sort((a, b) => sizeSort[a] - sizeSort[b]);
   }
-  return {
+  let out: VinylComponentConfig = {
     categories,
     weights: DEFAULT_WEIGHTS,
     sizeOptions: DEFAULT_SIZE_OPTIONS,
     quantities: DEFAULT_QUANTITIES,
   };
+  // Task #3451 — MRP's exact "Translucent" group seeds as generated
+  // translucent discs (Standard → Translucent) while keeping each color's
+  // imported photo as the rebuild/compare reference. Fresh environments thus
+  // match the one-time backfill applied to already-persisted configs.
+  const press = await storage.getManufacturerById(pressId).catch(() => null);
+  if (isMemphisPress(press)) out = applyMrpTranslucentStandardGen(out).config;
+  return out;
 }
 
 /** Pricing rows seeded from the seeded vinyl types/colors — price cells EMPTY. */

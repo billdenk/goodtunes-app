@@ -4354,7 +4354,14 @@ function GeneratorSheet({
   const makeSwatch = (nm: string, id?: string): Swatch => ({
     id: id ?? `gen-${Date.now()}`,
     name: nm,
-    kind: style.eitherOrBase ? baseKind : 'opaque',
+    // Standard's Finish picker decides the body: Translucent / Ultra clear
+    // save as translucent-kind so the finish survives a save round-trip
+    // (Task #3451 — MRP's Translucent colors must stay translucent).
+    kind: style.eitherOrBase
+      ? baseKind
+      : style.pickOne?.label === 'Finish' && option !== 'opaque'
+        ? 'translucent'
+        : 'opaque',
     base: colors.find((c) => HEX_RE.test(c)) ?? style.layers.find((l) => l.fixedColor)?.fixedColor ?? '#1B3A6B',
     sizes: offeredSizes.length > 0 ? offeredSizes : [...SIZES],
     gen: {
@@ -5733,7 +5740,13 @@ export function PressVinylStylesComponent({
         ? { ...c, swatches: c.swatches.map((x) => (x.id === oldId ? s : x)) }
         : c)));
     } else if (genSheet?.swatch && genSheet.catId) {
-      updateSwatchIn(genSheet.catId, s);
+      // Edit-in-place keeps the swatch's reference photo (Task #3451 — MRP's
+      // imported photos stay available for compare/rebuild); only the
+      // explicit Replace flow above drops the upload.
+      updateSwatchIn(
+        genSheet.catId,
+        genSheet.swatch.customImg ? { ...s, customImg: genSheet.swatch.customImg } : s,
+      );
       catId = genSheet.catId;
     } else if (category.genStyleId) {
       // Adding inside a generator-made type — the color stays in that type.
@@ -6198,7 +6211,12 @@ export function PressVinylStylesComponent({
           initial={genSheet.replace ? null : genSheet.swatch ?? null}
           startSaved={genSheet.view}
           homeCatId={genSheet.catId}
-          replaceOf={genSheet.replace ? genSheet.swatch : undefined}
+          // Editing a generated color that still carries its imported photo
+          // (MRP's Translucent group, Task #3451) keeps the compare drawer:
+          // replaceOf feeds the photo, but the sheet stays an edit-in-place
+          // (initial set, genSheet.replace false), and the auto-suggestion
+          // can't fire into a sheet whose colors are already seeded.
+          replaceOf={genSheet.replace || (genSheet.swatch?.customImg && !genSheet.view) ? genSheet.swatch : undefined}
           onClose={() => setGenSheet(null)}
           onSave={saveGenColor}
           onAddExtra={addColorToCategory}

@@ -100,6 +100,105 @@ export const vinylComponentConfigSchema = z.object({
 });
 export type VinylComponentConfig = z.infer<typeof vinylComponentConfigSchema>;
 
+// ── MRP "Translucent" group → Standard generator, translucent finish ───
+// Task #3451: Memphis Record Pressing's exact "Translucent" category must
+// render as generated translucent discs (the Standard style's Translucent
+// finish), not as opaque photo tiles. Each color's imported photo is KEPT
+// on the swatch (customImg) as the rebuild/compare reference — a swatch
+// carrying `gen` renders through the stencil kit, and the editor's compare
+// drawer still reads the photo. Scoped to MRP only (callers gate on
+// isMemphisPress) and to the EXACT category name "Translucent" — similarly
+// named groups ("Translucent Blends", "Ultra Clear", other presses) are
+// untouched.
+
+/** Exact-identity match for Memphis Record Pressing — never ILIKE-first-row
+    (prod carries decoy manufacturer rows). */
+export function isMemphisPress(
+  press: { name?: string | null; domain?: string | null } | null | undefined,
+): boolean {
+  if (!press) return false;
+  const name = (press.name ?? "").trim().toLowerCase();
+  const domain = (press.domain ?? "").trim().toLowerCase();
+  return name === "memphis record pressing" || domain.includes("memphisrecordpressing");
+}
+
+const SIX_HEX_RE = /^#[0-9a-fA-F]{6}$/;
+/** Normalize a saved swatch hex to the 6-digit form the generator renders
+    (GenDisc treats anything else as neutral gray). */
+function toSixHex(hexIn: string): string {
+  const h = (hexIn ?? "").trim();
+  if (SIX_HEX_RE.test(h)) return h;
+  const short = /^#([0-9a-fA-F]{3})[0-9a-fA-F]?$/.exec(h); // #rgb / #rgba
+  if (short) return "#" + short[1].split("").map((c) => c + c).join("");
+  const long = /^#([0-9a-fA-F]{6})[0-9a-fA-F]{2}$/.exec(h); // #rrggbbaa
+  if (long) return "#" + long[1];
+  return "#C7C7CC";
+}
+
+// MRP's photo-only Translucent imports carry no swatch hex — their saved
+// base is the seed fallback below. For those, the generated disc takes the
+// canonical name-appropriate hex (mirrors the Task #672 table in
+// server/pressCatalog.ts MRP_COLOR_TIERS → "Translucent"; keep in sync).
+// A real operator-saved base always wins over this table.
+const SEED_PLACEHOLDER_BASE = "#0c0c0c";
+const MRP_TRANSLUCENT_HEX: Record<string, string> = {
+  "t01 ruby": "#c0566a",
+  "t02 ultra clear": "#e8eef2",
+  "t03 cobalt": "#5a86c8",
+  "t04 emerald": "#5fb98a",
+  "t05 grape": "#9a6fc0",
+  "t06 light blue": "#a9d2ef",
+  "t07 lemonade": "#f2e79a",
+  "t08 orange crush": "#f0a866",
+  "t09 coke bottle clear": "#8fae93",
+  "t10 highlighter yellow": "#e6ee7a",
+  "t11 milky clear": "#eae6dd",
+  "t12 forest green": "#4f8f63",
+  "t13 sea blue": "#79b6c2",
+  "t14 tan": "#d8c49a",
+  "t15 black ice": "#6b7078",
+};
+
+/**
+ * Give every gen-less swatch in the exact "Translucent" category a Standard
+ * generator spec with the Translucent finish, seeded from its saved swatch
+ * color — or, when the saved base is still the import placeholder, from the
+ * canonical MRP name table (base is upgraded in step so other surfaces read
+ * the real color too). Idempotent: swatches already carrying `gen` are left
+ * byte-identical (operator generator edits are never overwritten),
+ * photos/sizes/names/ids are untouched, and every other category passes
+ * through unchanged.
+ */
+export function applyMrpTranslucentStandardGen(config: VinylComponentConfig): {
+  config: VinylComponentConfig;
+  changed: boolean;
+} {
+  let changed = false;
+  const categories = (config.categories ?? []).map((cat) => {
+    if ((cat.name ?? "").trim().toLowerCase() !== "translucent") return cat;
+    let catChanged = false;
+    const swatches = cat.swatches.map((sw) => {
+      if (sw.gen) return sw;
+      catChanged = true;
+      const placeholder = (sw.base ?? "").trim().toLowerCase() === SEED_PLACEHOLDER_BASE;
+      const canonical = placeholder
+        ? MRP_TRANSLUCENT_HEX[(sw.name ?? "").trim().toLowerCase()]
+        : undefined;
+      const hex = toSixHex(canonical ?? sw.base);
+      return {
+        ...sw,
+        kind: "translucent" as const,
+        base: canonical ?? sw.base,
+        gen: { styleId: "standard", colors: [hex], option: "trans" },
+      };
+    });
+    if (!catChanged) return cat;
+    changed = true;
+    return { ...cat, kind: "translucent" as const, swatches };
+  });
+  return changed ? { config: { ...config, categories }, changed } : { config, changed: false };
+}
+
 // ── Center labels component ────────────────────────────────────────────
 export const LABEL_STYLE_IDS = ["blank", "bw", "color"] as const;
 export const labelStyleSchema = z.object({
