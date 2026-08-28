@@ -151,9 +151,9 @@ function MaskLayer({
   );
 }
 
-// ─── The white press logo mark + quiet catalog arc text ──────────────
-// Printed on the label, so it rotates with the record body. The arc text is
-// mush when small, so it only shows on large labels.
+// ─── The white press logo mark ───────────────────────────────────────
+// Printed on the label, so it rotates with the record body. Decorative
+// RPM/catalog arc text was removed (Task #3445) — the label is logo-only.
 // labelLogoUrl is assumed already white-reading — no Memphis invert filter.
 function LabelLogo({
   size,
@@ -168,29 +168,11 @@ function LabelLogo({
 }) {
   // offsetRight: 7" labels put the logo beside the hole (the large jukebox
   // hole would punch through a centered logo), so shift it to the right side.
-  const showArcText = size >= 70 && !offsetRight;
-  const arcTextFill = whiteFilter ? 'rgba(245,245,247,0.55)' : 'rgba(0,0,0,0.38)';
   // Resolve through the shared logo chain (labelLogoUrl first) so presses
   // without a dedicated label logo still show their mark.
   const markUrl = resolvePressMarkLogo(press);
   // When null render the label without a logo mark.
-  if (!markUrl) {
-    if (!showArcText) return null;
-    return (
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
-        <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden style={{ position: 'absolute', inset: 0 }}>
-          <defs>
-            <path id="lbl-arc-bottom" d="M 24 50 A 26 26 0 0 0 76 50" fill="none" />
-          </defs>
-          <text fill={arcTextFill} style={{ fontSize: 4.4, fontWeight: 600, letterSpacing: 1 }}>
-            <textPath href="#lbl-arc-bottom" startOffset="50%" textAnchor="middle">
-              33 ⅓ RPM
-            </textPath>
-          </text>
-        </svg>
-      </div>
-    );
-  }
+  if (!markUrl) return null;
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
       {whiteFilter ? (
@@ -226,18 +208,6 @@ function LabelLogo({
             objectFit: 'contain',
           }}
         />
-      )}
-      {showArcText && (
-        <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden style={{ position: 'absolute', inset: 0 }}>
-          <defs>
-            <path id="lbl-arc-bottom" d="M 24 50 A 26 26 0 0 0 76 50" fill="none" />
-          </defs>
-          <text fill={arcTextFill} style={{ fontSize: 4.4, fontWeight: 600, letterSpacing: 1 }}>
-            <textPath href="#lbl-arc-bottom" startOffset="50%" textAnchor="middle">
-              33 ⅓ RPM
-            </textPath>
-          </text>
-        </svg>
       )}
     </div>
   );

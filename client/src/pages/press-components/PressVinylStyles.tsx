@@ -307,9 +307,8 @@ const SPLATTER_PRESETS: Array<{ label: string; vinylType: 'opaque' | 'translucen
 function DiscLabelArt({ size }: { size: number }) {
   const { logoUrl: brandLogoUrl } = useContext(LabelBrandCtx);
   // `size` is the label diameter. The full logo (SVG) stays crisp at any size
-  // and reads as a tiny brand dot on the small thumbnails. The subordinate
-  // catalog arc text would be mush when small, so it only shows on large labels.
-  const showArcText = size >= 70;
+  // and reads as a tiny brand dot on the small thumbnails. Decorative RPM /
+  // catalog arc text was removed (Task #3445) — the label is logo-only.
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
       {brandLogoUrl && (
@@ -330,25 +329,6 @@ function DiscLabelArt({ size }: { size: number }) {
             transform: `translate(-50%, calc(-50% - ${size * 0.9 * (143.3 / 272.4 - 0.5)}px))`,
           }}
         />
-      )}
-      {/* quiet catalog line, arced along the bottom — subordinate to the logo */}
-      {showArcText && (
-        <svg
-          viewBox="0 0 100 100"
-          width={size}
-          height={size}
-          aria-hidden
-          style={{ position: 'absolute', inset: 0 }}
-        >
-          <defs>
-            <path id="gt-label-bottom" d="M 24 50 A 26 26 0 0 0 76 50" fill="none" />
-          </defs>
-          <text fill="rgba(245,245,247,0.5)" style={{ fontSize: 4.4, fontWeight: 600, letterSpacing: 1 }}>
-            <textPath href="#gt-label-bottom" startOffset="50%" textAnchor="middle">
-              33 ⅓ RPM
-            </textPath>
-          </text>
-        </svg>
       )}
     </div>
   );

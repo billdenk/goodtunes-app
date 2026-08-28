@@ -259,10 +259,9 @@ type Swatch = {
   photo?: string;
 };
 
-// The white MRP logo mark + quiet arc text — printed on the black label.
+// The white press logo mark — printed on the black label. Decorative
+// RPM/catalog arc text was removed (Task #3445) — the label is logo-only.
 function DiscLabelArt({ size }: { size: number }) {
-  const { shortName } = usePressBrand();
-  const showArcText = size >= 70;
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
       <PressLogoImg
@@ -280,18 +279,6 @@ function DiscLabelArt({ size }: { size: number }) {
           filter: PRESS_MARK_ON_DARK,
         }}
       />
-      {showArcText && (
-        <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden style={{ position: 'absolute', inset: 0 }}>
-          <defs>
-            <path id="quote-disc-arc-bottom" d="M 24 50 A 26 26 0 0 0 76 50" fill="none" />
-          </defs>
-          <text fill="rgba(245,245,247,0.5)" style={{ fontSize: 4.4, fontWeight: 600, letterSpacing: 1 }}>
-            <textPath href="#quote-disc-arc-bottom" startOffset="50%" textAnchor="middle">
-              {`${shortName}-001 · 33 ⅓ RPM`}
-            </textPath>
-          </text>
-        </svg>
-      )}
     </div>
   );
 }
@@ -1524,9 +1511,6 @@ const LABEL_STYLES: LabelStyle[] = [
 ];
 
 function LabelLogo({ size, whiteFilter = true, offsetRight = false }: { size: number; whiteFilter?: boolean; offsetRight?: boolean }) {
-  const { shortName } = usePressBrand();
-  const showArcText = size >= 70 && !offsetRight;
-  const arcTextFill = whiteFilter ? 'rgba(245,245,247,0.55)' : 'rgba(0,0,0,0.38)';
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
       <PressLogoImg
@@ -1544,18 +1528,6 @@ function LabelLogo({ size, whiteFilter = true, offsetRight = false }: { size: nu
           filter: whiteFilter ? PRESS_MARK_ON_DARK : PRESS_MARK_ON_LIGHT,
         }}
       />
-      {showArcText && (
-        <svg viewBox="0 0 100 100" width={size} height={size} aria-hidden style={{ position: 'absolute', inset: 0 }}>
-          <defs>
-            <path id="quote-lbl-arc-bottom" d="M 24 50 A 26 26 0 0 0 76 50" fill="none" />
-          </defs>
-          <text fill={arcTextFill} style={{ fontSize: 4.4, fontWeight: 600, letterSpacing: 1 }}>
-            <textPath href="#quote-lbl-arc-bottom" startOffset="50%" textAnchor="middle">
-              {`${shortName}-001 · 33 ⅓ RPM`}
-            </textPath>
-          </text>
-        </svg>
-      )}
     </div>
   );
 }
