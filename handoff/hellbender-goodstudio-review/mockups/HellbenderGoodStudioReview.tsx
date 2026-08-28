@@ -47,7 +47,7 @@ const MOCK_SCREENS = [
     route: 'PressCatalogHellbenderDark',
     eyebrow: '07 · Press operations',
     title: 'Product catalog',
-    note: 'Hellbender’s product and pricing catalog inside GoodStudio.',
+    note: 'Hellbender’s product and pricing catalog inside GoodTunes®.',
   },
 ] as const;
 
@@ -96,7 +96,7 @@ export default function HellbenderGoodStudioReview() {
       >
         <img src={hellbenderLogo} alt="Hellbender Vinyl" style={{ width: 190, maxHeight: 46 }} />
         <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: 1.2, textTransform: 'uppercase', color: SUBINK }}>
-          GoodStudio review
+          GoodTunes® review
         </div>
       </header>
 
@@ -106,7 +106,7 @@ export default function HellbenderGoodStudioReview() {
             Hellbender Vinyl × GoodTunes®
           </div>
           <h1 className="hb-review-title" style={{ margin: '16px 0 0', fontSize: 58, lineHeight: 0.98, letterSpacing: -2.4, fontWeight: 700 }}>
-            Your GoodStudio journey.
+            Your GoodTunes® Journey
           </h1>
           <p style={{ margin: '24px 0 0', maxWidth: 680, fontSize: 18, lineHeight: 1.55, color: SUBINK }}>
             A working preview of the Hellbender experience, from the first estimate email through the artist portal and press catalog.
