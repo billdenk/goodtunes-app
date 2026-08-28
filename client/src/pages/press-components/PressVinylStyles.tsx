@@ -2908,6 +2908,12 @@ function GenGradientMap({ src, stops, locations, opacity }: { src: string; stops
   );
 }
 
+// How far the generated-disc PSD layer stack bleeds past the clipping
+// circle (percent inset, negative = oversize). ~1% is enough to push the
+// PNGs' antialiased alpha edge outside the clip on every disc size (44px
+// thumbnails → 2xx px stage) while being imperceptible on the textures.
+const GEN_EDGE_BLEED_INSET = '-1%';
+
 // The generator disc device — identical frame for every style: perfect
 // circle, fixed diameter, opaque label always on top, shared shine layer.
 // The art inside is Andrew's PSD, layer for layer.
@@ -2960,6 +2966,18 @@ function GenDisc({
     >
       {/* Rotating body: the PSD layer stack + the label printed on it */}
       <div ref={bodyRef} style={{ position: 'absolute', inset: 0, borderRadius: '50%', willChange: bodyRef ? 'transform' : undefined }}>
+        {/* Edge bleed (Task #3448): the PSD layers carry an antialiased alpha
+            fade at their outer edge; rendered exactly at the clip circle, that
+            fade let the light fallback surface underneath read as a pale rim
+            on dark backgrounds. Oversizing the whole layer stack ~1% pushes
+            the alpha fade OUTSIDE the overflow-hidden circle so the visible
+            edge is fully-covered disc color — the circle stays perfectly
+            round (the container still clips), no border is added, and the
+            fallback keeps acting as the light table behind translucent
+            bodies. Plain positioned div: no transform/opacity/isolation, so
+            layer mix-blend-modes keep compositing against the base exactly
+            as before. */}
+        <div aria-hidden style={{ position: 'absolute', inset: GEN_EDGE_BLEED_INSET, pointerEvents: 'none' }}>
         {style.layers.map((L, i) => {
           let file = L.file;
           let color: string | undefined;
@@ -2996,6 +3014,7 @@ function GenDisc({
           if (color === undefined) color = L.fixedColor ?? col(L.color ?? 0);
           return <GenTint key={i} src={url(file)} color={color} opacity={opacity} blend={L.blend} />;
         })}
+        </div>
         {/* Opaque G label — always on top; no source color peeks through. */}
         <div
           style={{
