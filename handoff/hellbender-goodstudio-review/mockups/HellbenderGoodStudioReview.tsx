@@ -121,6 +121,8 @@ export default function HellbenderGoodStudioReview() {
             <a
               key={screen.route}
               href={`#/${screen.route}`}
+              target="_blank"
+              rel="noopener noreferrer"
               className="hb-review-card"
               style={{
                 display: 'block',
