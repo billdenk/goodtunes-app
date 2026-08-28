@@ -368,7 +368,19 @@ export const componentConfigSchemaByKey: Record<PressComponentKey, z.ZodTypeAny>
 
 export type PressComponentsPayload = {
   canEdit: boolean;
-  press: { id: string; name: string; logoUrl: string | null; identityIconUrl: string | null };
+  press: {
+    id: string;
+    name: string;
+    logoUrl: string | null;
+    identityIconUrl: string | null;
+    // Uploaded logo variants (Task #3446) — light-background uploads let
+    // white product surfaces pick a mark that reads on white stock.
+    lightLogoUrl?: string | null;
+    squareLogoUrl?: string | null;
+    lightSquareLogoUrl?: string | null;
+    labelLogoUrl?: string | null;
+    labelBgColor?: string | null;
+  };
   vinyl: VinylComponentConfig;
   jackets: JacketsComponentConfig;
   sleeves: SleevesComponentConfig;

@@ -837,6 +837,8 @@ export function AdminManufacturer() {
                 name: pressMe?.name ?? DEFAULT_PRESS_BRAND.name,
                 shortName: pressShortName(pressMe?.name),
                 labelLogo: pressMe?.labelLogoUrl ?? pressMe?.logoUrl ?? DEFAULT_PRESS_BRAND.labelLogo,
+                // Task #3446 — light-background mark for white product surfaces.
+                lightLabelLogo: pressMe?.lightSquareLogoUrl ?? pressMe?.lightLogoUrl ?? null,
                 pressId: id,
               }}
             >

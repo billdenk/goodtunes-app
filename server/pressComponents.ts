@@ -502,6 +502,9 @@ export function registerPressComponentRoutes(
           logoUrl: (press as any).logoUrl ?? null,
           lightLogoUrl: (press as any).lightLogoUrl ?? null,
           squareLogoUrl: (press as any).squareLogoUrl ?? null,
+          // Light-background variants (Task #3446) — white product surfaces
+          // (B&W center labels, sticker previews) prefer these uploads.
+          lightSquareLogoUrl: (press as any).lightSquareLogoUrl ?? null,
           identityIconUrl: (press as any).identityIconUrl ?? null,
           // Center-label mark: each press's own logo on the rendered disc
           // (Hellbender sees the rune mark, never Memphis's skyline).

@@ -18,7 +18,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { RotateCcw, Check, Minus, Loader2 } from 'lucide-react';
 import { useAdminDark } from '@/lib/adminAppearance';
-import { resolvePressMarkLogo, type PressComponentsPayload } from './usePressComponents';
+import { resolvePressMarkLogo, resolvePressMarkLogoOnLight, type PressComponentsPayload } from './usePressComponents';
 import { WhiteMarkGlyph } from './PressMarkGlyph';
 import type { LabelsComponentConfig } from '@shared/pressComponents';
 
@@ -168,9 +168,11 @@ function LabelLogo({
 }) {
   // offsetRight: 7" labels put the logo beside the hole (the large jukebox
   // hole would punch through a centered logo), so shift it to the right side.
-  // Resolve through the shared logo chain (labelLogoUrl first) so presses
-  // without a dedicated label logo still show their mark.
-  const markUrl = resolvePressMarkLogo(press);
+  // Resolve through the shared surface-aware chains: dark faces prefer the
+  // label/dark mark (rendered white via mask); white stock prefers the
+  // uploaded LIGHT-background artwork (Task #3446 — MRP's black mark, not
+  // the white labelLogoUrl that vanished on white).
+  const markUrl = whiteFilter ? resolvePressMarkLogo(press) : resolvePressMarkLogoOnLight(press);
   // When null render the label without a logo mark.
   if (!markUrl) return null;
   return (

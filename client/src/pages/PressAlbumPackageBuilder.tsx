@@ -1140,7 +1140,7 @@ export function PressAlbumPackageBuilder({
   const press = invited?.press ?? invited?.effectivePress ?? null;
   // Label branding for the disc center — the invited-press payload doesn't
   // carry it, so pull the full press row (same source the catalog page uses).
-  const { data: pressRow } = useQuery<{ labelLogoUrl?: string | null; labelBgColor?: string | null; vinylPlaceholderUrl?: string | null; logoUrl?: string | null }>({
+  const { data: pressRow } = useQuery<{ labelLogoUrl?: string | null; labelBgColor?: string | null; vinylPlaceholderUrl?: string | null; logoUrl?: string | null; lightLogoUrl?: string | null; lightSquareLogoUrl?: string | null }>({
     queryKey: ["/api/manufacturers", press?.id],
     queryFn: async () => {
       const r = await apiRequest("GET", `/api/manufacturers/${press!.id}`);
@@ -1154,6 +1154,10 @@ export function PressAlbumPackageBuilder({
   // center still wears the right press mark even when the manufacturers
   // row fetch fails or comes back without branding fields.
   const labelLogoUrl = pressRow?.labelLogoUrl || pressRow?.logoUrl || press?.logoUrl || null;
+  // Task #3446 — uploaded light-background mark for white product surfaces
+  // (B&W labels, sticker previews) in the builder kit; null = polarity
+  // filter fallback on labelLogo.
+  const lightLabelLogoUrl = pressRow?.lightSquareLogoUrl || pressRow?.lightLogoUrl || null;
   const labelBgColor = pressRow?.labelBgColor || null;
 
   // Vinyl formats the press actually offers, in canon order.
@@ -1447,6 +1451,7 @@ export function PressAlbumPackageBuilder({
         name: press?.name ?? DEFAULT_PRESS_BRAND.name,
         shortName: pressShortName(press?.name),
         labelLogo: labelLogoUrl ?? DEFAULT_PRESS_BRAND.labelLogo,
+        lightLabelLogo: lightLabelLogoUrl,
         pressId: press?.id,
         catalogFormats: (invited?.catalog?.formats as CatalogFormat[] | undefined) ?? null,
       }}

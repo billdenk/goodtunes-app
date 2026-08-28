@@ -29,7 +29,7 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from "@/components/ui/popover";
-import type { PressComponentsPayload } from "./usePressComponents";
+import { resolvePressMarkLogoOnLight, type PressComponentsPayload } from "./usePressComponents";
 import type { StickersComponentConfig } from "@shared/pressComponents";
 
 // Defense-in-depth mirror of the shared-schema constraint: templates are
@@ -187,17 +187,12 @@ function Barcode({ height, scale = 1 }: { height: number; scale?: number }) {
 
 // ─── Press mark on the sticker face ──────────────────────────────────
 // Task #3049 — the mark resolves through the press's uploaded logo variants
-// (label/product logo first) before falling back to a neutral initials
-// chip — NEVER a hardcoded mock logo.
+// before falling back to a neutral initials chip — NEVER a hardcoded mock
+// logo. Task #3446 — stickers are WHITE stock, so this delegates to the
+// shared light-surface chain (uploaded light-background artwork first; the
+// white-reading labelLogoUrl vanished on white previews).
 export function resolveStickerLogo(press: PressComponentsPayload["press"]): string | null {
-  return (
-    press.labelLogoUrl ||
-    press.squareLogoUrl ||
-    press.logoUrl ||
-    press.lightLogoUrl ||
-    press.identityIconUrl ||
-    null
-  );
+  return resolvePressMarkLogoOnLight(press);
 }
 
 function PressMark({ logoUrl, name, size }: { logoUrl: string | null; name: string; size: number }) {

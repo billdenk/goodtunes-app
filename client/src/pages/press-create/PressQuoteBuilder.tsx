@@ -30,7 +30,7 @@ import { useAdminDark } from '@/lib/adminAppearance';
 import { PRESS_MARK_ON_DARK, PRESS_MARK_ON_LIGHT } from '@/lib/pressMark';
 import type { PressComponentsPayload } from '@shared/pressComponents';
 import { makeQuotePricer, pendingLines, scaledUnitDollars, computeSetupLines, polyBagUnitLine, type QuoteLine } from './quotePricing';
-import { PressLogoImg, usePressBrand, usePressCatalogSwatches, QtyStageFitScale, QTY_STAGE_W } from './PressPackageBuilder';
+import { PressLogoImg, PressLogoOnLightImg, usePressBrand, usePressCatalogSwatches, QtyStageFitScale, QTY_STAGE_W } from './PressPackageBuilder';
 import californialandCover from './assets/californialand-cover.jpg';
 import californialandInnerSleeve from './assets/californialand-inner-sleeve.png';
 import rubyVinylPhoto from './assets/mrp-ruby-translucent.png';
@@ -979,10 +979,9 @@ function JacketStage({ jacketType, widespine = false, tipOn = false }: { jacketT
                 flexShrink: 0, position: 'relative',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <PressLogoImg  alt="" aria-hidden style={{
+                <PressLogoOnLightImg alt="" aria-hidden style={{
                   width: HOLE_D * 0.56, height: HOLE_D * 0.56,
                   objectFit: 'contain',
-                  filter: PRESS_MARK_ON_LIGHT,
                   opacity: 0.78,
                 }} />
                 <div style={{
@@ -1511,23 +1510,24 @@ const LABEL_STYLES: LabelStyle[] = [
 ];
 
 function LabelLogo({ size, whiteFilter = true, offsetRight = false }: { size: number; whiteFilter?: boolean; offsetRight?: boolean }) {
+  // Shared placement; the white B&W label prefers the uploaded
+  // light-background mark (Task #3446) via PressLogoOnLightImg.
+  const placement: React.CSSProperties = {
+    position: 'absolute',
+    top: '50%',
+    left: offsetRight ? '13.5%' : '50%',
+    transform: 'translate(-50%, -50%)',
+    width: size * (offsetRight ? 0.18 : 0.9),
+    height: size * (offsetRight ? 0.18 : 0.9),
+    objectFit: 'contain',
+  };
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
-      <PressLogoImg
-        
-        alt=""
-        aria-hidden
-        style={{
-          position: 'absolute',
-          top: '50%',
-          left: offsetRight ? '13.5%' : '50%',
-          transform: 'translate(-50%, -50%)',
-          width: size * (offsetRight ? 0.18 : 0.9),
-          height: size * (offsetRight ? 0.18 : 0.9),
-          objectFit: 'contain',
-          filter: whiteFilter ? PRESS_MARK_ON_DARK : PRESS_MARK_ON_LIGHT,
-        }}
-      />
+      {whiteFilter ? (
+        <PressLogoImg alt="" aria-hidden style={{ ...placement, filter: PRESS_MARK_ON_DARK }} />
+      ) : (
+        <PressLogoOnLightImg alt="" aria-hidden style={placement} />
+      )}
     </div>
   );
 }
@@ -2222,11 +2222,10 @@ function Sticker({
     >
       {kind === 'promo' ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: minDim * 0.05, padding: minDim * 0.12 }}>
-          <PressLogoImg
-            
+          <PressLogoOnLightImg
             alt=""
             aria-hidden
-            style={{ width: minDim * 0.52, height: minDim * 0.52, objectFit: 'contain', filter: PRESS_MARK_ON_LIGHT }}
+            style={{ width: minDim * 0.52, height: minDim * 0.52, objectFit: 'contain' }}
           />
           {minDim >= 120 && (
             <div
@@ -3594,7 +3593,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
                       ))}
                       {labelStyle.id === 'bw' && (
                         <div className="w-full h-full" style={{ background: '#ffffff' }}>
-                          <PressLogoImg  alt="" aria-hidden className="absolute" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '56%', height: '56%', objectFit: 'contain', filter: PRESS_MARK_ON_LIGHT, opacity: 0.78 }} />
+                          <PressLogoOnLightImg alt="" aria-hidden className="absolute" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '56%', height: '56%', objectFit: 'contain', opacity: 0.78 }} />
                         </div>
                       )}
                       {labelStyle.id === 'blank' && <div className="w-full h-full" style={{ background: '#ffffff' }} />}

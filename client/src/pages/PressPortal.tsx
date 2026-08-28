@@ -524,6 +524,9 @@ export function PressPortal({ pressId, isSuperAdminView }: { pressId: string; is
         name: me?.name ?? DEFAULT_PRESS_BRAND.name,
         shortName: pressShortName(me?.name),
         labelLogo: me?.labelLogoUrl ?? me?.logoUrl ?? DEFAULT_PRESS_BRAND.labelLogo,
+        // Task #3446 — uploaded light-background mark for white product
+        // surfaces (B&W labels, stickers) in the builders.
+        lightLabelLogo: me?.lightSquareLogoUrl ?? me?.lightLogoUrl ?? null,
         pressId: me?.id,
       }}
     >

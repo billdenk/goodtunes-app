@@ -58,6 +58,11 @@ export type PressBrand = {
   name: string;
   shortName: string;
   labelLogo: string;
+  /** Uploaded LIGHT-background mark (Task #3446) — white product surfaces
+   * (B&W center labels, sticker previews) render this as uploaded, no
+   * polarity filter. Null/absent = fall back to labelLogo + the
+   * PRESS_MARK_ON_LIGHT filter (polarity-safe for any source). */
+  lightLabelLogo?: string | null;
   /** Press id — lets the builders fetch this press's real color catalog. */
   pressId?: string;
   /** Artist-side: catalog formats already in hand (invited-press payload) — skips the admin catalog fetch. */
@@ -78,6 +83,18 @@ export function usePressBrand(): PressBrand { return useContext(PressBrandContex
 export function PressLogoImg(props: Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'>) {
   const { labelLogo } = usePressBrand();
   return <img src={labelLogo} {...props} />;
+}
+/** Light-surface press mark (Task #3446) — white stock prefers the press's
+ * uploaded light-background artwork rendered AS UPLOADED; without one, the
+ * labelLogo falls back with the polarity-safe on-light filter (any style
+ * `filter` the call site passes is kept only for that fallback). */
+export function PressLogoOnLightImg({ style, ...props }: Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'>) {
+  const { labelLogo, lightLabelLogo } = usePressBrand();
+  if (lightLabelLogo) {
+    const { filter: _drop, ...rest } = style ?? {};
+    return <img src={lightLabelLogo} {...props} style={rest} />;
+  }
+  return <img src={labelLogo} {...props} style={{ ...style, filter: style?.filter ?? PRESS_MARK_ON_LIGHT }} />;
 }
 const PRESS_LABEL_BG = '#0a0a0a';
 
@@ -1129,10 +1146,9 @@ function JacketStage({ jacketType, widespine = false, tipOn = false }: { jacketT
                 flexShrink: 0, position: 'relative',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
-                <PressLogoImg  alt="" aria-hidden style={{
+                <PressLogoOnLightImg alt="" aria-hidden style={{
                   width: HOLE_D * 0.56, height: HOLE_D * 0.56,
                   objectFit: 'contain',
-                  filter: PRESS_MARK_ON_LIGHT,
                   opacity: 0.78,
                 }} />
                 <div style={{
@@ -1662,23 +1678,24 @@ const LABEL_STYLES: LabelStyle[] = [
 ];
 
 function LabelLogo({ size, whiteFilter = true, offsetRight = false }: { size: number; whiteFilter?: boolean; offsetRight?: boolean }) {
+  // Shared placement; the white B&W label prefers the uploaded
+  // light-background mark (Task #3446) via PressLogoOnLightImg.
+  const placement: React.CSSProperties = {
+    position: 'absolute',
+    top: '50%',
+    left: offsetRight ? '13.5%' : '50%',
+    transform: 'translate(-50%, -50%)',
+    width: size * (offsetRight ? 0.18 : 0.9),
+    height: size * (offsetRight ? 0.18 : 0.9),
+    objectFit: 'contain',
+  };
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', userSelect: 'none' }}>
-      <PressLogoImg
-        
-        alt=""
-        aria-hidden
-        style={{
-          position: 'absolute',
-          top: '50%',
-          left: offsetRight ? '13.5%' : '50%',
-          transform: 'translate(-50%, -50%)',
-          width: size * (offsetRight ? 0.18 : 0.9),
-          height: size * (offsetRight ? 0.18 : 0.9),
-          objectFit: 'contain',
-          filter: whiteFilter ? PRESS_MARK_ON_DARK : PRESS_MARK_ON_LIGHT,
-        }}
-      />
+      {whiteFilter ? (
+        <PressLogoImg alt="" aria-hidden style={{ ...placement, filter: PRESS_MARK_ON_DARK }} />
+      ) : (
+        <PressLogoOnLightImg alt="" aria-hidden style={placement} />
+      )}
     </div>
   );
 }
@@ -2373,11 +2390,10 @@ function Sticker({
     >
       {kind === 'promo' ? (
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: minDim * 0.05, padding: minDim * 0.12 }}>
-          <PressLogoImg
-            
+          <PressLogoOnLightImg
             alt=""
             aria-hidden
-            style={{ width: minDim * 0.52, height: minDim * 0.52, objectFit: 'contain', filter: PRESS_MARK_ON_LIGHT }}
+            style={{ width: minDim * 0.52, height: minDim * 0.52, objectFit: 'contain' }}
           />
           {minDim >= 120 && (
             <div
@@ -4167,7 +4183,7 @@ export function PressPackageBuilder({ pressId, packageId, canEdit, onExit, onSav
                       ))}
                       {labelStyle.id === 'bw' && (
                         <div className="w-full h-full" style={{ background: '#ffffff' }}>
-                          <PressLogoImg  alt="" aria-hidden className="absolute" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '56%', height: '56%', objectFit: 'contain', filter: PRESS_MARK_ON_LIGHT, opacity: 0.78 }} />
+                          <PressLogoOnLightImg alt="" aria-hidden className="absolute" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '56%', height: '56%', objectFit: 'contain', opacity: 0.78 }} />
                         </div>
                       )}
                       {labelStyle.id === 'blank' && <div className="w-full h-full" style={{ background: '#ffffff' }} />}

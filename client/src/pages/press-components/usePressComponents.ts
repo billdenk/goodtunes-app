@@ -32,6 +32,31 @@ export function resolvePressMarkLogo(press: PressComponentsPayload["press"]): st
   );
 }
 
+// Light-surface variant (Task #3446) — white product stock (the B&W center
+// label, sticker previews) must prefer the press's uploaded LIGHT-background
+// artwork (e.g. MRP's black mark). The dark chain above puts labelLogoUrl
+// (a white-reading disc mark) first, which nearly disappears on white.
+// Fallback order when no light upload exists: square → main corporate logo
+// (usually drawn for light pages) → identity icon → the label mark last.
+export function resolvePressMarkLogoOnLight(press: PressComponentsPayload["press"]): string | null {
+  return (
+    press.lightSquareLogoUrl ||
+    press.lightLogoUrl ||
+    press.squareLogoUrl ||
+    press.logoUrl ||
+    press.identityIconUrl ||
+    press.labelLogoUrl ||
+    null
+  );
+}
+
+// Whether the press uploaded a dedicated light-background mark. Surfaces
+// that polarity-filter a fallback asset (builders) skip the filter when a
+// genuine light upload is present — it's already drawn for white stock.
+export function hasDedicatedLightMark(press: PressComponentsPayload["press"]): boolean {
+  return Boolean(press.lightSquareLogoUrl || press.lightLogoUrl);
+}
+
 export type PressComponentsPayload = {
   canEdit: boolean;
   press: {
@@ -40,6 +65,7 @@ export type PressComponentsPayload = {
     logoUrl: string | null;
     lightLogoUrl: string | null;
     squareLogoUrl: string | null;
+    lightSquareLogoUrl: string | null;
     identityIconUrl: string | null;
     labelLogoUrl: string | null;
     labelBgColor: string | null;
