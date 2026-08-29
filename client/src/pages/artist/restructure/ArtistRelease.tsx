@@ -27,7 +27,11 @@ import { NewAlbumModeDialog } from '@/components/admin/NewAlbumModeDialog';
 import { ManufacturingLedger } from '@/components/admin/ShopifyPlusPanel';
 import { PageColumn, PageHeader } from '@/components/admin/PageShell';
 import { ArtistReleaseTrackRows } from '@/pages/AdminAlbum';
-import type { AlbumPhysicalFormat, AlbumSellMode } from '@shared/schema';
+import {
+  ALBUM_PHYSICAL_FORMAT_LABEL,
+  type AlbumPhysicalFormat,
+  type AlbumSellMode,
+} from '@shared/schema';
 import {
   BLUE, PILL_SHADOW, cn, useRestructureTheme, CanonPill, MilestoneStatus, SegChip,
   FORMAT_WORD, fmtDollars, goodtunesLogo, shopifyLogo,
@@ -39,7 +43,7 @@ import mrpLabelLogo from '@/assets/artist-portal/mrp-logo.svg';
 type PortalFormat = { id: string; kind: string; label: string; status: 'live' | 'press' | 'draft'; pressName?: string | null };
 type PortalMilestone = { id: string; label: string; amountCents: number; status: StatusWord; note: string; payUrl?: string | null };
 type PortalPayload = {
-  release: { id: string; title: string; artist: string; artworkUrl?: string | null; year: string; tracks: number; visibility: string; editing: string; catalogNumber?: string | null; upc?: string | null };
+  release: { id: string; title: string; artist: string; artworkUrl?: string | null; year: string; tracks: number; physicalFormat?: AlbumPhysicalFormat | null; visibility: string; editing: string; catalogNumber?: string | null; upc?: string | null };
   access?: { canEditMetadata: boolean; canUploadMasters: boolean };
   formats: PortalFormat[];
   store: {
@@ -245,6 +249,11 @@ function ReleaseDetails({ portal, albumId, portalQueryKey, t }: { portal: Portal
   const [editingKey, setEditingKey] = useState<EditableDetailKey | null>(null);
   const [draft, setDraft] = useState('');
   const primaryFormat = portal.formats.find((f) => f.kind === 'vinyl') ?? portal.formats[0];
+  const selectedFormatLabel = r.physicalFormat === 'single_lp'
+    ? 'Vinyl'
+    : r.physicalFormat
+      ? ALBUM_PHYSICAL_FORMAT_LABEL[r.physicalFormat]
+      : primaryFormat?.label ?? 'Not configured';
   const save = useMutation({
     mutationFn: async ({ key, value }: { key: EditableDetailKey; value: string }) => {
       const body = key === 'year'
@@ -304,18 +313,30 @@ function ReleaseDetails({ portal, albumId, portalQueryKey, t }: { portal: Portal
         type="button"
         disabled={!editingOpen}
         onClick={() => beginEdit(key, value)}
-        className="inline-flex items-center justify-end gap-2 text-right rounded-lg px-2 py-1 -mr-2 disabled:cursor-default"
-        style={{ color: value ? (emphasis ? t.ink : t.subink) : editingOpen ? BLUE : t.faint }}
+        className="inline-flex min-h-9 items-center justify-end gap-2 text-right rounded-lg px-2 py-1 -mr-2 disabled:cursor-default"
+        style={{ color: value ? (emphasis ? t.ink : t.subink) : t.faint }}
       >
-        <span className={emphasis && value ? 'font-semibold' : undefined}>{value || (editingOpen ? emptyLabel : '—')}</span>
-        {editingOpen && <Pencil className="w-3.5 h-3.5 flex-shrink-0" aria-hidden />}
+        {value ? (
+          <span className={emphasis ? 'font-semibold' : undefined}>{value}</span>
+        ) : editingOpen ? (
+          <>
+            <span className="group-hover:hidden group-focus-within:hidden">—</span>
+            <span className="hidden group-hover:inline group-focus-within:inline" style={{ color: BLUE }}>{emptyLabel}</span>
+          </>
+        ) : <span>—</span>}
+        {editingOpen && (
+          <Pencil
+            className="w-3.5 h-3.5 flex-shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
+            aria-hidden
+          />
+        )}
       </button>
     );
   };
   const rows: Array<{ label: string; value: ReactNode; testid: string }> = [
     { label: 'Title', value: editableValue('title', r.title, 'Add title', true), testid: 'detail-title' },
     { label: 'Artist', value: r.artist, testid: 'detail-artist' },
-    { label: 'Format', value: primaryFormat?.label ?? '—', testid: 'detail-format' },
+    { label: 'Format', value: selectedFormatLabel, testid: 'detail-format' },
     { label: 'Year', value: editableValue('year', r.year, 'Add year'), testid: 'detail-year' },
     { label: 'Tracks', value: `${r.tracks} tracks`, testid: 'detail-tracks' },
     { label: 'Catalog Number', value: editableValue('catalogNumber', r.catalogNumber ?? '', 'Add catalog number'), testid: 'detail-catalog-number' },
@@ -329,18 +350,6 @@ function ReleaseDetails({ portal, albumId, portalQueryKey, t }: { portal: Portal
       ),
       testid: 'detail-visibility',
     },
-    {
-      label: 'Editing',
-      value: (
-        <span className="inline-flex items-center gap-1.5">
-          {editingOpen
-            ? <Pencil className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} aria-hidden />
-            : <Lock className="w-3.5 h-3.5 flex-shrink-0" style={{ color: t.subink }} aria-hidden />}
-          {editingOpen ? 'Open' : 'Locked'}
-        </span>
-      ),
-      testid: 'detail-editing',
-    },
   ];
   return (
     <div style={{ marginTop: 26 }}>
@@ -349,7 +358,7 @@ function ReleaseDetails({ portal, albumId, portalQueryKey, t }: { portal: Portal
         {rows.map((r2, i) => (
           <div
             key={r2.testid}
-            className="flex items-center justify-between gap-6"
+            className="group flex items-center justify-between gap-6 transition-colors"
             style={{ padding: '13px 18px', borderTop: i === 0 ? undefined : `1px solid ${t.hairline}` }}
             data-testid={r2.testid}
           >

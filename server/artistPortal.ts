@@ -57,7 +57,7 @@ async function loadAlbums(albumIds: string[]) {
   if (!albumIds.length) return [] as any[];
   const r: any = await db.execute(sql`
     SELECT id, title, artwork, year, good_tunes_release_date, share_slug,
-           is_prepping, is_hidden, first_sold_at, sell_mode,
+           is_prepping, is_hidden, first_sold_at, sell_mode, physical_format,
            submitted_to_press_at, primary_artist_id,
            catalog_number, upc, price_cents,
            created_by_scope_kind, created_by_scope_id
@@ -289,7 +289,8 @@ async function releaseHandler(req: Request, res: Response) {
           ? String(album.year)
           : "",
       tracks: Number(songCounts.n),
-      visibility: album.is_hidden ? "Hidden" : album.is_prepping ? "Preview" : "Live",
+      physicalFormat: album.physical_format ?? null,
+      visibility: album.is_hidden ? "Hidden" : album.is_prepping ? "Private Preview" : "Public",
       editing: canEditMetadata ? "Open" : "Locked",
       // Task #3178 — catalog identifiers surfaced on the Details tab.
       catalogNumber: album.catalog_number ?? null,
