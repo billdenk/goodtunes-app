@@ -1,0 +1,93 @@
+Yes—asking Otis is the safest way to eliminate drift. Please copy/paste this prompt to Otis:
+
+```text
+I need an exact, source-backed handoff of the CURRENT artist account pages in the real GoodTunes app. This will be used to build the Super-admin Artist Profile without inventing or redesigning anything.
+
+First read docs/STATUS.md and inspect the current working implementation. Treat current code as authoritative.
+
+Pages/tabs to document:
+1. Dashboard
+2. Overview
+3. Cover
+4. GoodTunes® Releases
+5. Streaming
+6. Gear
+7. Splits
+8. Payouts
+9. Permissions
+
+For EACH tab, provide:
+
+A. Exact source
+- Current route/URL
+- Component export name
+- Source file path
+- Shared shell/layout components it uses
+- Important child components
+- Whether it is complete, partial, hidden behind a flag, or absent
+
+B. Exact visual structure
+- Page title and supporting copy
+- Section headings in order
+- Cards, tables, grids, empty states, filters, and status treatments
+- Exact container width, horizontal gutters, vertical spacing, card radius, and header/tab spacing
+- Desktop and 768px responsive behavior
+- Dark/light mode differences
+
+C. Exact behavior
+- Every visible action and what it opens or changes
+- Dialogs, popovers, menus, confirmation states, and success states
+- Filter/tab behavior
+- Loading, empty, error, and read-only states
+- Which actions are available to the artist
+
+D. Super-admin delta
+- Which additional actions or information a Super-admin should have
+- Do not redesign the page for Super-admin
+- Super-admin must reuse the artist page’s visual structure and differ only through permissions, data scope, and quiet contextual actions
+
+E. Screenshots
+Capture full-page screenshots of every existing tab:
+- Desktop dark mode at 1280px wide
+- Desktop light mode at 1280px wide
+- 768px dark mode
+- Include important open dialogs/popovers as additional screenshots
+- Use representative populated data where possible
+
+Important constraints:
+- Report ONLY what exists today.
+- Do not propose improvements or invent missing pages.
+- Do not substitute release-level pages for artist-account pages.
+- If a page or tab does not exist, say exactly: ABSENT.
+- If multiple implementations exist, identify which one is canonical and why.
+- Cite source file paths for every claim.
+- Note any stale or deprecated implementations that must not be reused.
+
+Please create this handoff package:
+
+handoff/super-admin-artist-profile-current/
+  MANIFEST.md
+  dashboard-dark-1280.png
+  dashboard-light-1280.png
+  dashboard-dark-768.png
+  overview-dark-1280.png
+  ...
+  [equivalent files for every existing tab]
+  dialogs/
+    [important dialog and popover screenshots]
+
+Then zip the folder as:
+
+super-admin-artist-profile-current.zip
+
+In MANIFEST.md, include a definitive table:
+
+Tab | Exists? | Canonical route | Component | Source file | Artist actions | Super-admin additions
+
+Finish by giving me:
+1. The zip file for download
+2. A concise list of any ABSENT tabs
+3. Any blockers that prevented an exact screenshot
+```
+
+Once Otis produces it, upload the ZIP here. I’ll use the manifest and screenshots as the source of truth, reuse the exact existing implementations, and add only the Super-admin permission differences.
