@@ -3,7 +3,7 @@
 import { PressPackageBuilder } from './PressPackageBuilder';
 
 export function PressCatalogHellbenderDark() {
-  return <PressPackageBuilder variant="hellbender" />;
+  return <PressPackageBuilder variant="hellbender" audience="artist" />;
 }
 
 export function PressCatalogParamountPackageBuilder() {

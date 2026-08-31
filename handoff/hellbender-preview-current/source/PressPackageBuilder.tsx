@@ -15,13 +15,18 @@
 // A frosted running-total bar stays pinned at the top.
 // Components below are copied verbatim from their donor files.
 
-import { createContext, useContext, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useLayoutEffect, useRef, useCallback, type ReactNode } from 'react';
 import {
   UserPlus,
   Search,
   LayoutDashboard,
   Disc3,
   Users,
+  Megaphone,
+  ShoppingBag,
+  UserCheck,
+  Store,
+  BarChart3,
   Library,
   Gift,
   Settings as Cog,
@@ -62,11 +67,13 @@ import niinaLabelArt from '../assets/niina-label-1.png';
 import hellbenderLogo from '../assets/hellbender-full.svg';
 import hellbenderIcon from '../assets/hellbender-icon.svg';
 import hellbenderOperator from '../assets/travis-whitlock.webp';
+import alexPhoto from '../assets/alex-tebeleff.jpg';
 import paramountOperator from '../assets/paramount/brooke-harris-portrait.jpeg';
 import paramountSymbol from '../assets/paramount/paramount-symbol.png';
 import paramountFrostedWhite from '../assets/paramount/frosted-white-vinyl.png';
 
 export type PressPackageBuilderVariant = 'memphis' | 'hellbender' | 'paramount';
+export type PressPackageBuilderAudience = 'press' | 'artist';
 
 export type PressPackageBuilderConfig = {
   variant: PressPackageBuilderVariant;
@@ -112,19 +119,26 @@ const PRESS_BUILDER_CONFIGS: Record<PressPackageBuilderVariant, PressPackageBuil
 
 export const PressBuilderBrandContext = createContext<PressPackageBuilderConfig>(PRESS_BUILDER_CONFIGS.memphis);
 const usePressBuilderBrand = () => useContext(PressBuilderBrandContext);
+const PressBuilderAudienceContext = createContext<PressPackageBuilderAudience>('press');
+const usePressBuilderAudience = () => useContext(PressBuilderAudienceContext);
 
 function PressMark({ style, darkSurface = true }: { style: React.CSSProperties; darkSurface?: boolean }) {
   const brand = usePressBuilderBrand();
   return <img src={brand.labelMark ?? brand.logo} alt="" aria-hidden style={{ objectFit: 'contain', filter: darkSurface && brand.markOnly ? 'invert(1)' : darkSurface ? brand.labelLogoFilter : undefined, ...style }} />;
 }
 
-export function PressPackageBuilderProvider({ variant, activeNav = 'builder', children }: {
+export function PressPackageBuilderProvider({ variant, audience = 'press', activeNav = 'builder', children }: {
   variant: PressPackageBuilderVariant;
+  audience?: PressPackageBuilderAudience;
   activeNav?: 'builder' | 'catalog';
   children: ReactNode;
 }) {
   const config = { ...PRESS_BUILDER_CONFIGS[variant], activeNav };
-  return <PressBuilderBrandContext.Provider value={config}>{children}</PressBuilderBrandContext.Provider>;
+  return (
+    <PressBuilderBrandContext.Provider value={config}>
+      <PressBuilderAudienceContext.Provider value={audience}>{children}</PressBuilderAudienceContext.Provider>
+    </PressBuilderBrandContext.Provider>
+  );
 }
 
 // ── Per-press label branding ─────────────────────────────────────────
@@ -2615,6 +2629,17 @@ const PRESS_NAV: PressNavItem[] = [
 // artist's Drafts → Projects. One engine, two exits: Create package
 // (back into the catalog) or Send estimate (to a client).
 const ACTIVE_NAV = 'Packages';
+const ARTIST_BUILDER_NAV: Array<{ label: string; icon: typeof LayoutDashboard; active?: boolean }> = [
+  { label: 'Dashboard', icon: LayoutDashboard },
+  { label: 'Releases', icon: Disc3, active: true },
+  { label: 'Audience', icon: Users },
+  { label: 'Acquisition', icon: Megaphone },
+  { label: 'Orders', icon: ShoppingBag },
+  { label: 'Buyers', icon: UserCheck },
+  { label: 'Referrals', icon: UserPlus },
+  { label: 'Shopify', icon: Store },
+  { label: 'Reports', icon: BarChart3 },
+];
 
 function NavLeaf({ label, icon: Icon, soon, route, child }: PressNavChild & { child?: boolean }) {
   const brand = usePressBuilderBrand();
@@ -2699,6 +2724,43 @@ function PressNavTree() {
   );
 }
 
+function ArtistBuilderNav() {
+  return (
+    <>
+      {ARTIST_BUILDER_NAV.map(({ label, icon: Icon, active }) => (
+        <a
+          key={label}
+          href="#"
+          onClick={(event) => event.preventDefault()}
+          className="flex items-center gap-2.5 px-2.5 h-9 rounded-lg transition-colors hover:bg-black/5 text-[13.5px]"
+          style={{
+            fontWeight: active ? 600 : 500,
+            color: active ? INK : SUBINK,
+            backgroundColor: active ? 'var(--q-card)' : undefined,
+            boxShadow: active ? PILL_SHADOW : undefined,
+          }}
+          data-testid={`artist-nav-${label.toLowerCase()}`}
+        >
+          <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? INK : '#a1a1a6' }} />
+          <span className="truncate">{label}</span>
+        </a>
+      ))}
+      <div className="pt-2 mt-auto" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
+        <a
+          href="#"
+          onClick={(event) => event.preventDefault()}
+          className="flex items-center gap-2.5 px-2.5 h-9 rounded-lg transition-colors hover:bg-black/5 text-[13.5px]"
+          style={{ fontWeight: 500, color: SUBINK }}
+          data-testid="artist-nav-settings"
+        >
+          <Cog className="w-4 h-4 flex-shrink-0" style={{ color: '#a1a1a6' }} />
+          <span>Settings</span>
+        </a>
+      </div>
+    </>
+  );
+}
+
 const USER_MENU: Array<{ label: string; icon: typeof UserPen }> = [
   { label: 'Edit profile', icon: UserPen },
   { label: 'Invite teammate', icon: UserPlus },
@@ -2707,6 +2769,10 @@ const USER_MENU: Array<{ label: string; icon: typeof UserPen }> = [
 
 function UserMenu({ qMode, setQMode }: { qMode: QMode; setQMode: (m: QMode) => void }) {
   const brand = usePressBuilderBrand();
+  const audience = usePressBuilderAudience();
+  const accountName = audience === 'artist' ? 'Alex Tebeleff' : brand.operatorName;
+  const accountEmail = audience === 'artist' ? 'alex@howband.com' : brand.operatorEmail;
+  const accountPhoto = audience === 'artist' ? alexPhoto : brand.operatorPhoto;
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -2716,7 +2782,7 @@ function UserMenu({ qMode, setQMode }: { qMode: QMode; setQMode: (m: QMode) => v
           aria-label="Account menu"
           data-testid="button-user-menu"
         >
-          <img src={brand.operatorPhoto} alt={brand.operatorInitials} className="w-full h-full object-cover" />
+          <img src={accountPhoto} alt={accountName} className="w-full h-full object-cover" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -2727,8 +2793,8 @@ function UserMenu({ qMode, setQMode }: { qMode: QMode; setQMode: (m: QMode) => v
         data-testid="menu-user"
       >
         <div className="px-3.5 py-3" style={{ borderBottom: `1px solid ${HAIRLINE}` }}>
-          <div className="text-[13.5px] font-semibold" style={{ color: INK }}>{brand.operatorName}</div>
-          <div className="text-[11.5px] truncate" style={{ color: SUBINK }}>{brand.operatorEmail}</div>
+          <div className="text-[13.5px] font-semibold" style={{ color: INK }}>{accountName}</div>
+          <div className="text-[11.5px] truncate" style={{ color: SUBINK }}>{accountEmail}</div>
         </div>
         <div className="py-1.5">
           {USER_MENU.map((m) => {
@@ -2788,12 +2854,17 @@ function UserMenu({ qMode, setQMode }: { qMode: QMode; setQMode: (m: QMode) => v
 
 export function PressShell({ children }: { children: ReactNode }) {
   const brand = usePressBuilderBrand();
-  // Appearance canon: dark default, persisted via localStorage 'gt-appearance'.
+  const audience = usePressBuilderAudience();
+  // Artist appearance never inherits a press/operator selection. Its optional
+  // Hellbender choice is deliberately scoped under a separate artist key.
+  const appearanceStorageKey = audience === 'artist'
+    ? `gt-artist-appearance-${brand.variant}`
+    : `gt-appearance-${brand.variant}`;
   const [qMode, setQMode] = useState<QMode>(() => {
     try {
-      const v = localStorage.getItem('gt-appearance');
-      return v === 'light' || v === 'dark' || v === 'system' ? v : brand.defaultMode;
-    } catch { return brand.defaultMode; }
+      const v = localStorage.getItem(appearanceStorageKey);
+      return v === 'light' || v === 'dark' || v === 'system' ? v : (audience === 'artist' ? 'light' : brand.defaultMode);
+    } catch { return audience === 'artist' ? 'light' : brand.defaultMode; }
   });
   const [systemDark, setSystemDark] = useState(() => typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: dark)').matches);
   useEffect(() => {
@@ -2803,12 +2874,14 @@ export function PressShell({ children }: { children: ReactNode }) {
     return () => mq.removeEventListener('change', fn);
   }, []);
   const isDark = qMode === 'dark' || (qMode === 'system' && systemDark);
-  useEffect(() => {
-    try { localStorage.setItem('gt-appearance', qMode); } catch { /* mock */ }
+  // Layout timing prevents a mounted artist builder from ever briefly taking on
+  // a prior press/operator dark document attribute before its own key resolves.
+  useLayoutEffect(() => {
+    try { localStorage.setItem(appearanceStorageKey, qMode); } catch { /* mock */ }
     if (isDark) document.documentElement.setAttribute('data-gt-dark', '');
     else document.documentElement.removeAttribute('data-gt-dark');
     return () => { document.documentElement.removeAttribute('data-gt-dark'); };
-  }, [qMode, isDark]);
+  }, [appearanceStorageKey, qMode, isDark]);
   return (
     <div className="q-root h-screen flex flex-col font-sans" style={{ backgroundColor: CANVAS, color: INK }}>
       <style>{Q_THEME_CSS}</style>
@@ -2822,7 +2895,7 @@ export function PressShell({ children }: { children: ReactNode }) {
         }}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          {brand.variant === 'hellbender' ? (
+            {brand.variant === 'hellbender' ? (
             <img
               src={brand.labelMark}
               alt=""
@@ -2880,7 +2953,7 @@ export function PressShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
-            <PressNavTree />
+            {audience === 'artist' ? <ArtistBuilderNav /> : <PressNavTree />}
           </nav>
           <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${HAIRLINE}` }}>
             <span className="text-[9px] uppercase tracking-wider font-bold flex-shrink-0" style={{ color: '#a1a1a6' }}>
@@ -3230,6 +3303,7 @@ const EDIT_SEEDS: Record<string, EditSeed> = {
 // ═══════════════════════════════════════════════════════════════════
 function PressPackageBuilderInner() {
   const brand = usePressBuilderBrand();
+  const audience = usePressBuilderAudience();
   // Edit mode resolves once per mount — hash routing remounts the mock.
   const editId = getEditPkgId();
   const seed = editId ? EDIT_SEEDS[editId] ?? null : null;
@@ -3244,6 +3318,7 @@ function PressPackageBuilderInner() {
   // click lands, then roll back to the index — which whispers the arrival.
   const finishSave = () => {
     setPkgSaved(true);
+    if (audience === 'artist') return;
     window.setTimeout(() => {
       const indexRoute = brand.variant === 'memphis' ? 'PressPackagesIndex' : `PressPackagesPressIndex?press=${brand.variant}`;
       window.location.hash = editId ? `#/${indexRoute}&saved=${editId}` : `#/${indexRoute}`;
@@ -3626,12 +3701,19 @@ function PressPackageBuilderInner() {
         {/* Breadcrumb + page heading — flips to edit-mode grammar when a
             package is opened from the catalog. */}
         <div className="min-w-0">
-          <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
+          {audience === 'press' && <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: '#a1a1a6' }}>
             <a href={brand.variant === 'memphis' ? '#/PressPackagesIndex' : `#/PressPackagesPressIndex?press=${brand.variant}`} className="hover:text-slate-600 transition-colors">Packages</a>
             <span style={{ color: '#d0d0d5' }}>›</span>
             <span style={{ color: SUBINK }}>{seed ? seed.title : 'New package'}</span>
-          </div>
-          {seed ? (
+          </div>}
+          {audience === 'artist' ? (
+            <>
+              <PageHeading lead="Build your package." rest="From scratch." />
+              <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: SUBINK }}>
+                Choose every production detail for this release. Your selections become this release&rsquo;s package.
+              </p>
+            </>
+          ) : seed ? (
             <>
               <PageHeading lead={`${seed.title}.`} rest={seed.stats.status === 'Live' ? 'Tuned and live.' : 'Still a draft.'} />
               <p style={{ fontSize: 16, marginTop: 10, maxWidth: 560, color: SUBINK }}>
@@ -4493,7 +4575,7 @@ function PressPackageBuilderInner() {
             the top of the artist builder (card system copied from
             ArtistReleasePackageTemplates — the press never designs the card,
             only fills in the variables). */}
-        <section id="step-artist-card" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
+        {audience === 'press' && <section id="step-artist-card" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
           <Gate on={allDone}>
             <SectionHeading
               lead="How artists will see it."
@@ -4713,7 +4795,7 @@ function PressPackageBuilderInner() {
               </div>
             </div>
           </Gate>
-        </section>
+        </section>}
 
         {/* ═══ 7 · SAVE ═══ */}
         <section id="step-save" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
@@ -4892,27 +4974,31 @@ function PressPackageBuilderInner() {
                   <span style={{ width: 20, height: 20, borderRadius: '50%', background: '#34a85315', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                     <Check className="w-3 h-3" strokeWidth={3} />
                   </span>
-                  "{cardName.trim() || pkgName || 'Untitled package'}" saved to Product Specs › {brand.displayName} Packages
+                  {audience === 'artist'
+                    ? 'Package added to the release draft.'
+                    : `"${cardName.trim() || pkgName || 'Untitled package'}" saved to Product Specs › ${brand.displayName} Packages`}
                 </div>
               ) : (
                 <>
                   <p className="text-[11.5px] text-right" style={{ color: '#a1a1a6' }}>
-                    {(cardName.trim() || pkgName)
-                      ? 'Packages skip quantity and price — artists pick their quantity later.'
-                      : 'Name your package above — the name is what artists see.'}
+                    {audience === 'artist'
+                      ? 'This package will be attached to your release draft.'
+                      : (cardName.trim() || pkgName)
+                        ? 'Packages skip quantity and price — artists pick their quantity later.'
+                        : 'Name your package above — the name is what artists see.'}
                   </p>
                   {/* Confirm earns its blue (Bill, Aug 26 2026): no name, no save —
                       quiet outline until the package has a real name. */}
                   <Button
                     className="rounded-full px-7"
-                    disabled={!(cardName.trim() || pkgName)}
-                    style={(cardName.trim() || pkgName)
+                    disabled={audience === 'artist' ? !allDone : !(cardName.trim() || pkgName)}
+                    style={(audience === 'artist' ? allDone : Boolean(cardName.trim() || pkgName))
                       ? { background: BLUE, color: '#fff', height: 44, fontSize: 14.5 }
                       : { background: 'transparent', color: '#6e6e73', border: '1px solid #6e6e73', height: 44, fontSize: 14.5, cursor: 'default' }}
                     onClick={finishSave}
                     data-testid="button-save-as-package"
                   >
-                    {seed ? 'Save changes' : 'Save to catalog'}
+                    {audience === 'artist' ? 'Use this package' : seed ? 'Save changes' : 'Save to catalog'}
                   </Button>
                 </>
               )}
@@ -4925,9 +5011,12 @@ function PressPackageBuilderInner() {
   );
 }
 
-export function PressPackageBuilder({ variant = 'memphis' }: { variant?: PressPackageBuilderVariant }) {
+export function PressPackageBuilder({ variant = 'memphis', audience = 'press' }: {
+  variant?: PressPackageBuilderVariant;
+  audience?: PressPackageBuilderAudience;
+}) {
   return (
-    <PressPackageBuilderProvider variant={variant}>
+    <PressPackageBuilderProvider variant={variant} audience={audience}>
       <PressPackageBuilderInner />
     </PressPackageBuilderProvider>
   );
