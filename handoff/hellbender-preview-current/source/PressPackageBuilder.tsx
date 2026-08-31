@@ -51,12 +51,12 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Boxes, Disc as NavVinyl, Square as NavJacket, CircleDot as NavLabel, FileText as NavInsert, Sticker as NavSticker, ReceiptText as NavPricing, ClipboardList as NavEstimates } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from '@/components/ui/popover';
+} from '@workspace/goodtunes-design-system/components/ui/popover';
 import goodtunesLogo from '../assets/goodtunes-logo.png';
 import mrpLogo from '../assets/mrp-logo.png';
 import brandonPhoto from '../assets/brandon-seavers.png';
@@ -414,7 +414,7 @@ function VinylDisc({
   size: number;
   swatch: Swatch;
   labelRatio?: number;
-  bodyRef?: React.RefObject<HTMLDivElement>;
+  bodyRef?: React.RefObject<HTMLDivElement | null>;
   /** Custom center-label content rendered inside the spinning body. */
   labelOverlay?: React.ReactNode;
 }) {
@@ -1771,7 +1771,7 @@ function LabelDisc({
 }: {
   size: number;
   kind: LabelKind;
-  bodyRef?: React.RefObject<HTMLDivElement>;
+  bodyRef?: React.RefObject<HTMLDivElement | null>;
   holeRatio?: number;
   labelRatio?: number;
   offsetLogo?: boolean;
