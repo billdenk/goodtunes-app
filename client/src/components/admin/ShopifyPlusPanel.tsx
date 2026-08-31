@@ -1997,8 +1997,15 @@ function QuoteRow({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } catch {
-      toast({ title: "Download failed", description: "Could not retrieve the estimate file.", variant: "destructive" });
+    } catch (e: any) {
+      // Task #3455 — surface the server's real error (e.g. a 403's message)
+      // instead of always claiming a generic retrieval failure.
+      const msg = String(e?.message ?? "").trim();
+      toast({
+        title: "Download failed",
+        description: msg || "Could not retrieve the estimate file.",
+        variant: "destructive",
+      });
     } finally {
       setDownloading(false);
     }

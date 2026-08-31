@@ -194,6 +194,30 @@ async function tryExtractPdfTotalCents(fileUrl: string): Promise<number | null> 
   }
 }
 
+// ── Legacy quote-total recovery (Task #3455) ──────────────────────────
+// Historical estimate rows uploaded before automatic total extraction
+// carry totalCents NULL and were never activated. Given an album's quote
+// rows (newest first, as the ledger read orders them), pick the first
+// stored-PDF row missing a total whose PDF yields one. Selection and
+// extraction are separated so tests can inject the extractor; the route
+// persists the result. Only meaningful when the album has NO active
+// estimate — callers must check that first.
+export async function recoverLegacyQuoteTotal(
+  quotes: { id: string; fileUrl: string; totalCents: number | null }[],
+  extract: (fileUrl: string) => Promise<number | null> = tryExtractPdfTotalCents,
+): Promise<{ quoteId: string; totalCents: number } | null> {
+  const candidates = quotes
+    .filter((q) => q.totalCents == null && q.fileUrl.startsWith("/objects/"))
+    .slice(0, 3);
+  for (const q of candidates) {
+    const recovered = await extract(q.fileUrl);
+    if (recovered != null && recovered > 0) {
+      return { quoteId: q.id, totalCents: recovered };
+    }
+  }
+  return null;
+}
+
 // ── System-computed manufacturing cost (Task #2697) ───────────────────
 // The same figure the Package (Sell) tab shows for the run: effective
 // per-unit manufacturing cost (broker-discounted snapshot when present,
@@ -1589,7 +1613,48 @@ export function registerShopifyPlusRoutes(app: Express) {
       //   2. the system-computed manufacturing cost (same source as the
       //      Package tab: effective per-unit cost × planned quantity),
       //   3. legacy fallback — the sum of the payment requests.
-      const activeQuote = quotes.find((q) => q.isActive) ?? null;
+      let activeQuote = quotes.find((q) => q.isActive) ?? null;
+
+      // Task #3455 — historical estimates uploaded before automatic total
+      // extraction (Task #2697) carry totalCents NULL and were never
+      // activated, so the ledger silently fell back to the system-computed
+      // cost even though the plant's authoritative PDF total exists in
+      // storage. Recover it lazily on read: when the album has NO active
+      // estimate, parse the stored PDFs (newest first, bounded) for a
+      // total, PERSIST it on the row, and activate that row so subsequent
+      // reads never re-parse. Never touches an album that already has an
+      // active estimate, and a parse failure just leaves the old fallback.
+      if (!activeQuote) {
+        const recovered = await recoverLegacyQuoteTotal(quotes);
+        if (recovered) {
+          const [updated] = await db
+            .update(albumManufacturerQuotes)
+            .set({ totalCents: recovered.totalCents, isActive: true })
+            .where(
+              and(
+                eq(albumManufacturerQuotes.id, recovered.quoteId),
+                isNull(albumManufacturerQuotes.totalCents),
+                // Atomic re-check: an operator may have activated another
+                // estimate between our read and this write. Never mint a
+                // second active row — the operator's choice wins and this
+                // request just falls through to the old fallback.
+                sql`NOT EXISTS (
+                  SELECT 1 FROM ${albumManufacturerQuotes} amq2
+                  WHERE amq2.album_id = ${albumId} AND amq2.is_active = true
+                )`,
+              ),
+            )
+            .returning();
+          if (updated) {
+            const q = quotes.find((x) => x.id === updated.id);
+            if (q) {
+              q.totalCents = updated.totalCents;
+              q.isActive = updated.isActive;
+              activeQuote = q;
+            }
+          }
+        }
+      }
       const stepsSumCents = steps.reduce(
         (s, r) => s + r.amountCents + r.marginCents,
         0,
@@ -1951,12 +2016,18 @@ export function registerShopifyPlusRoutes(app: Express) {
   // The file lives in private object storage under manufacturer-quotes/,
   // so there is no public /objects/ route for it — callers must hit this
   // authenticated endpoint instead.
+  //
+  // Task #3455 — this is a READ: anyone who can read the ledger (the
+  // manage_payouts tier, incl. the artist-scope owner) may download the
+  // estimate they're being asked to pay against. It previously demanded
+  // edit_metadata, which 403'd the paying artist. Mutations (upload,
+  // total edits, activation, delete) stay on gateEditMetadata.
   app.get(
     "/api/admin/albums/:albumId/manufacturing-ledger/quotes/:quoteId/download",
     async (req, res) => {
       const albumId = String(req.params.albumId);
       const quoteId = String(req.params.quoteId);
-      const userId = await gateEditMetadata(req, res, albumId);
+      const userId = await gatePayouts(req, res, albumId);
       if (!userId) return;
 
       const [row] = await db
