@@ -79,6 +79,15 @@ import {
   Video,
   X,
   ArrowLeftRight,
+  BarChart3,
+  Gift,
+  LayoutDashboard,
+  Megaphone,
+  Settings,
+  ShoppingBag,
+  Store,
+  UserCheck,
+  Users,
 } from 'lucide-react';
 import goodtunesLogo from '../assets/goodtunes-logo.png';
 import mrpLogo from '../assets/mrp-logo.svg';
@@ -177,6 +186,19 @@ export const ARTIST_PORTAL_TABS_GIT_BASELINE = [
   { id: 'settings', label: 'Settings' },
 ] as const;
 type ArtistTab = (typeof ARTIST_PORTAL_TABS_GIT_BASELINE)[number]['id'];
+type ArtistLiveTab = ArtistTab | 'acquisition' | 'buyers' | 'referrals' | 'shopify';
+
+const ARTIST_LIVE_NAV: Array<{ id: ArtistLiveTab; label: string; icon: typeof LayoutDashboard }> = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'catalog', label: 'Releases', icon: Disc3 },
+  { id: 'audience', label: 'Audience', icon: Users },
+  { id: 'acquisition', label: 'Acquisition', icon: Megaphone },
+  { id: 'orders', label: 'Orders', icon: ShoppingBag },
+  { id: 'buyers', label: 'Buyers', icon: UserCheck },
+  { id: 'referrals', label: 'Referrals', icon: Gift },
+  { id: 'shopify', label: 'Shopify', icon: Store },
+  { id: 'reports', label: 'Reports', icon: BarChart3 },
+];
 
 type ReleaseFormatId = 'single_lp' | 'cd' | 'cassette';
 type AdminRelease = {
@@ -2481,11 +2503,15 @@ function AccountSection({ t, isSuperAdmin }: { t: Theme; isSuperAdmin: boolean }
 export type ArtistDashboardAccountStackProps = {
   initialRole?: 'super-admin' | 'artist';
   lockRole?: boolean;
+  artistShell?: boolean;
+  viewingAs?: boolean;
 };
 
 export function ArtistDashboardAccountStack({
   initialRole = 'super-admin',
   lockRole = false,
+  artistShell = false,
+  viewingAs = false,
 }: ArtistDashboardAccountStackProps = {}) {
   // Theme state (persisted)
   const [mode, setModeState] = useState<Mode>(() => {
@@ -2493,7 +2519,7 @@ export function ArtistDashboardAccountStack({
       const saved = window.localStorage.getItem('gt-appearance');
       if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
     } catch { /* ignore */ }
-    return initialRole === 'artist' ? 'light' : 'dark';
+    return artistShell || initialRole === 'super-admin' ? 'dark' : 'light';
   });
   const setMode = (m: Mode) => {
     setModeState(m);
@@ -2515,7 +2541,7 @@ export function ArtistDashboardAccountStack({
 
   // Dashboard state
   const [preset, setPreset] = useState<Preset>('30d');
-  const [activeTab, setActiveTab] = useState<ArtistTab>('dashboard');
+  const [activeTab, setActiveTab] = useState<ArtistLiveTab>('dashboard');
   const [message, setMessage] = useState('');
   const [releases, setReleases] = useState<AdminRelease[]>(INITIAL_ADMIN_RELEASES);
   const [selectedRelease, setSelectedRelease] = useState<AdminRelease | null>(null);
@@ -2533,8 +2559,30 @@ export function ArtistDashboardAccountStack({
       data-person-id={MOCK_PERSON.id}
       data-testid="artist-dashboard-account-stack"
     >
-      {/* ── Header ── */}
-      <header
+      {/* ── Caller-owned header ── */}
+      {artistShell ? <header
+        className="h-14 flex-shrink-0 flex items-center justify-between gap-4 pl-3 pr-5 sticky top-0 z-20"
+        style={{ backgroundColor: t.rail, borderBottom: `1px solid ${t.hairline}` }}
+      >
+        <div className="flex items-center gap-2.5 min-w-0">
+          <img src={niinaSoleilPhoto} alt="" className="h-9 w-9 rounded-full object-cover flex-shrink-0" style={{ border: `1px solid ${t.hairline}` }} />
+          <span className="text-[15px] font-semibold whitespace-nowrap" style={{ color: t.ink }}>{MOCK_PERSON.name}</span>
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          {viewingAs && <span className="inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium" style={{ padding: '6px 12px', border: `1px solid ${t.hairline}`, backgroundColor: t.card, color: t.ink }}>
+            <Eye className="w-3.5 h-3.5" style={{ color: t.blue }} />Viewing as {MOCK_PERSON.name}
+          </span>}
+          <button type="button" className={cn('inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium px-3 h-8', t.hoverWash)} style={{ color: t.subink }}>
+            <MessageSquarePlus className="w-3.5 h-3.5" />Feedback
+          </button>
+          <button type="button" onClick={() => setMessage('Feedback and notifications are stubbed at the API boundary.')} className={cn('w-8 h-8 rounded-full flex items-center justify-center', t.hoverWash)} style={{ color: t.subink }} aria-label="Notifications">
+            <Bell className="w-4 h-4" />
+          </button>
+          {viewingAs
+            ? <span className="h-8 w-8 rounded-full flex items-center justify-center text-[12px] font-semibold" style={{ backgroundColor: t.blue, color: '#fff' }} aria-label="Admin account">Bi</span>
+            : <AccountMenu t={t} mode={mode} setMode={setMode} />}
+        </div>
+      </header> : <header
         className="h-14 flex-shrink-0 flex items-center justify-between gap-4 pl-4 pr-6 sticky top-0 z-20"
         style={{ backgroundColor: t.headerBg, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderBottom: `1px solid ${t.hairline}` }}
       >
@@ -2587,7 +2635,7 @@ export function ArtistDashboardAccountStack({
           </button>
           <AccountMenu t={t} mode={mode} setMode={setMode} />
         </div>
-      </header>
+      </header>}
 
       <div className="flex flex-1 min-h-0">
         {/* ── Super-admin rail — DS OperatorRail (canon) ── */}
@@ -2600,13 +2648,43 @@ export function ArtistDashboardAccountStack({
             onNavigate={(id) => setMessage(`${id} link held in comparison frame.`)}
           />
         )}
+        {artistShell && !isSuperAdmin && (
+          <aside className="w-60 flex-shrink-0 flex flex-col" style={{ backgroundColor: t.rail, borderRight: `1px solid ${t.hairline}` }}>
+            <div className="px-2.5 py-2.5">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2" style={{ color: t.faint }} />
+                <input className={cn('w-full h-9 pl-8 pr-9 rounded-full text-[12.5px] focus:outline-none', t.searchPlaceholder)} style={{ border: `1px solid ${t.hairline}`, color: t.ink, backgroundColor: t.card }} placeholder="Search…" readOnly />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-semibold rounded px-1 py-0.5" style={{ color: t.faint, border: `1px solid ${t.hairline}` }}>⌘K</span>
+              </div>
+            </div>
+            <nav className="flex-1 px-2.5 pt-1 pb-3 space-y-0.5 overflow-y-auto">
+              {ARTIST_LIVE_NAV.map((item) => {
+                const Icon = item.icon;
+                const active = activeTab === item.id;
+                return <button key={item.id} type="button" onClick={() => { setActiveTab(item.id); setSelectedRelease(null); }} className={cn('w-full flex items-center gap-2.5 px-2.5 h-9 rounded-xl text-[13px] transition-colors', !active && t.hoverWash)} style={{ fontWeight: active ? 600 : 500, color: active ? t.ink : t.subink, backgroundColor: active ? t.cardSoft : undefined, boxShadow: active ? t.pillShadow : undefined }}>
+                  <Icon className="w-4 h-4 flex-shrink-0" style={{ color: active ? t.blue : t.faint }} />
+                  <span className="truncate flex-1 text-left">{item.label}</span>
+                </button>;
+              })}
+            </nav>
+            <div className="px-2.5 pb-2">
+              <button type="button" onClick={() => { setActiveTab('settings'); setSelectedRelease(null); }} className={cn('w-full flex items-center gap-2.5 px-2.5 h-9 rounded-xl text-[13px] transition-colors', activeTab !== 'settings' && t.hoverWash)} style={{ fontWeight: activeTab === 'settings' ? 600 : 500, color: activeTab === 'settings' ? t.ink : t.subink, backgroundColor: activeTab === 'settings' ? t.cardSoft : undefined, boxShadow: activeTab === 'settings' ? t.pillShadow : undefined }}>
+                <Settings className="w-4 h-4" style={{ color: activeTab === 'settings' ? t.blue : t.faint }} /><span>Settings</span>
+              </button>
+            </div>
+            <div className="flex-shrink-0 px-4 py-3 flex items-center gap-2" style={{ borderTop: `1px solid ${t.hairline}` }}>
+              <span className="text-[9px] uppercase tracking-wider font-bold" style={{ color: t.faint }}>Powered by</span>
+              <img src={goodtunesLogo} alt="GoodTunes" className="h-5 w-auto" style={{ filter: 'brightness(0) invert(1)' }} />
+            </div>
+          </aside>
+        )}
 
         <main className="flex-1 min-w-0 overflow-y-auto">
           <div className="mx-auto w-full px-6 sm:px-10 pt-6 pb-[120px]" style={{ maxWidth: 1240, paddingLeft: 40, paddingRight: 40, paddingBottom: 96 }}>
             <div className="space-y-6">
 
               {/* ── Breadcrumb + operator actions ── */}
-              <div className="flex items-center justify-between gap-3 flex-wrap">
+              {(!artistShell || selectedRelease) && <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex flex-wrap items-center gap-1.5 text-[13px]" style={{ color: t.faint }}>
                   {isSuperAdmin ? <>
                     <button type="button" onClick={() => { setSelectedRelease(null); setActiveTab('dashboard'); }} className="hover:underline" style={{ color: t.faint }}>People</button>
@@ -2657,9 +2735,9 @@ export function ArtistDashboardAccountStack({
                     </>
                   )}
                 </div>
-              </div>
+              </div>}
 
-              {!selectedRelease && <>{/* ── Artist identity header ── */}
+              {!selectedRelease && !artistShell && <>{/* ── Artist identity header ── */}
               <div className="flex items-start gap-5">
                 <button
                   type="button"
@@ -2736,7 +2814,7 @@ export function ArtistDashboardAccountStack({
               {activeTab !== 'dashboard' && activeTab !== 'settings' && activeTab !== 'catalog' && (
                 <div className="rounded-2xl p-8 text-center" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }}>
                   <p className="text-[15px]" style={{ color: t.subink }}>
-                    {ARTIST_PORTAL_TABS_GIT_BASELINE.find((tab) => tab.id === activeTab)?.label ?? activeTab} — body held outside this Dashboard+Account extraction.
+                    {ARTIST_LIVE_NAV.find((tab) => tab.id === activeTab)?.label ?? ARTIST_PORTAL_TABS_GIT_BASELINE.find((tab) => tab.id === activeTab)?.label ?? activeTab} — body held outside this Dashboard+Account extraction.
                   </p>
                   <button type="button" onClick={() => setActiveTab('dashboard')} className="mt-4 inline-flex items-center gap-2 text-[13.5px] font-medium rounded-full px-4 h-9" style={{ color: t.blue }}>
                     ← Back to Dashboard
