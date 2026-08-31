@@ -3335,17 +3335,22 @@ const ART_SAMPLE_SET: ArtSlots = {
 
 // Sample-artwork modal — current preview left, Upload file / Paste a URL
 // right, sample-set link bottom-left. Theme-aware via --q-* tokens.
-function SampleArtworkModal({ slot, art, onSlot, onClose, onSampleSet }: {
+function SampleArtworkModal({ slot, art, onSlot, onClose, onSampleSet, onApply }: {
   slot: SlotId;
   art: ArtSlots;
   onSlot: (id: SlotId) => void;
   onClose: () => void;
   onSampleSet: () => void;
+  onApply: (slot: SlotId, url: string) => void;
 }) {
   const brand = usePressBuilderBrand();
   const [fileSource, setFileSource] = useState<'Upload file' | 'Paste a URL'>('Upload file');
+  const [draft, setDraft] = useState<string | null>(null);
+  const [urlValue, setUrlValue] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const meta = ART_SLOTS.find((s) => s.id === slot)!;
   const current = art[slot];
+  const preview = draft ?? current;
   const CARD = 'var(--q-card)';
   const RAISED = 'var(--q-track)';
   const FAINT = '#a1a1a6';
@@ -3398,8 +3403,8 @@ function SampleArtworkModal({ slot, art, onSlot, onClose, onSampleSet }: {
           <div>
             <div className="h-7 flex items-center text-[11px] font-semibold uppercase tracking-wider" style={{ color: FAINT }}>Currently on the build</div>
             <div className="mt-2.5 aspect-square rounded-xl flex items-center justify-center overflow-hidden" style={{ backgroundColor: RAISED, border: `1px solid ${HAIRLINE}` }} data-testid="preview-current-art">
-              {current ? (
-                <img src={current} alt={`Current ${meta.label.toLowerCase()} art`} className="w-full h-full object-cover" />
+              {preview ? (
+                <img src={preview} alt={`Current ${meta.label.toLowerCase()} art`} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center" style={{ background: '#111112' }}>
                   <PressMark style={{ width: '52%', height: 'auto', opacity: 0.92 }} />
@@ -3407,7 +3412,7 @@ function SampleArtworkModal({ slot, art, onSlot, onClose, onSampleSet }: {
               )}
             </div>
             <div className="mt-3 text-center">
-              <div className="text-[12.5px] font-medium" style={{ color: INK }}>{current ? 'Your sample art' : `${brand.displayName} house artwork`}</div>
+              <div className="text-[12.5px] font-medium" style={{ color: INK }}>{preview ? 'Your sample art' : `${brand.displayName} house artwork`}</div>
               <div className="mt-0.5 text-[11.5px] tabular-nums" style={{ color: FAINT }}>Suggested · {meta.size}</div>
             </div>
           </div>
@@ -3444,7 +3449,30 @@ function SampleArtworkModal({ slot, art, onSlot, onClose, onSampleSet }: {
               </div>
             </div>
             {fileSource === 'Upload file' ? (
-              <button type="button" className="mt-2.5 w-full flex-1 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-colors hover:bg-black/5" style={{ border: `1.5px dashed ${HAIRLINE}`, padding: '20px' }} data-testid="button-upload-drop">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const file = event.dataTransfer.files[0];
+                  if (file?.type.startsWith('image/')) setDraft(URL.createObjectURL(file));
+                }}
+                className="mt-2.5 w-full flex-1 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-colors hover:bg-black/5"
+                style={{ border: `1.5px dashed ${HAIRLINE}`, padding: '20px' }}
+                data-testid="button-upload-drop"
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) setDraft(URL.createObjectURL(file));
+                  }}
+                  data-testid="input-artwork-file"
+                />
                 <CloudUpload className="w-5 h-5" style={{ color: SUBINK }} />
                 <span className="text-[13.5px] font-medium" style={{ color: INK }}>Drag a file here, or click to pick</span>
                 <span className="text-[12px]" style={{ color: FAINT }}>JPG or PNG · {meta.size} suggested</span>
@@ -3452,8 +3480,8 @@ function SampleArtworkModal({ slot, art, onSlot, onClose, onSampleSet }: {
             ) : (
               <div className="mt-2.5 w-full flex-1 rounded-2xl flex flex-col items-center justify-center gap-3" style={{ border: `1.5px dashed ${HAIRLINE}`, padding: '20px 28px' }} data-testid="panel-paste-url">
                 <div className="w-full flex items-center gap-2.5" style={{ maxWidth: 420 }}>
-                  <input readOnly placeholder="https://… Dropbox, Drive, WeTransfer" className="flex-1 h-9 px-3.5 rounded-full text-[12.5px] focus:outline-none" style={{ backgroundColor: RAISED, border: `1px solid ${HAIRLINE}`, color: INK }} />
-                  <button type="button" className="h-9 px-4 rounded-full text-[12.5px] font-semibold flex-shrink-0" style={{ backgroundColor: RAISED, color: SUBINK }} data-testid="button-use-url">Use URL</button>
+                  <input value={urlValue} onChange={(event) => setUrlValue(event.target.value)} placeholder="https://… direct image link" className="flex-1 h-9 px-3.5 rounded-full text-[12.5px] focus:outline-none" style={{ backgroundColor: RAISED, border: `1px solid ${HAIRLINE}`, color: INK }} data-testid="input-artwork-url" />
+                  <button type="button" onClick={() => { const value = urlValue.trim(); if (/^https?:\/\//i.test(value)) setDraft(value); }} className="h-9 px-4 rounded-full text-[12.5px] font-semibold flex-shrink-0" style={{ backgroundColor: RAISED, color: SUBINK }} data-testid="button-use-url">Use URL</button>
                 </div>
                 <span className="text-[12px]" style={{ color: FAINT }}>We fetch the image from the link</span>
               </div>
@@ -3476,7 +3504,7 @@ function SampleArtworkModal({ slot, art, onSlot, onClose, onSampleSet }: {
             <button type="button" onClick={onClose} className="rounded-full text-[13px] font-medium" style={{ padding: '8px 20px', border: `1px solid ${HAIRLINE}`, background: 'transparent', color: SUBINK, cursor: 'pointer' }} data-testid="button-cancel-upload">
               Cancel
             </button>
-            <button type="button" onClick={onClose} className="rounded-full text-[13px] font-semibold" style={{ padding: '8px 22px', border: 'none', background: BLUE, color: '#fff', cursor: 'pointer' }} data-testid="button-save-upload">
+            <button type="button" onClick={() => { if (draft) onApply(slot, draft); onClose(); }} className="rounded-full text-[13px] font-semibold" style={{ padding: '8px 22px', border: 'none', background: BLUE, color: '#fff', cursor: 'pointer' }} data-testid="button-save-upload">
               Save
             </button>
           </div>
@@ -3528,6 +3556,8 @@ function PressPackageBuilderInner() {
   // intake, ported from ArtistReleasePriceGoodDeed. House art shows until a
   // slot is filled; the intake lives with the single final build preview.
   const [art, setArt] = useState<ArtSlots>({ cover: null, sleeve: null, label: null });
+  const temporaryArtUrls = useRef<string[]>([]);
+  useEffect(() => () => temporaryArtUrls.current.forEach((url) => URL.revokeObjectURL(url)), []);
   const [stageHover, setStageHover] = useState(false);
   const [stageMenuOpen, setStageMenuOpen] = useState(false);
   const [modalSlot, setModalSlot] = useState<SlotId | null>(null);
@@ -5180,6 +5210,10 @@ function PressPackageBuilderInner() {
           onSlot={setModalSlot}
           onClose={() => setModalSlot(null)}
           onSampleSet={() => { setArt(ART_SAMPLE_SET); setModalSlot(null); }}
+          onApply={(slot, url) => {
+            if (url.startsWith('blob:')) temporaryArtUrls.current.push(url);
+            setArt((current) => ({ ...current, [slot]: url }));
+          }}
         />
       )}
     </PressShell>
