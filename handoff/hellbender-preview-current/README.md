@@ -78,3 +78,8 @@ Files in source/ are copied verbatim from approved GoodStudio. Integrate against
 ## Complete asset bundle
 
 The assets/ directory contains every local asset referenced by the supplied source files, preserving the same ../assets/... relative import structure from source/. Do not substitute initials, album art, generated marks, or other fallbacks. In particular, use the supplied alex-tebeleff.jpg and how-inner-sleeve.png exactly.
+
+
+## Required vinyl material layers
+
+The estimate and estimate-email vinyl preview is a three-pass renderer: emerald base color, translucent-vinyl.png material texture (multiply at 0.52), and a fixed sheen using vinyl-highlights.png as the mask over a white-to-transparent gradient. Both exact runtime assets are bundled under public/vinyl-layers/. Do not flatten the preview to a solid green disc. When adapting paths for /hellbender-preview, either import these images as modules or serve/map them under the isolated route; preserve maskImage and WebkitMaskImage. Verify both PressClientEstimateHellbender and PressClientEstimateEmailHellbender show the groove texture, radial highlight sweep, translucent variation, and edge depth.
