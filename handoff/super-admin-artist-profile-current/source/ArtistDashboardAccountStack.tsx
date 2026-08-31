@@ -32,6 +32,7 @@ import { OperatorRail } from '@workspace/goodtunes-design-system/components/oper
 import { ComponentIcon, type IconKind } from './PressTemplatesIndex';
 import { ArtistDashboardNextStepsStrip } from './ArtistDashboardNextSteps';
 import { ArtistTemplateTest } from './ArtistTemplateTest';
+import { ArtistReleasePackageBuilderContent } from './ArtistReleasePackageTemplates';
 import {
   Award,
   Banknote,
@@ -101,6 +102,7 @@ import xLogo from '../assets/logo-x.svg';
 import blueskyLogo from '../assets/logo-bluesky.svg';
 import facebookLogo from '../assets/logo-facebook.svg';
 import californialandCover from '../assets/californialand-cover.jpg';
+import niinaSoleilPhoto from '../assets/niina-soleil.webp';
 import niinaLabelOne from '../assets/niina-label-1.png';
 import goodDeedA4Preview from '../assets/gooddeed-californialand-a4.png';
 import goodDeedLetterPreview from '../assets/gooddeed-californialand-letter.png';
@@ -206,7 +208,7 @@ const MOCK_PERSON = {
   id: 'person_niina_soleil',
   name: 'Niina Soleil',
   labelId: null,
-  photoUrl: null,
+  photoUrl: niinaSoleilPhoto,
   shape: 'artist',
   isGroup: false,
   bio: 'Artist behind CALIFORNIALAND.',
@@ -710,7 +712,7 @@ function ReleaseWallCard({ t, release, onOpen, onDuplicate, onDelete }: { t: The
   );
 }
 
-const RELEASE_DETAIL_TABS = ['Dashboard', 'Details', 'Assets', 'Package', 'Store', 'Payments'] as const;
+const RELEASE_DETAIL_TABS = ['Dashboard', 'Package', 'Assets', 'Details', 'Store', 'Payments'] as const;
 type ReleaseDetailTab = (typeof RELEASE_DETAIL_TABS)[number];
 
 function ReleaseDashboard({
@@ -1319,15 +1321,7 @@ function ReleaseDetailSurface({ t, release, onSave }: { t: Theme; release: Admin
             />)}
         </div> : <PlayerArtPanel t={t} release={release} />}
       </div>}
-      {tab === 'Package' && <div className="rounded-2xl px-6 py-8" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }} data-testid="release-package-integration-seam" data-handoff-only="true">
-        <div className="flex items-start gap-3">
-          <Eye className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: t.subink }} />
-          <div>
-            <h2 className="text-[17px] font-semibold" style={{ color: t.ink }}>One package builder. Two entry paths.</h2>
-            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: t.subink }}>Use the approved PressQuoteBuilder presentation for the artist’s build-from-scratch region, with only Otis’s real artist steps. Whether the artist starts here or accepts a press estimate, the same Package page receives the real values, provenance, permissions, and lock state.</p>
-          </div>
-        </div>
-      </div>}
+      {tab === 'Package' && <div data-testid="release-package"><ArtistReleasePackageBuilderContent embedded /></div>}
       {tab === 'Store' && <ReleaseStore t={t} release={release} />}
       {tab === 'Payments' && <ReleasePayments t={t} release={release} />}
     </div>
@@ -2653,11 +2647,11 @@ export function ArtistDashboardAccountStack() {
                 <button
                   type="button"
                   onClick={() => setMessage('Photo editor is stubbed at the upload boundary.')}
-                  className="w-20 h-20 rounded-full flex-shrink-0 flex items-center justify-center text-[22px] font-semibold ring-1"
-                  style={{ backgroundColor: t.cardSoft, color: t.subink, ...(t === THEMES.dark ? { boxShadow: `inset 0 0 0 1px ${t.hairline}` } : {}) }}
+                  className="w-20 h-20 rounded-full flex-shrink-0 overflow-hidden ring-1"
+                  style={{ backgroundColor: t.cardSoft, ...(t === THEMES.dark ? { boxShadow: `inset 0 0 0 1px ${t.hairline}` } : {}) }}
                   aria-label="Edit artist photo"
                 >
-                  AW
+                  <img src={MOCK_PERSON.photoUrl} alt="" className="h-full w-full object-cover" />
                 </button>
                 <div className="flex-1 min-w-0">
                   <div className="text-[11px] font-bold uppercase tracking-wider" style={{ color: t.faint }}>{MOCK_PERSON.shape === 'artist' ? 'Independent' : MOCK_PERSON.shape}</div>
