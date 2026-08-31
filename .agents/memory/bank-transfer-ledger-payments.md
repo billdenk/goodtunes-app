@@ -33,3 +33,6 @@ description: Stripe customer_balance bank transfers on the Shopify+ manufacturin
   **How to apply:** for money-moving reconciliation, require strict,
   fully-paginated live Stripe reads and safe integer cents; fail closed on
   malformed/missing fields or attribution ambiguity.
+  **Confirmed:** after publication, the PI-bound transaction recovery settled
+  the production request at the exact applied amount and produced the expected
+  remaining ledger balance.
