@@ -1,0 +1,63 @@
+Done and verified:
+
+- Niina’s photo replaces **AW**.
+- Release order is **Dashboard → Package → Assets → Details → Store → Payments**.
+- The actual Package builder is visible in the Super-admin frame.
+- Package headings follow Apple canon.
+- Canvas frame is back to **live**.
+- Final Otis commit: [d2958a5](https://github.com/billdenk/goodtunes-app/commit/d2958a5ef92d714c3303935dfa8b5492f4732a59)
+
+### Copy/paste for Otis
+
+```text
+Pull the latest billdenk/goodtunes-app main.
+
+Read these before implementing:
+- docs/STATUS.md
+- handoff/super-admin-artist-profile-current/MANIFEST.md
+- handoff/super-admin-artist-profile-current/UPDATE-2026-08-31.md
+
+Apply the final Super-admin Artist Profile handoff from commit:
+d2958a5ef92d714c3303935dfa8b5492f4732a59
+
+Core ownership rule:
+- Otis remains authoritative for routes, permissions, payloads, calculations, data contracts, lifecycle state, loading/error behavior, and available actions.
+- The approved GoodStudio source is authoritative for visual hierarchy, geometry, copy treatment, interaction presentation, and Apple-canon styling.
+- Preserve all real Otis functionality. Do not invent missing data, routes, dates, values, states, or workflows.
+
+Package:
+- Release navigation order is:
+  Dashboard → Package → Assets → Details → Store → Payments
+- Package precedes Assets because the selected package components determine the required templates and uploads.
+- Use the artist Package builder delivered in:
+  handoff/super-admin-artist-profile-current/source/ArtistReleasePackageTemplates.tsx
+- Do not use the obsolete ArtistPackageBuilder or another historical Playground reconstruction.
+- There is one artist Package surface with two entry paths:
+  1. The artist creates the release/package themselves.
+  2. The artist accepts a press estimate, which Otis converts through its verified lifecycle and uses to pre-populate the same Package surface.
+- Origin may affect provenance, starting values, permissions, and lock state according to Otis contracts. It must not create a second builder.
+- Super-admin sees the same artist Package body inside Super-admin chrome.
+- The build-from-scratch region uses the approved PressQuoteBuilder presentation, but only with behavior and steps supported by Otis’s real artist contract.
+
+Apple canon:
+- Section headings use a concrete noun or concise imperative of one word, two at most.
+- The bold lead owns its period.
+- The quieter continuation explains the action, benefit, question, or next step.
+- Preserve the delivered examples such as:
+  Package. / Packages. / Build. / Size. / Vinyl. / Color. / Quantity.
+
+Identity:
+- Use Niina’s real artist image from:
+  handoff/super-admin-artist-profile-current/assets/niina-soleil.webp
+- Do not render the “AW” initials placeholder.
+
+No dead ends:
+- Every visible control must map to an existing Otis route or action.
+- If a requested action or lifecycle transition is unsupported, report the conflict instead of adding a no-op or inventing behavior.
+
+Keep the current Audience, Orders, and Reports bodies until their later visual review.
+
+After applying the handoff:
+- Update docs/STATUS.md with the applied handoff commit.
+- Report any Otis-versus-handoff conflicts instead of silently choosing or inventing a resolution.
+```
