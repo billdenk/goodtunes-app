@@ -93,3 +93,8 @@ The complete runtime set is bundled under public/vinyl-layers/: opaque-vinyl.png
 ## Builder layout and account-menu correction
 
 Use the updated PressPackageBuilder.tsx verbatim. In Pick a quantity, remove only the album/vinyl/sleeve visual; keep the quantity controls at their original compact 520px width in the existing right-hand lane. Do not center them and do not stretch them full width. Keep the single physical package preview beside the final price in The build, bounded to its own responsive column so it cannot overlap pricing. The Alex account popover must be fully opaque with explicit background, shadow, clipping, and z-index 100. The inner-circle runtime image has a fail-safe onError guard so a missing path can never draw a browser broken-image glyph over the Hellbender center mark; still fix the path and load the bundled file. Acceptance: no duplicate package visual, no pricing overlap at 1440/1024, readable account menu, no broken-image glyph.
+
+
+## Builder step-heading grammar
+
+Every two-tone StepHeading uses a one-word dark lead, or two words only when necessary, followed by the gray explanatory sentence. Current leads: Size, Discs, Weight, Type, Color, Jacket, Inner sleeve, Hole, Label, Insert, Sticker, Sticker size, and Quantity. Do not restore instructional leads such as Pick a size, How many discs, or Add an insert.

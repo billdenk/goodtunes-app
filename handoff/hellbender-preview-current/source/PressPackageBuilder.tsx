@@ -3810,7 +3810,7 @@ function PressPackageBuilderInner() {
               <div className="flex flex-col" style={{ gap: 48 }}>
                 {/* Size */}
                 <section>
-                  <StepHeading lead="Pick a size." rest="The record sets the fit." />
+                  <StepHeading lead="Size." rest="The record sets the fit." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     The size you pick here carries through every step below.
                   </p>
@@ -3838,7 +3838,7 @@ function PressPackageBuilderInner() {
                 {/* Discs — 1LP..4LP (Bill, Aug 16 2026: "we forgot 1LP, 2LP, 3LP, 4LP") */}
                 <Gate on={canDo('discs')}>
                 <section id="step-discs" style={{ scrollMarginTop: 120 }}>
-                  <StepHeading lead="How many discs." rest="Singles to box sets." />
+                  <StepHeading lead="Discs." rest="Singles to box sets." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Each disc adds a pressed record and its label. The jacket holds them all.
                   </p>
@@ -3868,7 +3868,7 @@ function PressPackageBuilderInner() {
                 {/* Weight */}
                 <Gate on={canDo('weight')}>
                 <section id="step-weight" style={{ scrollMarginTop: 120 }}>
-                  <StepHeading lead="Pick a weight." rest="How heavy it presses." />
+                  <StepHeading lead="Weight." rest="How heavy it presses." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     {VINYL_WEIGHTS.length} weights available from {brand.legalName}.
                   </p>
@@ -3900,7 +3900,7 @@ function PressPackageBuilderInner() {
                 <section id="step-ctype" style={{ scrollMarginTop: 120 }}>
                   {picked('ctype') && !typeOpen ? (
                     <>
-                      <StepHeading lead="Pick a type." rest="What kind of vinyl?" />
+                      <StepHeading lead="Type." rest="What kind of vinyl?" />
                       <div
                         className="flex items-center rounded-2xl bg-white"
                         style={{ marginTop: 16, gap: 14, padding: '12px 18px', border: `1px solid ${HAIRLINE}` }}
@@ -3928,7 +3928,7 @@ function PressPackageBuilderInner() {
                     </>
                   ) : (
                     <>
-                      <StepHeading lead="Pick a type." rest="What kind of vinyl?" />
+                      <StepHeading lead="Type." rest="What kind of vinyl?" />
                       <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                         {colors.length} colors in your catalog press for {sizeLabel}.
                       </p>
@@ -3965,7 +3965,7 @@ function PressPackageBuilderInner() {
                 {/* Color — the looks within the chosen type */}
                 <Gate on={canDo('color')}>
                 <section id="step-color" style={{ scrollMarginTop: 120 }}>
-                  <StepHeading lead="Pick a color." rest="From your catalog." />
+                  <StepHeading lead="Color." rest="From your catalog." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     {picked('ctype')
                       ? `${COLOR_TYPES.find((t) => t.id === colorKind)?.name} · ${colors.filter((c) => c.kind === colorKind).length} colors`
@@ -4009,7 +4009,7 @@ function PressPackageBuilderInner() {
             }
             right={
               <>
-                <StepHeading lead="Pick a jacket." rest="How it&rsquo;s built." />
+                <StepHeading lead="Jacket." rest="How it&rsquo;s built." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {jacketOptions.length} types available from {brand.legalName} for {sizeLabel} records.
                 </p>
@@ -4057,7 +4057,7 @@ function PressPackageBuilderInner() {
             }
             right={
               <>
-                <StepHeading lead="Pick an inner sleeve." rest="Printed, unprinted, or polylined." />
+                <StepHeading lead="Inner sleeve." rest="Printed, unprinted, or polylined." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {SLEEVE_OPTIONS.length} inner sleeve types available from {brand.legalName}.
                 </p>
@@ -4113,7 +4113,7 @@ function PressPackageBuilderInner() {
               <div className="flex flex-col" style={{ gap: 48 }}>
                 {is7 && (
                   <section>
-                    <StepHeading lead="Pick a hole." rest="Spindle or jukebox." />
+                    <StepHeading lead="Hole." rest="Spindle or jukebox." />
                     <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                       7&quot; records press with a small spindle hole or the classic large 45 hole.
                     </p>
@@ -4140,7 +4140,7 @@ function PressPackageBuilderInner() {
                 )}
                 <Gate on={canDo('label')}>
                 <section>
-                  <StepHeading lead="Pick a type." rest="Which label type?" />
+                  <StepHeading lead="Label." rest="Which label type?" />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Printed before pressing — the label becomes part of the record.
                   </p>
@@ -4190,7 +4190,7 @@ function PressPackageBuilderInner() {
             }
             right={
               <>
-                <StepHeading lead="Add an insert." rest="Optional — or skip it." />
+                <StepHeading lead="Insert." rest="Optional — or skip it." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {insertsAvailable
                     ? `${visibleInserts.length - 1} insert types available from ${brand.legalName} — or skip it.`
@@ -4240,7 +4240,7 @@ function PressPackageBuilderInner() {
             right={
               <div className="flex flex-col" style={{ gap: 48 }}>
                 <section>
-                  <StepHeading lead="Add a sticker." rest="Die-cut to fit — or none." />
+                  <StepHeading lead="Sticker." rest="Die-cut to fit — or none." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Stickers apply to the shrink-wrap, not the jacket itself.
                   </p>
@@ -4259,7 +4259,7 @@ function PressPackageBuilderInner() {
 
                 {stickerShape && (
                   <section>
-                    <StepHeading lead="Pick a size." rest={`For ${stickerShape.name.toLowerCase()}s.`} />
+                    <StepHeading lead="Sticker size." rest={`For ${stickerShape.name.toLowerCase()}s.`} />
                     <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                       {stickerShape.id === 'upc'
                         ? 'UPC stickers come in one standard retail size.'
@@ -4396,7 +4396,7 @@ function PressPackageBuilderInner() {
             right={
               <div className="flex flex-col" style={{ gap: 48 }}>
                 <section>
-                  <StepHeading lead="Pick a quantity." rest="Watch the price drop." />
+                  <StepHeading lead="Quantity." rest="Watch the price drop." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Bigger runs bring the per-record price down — each card prices this exact record.
                   </p>
