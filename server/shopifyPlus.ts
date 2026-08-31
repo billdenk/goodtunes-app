@@ -130,7 +130,11 @@ export type BankTransferStripe = {
      *  applied the mutation. */
     retrieve: (
       id: string,
-    ) => Promise<{ amount?: number | null; status?: string | null }>;
+    ) => Promise<{
+      amount?: number | null;
+      amount_received?: number | null;
+      status?: string | null;
+    }>;
   };
 };
 
@@ -925,11 +929,14 @@ export async function acceptPartialTransferAsPaid(opts: {
 
   const dueCents = step.amountCents + step.marginCents;
 
-  // What's actually available = the customer's LIVE USD cash balance,
-  // and nothing else. The webhook-recorded tally is historical: the same
-  // Stripe customer (and cash balance) is reused across a run's steps, so
-  // a stale tally can claim funds that have since settled another step.
-  // A successful live read is REQUIRED — fail closed on any Stripe error.
+  // What's actually received comes from Stripe LIVE, never the webhook tally:
+  //   1. amount_received on THIS partially-funded PaymentIntent (Stripe has
+  //      already allocated the transfer, so customer cash balance is $0);
+  //   2. otherwise the customer's unallocated USD cash balance.
+  // The webhook-recorded tally is historical: the same Stripe customer is
+  // reused across a run's steps, so it can claim funds that have since settled
+  // another step. A successful live read is REQUIRED — fail closed if neither
+  // Stripe surface can be read.
   if (!step.stripeCustomerId) {
     return {
       ok: false,
@@ -937,18 +944,40 @@ export async function acceptPartialTransferAsPaid(opts: {
       message: "This step has no Stripe customer to read funds from.",
     };
   }
-  let receivedCents: number;
+  let receivedCents = 0;
+  let piReadError: unknown = null;
   try {
+    const pi = await stripe.paymentIntents.retrieve(piId);
+    const piReceived = pi?.amount_received;
+    receivedCents = typeof piReceived === "number" ? piReceived : 0;
+  } catch (e) {
+    piReadError = e;
+  }
+  try {
+    // Only consult unallocated cash when this PI has no funds attached.
+    // This avoids counting unrelated surplus on the customer when Stripe
+    // already tells us exactly what belongs to this payment.
+    if (receivedCents <= 0) {
     const cust = await stripe.customers.retrieve(step.stripeCustomerId, {
       expand: ["cash_balance"],
     });
     const usd = cust?.cash_balance?.available?.usd;
     receivedCents = typeof usd === "number" ? usd : 0;
+    }
   } catch (e: any) {
+    if (!piReadError) {
+      // The PaymentIntent read succeeded and positively reported no attached
+      // funds; without a cash-balance read we cannot safely infer receipt.
+      return {
+        ok: false,
+        status: 502,
+        message: `Couldn't read the customer's cash balance at Stripe (${e?.message ?? "error"}) — nothing was changed. Retry once Stripe is reachable.`,
+      };
+    }
     return {
       ok: false,
       status: 502,
-      message: `Couldn't read the customer's cash balance at Stripe (${e?.message ?? "error"}) — nothing was changed. Retry once Stripe is reachable.`,
+      message: `Couldn't read the payment or the customer's cash balance at Stripe (${e?.message ?? (piReadError as any)?.message ?? "error"}) — nothing was changed. Retry once Stripe is reachable.`,
     };
   }
   if (receivedCents <= 0) {

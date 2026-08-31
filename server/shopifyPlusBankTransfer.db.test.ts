@@ -42,8 +42,11 @@ function stubStripe(opts: {
   confirmError?: string;
   onUpdate?: (id: string, params: any) => void;
   onConfirm?: (id: string) => void;
+  onCustomerRetrieve?: () => void;
   /** Initial PaymentIntent amount reported by retrieve (default 500000). */
   piAmount?: number;
+  /** Funds already allocated to this partially-funded PaymentIntent. */
+  piAmountReceived?: number;
   /** Simulate a network timeout that lands AFTER Stripe applied the update:
    *  the amount mutates, then the call throws updateError. */
   updateAppliesDespiteError?: boolean;
@@ -61,12 +64,15 @@ function stubStripe(opts: {
   let piStatus: string = opts.piStatus ?? "requires_confirmation";
   return {
     customers: {
-      retrieve: async () => ({
-        cash_balance: {
-          available:
-            opts.cashUsdCents == null ? null : { usd: opts.cashUsdCents },
-        },
-      }),
+      retrieve: async () => {
+        opts.onCustomerRetrieve?.();
+        return {
+          cash_balance: {
+            available:
+              opts.cashUsdCents == null ? null : { usd: opts.cashUsdCents },
+          },
+        };
+      },
     },
     paymentIntents: {
       update: async (id, params) => {
@@ -92,7 +98,11 @@ function stubStripe(opts: {
       },
       retrieve: async () => {
         if (opts.piRetrieveError) throw new Error(opts.piRetrieveError);
-        return { amount: piAmount, status: piStatus };
+        return {
+          amount: piAmount,
+          amount_received: opts.piAmountReceived ?? 0,
+          status: piStatus,
+        };
       },
     },
   };
@@ -385,6 +395,44 @@ test("accept-partial happy path: PI shrunk to received, confirmed, step paid wit
   assert.equal(after1.marginCents, 0);
   assert.equal(after1.amountReceivedCents, 413500);
   assert.ok(after1.paidAt);
+});
+
+test("accept-partial uses PaymentIntent amount_received when allocated funds leave cash balance at zero", async () => {
+  // This is Stripe's real underpayment shape: the $4,135 transfer is already
+  // attached to the $5,370 PI, so none of it remains in customer cash balance.
+  const step = await seedStep({ amountCents: 537000 });
+  const updates: any[] = [];
+  let customerReads = 0;
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 0,
+      piAmount: 537000,
+      piAmountReceived: 413500,
+      onUpdate: (id, p) => updates.push([id, p]),
+      onCustomerRetrieve: () => customerReads++,
+    }),
+  });
+  assert.equal(res.ok, true);
+  if (res.ok) {
+    assert.equal(res.acceptedCents, 413500);
+    assert.equal(res.forgivenCents, 123500);
+  }
+  assert.deepEqual(updates, [[step.stripePaymentIntentId, { amount: 413500 }]]);
+  assert.equal(
+    customerReads,
+    0,
+    "PI-specific funds must not be added to unrelated customer cash",
+  );
+  const [after] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after.status, "paid");
+  assert.equal(after.amountCents, 413500);
+  assert.equal(after.amountReceivedCents, 413500);
 });
 
 test("accept-partial preserves the margin line when the received funds cover it", async () => {
