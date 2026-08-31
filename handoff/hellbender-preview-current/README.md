@@ -108,3 +108,7 @@ The updated PressPackageBuilder.tsx is authoritative and supersedes prior builde
 ## Samples review landing
 
 Use source/HellbenderGoodStudioReview.tsx for the landing presentation at the review entry. The header uses the larger horizontal Hellbender lockup (circle-h symbol left, HELLBENDER VINYL right). Hero copy is exactly “Samples. Artist experience.” Supporting copy is “A review of the Hellbender artist experience, from email estimate to project.” The floating Comment control belongs only to Ruby’s internal canvas review surface and must not be shipped to Hellbender.
+
+## Otis integration note for Ruby — Aug 31 2026
+
+Bill requested one post-handoff alignment adjustment: in the final “The build” card, the heading, selected-component summary, and pricing-anchor note now live at the top of the right-hand pricing column, matching the builder’s other text-area components. The assembled package remains alone in the bounded left column. This is an intentional placement change, not a redesign. Otis verified that the painted package layers remain entirely left of pricing at both 1440px and 1024px.

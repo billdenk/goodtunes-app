@@ -4921,27 +4921,11 @@ function PressPackageBuilderInner() {
         <section id="step-save" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
           <Gate on={allDone}>
           <div className="rounded-3xl bg-white" style={{ marginTop: 28, padding: 32, border: `1px solid ${HAIRLINE}` }}>
-            {/* Header spans the full card (Bill, Aug 22 2026): heading, build
-                summary and anchor note up top; the stage + math sit below. */}
             {/* Packages are catalog items — no client, no quantity picked
                 here. Estimates get built FROM packages later (Bill).
                 Apple-canon two-tone heading, sentence case (Bill, note 3):
                 the ALL-CAPS eyebrows are gone — section identity lives in
                 the heading, matching every other section in this builder. */}
-            <h2 className="tracking-tight" style={{ fontSize: 24, lineHeight: 1.15, fontWeight: 600, paddingLeft: 20 }}>
-              <span style={{ color: INK }}>The build. </span>
-              <span style={{ color: '#a1a1a6' }}>Everything you picked.</span>
-            </h2>
-            <div className="text-[12.5px]" style={{ color: SUBINK, lineHeight: 1.6, paddingLeft: 20, marginTop: 10 }}>
-              {sizeLabel} · {weightId}g · {color.name} · {labelStyle.name} label · {jacketType.name} · {sleeveType.name} sleeve
-              {insertType.id === 'none' ? '' : ` · ${insertType.name}`}
-              {stickerShape ? ` · ${stickerShape.name} sticker` : ''}
-            </div>
-            {/* The pricing anchor is the smallest visible quantity card
-                (Bill, note 1) — no separate minimum-run row. */}
-            <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 8, paddingLeft: 20, maxWidth: 560, lineHeight: 1.5 }} data-testid="anchor-note">
-              Priced at {anchorQty.toLocaleString()} units — the smallest quantity still shown to artists, and the most they&rsquo;d pay. Bigger runs only get cheaper.
-            </div>
             <div
               className="grid items-center gap-10"
               style={{
@@ -5080,6 +5064,20 @@ function PressPackageBuilderInner() {
                 </p>
               </div>
               <div className="min-w-0 flex flex-col">
+                <h2 className="tracking-tight" style={{ fontSize: 24, lineHeight: 1.15, fontWeight: 600 }}>
+                  <span style={{ color: INK }}>The build. </span>
+                  <span style={{ color: '#a1a1a6' }}>Everything you picked.</span>
+                </h2>
+                <div className="text-[12.5px]" style={{ color: SUBINK, lineHeight: 1.6, marginTop: 10 }}>
+                  {sizeLabel} · {weightId}g · {color.name} · {labelStyle.name} label · {jacketType.name} · {sleeveType.name} sleeve
+                  {insertType.id === 'none' ? '' : ` · ${insertType.name}`}
+                  {stickerShape ? ` · ${stickerShape.name} sticker` : ''}
+                </div>
+                {/* The pricing anchor is the smallest visible quantity card
+                    (Bill, note 1) — no separate minimum-run row. */}
+                <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 8, marginBottom: 24, maxWidth: 560, lineHeight: 1.5 }} data-testid="anchor-note">
+                  Priced at {anchorQty.toLocaleString()} units — the smallest quantity still shown to artists, and the most they&rsquo;d pay. Bigger runs only get cheaper.
+                </div>
                 {/* Honest math, big finish — now in lockstep with the client
                     estimate (Bill, Aug 16 2026): Per record expands to the full
                     component breakdown, setup costs are in the math, hairlines
