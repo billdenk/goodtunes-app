@@ -98,3 +98,8 @@ Use the updated PressPackageBuilder.tsx verbatim. In Pick a quantity, remove onl
 ## Builder step-heading grammar
 
 Every two-tone StepHeading uses a one-word dark lead, or two words only when necessary, followed by the gray explanatory sentence. Current leads: Size, Discs, Weight, Type, Color, Jacket, Inner sleeve, Hole, Label, Insert, Sticker, Sticker size, and Quantity. Do not restore instructional leads such as Pick a size, How many discs, or Add an insert.
+
+
+## Final stage hierarchy — authoritative
+
+The updated PressPackageBuilder.tsx is authoritative and supersedes prior builder corrections. Record-selection steps Size through Color show the standalone vinyl DiscStage in the left column. Package-selection steps Jacket through Sticker retain their relevant left-side package/component previews. Quantity alone has hideLeft: zero album/jacket/sleeve/vinyl imagery; the unchanged 520px controls stay in the right lane. The build has exactly one assembled package in a bounded left column and pricing in a separate right column; their boxes must not intersect at 1440 or 1024. The final preview owns the existing Cover / Inner sleeve / Center label artwork intake. Do not move hideLeft to the first Vinyl SplitSection.

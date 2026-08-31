@@ -49,6 +49,9 @@ import {
   MoreHorizontal,
   Plus,
   Trash2,
+  X,
+  CloudUpload,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Boxes, Disc as NavVinyl, Square as NavJacket, CircleDot as NavLabel, FileText as NavInsert, Sticker as NavSticker, ReceiptText as NavPricing, ClipboardList as NavEstimates } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -3308,6 +3311,181 @@ const EDIT_SEEDS: Record<string, EditSeed> = {
   },
 };
 
+// ── Sample-artwork intake (ported from ArtistReleasePriceGoodDeed) ────
+// The approved three-slot interaction: Cover, Inner sleeve, Center label,
+// with a current-art preview, Upload file / Paste a URL, and a sample-set
+// shortcut. Retokened to this builder's theme-aware CSS vars and rebranded
+// to the active press house art (PressMark) instead of the label mark.
+type ArtSlots = { cover: string | null; sleeve: string | null; label: string | null };
+type SlotId = keyof ArtSlots;
+
+const ART_SLOTS: { id: SlotId; label: string; size: string }[] = [
+  { id: 'cover', label: 'Cover', size: '1080 × 1080 px' },
+  { id: 'sleeve', label: 'Inner sleeve', size: '1080 × 1080 px' },
+  { id: 'label', label: 'Center label', size: '1200 × 1200 px' },
+];
+
+// The Californialand sample set — the same approved sample assets used on the
+// artist pricing page, wired to all three slots.
+const ART_SAMPLE_SET: ArtSlots = {
+  cover: californialandCover,
+  sleeve: californialandInnerSleeve,
+  label: niinaLabelArt,
+};
+
+// Sample-artwork modal — current preview left, Upload file / Paste a URL
+// right, sample-set link bottom-left. Theme-aware via --q-* tokens.
+function SampleArtworkModal({ slot, art, onSlot, onClose, onSampleSet }: {
+  slot: SlotId;
+  art: ArtSlots;
+  onSlot: (id: SlotId) => void;
+  onClose: () => void;
+  onSampleSet: () => void;
+}) {
+  const brand = usePressBuilderBrand();
+  const [fileSource, setFileSource] = useState<'Upload file' | 'Paste a URL'>('Upload file');
+  const meta = ART_SLOTS.find((s) => s.id === slot)!;
+  const current = art[slot];
+  const CARD = 'var(--q-card)';
+  const RAISED = 'var(--q-track)';
+  const FAINT = '#a1a1a6';
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ backgroundColor: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }} data-testid="modal-sample-artwork">
+      <div className="rounded-2xl overflow-hidden" style={{ width: 720, maxWidth: 'calc(100vw - 40px)', backgroundColor: CARD, border: `1px solid ${HAIRLINE}`, boxShadow: '0 24px 64px rgba(0,0,0,0.35)' }}>
+        {/* header — title + slot chip row */}
+        <div className="flex items-start justify-between gap-4 px-7 pt-6">
+          <div>
+            <h2 className="text-[19px] font-semibold" style={{ color: INK, letterSpacing: '-0.01em' }}>
+              Sample artwork · {meta.label}
+            </h2>
+            <p className="mt-1 text-[12.5px]" style={{ color: SUBINK }}>
+              Temp art for the preview only — it never leaves this build.
+            </p>
+            <div className="inline-flex items-center rounded-full" style={{ marginTop: 12, padding: 3, backgroundColor: RAISED }} role="tablist" aria-label="Artwork slot" data-testid="chips-artwork-slot">
+              {ART_SLOTS.map((sl) => {
+                const on = sl.id === slot;
+                return (
+                  <button
+                    key={sl.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={on}
+                    onClick={() => onSlot(sl.id)}
+                    className="rounded-full transition-colors"
+                    style={{
+                      padding: '4px 14px', fontSize: 12,
+                      fontWeight: on ? 600 : 500,
+                      color: on ? INK : FAINT,
+                      backgroundColor: on ? CARD : 'transparent',
+                      border: on ? `1px solid ${HAIRLINE}` : '1px solid transparent',
+                      cursor: 'pointer',
+                    }}
+                    data-testid={`chip-slot-${sl.id}`}
+                  >
+                    {sl.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="w-8 h-8 -mr-2 rounded-full flex items-center justify-center transition-colors hover:bg-black/5 flex-shrink-0" style={{ color: SUBINK }} aria-label="Close" data-testid="button-close-upload">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-7 pt-5 pb-5 grid gap-6" style={{ gridTemplateColumns: '230px 1fr' }}>
+          {/* Current art */}
+          <div>
+            <div className="h-7 flex items-center text-[11px] font-semibold uppercase tracking-wider" style={{ color: FAINT }}>Currently on the build</div>
+            <div className="mt-2.5 aspect-square rounded-xl flex items-center justify-center overflow-hidden" style={{ backgroundColor: RAISED, border: `1px solid ${HAIRLINE}` }} data-testid="preview-current-art">
+              {current ? (
+                <img src={current} alt={`Current ${meta.label.toLowerCase()} art`} className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center" style={{ background: '#111112' }}>
+                  <PressMark style={{ width: '52%', height: 'auto', opacity: 0.92 }} />
+                </div>
+              )}
+            </div>
+            <div className="mt-3 text-center">
+              <div className="text-[12.5px] font-medium" style={{ color: INK }}>{current ? 'Your sample art' : `${brand.displayName} house artwork`}</div>
+              <div className="mt-0.5 text-[11.5px] tabular-nums" style={{ color: FAINT }}>Suggested · {meta.size}</div>
+            </div>
+          </div>
+
+          {/* Upload side */}
+          <div className="flex flex-col">
+            <div className="h-7 flex items-center justify-between gap-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: FAINT }}>New file</div>
+              <div className="inline-flex items-center rounded-full" style={{ padding: 3, backgroundColor: RAISED }} role="tablist" aria-label="File source" data-testid="tabs-file-source">
+                {(['Upload file', 'Paste a URL'] as const).map((label) => {
+                  const on = fileSource === label;
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      role="tab"
+                      aria-selected={on}
+                      onClick={() => setFileSource(label)}
+                      className="rounded-full transition-colors"
+                      style={{
+                        padding: '4px 14px', fontSize: 12,
+                        fontWeight: on ? 600 : 500,
+                        color: on ? INK : FAINT,
+                        backgroundColor: on ? CARD : 'transparent',
+                        border: on ? `1px solid ${HAIRLINE}` : '1px solid transparent',
+                        cursor: 'pointer',
+                      }}
+                      data-testid={`tab-source-${label === 'Upload file' ? 'upload' : 'url'}`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {fileSource === 'Upload file' ? (
+              <button type="button" className="mt-2.5 w-full flex-1 rounded-2xl flex flex-col items-center justify-center gap-1.5 transition-colors hover:bg-black/5" style={{ border: `1.5px dashed ${HAIRLINE}`, padding: '20px' }} data-testid="button-upload-drop">
+                <CloudUpload className="w-5 h-5" style={{ color: SUBINK }} />
+                <span className="text-[13.5px] font-medium" style={{ color: INK }}>Drag a file here, or click to pick</span>
+                <span className="text-[12px]" style={{ color: FAINT }}>JPG or PNG · {meta.size} suggested</span>
+              </button>
+            ) : (
+              <div className="mt-2.5 w-full flex-1 rounded-2xl flex flex-col items-center justify-center gap-3" style={{ border: `1.5px dashed ${HAIRLINE}`, padding: '20px 28px' }} data-testid="panel-paste-url">
+                <div className="w-full flex items-center gap-2.5" style={{ maxWidth: 420 }}>
+                  <input readOnly placeholder="https://… Dropbox, Drive, WeTransfer" className="flex-1 h-9 px-3.5 rounded-full text-[12.5px] focus:outline-none" style={{ backgroundColor: RAISED, border: `1px solid ${HAIRLINE}`, color: INK }} />
+                  <button type="button" className="h-9 px-4 rounded-full text-[12.5px] font-semibold flex-shrink-0" style={{ backgroundColor: RAISED, color: SUBINK }} data-testid="button-use-url">Use URL</button>
+                </div>
+                <span className="text-[12px]" style={{ color: FAINT }}>We fetch the image from the link</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* footer — sample-set link bottom-left, Cancel/Save right */}
+        <div className="flex items-center justify-between gap-4 px-7 pb-6" style={{ paddingTop: 6 }}>
+          <button
+            type="button"
+            onClick={onSampleSet}
+            className="text-[12.5px] font-medium hover:opacity-80"
+            style={{ color: BLUE, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+            data-testid="button-sample-set"
+          >
+            Use the Californialand sample set
+          </button>
+          <div className="flex items-center gap-3">
+            <button type="button" onClick={onClose} className="rounded-full text-[13px] font-medium" style={{ padding: '8px 20px', border: `1px solid ${HAIRLINE}`, background: 'transparent', color: SUBINK, cursor: 'pointer' }} data-testid="button-cancel-upload">
+              Cancel
+            </button>
+            <button type="button" onClick={onClose} className="rounded-full text-[13px] font-semibold" style={{ padding: '8px 22px', border: 'none', background: BLUE, color: '#fff', cursor: 'pointer' }} data-testid="button-save-upload">
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // PAGE
 // ═══════════════════════════════════════════════════════════════════
@@ -3346,11 +3524,13 @@ function PressPackageBuilderInner() {
   const [sleeveId, setSleeveId] = useState<string>(seed ? seed.sleeveId : 'printed');
   const [sleeveVariantId, setSleeveVariantId] = useState<string>(() =>
     seed ? (SLEEVE_OPTIONS.find((s) => s.id === seed.sleeveId)?.variants[0]?.id ?? 'board') : 'board');
-  // Qty-stage artwork: MRP house art by default; the button swaps in the
-  // artist's temp artwork (Bill, Aug 16 2026).
-  const [useArtistArt, setUseArtistArt] = useState(false);
-  // Qty-stage record spins on hover, same feel as the hero discs.
-  const qtySpin = useVinylSpin();
+  // Package-stage artwork (Bill): the approved three-slot sample-artwork
+  // intake, ported from ArtistReleasePriceGoodDeed. House art shows until a
+  // slot is filled; the intake lives with the single final build preview.
+  const [art, setArt] = useState<ArtSlots>({ cover: null, sleeve: null, label: null });
+  const [stageHover, setStageHover] = useState(false);
+  const [stageMenuOpen, setStageMenuOpen] = useState(false);
+  const [modalSlot, setModalSlot] = useState<SlotId | null>(null);
 
   const [labelId, setLabelId] = useState<LabelKind>('bw');
   const [holeId, setHoleId] = useState<string>('small');
@@ -3773,7 +3953,6 @@ function PressPackageBuilderInner() {
         {/* ═══ 1 · VINYL (Add your vinyl) ═══ */}
         <section style={{ marginTop: 48 }}>
           <SplitSection
-            hideLeft
             left={
               <Gate on={picked('size')}>
                 <div className="flex flex-col items-center">
@@ -4286,113 +4465,13 @@ function PressPackageBuilderInner() {
 
         {/* ═══ 7 · QUANTITY — moved to the end (Bill, Aug 16 2026): build the
             record first, then watch the run size drop the per-record price.
-            Album on the left (jacket closed, inner sleeve peeking), the
-            original quantity cards on the right (Bill feedback, Aug 16). */}
+            No album visual on this step (Bill): the single retained package
+            preview lives in The build. Quantity cards keep their right lane. */}
         <section id="step-qty" style={{ marginTop: 72, paddingTop: 56, borderTop: `1px solid ${HAIRLINE}`, scrollMarginTop: 104 }}>
           <Gate on={canDo('qty')}>
           <SplitSection
-            left={
-              <>
-                {/* Artist-page treatment (Bill, Aug 16 2026): full-color cover
-                    up front, inner sleeve a sliver + record peeking like the
-                    Niina/Californialand card. Hover slides the sleeve out to a
-                    full peek and the record further; off-hover they tuck back. */}
-                <div className="relative group" style={{ width: JS_BASE + 140, height: JS_BASE + 12 }} data-testid="qty-album-stage">
-                  {/* record — the real VinylDisc render of the chosen color
-                      (splatter layers and all), peeking right of the jacket */}
-                  <div
-                    className="absolute transition-transform duration-500 ease-out group-hover:translate-x-11"
-                    style={{ left: 140, top: 14, width: JS_BASE - 16, height: JS_BASE - 16, zIndex: 1, borderRadius: '50%', boxShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
-                    aria-hidden
-                  >
-                    <div onPointerEnter={qtySpin.onPointerEnter} onPointerLeave={qtySpin.onPointerLeave}>
-                    <VinylDisc size={JS_BASE - 16} swatch={color} bodyRef={qtySpin.bodyRef} labelOverlay={
-                    <div className="absolute rounded-full overflow-hidden" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: color.photo ? '40%' : '33.4%', height: color.photo ? '40%' : '33.4%', zIndex: 2 }}>
-                      {labelStyle.id === 'color' && (useArtistArt ? (
-                        <img src={niinaLabelArt} alt="" aria-hidden className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center" style={{
-                          background:
-                            'conic-gradient(from 210deg,' +
-                            '#e91e8c 0deg, #8e2de2 55deg, #2a52d8 110deg,' +
-                            '#0fa596 165deg, #2e9e3f 210deg, #d99a00 265deg,' +
-                            '#e05a1a 305deg, #e91e8c 360deg)',
-                        }}>
-                          <PressMark style={{ width: '72%', height: '72%', opacity: 0.95 }} />
-                        </div>
-                      ))}
-                      {labelStyle.id === 'bw' && (
-                        <div className="w-full h-full" style={{ background: '#ffffff' }}>
-                          <PressMark darkSurface={false} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '56%', height: '56%', opacity: 0.78 }} />
-                        </div>
-                      )}
-                      {labelStyle.id === 'blank' && <div className="w-full h-full" style={{ background: '#ffffff' }} />}
-                      <div className="absolute rounded-full" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 9, height: 9, background: '#161617', zIndex: 3 }} />
-                    </div>
-                    } />
-                    </div>
-                    <div className="absolute" style={{ bottom: 4, right: -8, zIndex: 5 }}>
-                      <RewindButton show={qtySpin.showRewind} onClick={qtySpin.rewind} size={28} />
-                    </div>
-                  </div>
-                  {/* inner sleeve — a sliver at rest, expands out on hover */}
-                  <div
-                    className="absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-6"
-                    style={{
-                      left: 38, top: 10, width: JS_BASE - 12, height: JS_BASE - 12, zIndex: 2,
-                      background: look.printed
-                        ? 'linear-gradient(155deg, #1e1e26 0%, #0f0f14 100%)'
-                        : look.color === 'black' ? '#0a0a0a' : '#ffffff',
-                      border: look.color === 'black' || look.printed ? '1px solid #222' : '1px solid rgba(0,0,0,0.10)',
-                      boxShadow: '0 1px 8px rgba(0,0,0,0.22)',
-                      overflow: 'hidden',
-                    }}
-                    aria-hidden
-                  >
-                    {look.printed && (useArtistArt ? (
-                      <img src={californialandInnerSleeve} alt="" aria-hidden className="w-full h-full object-cover" />
-                    ) : (
-                      <RainbowPrintFace logoSize={(JS_BASE - 12) * 0.42} />
-                    ))}
-                    {look.polylined && (
-                      <div className="absolute inset-0" style={{ background: 'linear-gradient(115deg, rgba(255,255,255,0.0) 40%, rgba(255,255,255,0.25) 50%, rgba(255,255,255,0.0) 60%)' }} />
-                    )}
-                    {look.boardWeight && (
-                      <div className="absolute" style={{ right: 0, top: 0, bottom: 0, width: 3, background: 'rgba(255,255,255,0.25)' }} />
-                    )}
-                  </div>
-                  {/* jacket — MRP house jacket by default; artist cover on swap.
-                      PMP-style house jacket (Bill, Aug 16 2026): dark board, white
-                      press mark, nothing else. Memphis will supply the real image;
-                      white via CSS invert — only dark assets exist. */}
-                  <div className="absolute overflow-hidden rounded-sm" style={{ left: 0, top: 0, width: JS_BASE, height: JS_BASE, zIndex: 3, boxShadow: '0 4px 22px rgba(0,0,0,0.35)' }}>
-                    {useArtistArt ? (
-                      <img src={californialandCover} alt="Artist cover" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center" style={{ background: '#111112' }}>
-                        <PressMark style={{ width: '52%', height: 'auto', opacity: 0.92 }} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <p className="text-[12px] text-center" style={{ marginTop: 6, maxWidth: 360, color: '#a1a1a6' }}>
-                  {useArtistArt ? 'Artist temp artwork for this package' : `${brand.displayName} house artwork by default`} — hover to slide the sleeve and record out.
-                </p>
-                {/* Swap-in point (Bill, Aug 16 2026): a press can drop in the
-                    artist's temp artwork, sleeve, and label for the estimate;
-                    otherwise the press default shows. Mock-only affordance. */}
-                <button
-                  type="button"
-                  onClick={() => setUseArtistArt((v) => !v)}
-                  aria-pressed={useArtistArt}
-                  className="rounded-full text-[12px] font-medium transition-colors hover:bg-black/5"
-                  style={{ marginTop: 10, padding: '6px 14px', border: `1px solid ${HAIRLINE}`, color: SUBINK, background: 'transparent', cursor: 'pointer' }}
-                  data-testid="qty-swap-artwork"
-                >
-                  {useArtistArt ? `Back to ${brand.displayName} house artwork` : 'Use the artist\u2019s artwork instead\u2026'}
-                </button>
-              </>
-            }
+            hideLeft
+            left={null}
             right={
               <div className="flex flex-col" style={{ gap: 48 }}>
                 <section>
@@ -4450,7 +4529,7 @@ function PressPackageBuilderInner() {
                           </button>
 
                           {/* Quiet ··· affordance — revealed on hover/focus, top-right */}
-                          {!below && (
+                          {!below && audience === 'press' && (
                             <Popover open={qtyMenuOpen === q} onOpenChange={(o) => setQtyMenuOpen(o ? q : null)}>
                               <PopoverTrigger asChild>
                                 <button
@@ -4837,14 +4916,48 @@ function PressPackageBuilderInner() {
               {/* The final package preview lives beside the final price only.
                   Its geometry is bounded to its own column so it never crosses
                   into the pricing record. */}
-              <div className="min-w-0 flex items-center justify-center">
-                <div className="relative group w-full max-w-[420px] h-[312px]" data-testid="save-package-stage">
+              <div className="min-w-0 flex flex-col items-center justify-center">
+                {/* The single retained package preview. The sample-artwork
+                    intake (ported from ArtistReleasePriceGoodDeed) lives here:
+                    hover reveals •••, which opens a per-slot sample-art modal.
+                    Cover / Inner sleeve / Center label all update this stage. */}
+                <div
+                  className="relative group w-full max-w-[420px] h-[312px]"
+                  data-testid="save-package-stage"
+                  onMouseEnter={() => setStageHover(true)}
+                  onMouseLeave={() => { setStageHover(false); setStageMenuOpen(false); }}
+                >
                   <div
                     className="absolute transition-transform duration-500 ease-out group-hover:translate-x-8"
                     style={{ left: 118, top: 14, width: 284, height: 284, zIndex: 1, borderRadius: '50%', boxShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
                     aria-hidden
                   >
-                    <VinylDisc size={284} swatch={color} />
+                    <VinylDisc size={284} swatch={color} labelOverlay={
+                      <div className="absolute rounded-full overflow-hidden" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: color.photo ? '40%' : '33.4%', height: color.photo ? '40%' : '33.4%', zIndex: 2 }}>
+                        {/* center-label error guard: only the color label carries
+                            art; bw and blank keep their canon faces. */}
+                        {labelStyle.id === 'color' && (art.label ? (
+                          <img src={art.label} alt="" aria-hidden className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center" style={{
+                            background:
+                              'conic-gradient(from 210deg,' +
+                              '#e91e8c 0deg, #8e2de2 55deg, #2a52d8 110deg,' +
+                              '#0fa596 165deg, #2e9e3f 210deg, #d99a00 265deg,' +
+                              '#e05a1a 305deg, #e91e8c 360deg)',
+                          }}>
+                            <PressMark style={{ width: '72%', height: '72%', opacity: 0.95 }} />
+                          </div>
+                        ))}
+                        {labelStyle.id === 'bw' && (
+                          <div className="w-full h-full" style={{ background: '#ffffff' }}>
+                            <PressMark darkSurface={false} style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '56%', height: '56%', opacity: 0.78 }} />
+                          </div>
+                        )}
+                        {labelStyle.id === 'blank' && <div className="w-full h-full" style={{ background: '#ffffff' }} />}
+                        <div className="absolute rounded-full" style={{ left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: 9, height: 9, background: '#161617', zIndex: 3 }} />
+                      </div>
+                    } />
                   </div>
                   <div
                     className="absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-5"
@@ -4859,22 +4972,67 @@ function PressPackageBuilderInner() {
                     }}
                     aria-hidden
                   >
-                    {look.printed && (useArtistArt ? (
-                      <img src={californialandInnerSleeve} alt="" aria-hidden className="w-full h-full object-cover" />
+                    {look.printed && (art.sleeve ? (
+                      <img src={art.sleeve} alt="" aria-hidden className="w-full h-full object-cover" />
                     ) : (
                       <RainbowPrintFace logoSize={121} />
                     ))}
                   </div>
                   <div className="absolute overflow-hidden rounded-sm" style={{ left: 0, top: 0, width: 300, height: 300, zIndex: 3, boxShadow: '0 4px 22px rgba(0,0,0,0.35)' }}>
-                    {useArtistArt ? (
-                      <img src={californialandCover} alt="Artist cover" className="w-full h-full object-cover" />
+                    {art.cover ? (
+                      <img src={art.cover} alt="Sample cover" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center" style={{ background: '#111112' }}>
                         <PressMark style={{ width: '52%', height: 'auto', opacity: 0.92 }} />
                       </div>
                     )}
                   </div>
+                  {/* ••• — appears on hover over the cover, opens the sample-art menu */}
+                  <button
+                    type="button"
+                    aria-label="Sample artwork actions"
+                    onClick={() => setStageMenuOpen((v) => !v)}
+                    className="absolute w-8 h-8 rounded-full inline-flex items-center justify-center transition-opacity z-10"
+                    style={{
+                      top: 10, left: 300 - 32 - 10,
+                      opacity: stageHover || stageMenuOpen ? 1 : 0,
+                      pointerEvents: stageHover || stageMenuOpen ? 'auto' : 'none',
+                      backgroundColor: 'rgba(22,22,24,0.82)',
+                      border: `1px solid ${HAIRLINE}`,
+                      color: '#fff',
+                      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+                    }}
+                    data-testid="button-stage-menu"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </button>
+                  {stageMenuOpen && (
+                    <div
+                      className="absolute z-20 rounded-xl py-1.5 text-left"
+                      style={{ top: 50, left: 300 - 10 - 200, minWidth: 200, backgroundColor: 'var(--q-card)', boxShadow: '0 12px 32px rgba(0,0,0,0.28)', border: `1px solid ${HAIRLINE}` }}
+                      data-testid="menu-stage-artwork"
+                    >
+                      {ART_SLOTS.map((sl) => (
+                        <button
+                          key={sl.id}
+                          type="button"
+                          onClick={() => { setStageMenuOpen(false); setModalSlot(sl.id); }}
+                          className="w-full flex items-center gap-2.5 px-3.5 py-2 text-[12.5px] font-medium hover:bg-black/5"
+                          style={{ color: INK, background: 'none', border: 'none', cursor: 'pointer' }}
+                          data-testid={`menu-item-sample-${sl.id}`}
+                        >
+                          <ImageIcon className="w-3.5 h-3.5" style={{ color: SUBINK }} />
+                          Sample {sl.label.toLowerCase()}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+                <p className="text-[12px] text-center" style={{ marginTop: 10, maxWidth: 360, color: '#a1a1a6' }}>
+                  {art.cover || art.sleeve || art.label
+                    ? 'Sample artwork on the preview — temp art, never sent to the press.'
+                    : `${brand.displayName} house artwork by default — hover the cover to sample your own.`}
+                </p>
               </div>
               <div className="min-w-0 flex flex-col">
                 {/* Honest math, big finish — now in lockstep with the client
@@ -5014,6 +5172,16 @@ function PressPackageBuilderInner() {
           </Gate>
         </section>
       </div>
+
+      {modalSlot && (
+        <SampleArtworkModal
+          slot={modalSlot}
+          art={art}
+          onSlot={setModalSlot}
+          onClose={() => setModalSlot(null)}
+          onSampleSet={() => { setArt(ART_SAMPLE_SET); setModalSlot(null); }}
+        />
+      )}
     </PressShell>
   );
 }
