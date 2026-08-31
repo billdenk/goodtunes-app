@@ -1324,7 +1324,7 @@ function ReleaseDetailSurface({ t, release, onSave }: { t: Theme; release: Admin
           <Eye className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: t.subink }} />
           <div>
             <h2 className="text-[17px] font-semibold" style={{ color: t.ink }}>One package builder. Two entry paths.</h2>
-            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: t.subink }}>Use the approved PressQuoteBuilder presentation here whether the artist starts the release or accepts a press estimate. Otis supplies the real starting values, provenance, permissions, and lock state; do not port the obsolete ArtistPackageBuilder.</p>
+            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: t.subink }}>Use the approved PressQuoteBuilder presentation for the artist’s build-from-scratch region, with only Otis’s real artist steps. Whether the artist starts here or accepts a press estimate, the same Package page receives the real values, provenance, permissions, and lock state.</p>
           </div>
         </div>
       </div>}
