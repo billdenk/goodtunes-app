@@ -2478,14 +2478,22 @@ function AccountSection({ t, isSuperAdmin }: { t: Theme; isSuperAdmin: boolean }
 }
 
 // ─── Main component ───────────────────────────────────────────────────────
-export function ArtistDashboardAccountStack() {
+export type ArtistDashboardAccountStackProps = {
+  initialRole?: 'super-admin' | 'artist';
+  lockRole?: boolean;
+};
+
+export function ArtistDashboardAccountStack({
+  initialRole = 'super-admin',
+  lockRole = false,
+}: ArtistDashboardAccountStackProps = {}) {
   // Theme state (persisted)
   const [mode, setModeState] = useState<Mode>(() => {
     try {
       const saved = window.localStorage.getItem('gt-appearance');
       if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
     } catch { /* ignore */ }
-    return 'dark';
+    return initialRole === 'artist' ? 'light' : 'dark';
   });
   const setMode = (m: Mode) => {
     setModeState(m);
@@ -2503,7 +2511,7 @@ export function ArtistDashboardAccountStack() {
   const t = mode === 'dark' || (mode === 'system' && systemDark) ? THEMES.dark : THEMES.light;
 
   // Role toggle (super-admin = extra operator controls)
-  const [isSuperAdmin, setIsSuperAdmin] = useState(true);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(initialRole === 'super-admin');
 
   // Dashboard state
   const [preset, setPreset] = useState<Preset>('30d');
@@ -2535,29 +2543,31 @@ export function ArtistDashboardAccountStack() {
           <img src={goodtunesLogo} alt="GoodTunes" className="h-7 w-auto flex-shrink-0" style={{ filter: 'brightness(0) invert(1)' }} />
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {/* Role toggle — prototype chrome */}
-          <button
-            type="button"
-            onClick={() => setIsSuperAdmin((v) => !v)}
-            className={cn('h-8 px-3 rounded-full inline-flex items-center gap-1.5 text-[12.5px] font-medium transition-colors', t.hoverWash)}
-            style={{ color: t.faint, border: `1px solid ${t.hairline}` }}
-            aria-label="Toggle between super-admin and artist view"
-            title={isSuperAdmin ? 'Switch to Artist view' : 'Switch to Super-admin view'}
-          >
-            {isSuperAdmin ? <User className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
-            <span className="hidden sm:inline">{isSuperAdmin ? 'Artist view' : 'Super-admin'}</span>
-          </button>
-          {/* Variation guide */}
-          <button
-            type="button"
-            onClick={() => setShowGuide(true)}
-            className={cn('h-8 px-3 rounded-full inline-flex items-center gap-1.5 text-[13px] font-medium transition-colors', t.hoverWash)}
-            style={{ color: t.subink }}
-            data-testid="button-interaction-guide"
-          >
-            <ListChecks className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Guide</span>
-          </button>
+          {!lockRole && <>
+            {/* Role toggle — prototype chrome */}
+            <button
+              type="button"
+              onClick={() => setIsSuperAdmin((v) => !v)}
+              className={cn('h-8 px-3 rounded-full inline-flex items-center gap-1.5 text-[12.5px] font-medium transition-colors', t.hoverWash)}
+              style={{ color: t.faint, border: `1px solid ${t.hairline}` }}
+              aria-label="Toggle between super-admin and artist view"
+              title={isSuperAdmin ? 'Switch to Artist view' : 'Switch to Super-admin view'}
+            >
+              {isSuperAdmin ? <User className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
+              <span className="hidden sm:inline">{isSuperAdmin ? 'Artist view' : 'Super-admin'}</span>
+            </button>
+            {/* Variation guide */}
+            <button
+              type="button"
+              onClick={() => setShowGuide(true)}
+              className={cn('h-8 px-3 rounded-full inline-flex items-center gap-1.5 text-[13px] font-medium transition-colors', t.hoverWash)}
+              style={{ color: t.subink }}
+              data-testid="button-interaction-guide"
+            >
+              <ListChecks className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Guide</span>
+            </button>
+          </>}
           <button
             type="button"
             className={cn('h-8 px-3 rounded-full inline-flex items-center gap-1.5 text-[13px] font-medium transition-colors', t.hoverWash)}
@@ -2598,10 +2608,17 @@ export function ArtistDashboardAccountStack() {
               {/* ── Breadcrumb + operator actions ── */}
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex flex-wrap items-center gap-1.5 text-[13px]" style={{ color: t.faint }}>
-                  <button type="button" onClick={() => { setSelectedRelease(null); setActiveTab('dashboard'); }} className="hover:underline" style={{ color: t.faint }}>People</button>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                  {selectedRelease ? <button type="button" onClick={() => { setSelectedRelease(null); setActiveTab('dashboard'); }} className="hover:underline" style={{ color: t.faint }}>{MOCK_PERSON.name}</button> : <span style={{ color: t.ink, fontWeight: 600 }}>{MOCK_PERSON.name}</span>}
-                  {selectedRelease && <><ChevronRight className="w-3.5 h-3.5" /><button type="button" onClick={() => { setSelectedRelease(null); setActiveTab('catalog'); }} className="hover:underline" style={{ color: t.faint }}>Releases</button><ChevronRight className="w-3.5 h-3.5" /><span style={{ color: t.ink, fontWeight: 600 }}>{selectedRelease.title}</span></>}
+                  {isSuperAdmin ? <>
+                    <button type="button" onClick={() => { setSelectedRelease(null); setActiveTab('dashboard'); }} className="hover:underline" style={{ color: t.faint }}>People</button>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                    {selectedRelease ? <button type="button" onClick={() => { setSelectedRelease(null); setActiveTab('dashboard'); }} className="hover:underline" style={{ color: t.faint }}>{MOCK_PERSON.name}</button> : <span style={{ color: t.ink, fontWeight: 600 }}>{MOCK_PERSON.name}</span>}
+                  </> : <>
+                    {selectedRelease ? <button type="button" onClick={() => { setSelectedRelease(null); setActiveTab('catalog'); }} className="hover:underline" style={{ color: t.faint }}>Releases</button> : <span style={{ color: t.ink, fontWeight: 600 }}>{activeTab === 'catalog' ? 'Releases' : ARTIST_PORTAL_TABS_GIT_BASELINE.find((item) => item.id === activeTab)?.label ?? 'Dashboard'}</span>}
+                  </>}
+                  {selectedRelease && (isSuperAdmin
+                    ? <><ChevronRight className="w-3.5 h-3.5" /><button type="button" onClick={() => { setSelectedRelease(null); setActiveTab('catalog'); }} className="hover:underline" style={{ color: t.faint }}>Releases</button><ChevronRight className="w-3.5 h-3.5" /><span style={{ color: t.ink, fontWeight: 600 }}>{selectedRelease.title}</span></>
+                    : <><ChevronRight className="w-3.5 h-3.5" /><span style={{ color: t.ink, fontWeight: 600 }}>{selectedRelease.title}</span></>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5">
                   {isSuperAdmin && (
