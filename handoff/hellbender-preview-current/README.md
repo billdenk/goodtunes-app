@@ -73,3 +73,8 @@ Files in source/ are copied verbatim from approved GoodStudio. Integrate against
 - CALIFORNIALAND currently exposes only Vinyl; Single LP; Memphis Record Pressing; At press; MRP estimate · CALIFORNIALAND · Single LP; $5,430 estimated; $1,295 paid; and $4,135 outstanding. Do not import historical Ruby/Black/Seafoam, quantities, or unit prices from unrelated mocks.
 - Newly agreed package snapshots use the same visual hierarchy and may render only their stored title, component summary, minimum run, calculated unit cost, and source.
 - Agreed state remains read-only with Request change; do not show presets or an editable builder.
+
+
+## Complete asset bundle
+
+The assets/ directory contains every local asset referenced by the supplied source files, preserving the same ../assets/... relative import structure from source/. Do not substitute initials, album art, generated marks, or other fallbacks. In particular, use the supplied alex-tebeleff.jpg and how-inner-sleeve.png exactly.
