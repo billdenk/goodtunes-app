@@ -1247,6 +1247,108 @@ function ReleasePayments({ t, release }: { t: Theme; release: AdminRelease }) {
   </div>;
 }
 
+type PackageSpecRow = { label: string; value: string; known?: boolean };
+type PackageSpecValue = Omit<PackageSpecRow, 'label'>;
+
+function AgreedPackageRecord({ t, release, onRequestChange }: { t: Theme; release: AdminRelease; onRequestChange: () => void }) {
+  const snapshot = release.packageSnapshot;
+  const snapshotExplicitlyNamesBlack = Boolean(snapshot && /\bblack\b/i.test(`${snapshot.title} ${snapshot.subtitle}`));
+  const isCaliforniaLandRecord = release.id === 'california-land' && !snapshot;
+  const known = (value: string): PackageSpecValue => ({ value, known: true });
+  const unknown = (): PackageSpecValue => ({ value: 'Not exposed' });
+  const specificationGroups: Array<{ title: string; rows: PackageSpecRow[] }> = [
+    {
+      title: 'Record',
+      rows: [
+        { label: 'Format', ...(isCaliforniaLandRecord ? known('Vinyl') : unknown()) },
+        { label: 'Size', ...unknown() },
+        { label: 'Disc count / configuration', ...(isCaliforniaLandRecord ? known('Single LP') : unknown()) },
+        { label: 'Weight', ...unknown() },
+        { label: 'Vinyl type', ...unknown() },
+        { label: 'Color', ...unknown() },
+        { label: 'Center label', ...unknown() },
+      ],
+    },
+    {
+      title: 'Packaging',
+      rows: [
+        { label: 'Jacket', ...unknown() },
+        { label: 'Inner sleeve', ...unknown() },
+        { label: 'Insert / add-ons', ...unknown() },
+      ],
+    },
+    {
+      title: 'Production',
+      rows: [
+        { label: 'Package title', ...(snapshot ? known(snapshot.title) : unknown()) },
+        { label: 'Component summary', ...(snapshot ? known(snapshot.subtitle) : unknown()) },
+        { label: 'Quantity / minimum run', ...(snapshot ? known(snapshot.minRun.toLocaleString()) : unknown()) },
+        { label: 'Calculated / recorded unit cost', ...(snapshot ? known(`$${snapshot.unitCost.toFixed(2)} / unit`) : unknown()) },
+        { label: 'Setup', ...unknown() },
+        { label: 'Manufacturing total', ...(isCaliforniaLandRecord ? known('$5,430 estimated') : unknown()) },
+        { label: 'Paid', ...(isCaliforniaLandRecord ? known('$1,295 paid') : unknown()) },
+        { label: 'Outstanding', ...(isCaliforniaLandRecord ? known('$4,135 outstanding') : unknown()) },
+        { label: 'Manufacturing partner', ...(isCaliforniaLandRecord ? known('Memphis Record Pressing') : unknown()) },
+        { label: 'Estimate', ...(isCaliforniaLandRecord ? known('MRP estimate · CALIFORNIALAND · Single LP') : unknown()) },
+        { label: 'Production status', ...(isCaliforniaLandRecord ? known('At press') : unknown()) },
+        { label: 'Source / provenance', ...(snapshot ? known(snapshot.source) : unknown()) },
+      ],
+    },
+  ];
+  const previewStatus = snapshotExplicitlyNamesBlack ? 'Black vinyl sourced by package details' : 'Color not exposed';
+
+  return (
+    <section data-testid="agreed-package-production-record">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>Package. <span className="font-normal" style={{ color: t.subink }}>The agreed production record.</span></h2>
+          <p className="mt-1 text-[13px]" style={{ color: t.subink }}>A read-only record of manufacturing values available to this release.</p>
+        </div>
+        <QuietAction t={t} onClick={onRequestChange} testid="button-request-package-change">Request change</QuietAction>
+      </div>
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <SectionCard t={t} className="min-w-0" testid="card-package-product-preview">
+          <div className="p-5">
+            <p className="text-[15px] font-semibold" style={{ color: t.ink }}>Product preview</p>
+            <p className="mt-1 text-[13px]" style={{ color: t.subink }}>Jacket artwork and the available record treatment.</p>
+            <div className="relative mt-6 flex min-h-[280px] items-center justify-center overflow-hidden rounded-2xl p-5" style={{ backgroundColor: t.cardSoft }}>
+              <div className="relative h-48 w-48 sm:h-56 sm:w-56">
+                <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full sm:h-48 sm:w-48" style={{ transform: 'translate(-12%, -50%)', background: snapshotExplicitlyNamesBlack ? '#111111' : t.card, border: `1px solid ${t.hairline}`, boxShadow: snapshotExplicitlyNamesBlack ? 'inset 0 0 0 1px rgba(255,255,255,0.18)' : `inset 0 0 0 10px ${t.cardSoft}` }} aria-label={previewStatus}>
+                  <span className="absolute inset-5 rounded-full" style={{ border: `1px solid ${t.hairline}` }} />
+                  <span className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: snapshotExplicitlyNamesBlack ? '#26262a' : t.cardSoft, border: `1px solid ${t.hairline}` }} />
+                  <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: t.faint }} />
+                </div>
+                {release.cover ? (
+                  <img src={release.cover} alt={`${release.title} jacket artwork`} className="absolute inset-0 h-full w-full rounded-xl object-cover" style={{ boxShadow: `0 0 0 1px ${t.hairline}, 0 18px 36px rgba(0,0,0,0.18)` }} data-testid="img-package-jacket-art" />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl" style={{ backgroundColor: t.card, boxShadow: `0 0 0 1px ${t.hairline}, 0 18px 36px rgba(0,0,0,0.18)` }} data-testid="package-jacket-art-not-exposed">
+                    <Image className="h-5 w-5" style={{ color: t.faint }} />
+                    <span className="text-[12px]" style={{ color: t.faint }}>Jacket art not exposed</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ backgroundColor: t.cardSoft }}>
+              <Disc3 className="h-4 w-4 shrink-0" style={{ color: t.subink }} />
+              <span className="text-[13px] font-medium" style={{ color: snapshotExplicitlyNamesBlack ? t.ink : t.subink }}>{previewStatus}</span>
+            </div>
+          </div>
+        </SectionCard>
+        <div className="min-w-0 space-y-4" data-testid="package-specification-groups">
+          {specificationGroups.map((group) => (
+            <SectionCard key={group.title} t={t} className="overflow-hidden">
+              <CardHead t={t} title={group.title} />
+              {group.rows.map((row) => (
+                <FieldRow key={row.label} t={t} label={row.label} value={row.value} quiet={!row.known} />
+              ))}
+            </SectionCard>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function ReleaseDetailSurface({ t, release, onSave }: { t: Theme; release: AdminRelease; onSave: (release: AdminRelease) => void }) {
   const [tab, setTab] = useState<ReleaseDetailTab>('Dashboard');
   const [assetFormat, setAssetFormat] = useState<'GoodTunes® Player' | 'Vinyl' | 'GoodDeed®'>(release.format === 'single_lp' ? 'Vinyl' : 'GoodTunes® Player');
@@ -1346,29 +1448,7 @@ function ReleaseDetailSurface({ t, release, onSave }: { t: Theme; release: Admin
         </div> : <PlayerArtPanel t={t} release={release} />}
       </div>}
       {tab === 'Package' && <div data-testid="release-package">
-        {release.packageState === 'agreed' && release.id === 'california-land' && !release.packageSnapshot ? (
-          <section className="rounded-2xl overflow-hidden" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }} data-testid="legacy-agreed-package-summary">
-            <div className="px-5 py-5">
-              <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>Package. <span className="font-normal" style={{ color: t.subink }}>The agreed production record.</span></h2>
-              <p className="mt-1 text-[13px]" style={{ color: t.subink }}>Values retained from the release and its attached manufacturing record.</p>
-            </div>
-            {[
-              ['Format', 'Vinyl'],
-              ['Configuration', 'Single LP'],
-              ['Manufacturing partner', 'Memphis Record Pressing'],
-              ['Production status', 'At press'],
-              ['Estimate', 'MRP estimate · CALIFORNIALAND · Single LP'],
-              ['Manufacturing totals', '$5,430.00 estimated · $1,295.00 paid · $4,135.00 outstanding'],
-              ['Size, weight, color, packaging', 'Not exposed'],
-            ].map(([label, value], index, rows) => <div key={label} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4" style={{ borderTop: `1px solid ${t.hairline}` }} data-testid={`legacy-package-${index}`}>
-              <span className="text-[12.5px]" style={{ color: t.subink }}>{label}</span>
-              <span className="text-right text-[13px] font-medium" style={{ color: value === 'Not exposed' ? t.faint : t.ink }}>{value}</span>
-            </div>)}
-            <div className="flex justify-end px-5 py-4" style={{ borderTop: `1px solid ${t.hairline}` }}>
-              <QuietAction t={t} onClick={() => onSave({ ...release, packageState: 'draft', packageSnapshot: undefined })} testid="button-request-package-change">Request change</QuietAction>
-            </div>
-          </section>
-        ) : <ArtistReleasePackageBuilderContent
+        {release.packageState === 'agreed' ? <AgreedPackageRecord t={t} release={release} onRequestChange={() => onSave({ ...release, packageState: 'draft', packageSnapshot: undefined })} /> : <ArtistReleasePackageBuilderContent
           embedded
           packageState={release.packageState}
           packageSnapshot={release.packageSnapshot}
