@@ -111,6 +111,8 @@ import xLogo from '../assets/logo-x.svg';
 import blueskyLogo from '../assets/logo-bluesky.svg';
 import facebookLogo from '../assets/logo-facebook.svg';
 import californialandCover from '../assets/californialand-cover.jpg';
+import californialandInnerSleeve from '../assets/californialand-inner-sleeve.png';
+import mrpRubyTranslucent from '../assets/mrp-ruby-translucent.png';
 import niinaSoleilPhoto from '../assets/niina-soleil.webp';
 import niinaLabelOne from '../assets/niina-label-1.png';
 import goodDeedA4Preview from '../assets/gooddeed-californialand-a4.png';
@@ -1261,11 +1263,11 @@ function AgreedPackageRecord({ t, release, onRequestChange }: { t: Theme; releas
       title: 'Record',
       rows: [
         { label: 'Format', ...(isCaliforniaLandRecord ? known('Vinyl') : unknown()) },
-        { label: 'Size', ...unknown() },
-        { label: 'Disc count / configuration', ...(isCaliforniaLandRecord ? known('Single LP') : unknown()) },
+        { label: 'Size', ...(isCaliforniaLandRecord ? known('12-inch') : unknown()) },
+        { label: 'Disc count / configuration', ...(isCaliforniaLandRecord ? known('Single LP · 12-inch LP') : unknown()) },
         { label: 'Weight', ...unknown() },
         { label: 'Vinyl type', ...unknown() },
-        { label: 'Color', ...unknown() },
+        { label: 'Color', ...(isCaliforniaLandRecord ? known('Translucent Ruby') : unknown()) },
         { label: 'Center label', ...unknown() },
       ],
     },
@@ -1273,7 +1275,7 @@ function AgreedPackageRecord({ t, release, onRequestChange }: { t: Theme; releas
       title: 'Packaging',
       rows: [
         { label: 'Jacket', ...unknown() },
-        { label: 'Inner sleeve', ...unknown() },
+        { label: 'Inner sleeve', ...(isCaliforniaLandRecord ? known('Supplied / printed') : unknown()) },
         { label: 'Insert / add-ons', ...unknown() },
       ],
     },
@@ -1295,7 +1297,7 @@ function AgreedPackageRecord({ t, release, onRequestChange }: { t: Theme; releas
       ],
     },
   ];
-  const previewStatus = snapshotExplicitlyNamesBlack ? 'Black vinyl sourced by package details' : 'Color not exposed';
+  const previewStatus = snapshotExplicitlyNamesBlack ? 'Black vinyl sourced by package details' : 'Record details not exposed';
 
   return (
     <section data-testid="agreed-package-production-record">
@@ -1313,11 +1315,15 @@ function AgreedPackageRecord({ t, release, onRequestChange }: { t: Theme; releas
             <p className="mt-1 text-[13px]" style={{ color: t.subink }}>Jacket artwork and the available record treatment.</p>
             <div className="relative mt-6 flex min-h-[280px] items-center justify-center overflow-hidden rounded-2xl p-5" style={{ backgroundColor: t.cardSoft }}>
               <div className="relative h-48 w-48 sm:h-56 sm:w-56">
-                <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full sm:h-48 sm:w-48" style={{ transform: 'translate(-12%, -50%)', background: snapshotExplicitlyNamesBlack ? '#111111' : t.card, border: `1px solid ${t.hairline}`, boxShadow: snapshotExplicitlyNamesBlack ? 'inset 0 0 0 1px rgba(255,255,255,0.18)' : `inset 0 0 0 10px ${t.cardSoft}` }} aria-label={previewStatus}>
-                  <span className="absolute inset-5 rounded-full" style={{ border: `1px solid ${t.hairline}` }} />
-                  <span className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: snapshotExplicitlyNamesBlack ? '#26262a' : t.cardSoft, border: `1px solid ${t.hairline}` }} />
-                  <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: t.faint }} />
-                </div>
+                {isCaliforniaLandRecord ? (
+                  <img src={mrpRubyTranslucent} alt="Translucent Ruby vinyl with MRP center label" className="absolute left-1/2 top-1/2 h-40 w-40 -translate-y-1/2 object-contain sm:h-48 sm:w-48" style={{ transform: 'translate(-12%, -50%)' }} data-testid="img-package-ruby-vinyl" />
+                ) : (
+                  <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full sm:h-48 sm:w-48" style={{ transform: 'translate(-12%, -50%)', background: snapshotExplicitlyNamesBlack ? '#111111' : t.card, border: `1px solid ${t.hairline}`, boxShadow: snapshotExplicitlyNamesBlack ? 'inset 0 0 0 1px rgba(255,255,255,0.18)' : `inset 0 0 0 10px ${t.cardSoft}` }} aria-label={previewStatus}>
+                    <span className="absolute inset-5 rounded-full" style={{ border: `1px solid ${t.hairline}` }} />
+                    <span className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: snapshotExplicitlyNamesBlack ? '#26262a' : t.cardSoft, border: `1px solid ${t.hairline}` }} />
+                    <span className="absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ background: t.faint }} />
+                  </div>
+                )}
                 {release.cover ? (
                   <img src={release.cover} alt={`${release.title} jacket artwork`} className="absolute inset-0 h-full w-full rounded-xl object-cover" style={{ boxShadow: `0 0 0 1px ${t.hairline}, 0 18px 36px rgba(0,0,0,0.18)` }} data-testid="img-package-jacket-art" />
                 ) : (
@@ -1328,10 +1334,17 @@ function AgreedPackageRecord({ t, release, onRequestChange }: { t: Theme; releas
                 )}
               </div>
             </div>
-            <div className="mt-4 flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ backgroundColor: t.cardSoft }}>
-              <Disc3 className="h-4 w-4 shrink-0" style={{ color: t.subink }} />
-              <span className="text-[13px] font-medium" style={{ color: snapshotExplicitlyNamesBlack ? t.ink : t.subink }}>{previewStatus}</span>
-            </div>
+            {isCaliforniaLandRecord ? (
+              <div className="mt-4 flex items-center gap-3">
+                <img src={californialandInnerSleeve} alt="CALIFORNIALAND supplied printed inner sleeve" className="h-12 w-12 rounded-lg object-cover" style={{ border: `1px solid ${t.hairline}` }} data-testid="img-package-inner-sleeve" />
+                <span className="text-[13px]" style={{ color: t.subink }}>Supplied / printed inner sleeve</span>
+              </div>
+            ) : (
+              <div className="mt-4 flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ backgroundColor: t.cardSoft }}>
+                <Disc3 className="h-4 w-4 shrink-0" style={{ color: t.subink }} />
+                <span className="text-[13px] font-medium" style={{ color: snapshotExplicitlyNamesBlack ? t.ink : t.subink }}>{previewStatus}</span>
+              </div>
+            )}
           </div>
         </SectionCard>
         <div className="min-w-0 space-y-4" data-testid="package-specification-groups">
