@@ -3571,10 +3571,11 @@ function BuildFlow() {
                 >
                   <section role="button" tabIndex={0} style={{ marginTop: 20, borderRadius: 18, border: `1px solid ${HAIRLINE}`, background: CARD, padding: '30px 34px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 28, cursor: 'pointer', overflow: 'hidden' }}>
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.3, color: INK }}>GoodTunes® Direct.</div>
-                      <div style={{ fontSize: 14, color: SUBINK, marginTop: 6, maxWidth: 460, lineHeight: 1.6 }}>
-                        Sell through your GoodTunes store — we handle the storefront, checkout,
-                        and payouts for you. You can change this later.
+                      <div style={{ fontSize: 21, fontWeight: 700, letterSpacing: -0.3, color: INK }}>Get the order placed for $0 out of pocket.</div>
+                      <div style={{ fontSize: 14, color: SUBINK, marginTop: 6, maxWidth: 480, lineHeight: 1.6 }}>
+                        Your fans fund the run through your GoodTunes store. GoodTunes runs the
+                        storefront, checkout, and payouts — production starts once the run reaches
+                        its threshold. You can change this later.
                       </div>
                       <div data-testid="link-goodtunes-learn-more" style={{ display: 'flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap', color: BLUE, fontSize: 15, fontWeight: 600, marginTop: 16 }}>
                         Learn more
