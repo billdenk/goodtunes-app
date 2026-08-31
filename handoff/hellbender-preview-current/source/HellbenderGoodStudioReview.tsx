@@ -94,6 +94,7 @@ export function PressGoodStudioReview({
   return (
     <div style={{ minHeight: '100dvh', background, color: INK, fontFamily: font }}>
       <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;700&display=swap');
         * { box-sizing: border-box; }
         .hb-review-card { transition: transform 180ms ease, box-shadow 180ms ease; }
         .hb-review-card:hover { transform: translateY(-2px); box-shadow: 0 16px 34px rgba(0,0,0,.09); }
@@ -131,7 +132,7 @@ export function PressGoodStudioReview({
             {pressName} × GoodTunes®
           </div>
           <h1 className="hb-review-title" style={{ margin: '16px 0 0', fontSize: 58, lineHeight: 0.98, letterSpacing: -2.4, fontWeight: 700 }}>
-            Journey. <span style={{ color: SUBINK, fontWeight: 400 }}>Review the Hellbender artist experience.</span>
+            Samples. <span style={{ color: SUBINK, fontWeight: 400 }}>Artist experience.</span>
           </h1>
           <p style={{ margin: '24px 0 0', maxWidth: 680, fontSize: 18, lineHeight: 1.55, color: SUBINK }}>
             {description}
@@ -198,11 +199,11 @@ export default function HellbenderGoodStudioReview() {
       pressName="Hellbender Vinyl"
       logo={hellbenderLogo}
       logoAlt="Hellbender Vinyl"
-      logoStyle={{ width: 190, maxHeight: 46 }}
+      logoStyle={{ width: 260, maxHeight: 54 }}
       accent="#DF0C15"
       background="#f5f5f3"
       font="'Chivo', -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif"
-      description="A complete partner review of the Hellbender experience, from the first estimate email through package agreement and the artist’s working project."
+      description="A review of the Hellbender artist experience, from email estimate to project."
       screens={MOCK_SCREENS}
     />
   );

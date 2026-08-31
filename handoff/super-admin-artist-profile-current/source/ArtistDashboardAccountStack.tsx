@@ -1777,37 +1777,13 @@ function PressReviewDialog({ t, modeKind, fromName, press, onBack, onClose, onCo
   );
 }
 
-// ─── Identity bulk editor (verbatim from Canon) ───────────────────────────
-function IdentityBulkEditor({ t, draft, bio, firstFieldRef, valid, onDraftChange, onBioChange, onSave }: { t: Theme; draft: IdentityData; bio: string; firstFieldRef: React.RefObject<HTMLInputElement | null>; valid: boolean; onDraftChange: (next: IdentityData) => void; onBioChange: (next: string) => void; onSave: () => void }) {
+// ─── Identity rows retain the display grid while editing in place. ─────────
+function IdentityInPlaceRow({ t, label, children }: { t: Theme; label: string; children: React.ReactNode }) {
   return (
-    <form className="mt-2" onSubmit={(event) => { event.preventDefault(); if (valid) onSave(); }} data-testid="identity-inline-editor">
-      <div className="grid grid-cols-1 gap-x-4 px-6 lg:grid-cols-2">
-        <Field t={t} label="Artist name">
-          <input ref={firstFieldRef} value={draft.name} onChange={(e) => onDraftChange({ ...draft, name: e.target.value })} className="h-10 w-full rounded-xl px-3 text-[13.5px] focus:outline-none" style={inputStyle(t)} data-testid="input-identity-name" />
-        </Field>
-        <Field t={t} label="Contact email">
-          <input value={draft.email} onChange={(e) => onDraftChange({ ...draft, email: e.target.value })} type="email" className="h-10 w-full rounded-xl px-3 text-[13.5px] focus:outline-none" style={inputStyle(t)} data-testid="input-identity-email" />
-        </Field>
-        <Field t={t} label="Location">
-          <input value={draft.location} onChange={(e) => onDraftChange({ ...draft, location: e.target.value })} className="h-10 w-full rounded-xl px-3 text-[13.5px] focus:outline-none" style={inputStyle(t)} data-testid="input-identity-location" />
-        </Field>
-        <Field t={t} label="Artist type">
-          <select value={draft.type} onChange={(e) => onDraftChange({ ...draft, type: e.target.value })} className="h-10 w-full appearance-none rounded-xl px-3 text-[13.5px] focus:outline-none" style={inputStyle(t)} data-testid="select-identity-type">
-            {ARTIST_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
-          </select>
-        </Field>
-        <Field t={t} label="Status">
-          <select value={draft.status} onChange={(e) => onDraftChange({ ...draft, status: e.target.value })} className="h-10 w-full appearance-none rounded-xl px-3 text-[13.5px] focus:outline-none" style={inputStyle(t)} data-testid="select-identity-status">
-            {ARTIST_STATUSES.map((x) => <option key={x} value={x}>{x}</option>)}
-          </select>
-        </Field>
-      </div>
-      <div className="px-6 pb-2">
-        <Field t={t} label="Bio">
-          <textarea value={bio} onChange={(event) => onBioChange(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && valid) onSave(); }} placeholder="Add a short artist bio…" className="min-h-20 w-full resize-none rounded-xl px-3 py-2 text-[13.5px] focus:outline-none" style={inputStyle(t)} data-testid="input-identity-bio" />
-        </Field>
-      </div>
-    </form>
+    <div className="flex h-12 items-center gap-4 px-6" style={{ borderTop: `1px solid ${t.hairline}` }}>
+      <span className="w-[150px] flex-shrink-0 text-[13px]" style={{ color: t.subink }}>{label}</span>
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
   );
 }
 
@@ -2428,21 +2404,33 @@ function AccountSection({ t, isSuperAdmin }: { t: Theme; isSuperAdmin: boolean }
               </div>
             )}
           />
-          {bulkEditingIdentity ? (
-            <IdentityBulkEditor t={t} draft={identityDraft} bio={bioDraft} firstFieldRef={identityFirstFieldRef} valid={bulkIdentityValid} onDraftChange={setIdentityDraft} onBioChange={setBioDraft} onSave={saveBulkIdentityEdit} />
-          ) : (
-            <div className="mt-2 grid grid-cols-1 lg:grid-cols-2">
-              <FieldRow t={t} label="Name" value={identity.name} />
-              <FieldRow t={t} label="Contact email" value={identity.email} />
-              <FieldRow t={t} label="Location" value={identity.location} />
-              <FieldRow t={t} label="Label" value={MOCK_ARTIST_ACCOUNT.label} />
-              <FieldRow t={t} label="Type" value={identity.type} />
-              <FieldRow t={t} label="Status" value={identity.status} />
-              <FieldRow t={t} label="Manager" value={MOCK_ARTIST_ACCOUNT.manager} />
-              <FieldRow t={t} label="Credits" value={MOCK_ARTIST_ACCOUNT.credits.join(' · ')} />
-              <FieldRow t={t} label="Bio" value={bio || 'Not set'} quiet={!bio} />
-            </div>
-          )}
+          <form className="mt-2 grid grid-cols-1 lg:grid-cols-2" onSubmit={(event) => { event.preventDefault(); if (bulkIdentityValid) saveBulkIdentityEdit(); }} data-testid={bulkEditingIdentity ? 'identity-in-place-editor' : undefined}>
+            {bulkEditingIdentity ? (
+              <>
+                <IdentityInPlaceRow t={t} label="Name"><input ref={identityFirstFieldRef} value={identityDraft.name} onChange={(event) => setIdentityDraft({ ...identityDraft, name: event.target.value })} className="h-8 w-full rounded-lg px-2 text-right text-[13px] font-medium focus:outline-none" style={inputStyle(t)} aria-label="Name" data-testid="input-identity-name" /></IdentityInPlaceRow>
+                <IdentityInPlaceRow t={t} label="Contact email"><input value={identityDraft.email} onChange={(event) => setIdentityDraft({ ...identityDraft, email: event.target.value })} type="email" className="h-8 w-full rounded-lg px-2 text-right text-[13px] font-medium focus:outline-none" style={inputStyle(t)} aria-label="Contact email" data-testid="input-identity-email" /></IdentityInPlaceRow>
+                <IdentityInPlaceRow t={t} label="Location"><input value={identityDraft.location} onChange={(event) => setIdentityDraft({ ...identityDraft, location: event.target.value })} className="h-8 w-full rounded-lg px-2 text-right text-[13px] font-medium focus:outline-none" style={inputStyle(t)} aria-label="Location" data-testid="input-identity-location" /></IdentityInPlaceRow>
+                <FieldRow t={t} label="Label" value={MOCK_ARTIST_ACCOUNT.label} />
+                <IdentityInPlaceRow t={t} label="Type"><select value={identityDraft.type} onChange={(event) => setIdentityDraft({ ...identityDraft, type: event.target.value })} className="h-8 w-full appearance-none rounded-lg px-2 text-right text-[13px] font-medium focus:outline-none" style={inputStyle(t)} aria-label="Artist type" data-testid="select-identity-type">{ARTIST_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}</select></IdentityInPlaceRow>
+                <IdentityInPlaceRow t={t} label="Status"><select value={identityDraft.status} onChange={(event) => setIdentityDraft({ ...identityDraft, status: event.target.value })} className="h-8 w-full appearance-none rounded-lg px-2 text-right text-[13px] font-medium focus:outline-none" style={inputStyle(t)} aria-label="Status" data-testid="select-identity-status">{ARTIST_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></IdentityInPlaceRow>
+                <FieldRow t={t} label="Manager" value={MOCK_ARTIST_ACCOUNT.manager} />
+                <FieldRow t={t} label="Credits" value={MOCK_ARTIST_ACCOUNT.credits.join(' · ')} />
+                <IdentityInPlaceRow t={t} label="Bio"><input value={bioDraft} onChange={(event) => setBioDraft(event.target.value)} placeholder="Not set" className="h-8 w-full rounded-lg px-2 text-right text-[13px] font-medium focus:outline-none" style={inputStyle(t)} aria-label="Bio" data-testid="input-identity-bio" /></IdentityInPlaceRow>
+              </>
+            ) : (
+              <>
+                <FieldRow t={t} label="Name" value={identity.name} />
+                <FieldRow t={t} label="Contact email" value={identity.email} />
+                <FieldRow t={t} label="Location" value={identity.location} />
+                <FieldRow t={t} label="Label" value={MOCK_ARTIST_ACCOUNT.label} />
+                <FieldRow t={t} label="Type" value={identity.type} />
+                <FieldRow t={t} label="Status" value={identity.status} />
+                <FieldRow t={t} label="Manager" value={MOCK_ARTIST_ACCOUNT.manager} />
+                <FieldRow t={t} label="Credits" value={MOCK_ARTIST_ACCOUNT.credits.join(' · ')} />
+                <FieldRow t={t} label="Bio" value={bio || 'Not set'} quiet={!bio} />
+              </>
+            )}
+          </form>
         </SectionCard>
 
         {/* ── Links ── */}
@@ -2483,6 +2471,11 @@ function AccountSection({ t, isSuperAdmin }: { t: Theme; isSuperAdmin: boolean }
                   </div>
                 </div>
               ))}
+              {MOCK_LINKS_SET.length === 0 && extraLinks.length === 0 && (
+                <button type="button" onClick={(event) => openLinkPopover(event)} className={cn('flex min-h-24 w-full items-center justify-center gap-2 rounded-xl px-4 text-[14px] font-medium transition-colors lg:col-span-2', t.hoverWash)} style={{ color: t.blue, border: `1px dashed ${t.hairline}` }} data-testid="button-add-link-placeholder">
+                  <Plus className="h-4 w-4" />Add a link
+                </button>
+              )}
             </div>
           </div>
         </SectionCard>

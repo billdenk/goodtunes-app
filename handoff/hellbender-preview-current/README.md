@@ -103,3 +103,8 @@ Every two-tone StepHeading uses a one-word dark lead, or two words only when nec
 ## Final stage hierarchy — authoritative
 
 The updated PressPackageBuilder.tsx is authoritative and supersedes prior builder corrections. Record-selection steps Size through Color show the standalone vinyl DiscStage in the left column. Package-selection steps Jacket through Sticker retain their relevant left-side package/component previews. Quantity alone has hideLeft: zero album/jacket/sleeve/vinyl imagery; the unchanged 520px controls stay in the right lane. The build has exactly one assembled package in a bounded left column and pricing in a separate right column; their boxes must not intersect at 1440 or 1024. The final preview owns the existing Cover / Inner sleeve / Center label artwork intake. Do not move hideLeft to the first Vinyl SplitSection.
+
+
+## Samples review landing
+
+Use source/HellbenderGoodStudioReview.tsx for the landing presentation at the review entry. The header uses the larger horizontal Hellbender lockup (circle-h symbol left, HELLBENDER VINYL right). Hero copy is exactly “Samples. Artist experience.” Supporting copy is “A review of the Hellbender artist experience, from email estimate to project.” The floating Comment control belongs only to Ruby’s internal canvas review surface and must not be shipped to Hellbender.
