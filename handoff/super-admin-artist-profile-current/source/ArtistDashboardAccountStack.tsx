@@ -1323,8 +1323,8 @@ function ReleaseDetailSurface({ t, release, onSave }: { t: Theme; release: Admin
         <div className="flex items-start gap-3">
           <Eye className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: t.subink }} />
           <div>
-            <h2 className="text-[17px] font-semibold" style={{ color: t.ink }}>Current Otis package builder</h2>
-            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: t.subink }}>This tab is the integration seam for Otis’s existing artist release Package body. Preserve that live builder unchanged here; do not port an older Playground reconstruction.</p>
+            <h2 className="text-[17px] font-semibold" style={{ color: t.ink }}>One package builder. Two entry paths.</h2>
+            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: t.subink }}>Use the approved PressQuoteBuilder presentation here whether the artist starts the release or accepts a press estimate. Otis supplies the real starting values, provenance, permissions, and lock state; do not port the obsolete ArtistPackageBuilder.</p>
           </div>
         </div>
       </div>}
