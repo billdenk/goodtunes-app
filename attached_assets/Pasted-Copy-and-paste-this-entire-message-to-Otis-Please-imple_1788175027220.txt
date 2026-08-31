@@ -1,0 +1,232 @@
+Copy and paste this entire message to Otis:
+
+---
+
+Please implement and publish the **Hellbender Preview** in `billdenk/goodtunes-app`.
+
+## Source
+
+Use the latest `main` and the handoff at:
+
+`handoff/hellbender-preview-current`
+
+Final handoff commit:
+
+`f6e20316a255360e93278394a3ecaf9c6fc66cf5`
+
+This handoff supersedes every previous Hellbender mock or instruction.
+
+## Publish target
+
+Publish the journey at:
+
+`https://get.goodtunes.music/hellbender-preview`
+
+Use Otis’s existing routing and deployment configuration. Do not hardcode the production hostname in browser code.
+
+## Preserve Otis behavior
+
+Otis remains authoritative for:
+
+- authentication and permissions;
+- real routes and navigation;
+- API payloads and calculations;
+- estimates and package data;
+- loading and error states;
+- project lifecycle;
+- responsive behavior.
+
+Use the handoff for presentation and journey requirements. Do not replace real functionality with mock data or invent missing values.
+
+## Seven-screen review journey
+
+Present exactly these seven screens in this order:
+
+1. Estimate email
+2. Estimate
+3. Accepted estimate
+4. Next steps
+5. Artist Dashboard
+6. Artist Project Home/Releases
+7. Artist Package Builder
+
+Keep every screen accessible from the review page.
+
+Use **Estimate**, not user-facing **Quote**.
+
+Preserve the real Hellbender review data, including:
+
+- Alex Tebeleff
+- How???
+- Estimate `071500-02`
+- existing quantities, prices, totals, statuses, and links
+
+Do not substitute Niina Soleil.
+
+## Hellbender white-label artist shell
+
+The Dashboard, Releases, release pages, and artist package builder use the same white-label artist shell.
+
+### Brand and account identity
+
+- Hellbender Vinyl owns the top-left brand position.
+- Use the symbol-only `hellbender-icon.svg` in Hellbender red.
+- Do not place the symbol inside a white carrier circle.
+- Do not use the full Hellbender wordmark as the icon.
+- “Hellbender Vinyl” may appear beside the symbol.
+- Alex Tebeleff is the signed-in artist in the top-right account control.
+
+### Appearance
+
+The Hellbender artist experience defaults to **light mode**, including:
+
+- Dashboard
+- Releases
+- Release detail
+- Package page
+- Package builder
+
+Do not inherit a global or press-operator dark-mode preference. If appearance is persisted, use a Hellbender artist-specific preference such as:
+
+`gt-artist-appearance-hellbender`
+
+Do not restore the legacy dark shell, Alex-with-Hellbender header sentence, or solid red footer.
+
+### Artist rail
+
+Use this artist rail:
+
+- Search
+- Dashboard
+- Releases
+- Audience
+- Acquisition
+- Orders
+- Buyers
+- Referrals
+- Shopify
+- Reports
+- Settings pinned at the bottom
+- Powered by GoodTunes
+
+Do not show press-admin destinations such as:
+
+- Clients
+- Create
+- Estimates
+- Packages
+- Projects
+- Product Specs
+- Components
+- White Label
+- Team
+
+## How the artist reaches the builder
+
+The package builder is not a global rail destination.
+
+The navigation path is:
+
+**Releases → select or create a release → Package**
+
+A release detail should expose:
+
+- Dashboard
+- Package
+- Assets
+- Details
+- Store
+- Payments
+
+### Draft release without a package
+
+When the artist opens **Package**, show:
+
+- available curated package choices;
+- **Build from scratch**.
+
+Choosing **Build from scratch** opens the builder inside that release.
+
+The builder heading should be:
+
+**Build your package. From scratch.**
+
+Explain that the selections become this release’s package.
+
+The final action is:
+
+**Use this package**
+
+That action attaches the completed package configuration to the draft release.
+
+Do not say:
+
+- Save to catalog
+- Convert to draft
+
+The release is already a draft.
+
+### Existing agreed package
+
+If the release already has an agreed package, show the read-only agreed-package summary.
+
+Do not show package presets or the editable builder.
+
+Reopening the builder requires an explicit, permission-gated:
+
+**Request change**
+
+## Remove press-only package merchandising
+
+In artist context, completely omit:
+
+**How artists will see it. Your package, their rail.**
+
+Do not ask the artist to configure:
+
+- a reusable package name;
+- a sell line;
+- catalog-card artwork;
+- cover/background treatments;
+- a package-card preview.
+
+Those controls and **Save to catalog** remain available only in the press-admin package builder.
+
+Reuse the same production components, availability, gating, and pricing engine for both callers. Do not fork the calculations.
+
+## Vinyl branding
+
+Hellbender vinyl center labels use:
+
+- a neutral-black center label;
+- the white symbol-only Hellbender icon.
+
+Do not use the full wordmark or generated circular text on the center label.
+
+## Remove from the review page
+
+Do not include the standalone lifecycle callout that said:
+
+“Lifecycle. Build the package before the project begins.”
+
+The review page should go directly from its introduction to the seven screen cards.
+
+## Verification before publishing
+
+Please verify:
+
+- all seven review links work;
+- the complete estimate-to-project journey works;
+- Dashboard, Releases, release detail, Package, and builder use the light Hellbender artist shell;
+- clicking Releases returns to the Releases list;
+- Package is reached from inside a release;
+- draft releases can choose or build a package;
+- Use this package attaches the package to the draft release;
+- agreed releases show the summary rather than the builder;
+- press-only navigation and merchandising controls never appear in artist context;
+- the red symbol-only header mark is correct;
+- the white symbol-only center label is correct;
+- desktop and tablet/mobile layouts work;
+- the published URL is accessible at `https://get.goodtunes.music/hellbender-preview`.
+
+---

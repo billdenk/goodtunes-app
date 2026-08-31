@@ -1,13 +1,26 @@
 import { createRoot } from "react-dom/client";
-import App from "./App";
 import "./index.css";
-import { installGlobalErrorReporter } from "@/components/GlobalErrorBoundary";
-import { armBootWatchdog } from "@/lib/bootHeal";
-import { setAuthToken } from "@/lib/queryClient";
-import { setPreviewPass } from "@/lib/previewPass";
-import { applyAdminAppearance, setAdminAppearance } from "@/lib/adminAppearance";
-import { isWhitelabelHost } from "@shared/whitelabelHost";
-import { isAdminSurfacePath } from "@/lib/bootSurface";
+
+async function mountNormalApp() {
+  const [
+    { default: App },
+    { installGlobalErrorReporter },
+    { armBootWatchdog },
+    { setAuthToken },
+    { setPreviewPass },
+    { applyAdminAppearance, setAdminAppearance },
+    { isWhitelabelHost },
+    { isAdminSurfacePath },
+  ] = await Promise.all([
+    import("./App"),
+    import("@/components/GlobalErrorBoundary"),
+    import("@/lib/bootHeal"),
+    import("@/lib/queryClient"),
+    import("@/lib/previewPass"),
+    import("@/lib/adminAppearance"),
+    import("@shared/whitelabelHost"),
+    import("@/lib/bootSurface"),
+  ]);
 
 // Task #1631 — Cross-host purchase handoff pickup. After a sale on the buy
 // funnel (get./store.goodtunes.music), the fan is redirected to
@@ -143,3 +156,12 @@ createRoot(document.getElementById("root")!).render(<App />);
 // markBootSucceeded(). Do NOT remove — this is what turns Bill's manual
 // "just reload it" into an automatic recovery.
 armBootWatchdog();
+}
+
+if (window.location.pathname === "/hellbender-preview") {
+  void import("@/pages/hellbender-preview").then(({ default: HellbenderPreviewRouter }) => {
+    createRoot(document.getElementById("root")!).render(<HellbenderPreviewRouter />);
+  });
+} else {
+  void mountNormalApp();
+}
