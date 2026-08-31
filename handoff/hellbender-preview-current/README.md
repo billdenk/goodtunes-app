@@ -78,3 +78,23 @@ Files in source/ are copied verbatim from approved GoodStudio. Integrate against
 ## Complete asset bundle
 
 The assets/ directory contains every local asset referenced by the supplied source files, preserving the same ../assets/... relative import structure from source/. Do not substitute initials, album art, generated marks, or other fallbacks. In particular, use the supplied alex-tebeleff.jpg and how-inner-sleeve.png exactly.
+
+
+## Required vinyl material layers
+
+The estimate and estimate-email vinyl preview is a three-pass renderer: emerald base color, translucent-vinyl.png material texture (multiply at 0.52), and a fixed sheen using vinyl-highlights.png as the mask over a white-to-transparent gradient. Both exact runtime assets are bundled under public/vinyl-layers/. Do not flatten the preview to a solid green disc. When adapting paths for /hellbender-preview, either import these images as modules or serve/map them under the isolated route; preserve maskImage and WebkitMaskImage. Verify both PressClientEstimateHellbender and PressClientEstimateEmailHellbender show the groove texture, radial highlight sweep, translucent variation, and edge depth.
+
+
+## Complete vinyl layer inventory
+
+The complete runtime set is bundled under public/vinyl-layers/: opaque-vinyl.png, translucent-vinyl.png, splatter-one.png, splatter-two.png, splatter-three.png, vinyl-highlights.png, and inner-circle.png. PressClientEstimateHellbender and PressClientEstimateEmailHellbender require translucent-vinyl.png plus vinyl-highlights.png. PressPackageBuilder requires all seven. Treat missing network requests for any layer as a failed integration even when the flat base color still renders.
+
+
+## Builder layout and account-menu correction
+
+Use the updated PressPackageBuilder.tsx verbatim. In Pick a quantity, remove only the album/vinyl/sleeve visual; keep the quantity controls at their original compact 520px width in the existing right-hand lane. Do not center them and do not stretch them full width. Keep the single physical package preview beside the final price in The build, bounded to its own responsive column so it cannot overlap pricing. The Alex account popover must be fully opaque with explicit background, shadow, clipping, and z-index 100. The inner-circle runtime image has a fail-safe onError guard so a missing path can never draw a browser broken-image glyph over the Hellbender center mark; still fix the path and load the bundled file. Acceptance: no duplicate package visual, no pricing overlap at 1440/1024, readable account menu, no broken-image glyph.
+
+
+## Builder step-heading grammar
+
+Every two-tone StepHeading uses a one-word dark lead, or two words only when necessary, followed by the gray explanatory sentence. Current leads: Size, Discs, Weight, Type, Color, Jacket, Inner sleeve, Hole, Label, Insert, Sticker, Sticker size, and Quantity. Do not restore instructional leads such as Pick a size, How many discs, or Add an insert.

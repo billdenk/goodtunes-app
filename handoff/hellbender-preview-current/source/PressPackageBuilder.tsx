@@ -565,6 +565,7 @@ function VinylDisc({
           src={LAYERS.inner}
           alt=""
           aria-hidden
+          onError={(event) => { event.currentTarget.style.display = 'none'; }}
           style={{
             position: 'absolute',
             top: '50%',
@@ -2787,9 +2788,15 @@ function UserMenu({ qMode, setQMode }: { qMode: QMode; setQMode: (m: QMode) => v
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        sideOffset={8}
-        className="w-64 p-0 rounded-2xl"
-        style={{ border: `1px solid ${HAIRLINE}` }}
+        sideOffset={12}
+        className="w-72 p-0 rounded-2xl"
+        style={{
+          backgroundColor: 'var(--q-card)',
+          border: `1px solid ${HAIRLINE}`,
+          boxShadow: '0 18px 50px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.10)',
+          overflow: 'hidden',
+          zIndex: 100,
+        }}
         data-testid="menu-user"
       >
         <div className="px-3.5 py-3" style={{ borderBottom: `1px solid ${HAIRLINE}` }}>
@@ -3017,7 +3024,10 @@ function Gate({ on, children }: { on: boolean; children: ReactNode }) {
 }
 
 // Donor split-grid section: sticky preview left, pickers right.
-function SplitSection({ left, right }: { left: ReactNode; right: ReactNode }) {
+function SplitSection({ left, right, hideLeft = false }: { left: ReactNode; right: ReactNode; hideLeft?: boolean }) {
+  if (hideLeft) {
+    return <div style={{ marginTop: 40, width: '100%', maxWidth: 520, marginLeft: 'auto' }}>{right}</div>;
+  }
   return (
     <div style={{ marginTop: 40, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 520px', gap: 56, alignItems: 'start' }}>
       <div className="sticky" style={{ top: 148 }}>
@@ -3763,6 +3773,7 @@ function PressPackageBuilderInner() {
         {/* ═══ 1 · VINYL (Add your vinyl) ═══ */}
         <section style={{ marginTop: 48 }}>
           <SplitSection
+            hideLeft
             left={
               <Gate on={picked('size')}>
                 <div className="flex flex-col items-center">
@@ -3799,7 +3810,7 @@ function PressPackageBuilderInner() {
               <div className="flex flex-col" style={{ gap: 48 }}>
                 {/* Size */}
                 <section>
-                  <StepHeading lead="Pick a size." rest="The record sets the fit." />
+                  <StepHeading lead="Size." rest="The record sets the fit." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     The size you pick here carries through every step below.
                   </p>
@@ -3827,7 +3838,7 @@ function PressPackageBuilderInner() {
                 {/* Discs — 1LP..4LP (Bill, Aug 16 2026: "we forgot 1LP, 2LP, 3LP, 4LP") */}
                 <Gate on={canDo('discs')}>
                 <section id="step-discs" style={{ scrollMarginTop: 120 }}>
-                  <StepHeading lead="How many discs." rest="Singles to box sets." />
+                  <StepHeading lead="Discs." rest="Singles to box sets." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Each disc adds a pressed record and its label. The jacket holds them all.
                   </p>
@@ -3857,7 +3868,7 @@ function PressPackageBuilderInner() {
                 {/* Weight */}
                 <Gate on={canDo('weight')}>
                 <section id="step-weight" style={{ scrollMarginTop: 120 }}>
-                  <StepHeading lead="Pick a weight." rest="How heavy it presses." />
+                  <StepHeading lead="Weight." rest="How heavy it presses." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     {VINYL_WEIGHTS.length} weights available from {brand.legalName}.
                   </p>
@@ -3889,7 +3900,7 @@ function PressPackageBuilderInner() {
                 <section id="step-ctype" style={{ scrollMarginTop: 120 }}>
                   {picked('ctype') && !typeOpen ? (
                     <>
-                      <StepHeading lead="Pick a type." rest="What kind of vinyl?" />
+                      <StepHeading lead="Type." rest="What kind of vinyl?" />
                       <div
                         className="flex items-center rounded-2xl bg-white"
                         style={{ marginTop: 16, gap: 14, padding: '12px 18px', border: `1px solid ${HAIRLINE}` }}
@@ -3917,7 +3928,7 @@ function PressPackageBuilderInner() {
                     </>
                   ) : (
                     <>
-                      <StepHeading lead="Pick a type." rest="What kind of vinyl?" />
+                      <StepHeading lead="Type." rest="What kind of vinyl?" />
                       <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                         {colors.length} colors in your catalog press for {sizeLabel}.
                       </p>
@@ -3954,7 +3965,7 @@ function PressPackageBuilderInner() {
                 {/* Color — the looks within the chosen type */}
                 <Gate on={canDo('color')}>
                 <section id="step-color" style={{ scrollMarginTop: 120 }}>
-                  <StepHeading lead="Pick a color." rest="From your catalog." />
+                  <StepHeading lead="Color." rest="From your catalog." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     {picked('ctype')
                       ? `${COLOR_TYPES.find((t) => t.id === colorKind)?.name} · ${colors.filter((c) => c.kind === colorKind).length} colors`
@@ -3998,7 +4009,7 @@ function PressPackageBuilderInner() {
             }
             right={
               <>
-                <StepHeading lead="Pick a jacket." rest="How it&rsquo;s built." />
+                <StepHeading lead="Jacket." rest="How it&rsquo;s built." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {jacketOptions.length} types available from {brand.legalName} for {sizeLabel} records.
                 </p>
@@ -4046,7 +4057,7 @@ function PressPackageBuilderInner() {
             }
             right={
               <>
-                <StepHeading lead="Pick an inner sleeve." rest="Printed, unprinted, or polylined." />
+                <StepHeading lead="Inner sleeve." rest="Printed, unprinted, or polylined." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {SLEEVE_OPTIONS.length} inner sleeve types available from {brand.legalName}.
                 </p>
@@ -4102,7 +4113,7 @@ function PressPackageBuilderInner() {
               <div className="flex flex-col" style={{ gap: 48 }}>
                 {is7 && (
                   <section>
-                    <StepHeading lead="Pick a hole." rest="Spindle or jukebox." />
+                    <StepHeading lead="Hole." rest="Spindle or jukebox." />
                     <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                       7&quot; records press with a small spindle hole or the classic large 45 hole.
                     </p>
@@ -4129,7 +4140,7 @@ function PressPackageBuilderInner() {
                 )}
                 <Gate on={canDo('label')}>
                 <section>
-                  <StepHeading lead="Pick a type." rest="Which label type?" />
+                  <StepHeading lead="Label." rest="Which label type?" />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Printed before pressing — the label becomes part of the record.
                   </p>
@@ -4179,7 +4190,7 @@ function PressPackageBuilderInner() {
             }
             right={
               <>
-                <StepHeading lead="Add an insert." rest="Optional — or skip it." />
+                <StepHeading lead="Insert." rest="Optional — or skip it." />
                 <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                   {insertsAvailable
                     ? `${visibleInserts.length - 1} insert types available from ${brand.legalName} — or skip it.`
@@ -4229,7 +4240,7 @@ function PressPackageBuilderInner() {
             right={
               <div className="flex flex-col" style={{ gap: 48 }}>
                 <section>
-                  <StepHeading lead="Add a sticker." rest="Die-cut to fit — or none." />
+                  <StepHeading lead="Sticker." rest="Die-cut to fit — or none." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Stickers apply to the shrink-wrap, not the jacket itself.
                   </p>
@@ -4248,7 +4259,7 @@ function PressPackageBuilderInner() {
 
                 {stickerShape && (
                   <section>
-                    <StepHeading lead="Pick a size." rest={`For ${stickerShape.name.toLowerCase()}s.`} />
+                    <StepHeading lead="Sticker size." rest={`For ${stickerShape.name.toLowerCase()}s.`} />
                     <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                       {stickerShape.id === 'upc'
                         ? 'UPC stickers come in one standard retail size.'
@@ -4385,7 +4396,7 @@ function PressPackageBuilderInner() {
             right={
               <div className="flex flex-col" style={{ gap: 48 }}>
                 <section>
-                  <StepHeading lead="Pick a quantity." rest="Watch the price drop." />
+                  <StepHeading lead="Quantity." rest="Watch the price drop." />
                   <p className="text-[12.5px]" style={{ marginTop: 10, color: SUBINK }}>
                     Bigger runs bring the per-record price down — each card prices this exact record.
                   </p>
@@ -4822,25 +4833,23 @@ function PressPackageBuilderInner() {
             <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 8, paddingLeft: 20, maxWidth: 560, lineHeight: 1.5 }} data-testid="anchor-note">
               Priced at {anchorQty.toLocaleString()} units — the smallest quantity still shown to artists, and the most they&rsquo;d pay. Bigger runs only get cheaper.
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 460px', gap: 40, alignItems: 'stretch', marginTop: 24 }}>
-              {/* The package itself, full quantity-stage size (Bill, Aug 22
-                  2026): same geometry as the quantity stage — jacket, inner
-                  sleeve tucked properly, record — vertically centered so the
-                  album runs from the top of the Per-record box to the bottom
-                  of the run total. */}
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(280px,0.85fr)_minmax(420px,1.15fr)] items-center gap-10" style={{ marginTop: 24, paddingLeft: 20, paddingRight: 20 }}>
+              {/* The final package preview lives beside the final price only.
+                  Its geometry is bounded to its own column so it never crosses
+                  into the pricing record. */}
               <div className="min-w-0 flex items-center justify-center">
-                <div className="relative group" style={{ width: JS_BASE + 140, height: JS_BASE + 12 }} data-testid="save-package-stage">
+                <div className="relative group w-full max-w-[420px] h-[312px]" data-testid="save-package-stage">
                   <div
-                    className="absolute transition-transform duration-500 ease-out group-hover:translate-x-11"
-                    style={{ left: 140, top: 14, width: JS_BASE - 16, height: JS_BASE - 16, zIndex: 1, borderRadius: '50%', boxShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
+                    className="absolute transition-transform duration-500 ease-out group-hover:translate-x-8"
+                    style={{ left: 118, top: 14, width: 284, height: 284, zIndex: 1, borderRadius: '50%', boxShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
                     aria-hidden
                   >
-                    <VinylDisc size={JS_BASE - 16} swatch={color} />
+                    <VinylDisc size={284} swatch={color} />
                   </div>
                   <div
-                    className="absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-6"
+                    className="absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-5"
                     style={{
-                      left: 38, top: 10, width: JS_BASE - 12, height: JS_BASE - 12, zIndex: 2,
+                      left: 32, top: 10, width: 288, height: 288, zIndex: 2,
                       background: look.printed
                         ? 'linear-gradient(155deg, #1e1e26 0%, #0f0f14 100%)'
                         : look.color === 'black' ? '#0a0a0a' : '#ffffff',
@@ -4853,10 +4862,10 @@ function PressPackageBuilderInner() {
                     {look.printed && (useArtistArt ? (
                       <img src={californialandInnerSleeve} alt="" aria-hidden className="w-full h-full object-cover" />
                     ) : (
-                      <RainbowPrintFace logoSize={(JS_BASE - 12) * 0.42} />
+                      <RainbowPrintFace logoSize={121} />
                     ))}
                   </div>
-                  <div className="absolute overflow-hidden rounded-sm" style={{ left: 0, top: 0, width: JS_BASE, height: JS_BASE, zIndex: 3, boxShadow: '0 4px 22px rgba(0,0,0,0.35)' }}>
+                  <div className="absolute overflow-hidden rounded-sm" style={{ left: 0, top: 0, width: 300, height: 300, zIndex: 3, boxShadow: '0 4px 22px rgba(0,0,0,0.35)' }}>
                     {useArtistArt ? (
                       <img src={californialandCover} alt="Artist cover" className="w-full h-full object-cover" />
                     ) : (
@@ -4867,8 +4876,6 @@ function PressPackageBuilderInner() {
                   </div>
                 </div>
               </div>
-
-              {/* The math on the right (Bill, Aug 22 2026), a bit wider. */}
               <div className="min-w-0 flex flex-col">
                 {/* Honest math, big finish — now in lockstep with the client
                     estimate (Bill, Aug 16 2026): Per record expands to the full
