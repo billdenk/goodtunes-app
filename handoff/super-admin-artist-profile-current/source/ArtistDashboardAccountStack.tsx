@@ -1313,10 +1313,25 @@ function AgreedPackageRecord({ t, release, onRequestChange }: { t: Theme; releas
           <div className="p-5">
             <p className="text-[15px] font-semibold" style={{ color: t.ink }}>Product preview</p>
             <p className="mt-1 text-[13px]" style={{ color: t.subink }}>Jacket artwork and the available record treatment.</p>
-            <div className="relative mt-6 flex min-h-[280px] items-center justify-center overflow-hidden rounded-2xl p-5" style={{ backgroundColor: t.cardSoft }}>
-              <div className="relative h-48 w-48 sm:h-56 sm:w-56">
+            <div className="relative mt-6 flex min-h-[300px] items-center justify-center overflow-hidden rounded-2xl p-5" style={{ backgroundColor: t.cardSoft }}>
+              <div className="relative h-[230px] w-full max-w-[360px]">
                 {isCaliforniaLandRecord ? (
-                  <img src={mrpRubyTranslucent} alt="Translucent Ruby vinyl with MRP center label" className="absolute left-1/2 top-1/2 h-40 w-40 -translate-y-1/2 object-contain sm:h-48 sm:w-48" style={{ transform: 'translate(-12%, -50%)' }} data-testid="img-package-ruby-vinyl" />
+                  <>
+                    <img
+                      src={californialandInnerSleeve}
+                      alt="CALIFORNIALAND supplied printed inner sleeve"
+                      className="absolute object-cover"
+                      style={{ left: '2%', top: '18%', width: '47%', aspectRatio: '1 / 1', transform: 'rotate(-4deg)', boxShadow: `0 0 0 1px ${t.hairline}, 0 14px 28px rgba(0,0,0,0.14)` }}
+                      data-testid="img-package-inner-sleeve"
+                    />
+                    <img
+                      src={mrpRubyTranslucent}
+                      alt="Translucent Ruby vinyl with MRP center label"
+                      className="absolute object-contain"
+                      style={{ right: '0%', top: '3%', width: '55%', aspectRatio: '1 / 1' }}
+                      data-testid="img-package-ruby-vinyl"
+                    />
+                  </>
                 ) : (
                   <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-y-1/2 rounded-full sm:h-48 sm:w-48" style={{ transform: 'translate(-12%, -50%)', background: snapshotExplicitlyNamesBlack ? '#111111' : t.card, border: `1px solid ${t.hairline}`, boxShadow: snapshotExplicitlyNamesBlack ? 'inset 0 0 0 1px rgba(255,255,255,0.18)' : `inset 0 0 0 10px ${t.cardSoft}` }} aria-label={previewStatus}>
                     <span className="absolute inset-5 rounded-full" style={{ border: `1px solid ${t.hairline}` }} />
@@ -1325,7 +1340,15 @@ function AgreedPackageRecord({ t, release, onRequestChange }: { t: Theme; releas
                   </div>
                 )}
                 {release.cover ? (
-                  <img src={release.cover} alt={`${release.title} jacket artwork`} className="absolute inset-0 h-full w-full rounded-xl object-cover" style={{ boxShadow: `0 0 0 1px ${t.hairline}, 0 18px 36px rgba(0,0,0,0.18)` }} data-testid="img-package-jacket-art" />
+                  <img
+                    src={release.cover}
+                    alt={`${release.title} jacket artwork`}
+                    className="absolute rounded-xl object-cover"
+                    style={isCaliforniaLandRecord
+                      ? { left: '27%', top: '12%', width: '53%', aspectRatio: '1 / 1', boxShadow: `0 0 0 1px ${t.hairline}, 0 18px 36px rgba(0,0,0,0.20)` }
+                      : { inset: 0, width: '100%', height: '100%', boxShadow: `0 0 0 1px ${t.hairline}, 0 18px 36px rgba(0,0,0,0.18)` }}
+                    data-testid="img-package-jacket-art"
+                  />
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl" style={{ backgroundColor: t.card, boxShadow: `0 0 0 1px ${t.hairline}, 0 18px 36px rgba(0,0,0,0.18)` }} data-testid="package-jacket-art-not-exposed">
                     <Image className="h-5 w-5" style={{ color: t.faint }} />
@@ -1335,9 +1358,12 @@ function AgreedPackageRecord({ t, release, onRequestChange }: { t: Theme; releas
               </div>
             </div>
             {isCaliforniaLandRecord ? (
-              <div className="mt-4 flex items-center gap-3">
-                <img src={californialandInnerSleeve} alt="CALIFORNIALAND supplied printed inner sleeve" className="h-12 w-12 rounded-lg object-cover" style={{ border: `1px solid ${t.hairline}` }} data-testid="img-package-inner-sleeve" />
-                <span className="text-[13px]" style={{ color: t.subink }}>Supplied / printed inner sleeve</span>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[13px]" style={{ color: t.subink }}>
+                <span>Printed inner sleeve</span>
+                <span aria-hidden style={{ color: t.faint }}>·</span>
+                <span>CALIFORNIALAND jacket</span>
+                <span aria-hidden style={{ color: t.faint }}>·</span>
+                <span>Translucent Ruby vinyl</span>
               </div>
             ) : (
               <div className="mt-4 flex items-center gap-2 rounded-xl px-3 py-2.5" style={{ backgroundColor: t.cardSoft }}>
