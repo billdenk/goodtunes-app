@@ -4942,7 +4942,16 @@ function PressPackageBuilderInner() {
             <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 8, paddingLeft: 20, maxWidth: 560, lineHeight: 1.5 }} data-testid="anchor-note">
               Priced at {anchorQty.toLocaleString()} units — the smallest quantity still shown to artists, and the most they&rsquo;d pay. Bigger runs only get cheaper.
             </div>
-            <div className="grid grid-cols-1 xl:grid-cols-[minmax(280px,0.85fr)_minmax(420px,1.15fr)] items-center gap-10" style={{ marginTop: 24, paddingLeft: 20, paddingRight: 20 }}>
+            <div
+              className="grid items-center gap-10"
+              style={{
+                marginTop: 24,
+                paddingLeft: 20,
+                paddingRight: 20,
+                gridTemplateColumns: 'minmax(280px, 0.85fr) minmax(420px, 1.15fr)',
+              }}
+              data-testid="save-build-layout"
+            >
               {/* The final package preview lives beside the final price only.
                   Its geometry is bounded to its own column so it never crosses
                   into the pricing record. */}
@@ -4952,11 +4961,16 @@ function PressPackageBuilderInner() {
                     hover reveals •••, which opens a per-slot sample-art modal.
                     Cover / Inner sleeve / Center label all update this stage. */}
                 <div
-                  className="relative group w-full max-w-[420px] h-[312px]"
+                  className="relative group w-full"
+                  style={{ maxWidth: 420, height: 312 }}
                   data-testid="save-package-stage"
                   onMouseEnter={() => setStageHover(true)}
                   onMouseLeave={() => { setStageHover(false); setStageMenuOpen(false); }}
                 >
+                  <div
+                    className="hellbender-package-stage-inner"
+                    style={{ position: 'relative', width: 420, height: 312, transformOrigin: 'top left' }}
+                  >
                   <div
                     className="absolute transition-transform duration-500 ease-out group-hover:translate-x-8"
                     style={{ left: 118, top: 14, width: 284, height: 284, zIndex: 1, borderRadius: '50%', boxShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
@@ -5057,6 +5071,7 @@ function PressPackageBuilderInner() {
                       ))}
                     </div>
                   )}
+                  </div>
                 </div>
                 <p className="text-[12px] text-center" style={{ marginTop: 10, maxWidth: 360, color: '#a1a1a6' }}>
                   {art.cover || art.sleeve || art.label

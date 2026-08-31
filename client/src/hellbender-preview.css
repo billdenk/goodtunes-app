@@ -1,3 +1,15 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * The final package renderer is authored on a fixed 420px stage. Below the
+ * desktop breakpoint its grid column is 280px wide, so scale the whole stage
+ * (including every absolute layer) instead of letting those layers cross into
+ * the sibling pricing column.
+ */
+@media (max-width: 1279px) {
+  .hellbender-package-stage-inner {
+    transform: scale(0.6666667);
+  }
+}
