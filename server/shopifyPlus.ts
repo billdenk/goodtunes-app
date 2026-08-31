@@ -34,7 +34,7 @@
 // authenticates with a Bearer token.
 
 import type { Express, Request, Response } from "express";
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "./db";
 import {
@@ -121,6 +121,24 @@ export type BankTransferStripe = {
       id: string,
       params?: any,
     ) => Promise<{ cash_balance?: { available?: Record<string, number> | null } | null }>;
+    listCashBalanceTransactions: (
+      id: string,
+      params?: { limit?: number; starting_after?: string },
+    ) => Promise<{
+      data: Array<{
+        id: string;
+        type?: string | null;
+        net_amount?: number | null;
+        currency?: string | null;
+        applied_to_payment?: {
+          payment_intent?: string | { id?: string | null } | null;
+        } | null;
+        unapplied_from_payment?: {
+          payment_intent?: string | { id?: string | null } | null;
+        } | null;
+      }>;
+      has_more?: boolean;
+    }>;
   };
   paymentIntents: {
     update: (id: string, params: any) => Promise<any>;
@@ -929,14 +947,14 @@ export async function acceptPartialTransferAsPaid(opts: {
 
   const dueCents = step.amountCents + step.marginCents;
 
-  // What's actually received comes from Stripe LIVE, never the webhook tally:
+  // What's actually received comes from Stripe LIVE:
   //   1. amount_received on THIS partially-funded PaymentIntent (Stripe has
-  //      already allocated the transfer, so customer cash balance is $0);
-  //   2. otherwise the customer's unallocated USD cash balance.
-  // The webhook-recorded tally is historical: the same Stripe customer is
-  // reused across a run's steps, so it can claim funds that have since settled
-  // another step. A successful live read is REQUIRED — fail closed if neither
-  // Stripe surface can be read.
+  //      sometimes already allocated the transfer);
+  //   2. the net customer-cash transactions Stripe explicitly binds to THIS PI;
+  //   3. otherwise the customer's unallocated USD cash balance, but only when
+  //      this is the customer's sole awaiting-transfer step.
+  // payerDetails is display/audit data only: its webhook lacks PI metadata and
+  // matches by newest open step, so it is never authoritative for settlement.
   if (!step.stripeCustomerId) {
     return {
       ok: false,
@@ -945,40 +963,176 @@ export async function acceptPartialTransferAsPaid(opts: {
     };
   }
   let receivedCents = 0;
-  let piReadError: unknown = null;
   try {
     const pi = await stripe.paymentIntents.retrieve(piId);
     const piReceived = pi?.amount_received;
-    receivedCents = typeof piReceived === "number" ? piReceived : 0;
-  } catch (e) {
-    piReadError = e;
-  }
-  try {
-    // Only consult unallocated cash when this PI has no funds attached.
-    // This avoids counting unrelated surplus on the customer when Stripe
-    // already tells us exactly what belongs to this payment.
-    if (receivedCents <= 0) {
-    const cust = await stripe.customers.retrieve(step.stripeCustomerId, {
-      expand: ["cash_balance"],
-    });
-    const usd = cust?.cash_balance?.available?.usd;
-    receivedCents = typeof usd === "number" ? usd : 0;
+    if (
+      typeof piReceived !== "number" ||
+      !Number.isSafeInteger(piReceived) ||
+      piReceived < 0
+    ) {
+      return {
+        ok: false,
+        status: 502,
+        message:
+          "Stripe returned an incomplete payment balance — nothing was changed. Retry once Stripe is reachable.",
+      };
     }
+    receivedCents = piReceived;
   } catch (e: any) {
-    if (!piReadError) {
-      // The PaymentIntent read succeeded and positively reported no attached
-      // funds; without a cash-balance read we cannot safely infer receipt.
+    return {
+      ok: false,
+      status: 502,
+      message: `Couldn't read the payment at Stripe (${e?.message ?? "error"}) — nothing was changed. Retry once Stripe is reachable.`,
+    };
+  }
+
+  if (receivedCents <= 0) {
+    try {
+      let startingAfter: string | undefined;
+      let piAppliedCents = 0;
+      const seenTransactionIds = new Set<string>();
+      for (let pageNumber = 0; pageNumber < 100; pageNumber++) {
+        const page = await stripe.customers.listCashBalanceTransactions(
+          step.stripeCustomerId,
+          {
+            limit: 100,
+            ...(startingAfter ? { starting_after: startingAfter } : {}),
+          },
+        );
+        if (
+          !Array.isArray(page?.data) ||
+          typeof page.has_more !== "boolean"
+        ) {
+          throw new Error("Stripe returned an incomplete transaction list");
+        }
+        for (const txn of page.data) {
+          if (typeof txn?.id !== "string" || !txn.id) {
+            throw new Error("Stripe returned a transaction without an ID");
+          }
+          if (seenTransactionIds.has(txn.id)) {
+            throw new Error("Stripe returned a duplicate transaction");
+          }
+          seenTransactionIds.add(txn.id);
+          if (
+            txn.type !== "applied_to_payment" &&
+            txn.type !== "unapplied_from_payment"
+          ) {
+            continue;
+          }
+          const relation =
+            txn.type === "applied_to_payment"
+              ? txn.applied_to_payment?.payment_intent
+              : txn.unapplied_from_payment?.payment_intent;
+          const relatedPi =
+            typeof relation === "string" ? relation : relation?.id ?? null;
+          if (typeof relatedPi !== "string" || !relatedPi) {
+            throw new Error(
+              "Stripe returned an allocation without a PaymentIntent",
+            );
+          }
+          if (relatedPi !== piId) continue;
+          if (
+            typeof txn.currency !== "string" ||
+            !txn.currency ||
+            typeof txn.net_amount !== "number" ||
+            !Number.isSafeInteger(txn.net_amount)
+          ) {
+            throw new Error(
+              "Stripe returned an incomplete payment allocation",
+            );
+          }
+          if (txn.currency.toLowerCase() !== "usd") continue;
+          const netAmount = txn.net_amount;
+          if (
+            (txn.type === "applied_to_payment" && netAmount > 0) ||
+            (txn.type === "unapplied_from_payment" && netAmount < 0)
+          ) {
+            throw new Error(
+              "Stripe returned an allocation with an invalid amount",
+            );
+          }
+          if (txn.type === "applied_to_payment") {
+            piAppliedCents += Math.max(0, -netAmount);
+          } else if (txn.type === "unapplied_from_payment") {
+            piAppliedCents -= Math.max(0, netAmount);
+          }
+          if (!Number.isSafeInteger(piAppliedCents)) {
+            throw new Error("Stripe allocation total was outside the safe range");
+          }
+        }
+        if (page.has_more === false) {
+          receivedCents = Math.max(0, piAppliedCents);
+          break;
+        }
+        const lastId = page.data.at(-1)?.id;
+        if (!lastId) {
+          throw new Error("Stripe transaction pagination was incomplete");
+        }
+        startingAfter = lastId;
+        if (pageNumber === 99) {
+          throw new Error("Stripe transaction history was too large to verify");
+        }
+      }
+    } catch (e: any) {
+      return {
+        ok: false,
+        status: 502,
+        message: `Couldn't verify payment allocations at Stripe (${e?.message ?? "error"}) — nothing was changed. Retry once Stripe is reachable.`,
+      };
+    }
+  }
+
+  if (receivedCents <= 0) {
+    try {
+      const cust = await stripe.customers.retrieve(step.stripeCustomerId, {
+        expand: ["cash_balance"],
+      });
+      const usd = cust?.cash_balance?.available?.usd;
+      if (
+        typeof usd !== "number" ||
+        !Number.isSafeInteger(usd) ||
+        usd < 0
+      ) {
+        return {
+          ok: false,
+          status: 502,
+          message:
+            "Stripe returned an incomplete customer cash balance — nothing was changed. Retry once Stripe is reachable.",
+        };
+      }
+      if (usd > 0) {
+        const [otherOpenStep] = await db
+          .select({ id: manufacturerPaymentSteps.id })
+          .from(manufacturerPaymentSteps)
+          .where(
+            and(
+              eq(
+                manufacturerPaymentSteps.stripeCustomerId,
+                step.stripeCustomerId,
+              ),
+              eq(manufacturerPaymentSteps.status, "awaiting_transfer"),
+              ne(manufacturerPaymentSteps.id, step.id),
+            ),
+          )
+          .limit(1);
+        if (otherOpenStep) {
+          return {
+            ok: false,
+            status: 409,
+            message:
+              "Stripe has unallocated funds, but this customer has more than one open payment request. Nothing was changed; reconcile the transfer in Stripe first.",
+          };
+        }
+      }
+      receivedCents = usd;
+    } catch (e: any) {
       return {
         ok: false,
         status: 502,
         message: `Couldn't read the customer's cash balance at Stripe (${e?.message ?? "error"}) — nothing was changed. Retry once Stripe is reachable.`,
       };
     }
-    return {
-      ok: false,
-      status: 502,
-      message: `Couldn't read the payment or the customer's cash balance at Stripe (${e?.message ?? (piReadError as any)?.message ?? "error"}) — nothing was changed. Retry once Stripe is reachable.`,
-    };
   }
   if (receivedCents <= 0) {
     return {

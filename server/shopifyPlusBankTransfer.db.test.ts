@@ -37,6 +37,11 @@ const albumId = `sp-bt-album-${randomUUID().slice(0, 8)}`;
 
 function stubStripe(opts: {
   cashUsdCents?: number | null;
+  omitCashUsd?: boolean;
+  cashTransactions?: any[];
+  cashTransactionPages?: Array<{ data: any[]; has_more?: unknown }>;
+  cashTransactionsError?: string;
+  onCashTransactionsList?: (params: any) => void;
   confirmStatus?: string;
   updateError?: string;
   confirmError?: string;
@@ -47,6 +52,7 @@ function stubStripe(opts: {
   piAmount?: number;
   /** Funds already allocated to this partially-funded PaymentIntent. */
   piAmountReceived?: number;
+  omitPiAmountReceived?: boolean;
   /** Simulate a network timeout that lands AFTER Stripe applied the update:
    *  the amount mutates, then the call throws updateError. */
   updateAppliesDespiteError?: boolean;
@@ -55,6 +61,8 @@ function stubStripe(opts: {
   confirmAppliesDespiteError?: boolean;
   /** Make paymentIntents.retrieve itself fail (fully indeterminate). */
   piRetrieveError?: string;
+  /** Allow this many successful PI reads before piRetrieveError starts. */
+  piRetrieveErrorAfter?: number;
   /** Initial PI status reported by retrieve (default requires_confirmation);
    *  use "succeeded" to model a racing settlement that already won. */
   piStatus?: string;
@@ -62,6 +70,8 @@ function stubStripe(opts: {
   // Stateful PI mirror so retrieve() is authoritative like the real API.
   let piAmount = opts.piAmount ?? 500000;
   let piStatus: string = opts.piStatus ?? "requires_confirmation";
+  let piRetrieveCalls = 0;
+  let cashTransactionListCalls = 0;
   return {
     customers: {
       retrieve: async () => {
@@ -69,9 +79,24 @@ function stubStripe(opts: {
         return {
           cash_balance: {
             available:
-              opts.cashUsdCents == null ? null : { usd: opts.cashUsdCents },
+              opts.omitCashUsd
+                ? {}
+                : opts.cashUsdCents == null
+                  ? null
+                  : { usd: opts.cashUsdCents },
           },
         };
+      },
+      listCashBalanceTransactions: async (_id, params) => {
+        opts.onCashTransactionsList?.(params);
+        if (opts.cashTransactionsError) {
+          throw new Error(opts.cashTransactionsError);
+        }
+        const page = opts.cashTransactionPages?.[cashTransactionListCalls++];
+        return (page ?? {
+          data: opts.cashTransactions ?? [],
+          has_more: false,
+        }) as any;
       },
     },
     paymentIntents: {
@@ -97,10 +122,18 @@ function stubStripe(opts: {
         return { status };
       },
       retrieve: async () => {
-        if (opts.piRetrieveError) throw new Error(opts.piRetrieveError);
+        piRetrieveCalls++;
+        if (
+          opts.piRetrieveError &&
+          piRetrieveCalls > (opts.piRetrieveErrorAfter ?? 0)
+        ) {
+          throw new Error(opts.piRetrieveError);
+        }
         return {
           amount: piAmount,
-          amount_received: opts.piAmountReceived ?? 0,
+          ...(!opts.omitPiAmountReceived
+            ? { amount_received: opts.piAmountReceived ?? 0 }
+            : {}),
           status: piStatus,
         };
       },
@@ -433,6 +466,319 @@ test("accept-partial uses PaymentIntent amount_received when allocated funds lea
   assert.equal(after.status, "paid");
   assert.equal(after.amountCents, 413500);
   assert.equal(after.amountReceivedCents, 413500);
+});
+
+test("accept-partial uses Stripe's PI-bound cash transaction when PI amount_received and cash balance report zero", async () => {
+  // Production exposes this shape after reconciling the pushed wire: the PI
+  // and unallocated balance are zero, but Stripe's applied_to_payment cash
+  // transaction proves that $4,135 was allocated to this exact PI.
+  const step = await seedStep({
+    amountCents: 537000,
+    amountReceivedCents: 0,
+    payerDetails: [
+      {
+        at: "2026-08-25T12:24:35.705Z",
+        currency: "usd",
+        amountCents: 413500,
+        bankTransfer: {
+          type: "us_bank_transfer",
+          us_bank_transfer: {
+            network: "domestic_wire_us",
+            sender_name: "Slingshot Creative LLC",
+          },
+        },
+      },
+      // A replay must not be summed into an impossible overpayment.
+      {
+        at: "2026-08-25T12:24:36.705Z",
+        currency: "usd",
+        amountCents: 413500,
+      },
+    ],
+  });
+  const updates: any[] = [];
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 0,
+      piAmount: 537000,
+      piAmountReceived: 0,
+      cashTransactions: [
+        {
+          id: "ccsbtxn_funded",
+          type: "funded",
+          net_amount: 413500,
+          currency: "usd",
+        },
+        {
+          id: "ccsbtxn_applied",
+          type: "applied_to_payment",
+          net_amount: -413500,
+          currency: "usd",
+          applied_to_payment: {
+            payment_intent: step.stripePaymentIntentId,
+          },
+        },
+      ],
+      onUpdate: (id, p) => updates.push([id, p]),
+    }),
+  });
+  assert.equal(res.ok, true);
+  if (res.ok) {
+    assert.equal(res.acceptedCents, 413500);
+    assert.equal(res.forgivenCents, 123500);
+  }
+  assert.deepEqual(updates, [[step.stripePaymentIntentId, { amount: 413500 }]]);
+  const [after] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after.status, "paid");
+  assert.equal(after.amountCents, 413500);
+  assert.equal(after.amountReceivedCents, 413500);
+});
+
+test("accept-partial ignores payer receipts and cash transactions bound to another PI", async () => {
+  const step = await seedStep({
+    amountCents: 537000,
+    amountReceivedCents: 0,
+    payerDetails: [{ currency: "usd", amountCents: 413500 }],
+  });
+  const updates: any[] = [];
+  const confirms: string[] = [];
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 0,
+      piAmountReceived: 0,
+      cashTransactions: [
+        {
+          id: "ccsbtxn_other",
+          type: "applied_to_payment",
+          net_amount: -413500,
+          currency: "usd",
+          applied_to_payment: { payment_intent: "pi_another_step" },
+        },
+      ],
+      onUpdate: (id, p) => updates.push([id, p]),
+      onConfirm: (id) => confirms.push(id),
+    }),
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 409);
+  assert.deepEqual(updates, []);
+  assert.deepEqual(confirms, []);
+  const [after] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after.status, "awaiting_transfer");
+  assert.equal(after.amountCents, 537000);
+  assert.equal(after.amountReceivedCents, 0);
+});
+
+test("accept-partial paginates and nets unapplied cash transactions for this PI", async () => {
+  const step = await seedStep({ amountCents: 537000 });
+  const listParams: any[] = [];
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      cashUsdCents: 0,
+      piAmountReceived: 0,
+      cashTransactionPages: [
+        {
+          data: [
+            {
+              id: "ccsbtxn_apply_5000",
+              type: "applied_to_payment",
+              net_amount: -500000,
+              currency: "usd",
+              applied_to_payment: {
+                payment_intent: step.stripePaymentIntentId,
+              },
+            },
+          ],
+          has_more: true,
+        },
+        {
+          data: [
+            {
+              id: "ccsbtxn_unapply_865",
+              type: "unapplied_from_payment",
+              net_amount: 86500,
+              currency: "usd",
+              unapplied_from_payment: {
+                payment_intent: step.stripePaymentIntentId,
+              },
+            },
+          ],
+          has_more: false,
+        },
+      ],
+      onCashTransactionsList: (params) => listParams.push(params),
+    }),
+  });
+  assert.equal(res.ok, true);
+  if (res.ok) assert.equal(res.acceptedCents, 413500);
+  assert.equal(listParams.length, 2);
+  assert.equal(listParams[0].starting_after, undefined);
+  assert.equal(listParams[1].starting_after, "ccsbtxn_apply_5000");
+});
+
+test("accept-partial fails closed when Stripe allocation history cannot be read", async () => {
+  const step = await seedStep({ amountCents: 537000 });
+  const updates: any[] = [];
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      piAmountReceived: 0,
+      cashTransactionsError: "Stripe timeout",
+      cashUsdCents: 413500,
+      onUpdate: (id, p) => updates.push([id, p]),
+    }),
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 502);
+  assert.deepEqual(updates, []);
+  const [after] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after.status, "awaiting_transfer");
+  assert.equal(after.amountCents, 537000);
+});
+
+test("accept-partial rejects malformed PI allocation and pagination data", async () => {
+  const cases = [
+    {
+      label: "fractional cents",
+      page: {
+        data: [
+          {
+            id: "ccsbtxn_fractional",
+            type: "applied_to_payment",
+            net_amount: -413500.5,
+            currency: "usd",
+          },
+        ],
+        has_more: false,
+      },
+      attachPi: true,
+    },
+    {
+      label: "missing has_more",
+      page: { data: [] },
+      attachPi: false,
+    },
+  ];
+  for (const testCase of cases) {
+    const step = await seedStep({ amountCents: 537000 });
+    if (testCase.attachPi) {
+      testCase.page.data[0].applied_to_payment = {
+        payment_intent: step.stripePaymentIntentId,
+      };
+    }
+    const res = await acceptPartialTransferAsPaid({
+      albumId,
+      stepId: step.id,
+      callerRole: "super_admin",
+      stripe: stubStripe({
+        piAmountReceived: 0,
+        cashUsdCents: 413500,
+        cashTransactionPages: [testCase.page],
+      }),
+    });
+    assert.equal(res.ok, false, testCase.label);
+    if (!res.ok) assert.equal(res.status, 502, testCase.label);
+    const [after] = await db
+      .select()
+      .from(manufacturerPaymentSteps)
+      .where(eq(manufacturerPaymentSteps.id, step.id));
+    assert.equal(after.status, "awaiting_transfer", testCase.label);
+    assert.equal(after.amountCents, 537000, testCase.label);
+  }
+});
+
+test("accept-partial refuses recorded receipts and shared cash when the PI read fails", async () => {
+  const step = await seedStep({
+    amountCents: 537000,
+    amountReceivedCents: 0,
+    payerDetails: [{ currency: "usd", amountCents: 413500 }],
+  });
+  const updates: any[] = [];
+  const confirms: string[] = [];
+  let customerReads = 0;
+  const res = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      piRetrieveError: "Stripe timeout",
+      cashUsdCents: 413500,
+      onCustomerRetrieve: () => customerReads++,
+      onUpdate: (id, p) => updates.push([id, p]),
+      onConfirm: (id) => confirms.push(id),
+    }),
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) assert.equal(res.status, 502);
+  assert.equal(customerReads, 0);
+  assert.deepEqual(updates, []);
+  assert.deepEqual(confirms, []);
+  const [after] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after.status, "awaiting_transfer");
+  assert.equal(after.amountCents, 537000);
+  assert.equal(after.amountReceivedCents, 0);
+});
+
+test("accept-partial fails closed on missing live Stripe balance fields", async () => {
+  const piMissing = await seedStep({ amountCents: 537000 });
+  const piRes = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: piMissing.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      omitPiAmountReceived: true,
+      cashUsdCents: 0,
+    }),
+  });
+  assert.equal(piRes.ok, false);
+  if (!piRes.ok) assert.equal(piRes.status, 502);
+
+  const cashMissing = await seedStep({ amountCents: 537000 });
+  const cashRes = await acceptPartialTransferAsPaid({
+    albumId,
+    stepId: cashMissing.id,
+    callerRole: "super_admin",
+    stripe: stubStripe({
+      piAmountReceived: 0,
+      omitCashUsd: true,
+      cashTransactions: [],
+    }),
+  });
+  assert.equal(cashRes.ok, false);
+  if (!cashRes.ok) assert.equal(cashRes.status, 502);
+
+  for (const seeded of [piMissing, cashMissing]) {
+    const [after] = await db
+      .select()
+      .from(manufacturerPaymentSteps)
+      .where(eq(manufacturerPaymentSteps.id, seeded.id));
+    assert.equal(after.status, "awaiting_transfer");
+    assert.equal(after.amountCents, 537000);
+    assert.equal(after.amountReceivedCents, 0);
+  }
 });
 
 test("accept-partial preserves the margin line when the received funds cover it", async () => {
@@ -808,6 +1154,7 @@ test("accept-partial indeterminate shrink with unreadable PI: no blind restore, 
       cashUsdCents: 413500,
       updateError: "socket timeout",
       piRetrieveError: "still down",
+      piRetrieveErrorAfter: 1,
     }),
   });
   assert.equal(res.ok, false);
@@ -855,6 +1202,7 @@ test("accept-partial indeterminate confirm with unreadable PI: PI untouched, shr
       cashUsdCents: 413500,
       confirmError: "socket timeout",
       piRetrieveError: "still down",
+      piRetrieveErrorAfter: 1,
       onUpdate: (id, p) => updates.push([id, p]),
     }),
   });

@@ -21,3 +21,15 @@ description: Stripe customer_balance bank transfers on the Shopify+ manufacturin
 - A thrown Stripe mutation is INDETERMINATE (timeouts land after the
   change applies) — reconcile from an authoritative re-read and record
   Stripe's settled amount, never the intended one.
+- A reconciled pushed wire can leave BOTH `PaymentIntent.amount_received`
+  and the customer's unallocated cash balance at zero. The authoritative
+  proof is the customer's `applied_to_payment` cash-balance transaction
+  whose `payment_intent` equals the step's PI; net any matching
+  `unapplied_from_payment` reversals. Payer-details receipts are display
+  only because their funded event has no PI metadata.
+  **Why:** production showed a $4,135 wire in this exact state; trusting the
+  newest-open-step receipt would risk settling another request on the reused
+  customer.
+  **How to apply:** for money-moving reconciliation, require strict,
+  fully-paginated live Stripe reads and safe integer cents; fail closed on
+  malformed/missing fields or attribution ambiguity.
