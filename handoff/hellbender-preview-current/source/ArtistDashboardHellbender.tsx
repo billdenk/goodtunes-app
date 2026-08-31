@@ -1,10 +1,6 @@
-// CORNER RULING (Hellbender, Aug 22 2026): Hellbender's corner token = SQUARE
-// and it applies across the whole Hellbender skin — buttons, cards, pills
-// included (site --media-radius and --product-card-corner-radius are 0).
-// Only true circles (avatars, status dots) stay round.
-//
-// ArtistDashboardHellbender — the FULL artist dashboard wearing Hellbender
-// Vinyl's white-label skin. This is the lockstep Hellbender twin of
+// ArtistDashboardHellbender — the full artist dashboard wearing Hellbender
+// Vinyl's current, light GoodTunes partner shell. This remains the lockstep
+// Hellbender twin of
 // ArtistDashboard.tsx: same information architecture and content — top bar
 // (artist brand left, Feedback / notifications / avatar right, the press's
 // mark quietly beside them), the artist rail (Dashboard / People / Projects
@@ -14,10 +10,8 @@
 // trend + activity, top projects + channels + giving — re-skinned per the
 // Hellbender canon:
 //
-//   • Canvas pure white #FFFFFF, ink #1d1d1f, subink #7a7a7a.
-//   • Red #DF0C15 filled actions ALWAYS carry WHITE text — never dark ink.
-//   • Chivo throughout (Google Fonts @import in a <style> tag).
-//   • Square corners across the skin; only true circles stay round.
+//   • Apple-canon light canvas, quiet rail, translucent header and rounded cards.
+//   • Hellbender red is reserved for earned partner actions.
 //   • Every status = word + icon, never color alone (colorblind-safe).
 //   • ONE filled red action on the page — the up-next step's upload.
 //   • "Estimate", never the q-word. Real ® character. No emojis.
@@ -66,18 +60,18 @@ import howAlbumCover from '../assets/how-album-cover.jpg';
 import alexPhoto from '../assets/alex-tebeleff.jpg';
 
 // ─── Palette — Hellbender white-label light canon ────────────────────
-const CANVAS = '#161617';
-const CARD = '#1e1e20';
-const CARD_RAISED = '#26262a';
-const RAIL_BG = '#1c1c1e';
-const INK = '#f5f5f7';
-const SUBINK = '#98989d';
-const HAIRLINE = 'rgba(255,255,255,0.10)';
+const CANVAS = '#f5f5f7';
+const CARD = '#ffffff';
+const CARD_RAISED = '#f0f0f2';
+const RAIL_BG = '#fbfbfd';
+const INK = '#1d1d1f';
+const SUBINK = '#6e6e73';
+const HAIRLINE = '#e6e6ea';
 const RED = '#DF0C15'; // the ONE earned fill on this page
 const LINK = '#DF0C15'; // links = red
 
 /* Chivo throughout — Hellbender's real face (their live stylesheet). */
-const FONT = "'Chivo', -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif";
+const FONT = "-apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', Arial, sans-serif";
 
 // ─── Button grammar — EXACT from hellbendervinyl.com base.css ────────
 // Buttons are FULLY ROUNDED PILLS (--buttons-radius: 40px): uppercase Chivo
@@ -132,7 +126,7 @@ function AccountMenu() {
       {open && (
         <div
           data-testid="menu-user"
-          style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 60, width: 300, background: CARD, border: `1px solid ${HAIRLINE}`, borderRadius: 0, boxShadow: '0 12px 32px rgba(0,0,0,0.12)', fontFamily: FONT }}
+          style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 60, width: 300, background: CARD, border: `1px solid ${HAIRLINE}`, borderRadius: 16, boxShadow: '0 16px 40px rgba(0,0,0,0.12)', fontFamily: FONT }}
         >
           <div style={{ padding: '12px 14px', borderBottom: `1px solid ${HAIRLINE}` }}>
             <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{MOCK_USER_NAME}</div>
@@ -154,7 +148,7 @@ function AccountMenu() {
           </div>
           <div style={{ display: 'block', padding: '10px 14px', borderTop: `1px solid ${HAIRLINE}` }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: SUBINK, marginBottom: 6 }}>APPEARANCE</div>
-            <div style={{ display: 'flex', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, borderRadius: 40, padding: 2 }} role="radiogroup" aria-label="Appearance">
+            <div style={{ display: 'flex', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, borderRadius: 999, padding: 2 }} role="radiogroup" aria-label="Appearance">
               {(['Light', 'Dark', 'System'] as const).map((m) => {
                 const active = mode === m;
                 return (
@@ -168,8 +162,9 @@ function AccountMenu() {
                     style={{
                       padding: '3px 9px', borderRadius: 40, fontSize: 11.5, cursor: 'pointer', fontFamily: FONT,
                       fontWeight: active ? 700 : 400,
-                      background: active ? CARD_RAISED : 'transparent',
-                      border: active ? `1px solid ${HAIRLINE}` : '1px solid transparent',
+                       background: active ? CARD : 'transparent',
+                       border: '1px solid transparent',
+                       boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : undefined,
                       color: active ? INK : SUBINK,
                     }}
                   >
@@ -399,7 +394,7 @@ function NavRow({ label, icon: Icon, active }: { label: string; icon: typeof Lay
       onClick={(e) => e.preventDefault()}
       data-testid={`rail-${label.toLowerCase()}`}
       style={{
-        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 0,
+        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10,
         fontSize: 13, fontWeight: active ? 700 : 400, color: active ? INK : SUBINK,
         background: active ? CARD : 'transparent',
         border: active ? `1px solid ${HAIRLINE}` : '1px solid transparent',
@@ -661,16 +656,9 @@ function GivingCard() {
 // Hellbender red instead of black (Bill's call). White mark + ink on red.
 function HbSimpleFooter() {
   return (
-    <footer style={{ background: RED, color: '#ffffff', padding: '18px 26px' }} data-testid="portal-footer">
-      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,0.9)' }}>
-        {/* brightness(0) invert(1) forces the black mark to true white on red. */}
-        <img src={hellbenderIcon} alt="" aria-hidden style={{ width: 26, height: 26, filter: 'brightness(0) invert(1)', opacity: 0.95 }} />
-        3402 Charlotte St · Pittsburgh, PA · hellbendervinyl.com
-        <span style={{ flex: 1 }} />
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.9)' }}>
-          Powered by
-          <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 15, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.95 }} />
-        </span>
+    <footer style={{ borderTop: `1px solid ${HAIRLINE}`, background: RAIL_BG, color: SUBINK, padding: '14px 26px' }} data-testid="portal-footer">
+      <div style={{ maxWidth: 1240, margin: '0 auto', fontSize: 11.5 }}>
+        {MOCK_JOB} is running with Hellbender Vinyl · hellbendervinyl.com
       </div>
     </footer>
   );
@@ -687,17 +675,24 @@ export default function ArtistDashboardHellbender() {
   const upNext = MOCK_STEPS.find((s) => s.status === 'next');
 
   return (
-    <div style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: FONT, display: 'flex', flexDirection: 'column' }}>
-      {/* Chivo — Hellbender's real face rides with the skin. */}
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;700&display=swap');`}</style>
+    <div data-testid="artist-dashboard-shell" style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: FONT, display: 'flex', flexDirection: 'column' }}>
+      <style>{`
+        [data-testid="artist-dashboard-shell"] button { border-radius: 999px !important; }
+        [data-testid="artist-dashboard-shell"] [data-testid^="dashboard-"],
+        [data-testid="artist-dashboard-shell"] [data-testid^="kpi-"],
+        [data-testid="artist-dashboard-shell"] [data-testid="next-steps-strip"] { border-radius: 16px !important; }
+        @media (max-width: 767px) {
+          [data-testid="artist-dashboard-shell"] nav { display: none !important; }
+          [data-testid="artist-dashboard-shell"] main > div { padding: 24px 20px 64px !important; }
+        }
+      `}</style>
 
       {/* ── Top bar — signed-in canon: press brand left; quiet Feedback +
           account avatar (canon dropdown) right. Nothing else. ── */}
-      <header style={{ height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 20px 0 12px', background: CANVAS, borderBottom: `1px solid ${HAIRLINE}` }}>
+      <header style={{ position: 'sticky', top: 0, zIndex: 30, height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 20px', background: 'rgba(251,251,253,0.72)', backdropFilter: 'blur(18px)', borderBottom: `1px solid ${HAIRLINE}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <img src={alexPhoto} alt={MOCK_USER_NAME} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-          <span style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{MOCK_USER_NAME}</span>
-          <span style={{ fontSize: 11.5, color: SUBINK, whiteSpace: 'nowrap' }}>with Hellbender Vinyl</span>
+          <img src={hellbenderIcon} alt="" aria-hidden style={{ width: 28, height: 28, objectFit: 'contain', flexShrink: 0, filter: 'brightness(0) saturate(100%) invert(14%) sepia(99%) saturate(6155%) hue-rotate(354deg) brightness(98%) contrast(101%)' }} />
+          <span style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap' }}>Hellbender Vinyl</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
           <button type="button" data-testid="button-feedback" style={{ ...btnOutline, border: '1px solid transparent', background: 'transparent', color: SUBINK }}>
@@ -711,7 +706,7 @@ export default function ArtistDashboardHellbender() {
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
         {/* ── Left rail — artist nav, POWERED BY GoodTunes at the bottom ── */}
-        <nav style={{ width: 218, flexShrink: 0, background: RAIL_BG, borderRight: `1px solid ${HAIRLINE}`, padding: '14px 10px', display: 'flex', flexDirection: 'column', gap: 2, position: 'sticky', top: 0, height: 'calc(100dvh - 56px)', overflowY: 'auto' }}>
+        <nav style={{ width: 244, flexShrink: 0, background: RAIL_BG, borderRight: `1px solid ${HAIRLINE}`, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 2, position: 'sticky', top: 56, height: 'calc(100dvh - 56px)', overflowY: 'auto' }}>
           <div style={{ position: 'relative', marginBottom: 10 }}>
             <Search style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', width: 13, height: 13, color: SUBINK }} />
             <input
@@ -737,7 +732,7 @@ export default function ArtistDashboardHellbender() {
 
         {/* ── Main ── */}
         <main style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
-          <div style={{ maxWidth: 1180, margin: '0 auto', padding: '28px 28px 60px' }}>
+          <div style={{ maxWidth: 1240, margin: '0 auto', padding: '32px 40px 96px' }}>
 
             {/* Greeting row + range pills + quiet outline action */}
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' }}>

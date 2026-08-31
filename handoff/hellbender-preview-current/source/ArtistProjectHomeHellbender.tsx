@@ -1,16 +1,11 @@
-// CORNER RULING (Hellbender, Aug 22 2026): Hellbender's corner token = SQUARE
-// and it applies across the whole Hellbender skin — buttons, cards, pills
-// included (site --media-radius and --product-card-corner-radius are 0).
-// Only true circles (avatars, status dots) stay round.
 // ArtistProjectHomeHellbender — the Hellbender-skinned twin of
 // ArtistProjectHome. Same page, same structure, kept in LOCKSTEP with the
 // GoodTunes original: album tiles with artwork + basic specs, hover "···"
 // menu (Create variant / Archive / Restore), archived disclosure in the
 // section header. Only the skin changes: Hellbender white-label light canon
-// (pure white canvas, red #DF0C15 with WHITE text on the ONE filled action,
-// black hairlines, Chivo throughout, square corners). Shell wears the
-// Hellbender site header signed-in + artist rail with Team pinned + dark
-// footer with Powered by GoodTunes®. Statuses are word + icon, never color
+// (Apple-canon light canvas, restrained Hellbender red action accent,
+// rounded controls and cards). Shell wears the current signed-in artist
+// header and rail. Statuses are word + icon, never color
 // alone (Bill is colorblind). "Estimate", never the q-word. Self-contained
 // per handoff rules.
 
@@ -30,12 +25,12 @@ const MOCK_UNIT = '$8.37 /unit';
 const MOCK_TOTAL = '$8,375.00';
 
 // ─── Palette — Hellbender light canon ────────────────────────────────
-const CANVAS = '#161617';
-const CARD = '#1e1e20';
-const CARD_RAISED = '#26262a';
-const INK = '#f5f5f7';
-const SUBINK = '#98989d';
-const HAIRLINE = 'rgba(255,255,255,0.10)';
+const CANVAS = '#f5f5f7';
+const CARD = '#ffffff';
+const CARD_RAISED = '#f0f0f2';
+const INK = '#1d1d1f';
+const SUBINK = '#6e6e73';
+const HAIRLINE = '#e6e6ea';
 const RED = '#DF0C15'; // the ONE earned fill on this page
 const LINK = '#DF0C15'; // links = red
 
@@ -163,7 +158,7 @@ function RailRow({ name, active }: { name: string; active: boolean }) {
       onClick={(e) => e.preventDefault()}
       data-testid={`rail-${name.toLowerCase()}`}
       style={{
-        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 0,
+        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10,
         fontSize: 13, fontWeight: active ? 700 : 400, color: active ? INK : SUBINK,
         background: active ? CARD_RAISED : 'transparent',
         border: active ? `1px solid ${HAIRLINE}` : '1px solid transparent',
@@ -206,7 +201,7 @@ function AccountMenu() {
       {open && (
         <div
           data-testid="menu-user"
-          style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 60, width: 300, background: CARD, border: `1px solid ${HAIRLINE}`, borderRadius: 0, boxShadow: '0 12px 32px rgba(0,0,0,0.12)', fontFamily: FONT }}
+          style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 60, width: 300, background: CARD, border: `1px solid ${HAIRLINE}`, borderRadius: 16, boxShadow: '0 16px 40px rgba(0,0,0,0.12)', fontFamily: FONT }}
         >
           <div style={{ padding: '12px 14px', borderBottom: `1px solid ${HAIRLINE}` }}>
             <div style={{ fontSize: 13.5, fontWeight: 700, color: INK }}>{MOCK_USER_NAME}</div>
@@ -228,7 +223,7 @@ function AccountMenu() {
           </div>
           <div style={{ display: 'block', padding: '10px 14px', borderTop: `1px solid ${HAIRLINE}` }}>
             <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1, color: SUBINK, marginBottom: 6 }}>APPEARANCE</div>
-            <div style={{ display: 'flex', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, borderRadius: 40, padding: 2 }} role="radiogroup" aria-label="Appearance">
+            <div style={{ display: 'flex', background: CARD_RAISED, border: `1px solid ${HAIRLINE}`, borderRadius: 999, padding: 2 }} role="radiogroup" aria-label="Appearance">
               {(['Light', 'Dark', 'System'] as const).map((m) => {
                 const active = mode === m;
                 return (
@@ -242,8 +237,9 @@ function AccountMenu() {
                     style={{
                       padding: '3px 9px', borderRadius: 40, fontSize: 11.5, cursor: 'pointer', fontFamily: FONT,
                       fontWeight: active ? 700 : 400,
-                      background: active ? CARD_RAISED : 'transparent',
-                      border: active ? `1px solid ${HAIRLINE}` : '1px solid transparent',
+                       background: active ? CARD : 'transparent',
+                       border: '1px solid transparent',
+                       boxShadow: active ? '0 1px 3px rgba(0,0,0,0.08)' : undefined,
                       color: active ? INK : SUBINK,
                     }}
                   >
@@ -274,14 +270,11 @@ function AccountMenu() {
 // bar deleted once signed in): band left, Feedback + avatar right. ─────
 function HbSiteHeader() {
   return (
-    <div style={{ position: 'sticky', top: 0, zIndex: 30, background: CANVAS }}>
-      {/* Chivo rides with the header — the real Hellbender face. */}
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Chivo:wght@400;700&display=swap');`}</style>
-      <header style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 20px 0 12px', borderBottom: `1px solid ${HAIRLINE}` }}>
+    <div style={{ position: 'sticky', top: 0, zIndex: 30, background: 'rgba(251,251,253,0.72)', backdropFilter: 'blur(18px)' }}>
+      <header style={{ height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '0 20px', borderBottom: `1px solid ${HAIRLINE}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <img src={alexPhoto} alt={MOCK_USER_NAME} style={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-          <span style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{MOCK_USER_NAME}</span>
-          <span style={{ fontSize: 11.5, color: SUBINK, whiteSpace: 'nowrap' }}>with Hellbender Vinyl</span>
+          <img src={hellbenderIcon} alt="" aria-hidden style={{ width: 28, height: 28, objectFit: 'contain', flexShrink: 0, filter: 'brightness(0) saturate(100%) invert(14%) sepia(99%) saturate(6155%) hue-rotate(354deg) brightness(98%) contrast(101%)' }} />
+          <span style={{ fontSize: 14.5, fontWeight: 700, whiteSpace: 'nowrap' }}>Hellbender Vinyl</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
           <button
@@ -303,16 +296,9 @@ function HbSiteHeader() {
 // Hellbender red instead of black (Bill's call). White mark + ink on red.
 function HbSimpleFooter() {
   return (
-    <footer style={{ background: RED, color: '#ffffff', padding: '18px 26px' }} data-testid="portal-footer">
-      <div style={{ maxWidth: 1080, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 10, fontSize: 11.5, color: 'rgba(255,255,255,0.9)' }}>
-        {/* brightness(0) invert(1) forces the black mark to true white on red. */}
-        <img src={hellbenderIcon} alt="" aria-hidden style={{ width: 26, height: 26, filter: 'brightness(0) invert(1)', opacity: 0.95 }} />
-        3402 Charlotte St · Pittsburgh, PA · hellbendervinyl.com
-        <span style={{ flex: 1 }} />
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'rgba(255,255,255,0.9)' }}>
-          Powered by
-          <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 15, width: 'auto', filter: 'brightness(0) invert(1)', opacity: 0.95 }} />
-        </span>
+    <footer style={{ borderTop: `1px solid ${HAIRLINE}`, background: CANVAS, color: SUBINK, padding: '14px 26px' }} data-testid="portal-footer">
+      <div style={{ maxWidth: 1240, margin: '0 auto', fontSize: 11.5 }}>
+        {MOCK_PROJECT} is running with Hellbender Vinyl · hellbendervinyl.com
       </div>
     </footer>
   );
@@ -392,10 +378,18 @@ function AlbumTile({ album, archived = false }: { album: Album; archived?: boole
 
 export default function ArtistProjectHomeHellbender() {
   const [archivedOpen, setArchivedOpen] = useState(false);
-  const font = "'Chivo', -apple-system, 'Helvetica Neue', Helvetica, Arial, sans-serif";
+  const font = "-apple-system, BlinkMacSystemFont, 'Inter', 'Helvetica Neue', Arial, sans-serif";
 
   return (
-    <div style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: font, display: 'flex', flexDirection: 'column' }}>
+    <div data-testid="artist-project-shell" style={{ minHeight: '100dvh', background: CANVAS, color: INK, fontFamily: font, display: 'flex', flexDirection: 'column' }}>
+      <style>{`
+        [data-testid="artist-project-shell"] button { border-radius: 999px !important; }
+        [data-testid="artist-project-shell"] [data-testid^="card-album"] > div:first-child { border-radius: 16px !important; }
+        @media (max-width: 767px) {
+          [data-testid="artist-project-shell"] nav { display: none !important; }
+          [data-testid="artist-project-shell"] main > div { padding: 24px 20px 64px !important; }
+        }
+      `}</style>
 
       {/* ── Hellbender's own site header wears the portal ── */}
       <HbSiteHeader />
@@ -403,7 +397,7 @@ export default function ArtistProjectHomeHellbender() {
       <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
         {/* ── Left rail — artist nav canon, Team pinned at the bottom ── */}
-        <nav style={{ width: 218, flexShrink: 0, background: CANVAS, borderRight: `1px solid ${HAIRLINE}`, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav style={{ width: 244, flexShrink: 0, background: '#fbfbfd', borderRight: `1px solid ${HAIRLINE}`, padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 2, position: 'sticky', top: 56, height: 'calc(100dvh - 56px)' }}>
           <div style={{ position: 'relative', marginBottom: 12 }}>
             <input
               placeholder="Search"
@@ -418,23 +412,26 @@ export default function ArtistProjectHomeHellbender() {
           <div style={{ borderTop: `1px solid ${HAIRLINE}`, marginTop: 'auto', paddingTop: 8 }}>
             <RailRow name="Settings" active={false} />
           </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '12px 12px 4px', borderTop: `1px solid ${HAIRLINE}`, marginTop: 8 }}>
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, color: SUBINK }}>POWERED BY</span>
+            <img src={goodtunesLogo} alt="GoodTunes®" style={{ height: 16, width: 'auto', opacity: 0.9 }} />
+          </div>
         </nav>
 
         {/* ── Main — the project home, lockstep with the original ── */}
         <main style={{ flex: 1, minWidth: 0, overflowY: 'auto' }}>
-          <div style={{ maxWidth: 920, margin: '0 auto', padding: '30px 28px 60px' }}>
+          <div style={{ maxWidth: 1240, margin: '0 auto', padding: '32px 40px 96px' }}>
 
-            {/* Breadcrumb — uppercase 11px, configurator style */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: SUBINK }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#a1a1a6' }}>
               <a href="#" onClick={(e) => e.preventDefault()} style={{ color: SUBINK, textDecoration: 'none' }}>
                 Releases
               </a>
-              <span aria-hidden style={{ color: 'rgba(0,0,0,0.25)' }}>&rsaquo;</span>
+              <span aria-hidden style={{ color: '#a1a1a6' }}>&rsaquo;</span>
               <span style={{ color: INK }}>{MOCK_PROJECT}</span>
             </div>
 
             {/* Heading — Apple grammar: lead bold, rest quiet */}
-            <h1 style={{ fontSize: 28, fontWeight: 700, letterSpacing: -0.6, margin: '12px 0 0' }} data-testid="heading-project-home">
+            <h1 style={{ fontSize: 30, fontWeight: 600, letterSpacing: '-0.03em', margin: '12px 0 0' }} data-testid="heading-project-home">
               {MOCK_PROJECT}. <span style={{ color: SUBINK, fontWeight: 400 }}>Your project home.</span>
             </h1>
             <p style={{ fontSize: 13, color: SUBINK, margin: '6px 0 0' }}>

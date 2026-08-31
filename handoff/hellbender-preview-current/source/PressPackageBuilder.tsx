@@ -99,7 +99,7 @@ const PRESS_BUILDER_CONFIGS: Record<PressPackageBuilderVariant, PressPackageBuil
   hellbender: {
     variant: 'hellbender', displayName: 'Hellbender', legalName: 'Hellbender Vinyl', logo: hellbenderLogo,
     operatorName: 'Travis', operatorEmail: 'travis@hellbendervinyl.com', operatorInitials: 'TW',
-    operatorPhoto: hellbenderOperator, defaultColorId: 'BK1', defaultColorKind: 'black', defaultMode: 'dark',
+    operatorPhoto: hellbenderOperator, defaultColorId: 'BK1', defaultColorKind: 'black', defaultMode: 'light',
     labelColor: '#0a0a0a', labelLogoFilter: 'brightness(0) invert(1)', labelMark: hellbenderIcon, markOnly: true, activeNav: 'builder',
   },
   paramount: {
@@ -2822,9 +2822,19 @@ export function PressShell({ children }: { children: ReactNode }) {
         }}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <span className="h-9 w-9 rounded-full ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0 p-1" style={{ backgroundColor: '#ffffff' }}>
-            <img src={brand.logo} alt={brand.legalName} className="w-full h-full object-contain" />
-          </span>
+          {brand.variant === 'hellbender' ? (
+            <img
+              src={brand.labelMark}
+              alt=""
+              aria-hidden
+              className="h-8 w-8 flex-shrink-0 object-contain"
+              style={{ filter: 'brightness(0) saturate(100%) invert(14%) sepia(99%) saturate(6155%) hue-rotate(354deg) brightness(98%) contrast(101%)' }}
+            />
+          ) : (
+            <span className="h-9 w-9 rounded-full ring-1 ring-slate-200 flex items-center justify-center flex-shrink-0 p-1" style={{ backgroundColor: '#ffffff' }}>
+              <img src={brand.logo} alt={brand.legalName} className="w-full h-full object-contain" />
+            </span>
+          )}
           <span className="text-[15px] font-semibold whitespace-nowrap" style={{ color: INK }}>
             {brand.legalName}
           </span>

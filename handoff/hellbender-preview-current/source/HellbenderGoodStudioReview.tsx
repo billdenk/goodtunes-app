@@ -139,44 +139,6 @@ export function PressGoodStudioReview({
           </p>
         </div>
 
-        <section
-          aria-label="Package lifecycle"
-          style={{
-            marginTop: 36,
-            maxWidth: 820,
-            padding: '20px 22px',
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) auto',
-            gap: 20,
-            alignItems: 'center',
-            background: '#ffffff',
-            border: `1px solid ${HAIRLINE}`,
-            borderRadius: 16,
-          }}
-        >
-          <div>
-            <h2 style={{ margin: 0, fontSize: 20, lineHeight: 1.2, letterSpacing: -0.3 }}>
-              Lifecycle. <span style={{ color: SUBINK, fontWeight: 400 }}>Build the package before the project begins.</span>
-            </h2>
-            <p style={{ margin: '8px 0 0', fontSize: 14, lineHeight: 1.5, color: SUBINK }}>
-              After the estimate is accepted, the release carries the agreed package as the working record—not the package chooser.
-            </p>
-          </div>
-          <div
-            aria-hidden
-            style={{
-              color: RED,
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: 0.9,
-              textTransform: 'uppercase',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Estimate → Project
-          </div>
-        </section>
-
         <div
           className="hb-review-grid"
           style={{ marginTop: 40, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 22 }}
