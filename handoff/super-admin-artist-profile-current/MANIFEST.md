@@ -137,3 +137,6 @@ Screenshots may be used to verify rendered states, but they must never override 
 Read UPDATE-2026-08-31.md and the exact source bundle under source/. This delta covers the approved Super-admin Artist Profile, release Dashboard/Details/Assets/Store/Payments, Settings hierarchy, shared Test/Certify workspace, role-aware chrome, and the no-dead-ends wiring checklist.
 
 This visual delta does not replace the registry and shared-body architecture above. Audience, Orders, and Reports retain their current Otis implementations until their later visual review.
+
+
+Package correction: the Package destination is required, but its body is Otis's current live artist release Package component. Historical Playground builder reconstructions are explicitly non-authoritative. See the Package correction in UPDATE-2026-08-31.md.

@@ -710,7 +710,7 @@ function ReleaseWallCard({ t, release, onOpen, onDuplicate, onDelete }: { t: The
   );
 }
 
-const RELEASE_DETAIL_TABS = ['Dashboard', 'Details', 'Assets', 'Store', 'Payments'] as const;
+const RELEASE_DETAIL_TABS = ['Dashboard', 'Details', 'Assets', 'Package', 'Store', 'Payments'] as const;
 type ReleaseDetailTab = (typeof RELEASE_DETAIL_TABS)[number];
 
 function ReleaseDashboard({
@@ -1318,6 +1318,15 @@ function ReleaseDetailSurface({ t, release, onSave }: { t: Theme; release: Admin
               onNotice={setAssetNotice}
             />)}
         </div> : <PlayerArtPanel t={t} release={release} />}
+      </div>}
+      {tab === 'Package' && <div className="rounded-2xl px-6 py-8" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }} data-testid="release-package-integration-seam" data-handoff-only="true">
+        <div className="flex items-start gap-3">
+          <Eye className="mt-0.5 h-4 w-4 flex-shrink-0" style={{ color: t.subink }} />
+          <div>
+            <h2 className="text-[17px] font-semibold" style={{ color: t.ink }}>Current Otis package builder</h2>
+            <p className="mt-1 max-w-2xl text-[13px] leading-relaxed" style={{ color: t.subink }}>This tab is the integration seam for Otis’s existing artist release Package body. Preserve that live builder unchanged here; do not port an older Playground reconstruction.</p>
+          </div>
+        </div>
       </div>}
       {tab === 'Store' && <ReleaseStore t={t} release={release} />}
       {tab === 'Payments' && <ReleasePayments t={t} release={release} />}
