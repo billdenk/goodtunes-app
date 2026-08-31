@@ -21,10 +21,10 @@
 // from other mockups. Numbers match PressClientEstimateHellbender at the
 // 1,000-unit tier and PressClientNextStepsHellbender's deposit math.
 
-import howAlbumCover from '@/pages/hellbender/assets/how-album-cover.jpg';
-import hellbenderLogo from '@/pages/hellbender/assets/hellbender-full.svg';
-import travisPhoto from '@/pages/hellbender/assets/travis-whitlock.webp';
-import goodtunesLogo from '@/pages/hellbender/assets/goodtunes-logo.png';
+import howAlbumCover from '../assets/how-album-cover.jpg';
+import hellbenderLogo from '../assets/hellbender-full.svg';
+import travisPhoto from '../assets/travis-whitlock.webp';
+import goodtunesLogo from '../assets/goodtunes-logo.png';
 
 // ─── Mock data — the same estimate the page she just accepted ─────────
 const MOCK_CLIENT_FIRST = 'Alex';

@@ -11,10 +11,10 @@
 
 import { useState } from 'react';
 import { MessageSquarePlus, UserPen, UserPlus, LogOut } from 'lucide-react';
-import howAlbumCover from '@/pages/hellbender/assets/how-album-cover.jpg';
-import alexPhoto from '@/pages/hellbender/assets/alex-tebeleff.svg';
-import hellbenderIcon from '@/assets/artist-portal/hellbender-icon.svg';
-import goodtunesLogo from '@/pages/hellbender/assets/goodtunes-logo.png';
+import howAlbumCover from '../assets/how-album-cover.jpg';
+import alexPhoto from '../assets/alex-tebeleff.jpg';
+import hellbenderIcon from '../assets/hellbender-icon.svg';
+import goodtunesLogo from '../assets/goodtunes-logo.png';
 
 // ─── Mock data — How???'s running pressing project ────────────────────
 const MOCK_CLIENT_FIRST = 'Alex';

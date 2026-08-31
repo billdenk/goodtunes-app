@@ -28,13 +28,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowRight, Facebook, Instagram, MapPin, Music2, Star, Twitter, X, Youtube } from 'lucide-react';
-import howAlbumCover from '@/pages/hellbender/assets/how-album-cover.jpg';
-import innerSleeveArt from '@/pages/hellbender/assets/how-album-cover.jpg';
-import hellbenderMark from '@/assets/artist-portal/hellbender-icon.svg';
-import hellbenderLogo from '@/pages/hellbender/assets/hellbender-full.svg';
-import travisPhoto from '@/pages/hellbender/assets/travis-whitlock.webp';
-import hellbenderBbbSeal from '@/pages/hellbender/assets/hellbender-bbb-seal.png';
-import goodtunesLogo from '@/pages/hellbender/assets/goodtunes-logo.png';
+import howAlbumCover from '../assets/how-album-cover.jpg';
+import innerSleeveArt from '../assets/how-inner-sleeve.png';
+import hellbenderMark from '../assets/hellbender-mark.png';
+import hellbenderLogo from '../assets/hellbender-full.svg';
+import travisPhoto from '../assets/travis-whitlock.webp';
+import hellbenderBbbSeal from '../assets/hellbender-bbb-seal.png';
+import goodtunesLogo from '../assets/goodtunes-logo.png';
 
 // ─── Mock data (from the Hellbender estimate PDF) ───────────────────────────
 const MOCK_CLIENT_FIRST = 'Alex';

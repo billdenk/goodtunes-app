@@ -28,10 +28,10 @@
 // Self-contained per handoff rules. Same MOCK_ data and numbers as
 // PressClientEstimate at the 1,000-unit tier (the tier Travis prepared).
 
-import howAlbumCover from '@/pages/hellbender/assets/how-album-cover.jpg';
-import hellbenderLogo from '@/pages/hellbender/assets/hellbender-full.svg';
-import hellbenderMark from '@/assets/artist-portal/hellbender-icon.svg';
-import travisPhoto from '@/pages/hellbender/assets/travis-whitlock.webp';
+import howAlbumCover from '../assets/how-album-cover.jpg';
+import hellbenderLogo from '../assets/hellbender-full.svg';
+import hellbenderMark from '../assets/hellbender-mark.png';
+import travisPhoto from '../assets/travis-whitlock.webp';
 
 // ─── Mock data (same estimate as the live page) ──────────────────────
 const MOCK_CLIENT_FIRST = 'Alex';

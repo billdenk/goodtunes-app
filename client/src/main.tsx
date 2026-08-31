@@ -1,5 +1,4 @@
 import { createRoot } from "react-dom/client";
-import "./index.css";
 
 async function mountNormalApp() {
   const [
@@ -159,9 +158,12 @@ armBootWatchdog();
 }
 
 if (window.location.pathname === "/hellbender-preview") {
-  void import("@/pages/hellbender-preview").then(({ default: HellbenderPreviewRouter }) => {
-    createRoot(document.getElementById("root")!).render(<HellbenderPreviewRouter />);
-  });
+  void Promise.all([
+    import("./hellbender-preview.css"),
+    import("@/pages/hellbender-preview"),
+  ]).then(([, { default: HellbenderPreviewRouter }]) => {
+      createRoot(document.getElementById("root")!).render(<HellbenderPreviewRouter />);
+    });
 } else {
-  void mountNormalApp();
+  void import("./index.css").then(() => mountNormalApp());
 }

@@ -57,20 +57,20 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from '@/components/ui/popover';
-import goodtunesLogo from '@/pages/hellbender/assets/goodtunes-logo.png';
-import mrpLogo from '@/pages/mrp/assets/mrp-logo.svg';
-import brandonPhoto from '@/pages/mrp/assets/brandon-seavers.png';
-import californialandCover from '@/pages/mrp/assets/californialand-cover.jpg';
-import californialandInnerSleeve from '@/pages/mrp/assets/californialand-inner-sleeve.png';
-import rubyVinylPhoto from '@/pages/mrp/assets/mrp-ruby-translucent.png';
-import niinaLabelArt from '@/pages/mrp/assets/niina-label-1.png';
-import hellbenderLogo from '@/pages/hellbender/assets/hellbender-full.svg';
-import hellbenderIcon from '@/assets/artist-portal/hellbender-icon.svg';
-import hellbenderOperator from '@/pages/hellbender/assets/travis-whitlock.webp';
-import alexPhoto from '@/pages/hellbender/assets/alex-tebeleff.svg';
-import paramountOperator from '@/pages/pmp/assets/jonathan-hibma.png';
-import paramountSymbol from '@/pages/pmp/assets/pmp-icon.svg';
-import paramountFrostedWhite from '@/pages/mrp/assets/mrp-ruby-translucent.png';
+import goodtunesLogo from '../assets/goodtunes-logo.png';
+import mrpLogo from '../assets/mrp-logo.png';
+import brandonPhoto from '../assets/brandon-seavers.png';
+import californialandCover from '../assets/californialand-cover.jpg';
+import californialandInnerSleeve from '../assets/californialand-inner-sleeve.png';
+import rubyVinylPhoto from '../assets/mrp-ruby-translucent.png';
+import niinaLabelArt from '../assets/niina-label-1.png';
+import hellbenderLogo from '../assets/hellbender-full.svg';
+import hellbenderIcon from '../assets/hellbender-icon.svg';
+import hellbenderOperator from '../assets/travis-whitlock.webp';
+import alexPhoto from '../assets/alex-tebeleff.jpg';
+import paramountOperator from '../assets/paramount/brooke-harris-portrait.jpeg';
+import paramountSymbol from '../assets/paramount/paramount-symbol.png';
+import paramountFrostedWhite from '../assets/paramount/frosted-white-vinyl.png';
 
 export type PressPackageBuilderVariant = 'memphis' | 'hellbender' | 'paramount';
 export type PressPackageBuilderAudience = 'press' | 'artist';
@@ -94,7 +94,7 @@ export type PressPackageBuilderConfig = {
   activeNav: 'builder' | 'catalog';
 };
 
-const PARAMOUNT_LOGO = paramountSymbol;
+const PARAMOUNT_LOGO = 'https://paramountpressing.com/hs-fs/hubfs/2a2c766a-803f-4745-b3af-047057e98b3a_720.png?width=400&height=455&name=2a2c766a-803f-4745-b3af-047057e98b3a_720.png';
 
 const PRESS_BUILDER_CONFIGS: Record<PressPackageBuilderVariant, PressPackageBuilderConfig> = {
   memphis: {

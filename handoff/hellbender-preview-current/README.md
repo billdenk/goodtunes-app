@@ -62,3 +62,19 @@ The final light Dashboard, light Project Home, and light artist-context Hellbend
 ## Source
 
 Files in source/ are copied verbatim from approved GoodStudio. Integrate against current Otis primitives and contracts; do not redraw from screenshots.
+
+
+## Agreed Package visual production record
+
+- Release → Package must present the agreed package as a visual production record, not only a text table.
+- Show jacket artwork and a vinyl/product preview beside organized Record, Packaging, and Production specification groups.
+- Expected rows: format, size, disc count/configuration, weight, vinyl type, color, center label, jacket, inner sleeve, insert/add-ons, quantity/minimum run, unit cost, setup, manufacturing total, paid, outstanding, partner, estimate, production status, and source/provenance.
+- Render only source-backed values. Unknown values say Not exposed. A neutral/ghost vinyl preview must be explicitly labeled Color not exposed or Preview incomplete so it is not mistaken for a selected color.
+- CALIFORNIALAND currently exposes only Vinyl; Single LP; Memphis Record Pressing; At press; MRP estimate · CALIFORNIALAND · Single LP; $5,430 estimated; $1,295 paid; and $4,135 outstanding. Do not import historical Ruby/Black/Seafoam, quantities, or unit prices from unrelated mocks.
+- Newly agreed package snapshots use the same visual hierarchy and may render only their stored title, component summary, minimum run, calculated unit cost, and source.
+- Agreed state remains read-only with Request change; do not show presets or an editable builder.
+
+
+## Complete asset bundle
+
+The assets/ directory contains every local asset referenced by the supplied source files, preserving the same ../assets/... relative import structure from source/. Do not substitute initials, album art, generated marks, or other fallbacks. In particular, use the supplied alex-tebeleff.jpg and how-inner-sleeve.png exactly.

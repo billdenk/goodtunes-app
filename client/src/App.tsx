@@ -111,7 +111,6 @@ import { AdminPressingOrders } from "@/pages/AdminPressingOrders";
 import AcceptInvite from "@/pages/AcceptInvite";
 import PressClientEstimate from "@/pages/PressClientEstimate";
 import PressClientEstimateAcceptedMRP from "@/pages/mrp/PressClientEstimateAcceptedMRP";
-import HellbenderPreviewRouter from "@/pages/hellbender-preview";
 import PressPQSheet from "@/pages/PressPQSheet";
 import { useWhitelabelBrand } from "@/hooks/useWhitelabelBrand";
 import PressClientNextStepsMRP from "@/pages/mrp/PressClientNextStepsMRP";
@@ -1026,9 +1025,6 @@ function Router() {
             links. Anyone can open /join/:code to submit an artist
             application; no auth required. */}
         <Route path="/join/:code" component={JoinReferralLink} />
-        {/* Public, presentation-only client review. This intentionally uses
-            bundled mock screens and never touches live Hellbender data. */}
-        <Route path="/hellbender-preview" component={HellbenderPreviewRouter} />
         <Route path="/home">
           <ProtectedRoute component={Home} />
         </Route>

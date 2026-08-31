@@ -19,12 +19,12 @@
 
 import { useState } from 'react';
 import { Search, User, ShoppingBag, ChevronDown, ArrowRight, Facebook, Instagram, Youtube, Music2, Twitter, Star, X, MapPin } from 'lucide-react';
-import howAlbumCover from '@/pages/hellbender/assets/how-album-cover.jpg';
-import hellbenderLogo from '@/pages/hellbender/assets/hellbender-full.svg';
-import hellbenderTextLogo from '@/pages/hellbender/assets/hellbender-text-logo.png';
-import hellbenderBbbSeal from '@/pages/hellbender/assets/hellbender-bbb-seal.png';
-import goodtunesLogo from '@/pages/hellbender/assets/goodtunes-logo.png';
-import travisPhoto from '@/pages/hellbender/assets/travis-whitlock.webp';
+import howAlbumCover from '../assets/how-album-cover.jpg';
+import hellbenderLogo from '../assets/hellbender-full.svg';
+import hellbenderTextLogo from '../assets/hellbender-text-logo.png';
+import hellbenderBbbSeal from '../assets/hellbender-bbb-seal.png';
+import goodtunesLogo from '../assets/goodtunes-logo.png';
+import travisPhoto from '../assets/travis-whitlock.webp';
 
 // ─── Mock data — same project the estimate page created ──────────────
 const MOCK_CLIENT_FIRST = 'Alex';

@@ -1,4 +1,4 @@
-import hellbenderLogo from '@/pages/hellbender/assets/hellbender-full.svg';
+import hellbenderLogo from '../assets/hellbender-full.svg';
 import type { CSSProperties } from 'react';
 
 export type GoodStudioReviewScreen = {
@@ -55,7 +55,7 @@ const MOCK_SCREENS: GoodStudioReviewScreen[] = [
 
 const MOCK_THUMBS = Object.fromEntries(
   Object.entries(
-    import.meta.glob('../../hellbender-goodstudio-review/assets/thumbs/route-*.jpg', {
+    import.meta.glob('../assets/thumbs/route-*.jpg', {
       eager: true,
       query: '?url',
       import: 'default',
