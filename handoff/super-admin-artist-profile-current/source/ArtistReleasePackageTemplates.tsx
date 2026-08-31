@@ -528,6 +528,27 @@ type Pkg = {
   note?: { icon: typeof AlertCircle; text: string }; // word + icon (never color alone)
 };
 
+/** The small, immutable record carried from the chooser into an agreed release. */
+export type ArtistPackageSnapshot = {
+  source: 'Memphis Record Pressing package builder';
+  presetId: string;
+  title: string;
+  subtitle: string;
+  minRun: number;
+  unitCost: number;
+};
+
+export function createArtistPackageSnapshot(pkg: Pkg): ArtistPackageSnapshot {
+  return {
+    source: 'Memphis Record Pressing package builder',
+    presetId: pkg.id,
+    title: pkg.title,
+    subtitle: pkg.subtitle,
+    minRun: pkg.minRun,
+    unitCost: pkg.unitCost,
+  };
+}
+
 const PACKAGES: Pkg[] = [
   {
     id: 'heavyweight',
@@ -4016,24 +4037,38 @@ function TwoTone({ lead, rest, size = 22 }: { lead: string; rest: string; size?:
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────
-export function ArtistReleasePackageBuilderContent({ embedded = false }: { embedded?: boolean } = {}) {
+export function ArtistReleasePackageBuilderContent({
+  embedded = false,
+  packageState = 'draft',
+  packageSnapshot,
+  onConvert,
+  onRequestChange,
+}: {
+  embedded?: boolean;
+  packageState?: 'draft' | 'agreed';
+  packageSnapshot?: ArtistPackageSnapshot;
+  onConvert?: (snapshot: ArtistPackageSnapshot) => void;
+  onRequestChange?: () => void;
+} = {}) {
   const [selected, setSelected] = useState<string | null>(null);
   const [saved, setSaved] = useState(true);
+  const selectedPackage = PACKAGES.find((pkg) => pkg.id === selected) ?? null;
+  const agreed = packageState === 'agreed';
 
   return (
     <>
-      <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: embedded ? '0 0 48px' : '32px 40px 96px' }}>
+      {!agreed && <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: embedded ? '0 0 48px' : '32px 40px 96px' }}>
         {/* Eyebrow */}
-        <div
+        {!embedded && <div
           className="text-[11px] font-bold uppercase"
           style={{ letterSpacing: 1.4, color: FAINT }}
           data-testid="text-eyebrow"
         >
           Releases › {RELEASE_TITLE}
-        </div>
+        </div>}
 
         {/* Header + the single filled accent button (Save) */}
-        <div className="flex items-start justify-between gap-6" style={{ marginTop: 10 }}>
+        {!embedded && <div className="flex items-start justify-between gap-6" style={{ marginTop: 10 }}>
           <div className="min-w-0">
             <h1 className="tracking-tight" style={{ fontSize: 40, fontWeight: 700, lineHeight: 1.05, margin: 0 }}>
               <span style={{ color: INK }}>Package. </span>
@@ -4071,10 +4106,10 @@ export function ArtistReleasePackageBuilderContent({ embedded = false }: { embed
               Save
             </button>
           </div>
-        </div>
+        </div>}
 
         {/* Divider */}
-        <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '32px 0 28px' }} />
+        {!embedded && <div className="h-px w-full" style={{ backgroundColor: HAIRLINE, margin: '32px 0 28px' }} />}
 
         {/* ── NEW: Start from a package ── */}
         <section data-testid="section-packages">
@@ -4107,14 +4142,60 @@ export function ArtistReleasePackageBuilderContent({ embedded = false }: { embed
             <Sparkles className="w-3.5 h-3.5" />
             Prefer to start clean? The builder below is yours from scratch.
           </div>
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-[12px]" style={{ color: FAINT }}>
+              {selectedPackage ? `Ready to use: ${selectedPackage.title}` : 'Select a ready package to continue.'}
+            </span>
+            <button
+              type="button"
+              disabled={!selectedPackage}
+              onClick={() => selectedPackage && onConvert?.(createArtistPackageSnapshot(selectedPackage))}
+              className="rounded-full px-4 py-2 text-[13px] font-semibold"
+              style={{
+                color: selectedPackage ? '#fff' : FAINT,
+                background: selectedPackage ? BLUE : CARD_RAISED,
+                border: selectedPackage ? 'none' : `1px solid ${HAIRLINE}`,
+                cursor: selectedPackage ? 'pointer' : 'not-allowed',
+              }}
+              data-testid="button-use-package"
+            >
+              Use this package
+            </button>
+          </div>
         </section>
       </div>
+      }
 
-      {/* ── Build your own — the press's canonical builder, on its own darker band ── */}
-      <div style={{ background: '#131314', borderTop: `1px solid ${HAIRLINE_SOFT}` }} data-testid="band-builder">
+      {agreed ? (
+        <section className="mx-auto w-full" style={{ maxWidth: 1240, padding: embedded ? '0 0 48px' : '32px 40px 96px' }} data-testid="agreed-package-summary">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <TwoTone lead="Package." rest="The agreed production record." />
+              <p className="mt-2 text-[13px]" style={{ color: SUBINK }}>Source-backed values from the Memphis Record Pressing package builder.</p>
+            </div>
+            <button type="button" onClick={onRequestChange} className="rounded-full px-3 py-2 text-[13px] font-medium" style={{ color: BLUE, background: 'transparent' }} data-testid="button-request-package-change">
+              Request change
+            </button>
+          </div>
+          <div className="mt-5 overflow-hidden rounded-2xl" style={{ border: `1px solid ${HAIRLINE}`, background: CARD }}>
+            {[
+              ['Package', packageSnapshot?.title ?? 'Not exposed'],
+              ['Components', packageSnapshot?.subtitle ?? 'Not exposed'],
+              ['Minimum run', packageSnapshot ? packageSnapshot.minRun.toLocaleString() : 'Not exposed'],
+              ['Calculated unit cost', packageSnapshot ? `${money2(packageSnapshot.unitCost)} / unit` : 'Not exposed'],
+              ['Source', packageSnapshot?.source ?? 'Not exposed'],
+            ].map(([label, value], index, rows) => (
+              <div key={label} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4" style={{ borderBottom: index < rows.length - 1 ? `1px solid ${HAIRLINE_SOFT}` : undefined }} data-testid={`agreed-package-${label.toLowerCase().replace(/\s+/g, '-')}`}>
+                <span className="text-[12.5px]" style={{ color: SUBINK }}>{label}</span>
+                <span className="text-right text-[13px] font-medium" style={{ color: value === 'Not exposed' ? FAINT : INK }}>{value}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : <div style={{ background: embedded ? 'transparent' : '#131314', borderTop: embedded ? undefined : `1px solid ${HAIRLINE_SOFT}` }} data-testid="band-builder">
         <div className="mx-auto w-full" style={{ maxWidth: 1240, padding: embedded ? '48px 0 96px' : '48px 40px 96px' }}>
           {/* Breadcrumb + page heading — verbatim from PressQuoteBuilder */}
-          <div className="min-w-0">
+          {!embedded && <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: FAINT }}>
               <a href="#" onClick={(e) => e.preventDefault()} className="transition-colors" style={{ color: FAINT }}>Releases</a>
               <span style={{ color: FAINT }}>›</span>
@@ -4130,11 +4211,11 @@ export function ArtistReleasePackageBuilderContent({ embedded = false }: { embed
               Pick the size once — every later choice is already sized to match.
               When you&rsquo;re done, save it to your release or share it.
             </p>
-          </div>
+          </div>}
 
           <BuildFlow />
         </div>
-      </div>
+      </div>}
     </>
   );
 }

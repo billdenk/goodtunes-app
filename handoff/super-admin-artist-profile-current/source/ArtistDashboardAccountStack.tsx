@@ -32,7 +32,7 @@ import { OperatorRail } from '@workspace/goodtunes-design-system/components/oper
 import { ComponentIcon, type IconKind } from './PressTemplatesIndex';
 import { ArtistDashboardNextStepsStrip } from './ArtistDashboardNextSteps';
 import { ArtistTemplateTest } from './ArtistTemplateTest';
-import { ArtistReleasePackageBuilderContent } from './ArtistReleasePackageTemplates';
+import { ArtistReleasePackageBuilderContent, type ArtistPackageSnapshot } from './ArtistReleasePackageTemplates';
 import {
   Award,
   Banknote,
@@ -210,6 +210,8 @@ type AdminRelease = {
   year?: string;
   catalogNumber?: string;
   upc?: string;
+  packageState: 'draft' | 'agreed';
+  packageSnapshot?: ArtistPackageSnapshot;
 };
 
 const RELEASE_FORMATS: Array<{ id: ReleaseFormatId; label: string; detail: string }> = [
@@ -219,7 +221,7 @@ const RELEASE_FORMATS: Array<{ id: ReleaseFormatId; label: string; detail: strin
 ];
 
 const INITIAL_ADMIN_RELEASES: AdminRelease[] = [
-  { id: 'california-land', title: 'CALIFORNIALAND', format: 'single_lp', status: 'At press', cover: californialandCover },
+  { id: 'california-land', title: 'CALIFORNIALAND', format: 'single_lp', status: 'At press', cover: californialandCover, packageState: 'agreed' },
 ];
 
 type Preset = 'today' | '7d' | '30d' | '90d' | 'all';
@@ -1290,7 +1292,7 @@ function ReleaseDetailSurface({ t, release, onSave }: { t: Theme; release: Admin
             </div>
             {group.fields.map(([label, key]) => {
               const editable = ['title', 'year', 'catalogNumber', 'upc'].includes(key);
-              const readValue = key === 'title' ? release.title : key === 'artist' ? MOCK_PERSON.name : key === 'format' ? format?.label ?? '—' : key === 'tracks' || key === 'visibility' ? '—' : release[key as keyof AdminRelease] || '—';
+               const readValue: string = key === 'title' ? release.title : key === 'artist' ? MOCK_PERSON.name : key === 'format' ? format?.label ?? '—' : key === 'tracks' || key === 'visibility' ? '—' : (release[key as 'year' | 'catalogNumber' | 'upc'] || '—');
               return <div key={key} className="flex min-h-[56px] items-center justify-between gap-5 px-5 py-3" style={{ borderTop: `1px solid ${t.hairline}` }}>
                 <span className="text-[12.5px]" style={{ color: t.subink }}>{label}</span>
                 {editing && editable ? <input value={draft[key as keyof typeof draft]} onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))} onKeyDown={(event) => { if (event.key === 'Enter') saveEdit(); }} className="h-8 min-w-0 max-w-[220px] flex-1 rounded-lg px-2 text-right text-[13px] outline-none" style={inputStyle(t)} aria-label={label} /> : <span className="truncate text-right text-[13px] font-medium" style={{ color: key === 'tracks' || key === 'visibility' ? t.faint : t.ink }}>{readValue}</span>}
@@ -1343,7 +1345,37 @@ function ReleaseDetailSurface({ t, release, onSave }: { t: Theme; release: Admin
             />)}
         </div> : <PlayerArtPanel t={t} release={release} />}
       </div>}
-      {tab === 'Package' && <div data-testid="release-package"><ArtistReleasePackageBuilderContent embedded /></div>}
+      {tab === 'Package' && <div data-testid="release-package">
+        {release.packageState === 'agreed' && release.id === 'california-land' && !release.packageSnapshot ? (
+          <section className="rounded-2xl overflow-hidden" style={{ backgroundColor: t.card, border: `1px solid ${t.hairline}` }} data-testid="legacy-agreed-package-summary">
+            <div className="px-5 py-5">
+              <h2 className="text-[22px] font-semibold tracking-tight" style={{ color: t.ink }}>Package. <span className="font-normal" style={{ color: t.subink }}>The agreed production record.</span></h2>
+              <p className="mt-1 text-[13px]" style={{ color: t.subink }}>Values retained from the release and its attached manufacturing record.</p>
+            </div>
+            {[
+              ['Format', 'Vinyl'],
+              ['Configuration', 'Single LP'],
+              ['Manufacturing partner', 'Memphis Record Pressing'],
+              ['Production status', 'At press'],
+              ['Estimate', 'MRP estimate · CALIFORNIALAND · Single LP'],
+              ['Manufacturing totals', '$5,430.00 estimated · $1,295.00 paid · $4,135.00 outstanding'],
+              ['Size, weight, color, packaging', 'Not exposed'],
+            ].map(([label, value], index, rows) => <div key={label} className="flex flex-wrap items-center justify-between gap-4 px-5 py-4" style={{ borderTop: `1px solid ${t.hairline}` }} data-testid={`legacy-package-${index}`}>
+              <span className="text-[12.5px]" style={{ color: t.subink }}>{label}</span>
+              <span className="text-right text-[13px] font-medium" style={{ color: value === 'Not exposed' ? t.faint : t.ink }}>{value}</span>
+            </div>)}
+            <div className="flex justify-end px-5 py-4" style={{ borderTop: `1px solid ${t.hairline}` }}>
+              <QuietAction t={t} onClick={() => onSave({ ...release, packageState: 'draft', packageSnapshot: undefined })} testid="button-request-package-change">Request change</QuietAction>
+            </div>
+          </section>
+        ) : <ArtistReleasePackageBuilderContent
+          embedded
+          packageState={release.packageState}
+          packageSnapshot={release.packageSnapshot}
+          onConvert={(snapshot) => onSave({ ...release, packageState: 'agreed', packageSnapshot: snapshot })}
+          onRequestChange={() => onSave({ ...release, packageState: 'draft', packageSnapshot: undefined })}
+        />}
+      </div>}
       {tab === 'Store' && <ReleaseStore t={t} release={release} />}
       {tab === 'Payments' && <ReleasePayments t={t} release={release} />}
     </div>
@@ -2802,7 +2834,7 @@ export function ArtistDashboardAccountStack({
                     if (release) setSelectedRelease(release);
                   }}
                   onDuplicateRelease={(release) => {
-                    const duplicate = { ...release, id: `release-${Date.now()}`, title: `${release.title} copy`, status: 'Prepping' as const };
+                     const duplicate = { ...release, id: `release-${Date.now()}`, title: `${release.title} copy`, status: 'Prepping' as const, packageState: 'draft' as const, packageSnapshot: undefined };
                     setReleases((current) => [duplicate, ...current]);
                     setSelectedRelease(duplicate);
                     setMessage('Album duplicated — opened the new Prepping draft');
@@ -2848,9 +2880,9 @@ export function ArtistDashboardAccountStack({
           onClose={() => setNewReleaseOpen(false)}
           onCreate={(title, format) => {
             const id = `release-${Date.now()}`;
-            setReleases((current) => [{ id, title, format, status: 'Prepping' }, ...current]);
+             setReleases((current) => [{ id, title, format, status: 'Prepping', packageState: 'draft' }, ...current]);
             setNewReleaseOpen(false);
-            setSelectedRelease({ id, title, format, status: 'Prepping' });
+             setSelectedRelease({ id, title, format, status: 'Prepping', packageState: 'draft' });
           }}
         />
       )}
