@@ -88,3 +88,8 @@ The estimate and estimate-email vinyl preview is a three-pass renderer: emerald 
 ## Complete vinyl layer inventory
 
 The complete runtime set is bundled under public/vinyl-layers/: opaque-vinyl.png, translucent-vinyl.png, splatter-one.png, splatter-two.png, splatter-three.png, vinyl-highlights.png, and inner-circle.png. PressClientEstimateHellbender and PressClientEstimateEmailHellbender require translucent-vinyl.png plus vinyl-highlights.png. PressPackageBuilder requires all seven. Treat missing network requests for any layer as a failed integration even when the flat base color still renders.
+
+
+## Builder layout and account-menu correction
+
+Use the updated PressPackageBuilder.tsx verbatim. In Pick a quantity, remove only the album/vinyl/sleeve visual; keep the quantity controls at their original compact 520px width in the existing right-hand lane. Do not center them and do not stretch them full width. Keep the single physical package preview beside the final price in The build, bounded to its own responsive column so it cannot overlap pricing. The Alex account popover must be fully opaque with explicit background, shadow, clipping, and z-index 100. The inner-circle runtime image has a fail-safe onError guard so a missing path can never draw a browser broken-image glyph over the Hellbender center mark; still fix the path and load the bundled file. Acceptance: no duplicate package visual, no pricing overlap at 1440/1024, readable account menu, no broken-image glyph.

@@ -51,12 +51,12 @@ import {
   Trash2,
 } from 'lucide-react';
 import { ChevronDown as NavChevron, Package as NavPackage, Layers as NavLayers, Award as NavAward, AudioLines as NavWave, LayoutTemplate as NavTemplate, Boxes, Disc as NavVinyl, Square as NavJacket, CircleDot as NavLabel, FileText as NavInsert, Sticker as NavSticker, ReceiptText as NavPricing, ClipboardList as NavEstimates } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@workspace/goodtunes-design-system/components/ui/button';
 import {
   Popover,
   PopoverTrigger,
   PopoverContent,
-} from '@/components/ui/popover';
+} from '@workspace/goodtunes-design-system/components/ui/popover';
 import goodtunesLogo from '../assets/goodtunes-logo.png';
 import mrpLogo from '../assets/mrp-logo.png';
 import brandonPhoto from '../assets/brandon-seavers.png';
@@ -414,7 +414,7 @@ function VinylDisc({
   size: number;
   swatch: Swatch;
   labelRatio?: number;
-  bodyRef?: React.RefObject<HTMLDivElement>;
+  bodyRef?: React.RefObject<HTMLDivElement | null>;
   /** Custom center-label content rendered inside the spinning body. */
   labelOverlay?: React.ReactNode;
 }) {
@@ -565,6 +565,7 @@ function VinylDisc({
           src={LAYERS.inner}
           alt=""
           aria-hidden
+          onError={(event) => { event.currentTarget.style.display = 'none'; }}
           style={{
             position: 'absolute',
             top: '50%',
@@ -1770,7 +1771,7 @@ function LabelDisc({
 }: {
   size: number;
   kind: LabelKind;
-  bodyRef?: React.RefObject<HTMLDivElement>;
+  bodyRef?: React.RefObject<HTMLDivElement | null>;
   holeRatio?: number;
   labelRatio?: number;
   offsetLogo?: boolean;
@@ -2787,9 +2788,15 @@ function UserMenu({ qMode, setQMode }: { qMode: QMode; setQMode: (m: QMode) => v
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        sideOffset={8}
-        className="w-64 p-0 rounded-2xl"
-        style={{ border: `1px solid ${HAIRLINE}` }}
+        sideOffset={12}
+        className="w-72 p-0 rounded-2xl"
+        style={{
+          backgroundColor: 'var(--q-card)',
+          border: `1px solid ${HAIRLINE}`,
+          boxShadow: '0 18px 50px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.10)',
+          overflow: 'hidden',
+          zIndex: 100,
+        }}
         data-testid="menu-user"
       >
         <div className="px-3.5 py-3" style={{ borderBottom: `1px solid ${HAIRLINE}` }}>
@@ -3017,7 +3024,10 @@ function Gate({ on, children }: { on: boolean; children: ReactNode }) {
 }
 
 // Donor split-grid section: sticky preview left, pickers right.
-function SplitSection({ left, right }: { left: ReactNode; right: ReactNode }) {
+function SplitSection({ left, right, hideLeft = false }: { left: ReactNode; right: ReactNode; hideLeft?: boolean }) {
+  if (hideLeft) {
+    return <div style={{ marginTop: 40, width: '100%', maxWidth: 520, marginLeft: 'auto' }}>{right}</div>;
+  }
   return (
     <div style={{ marginTop: 40, display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 520px', gap: 56, alignItems: 'start' }}>
       <div className="sticky" style={{ top: 148 }}>
@@ -3763,6 +3773,7 @@ function PressPackageBuilderInner() {
         {/* ═══ 1 · VINYL (Add your vinyl) ═══ */}
         <section style={{ marginTop: 48 }}>
           <SplitSection
+            hideLeft
             left={
               <Gate on={picked('size')}>
                 <div className="flex flex-col items-center">
@@ -4822,25 +4833,23 @@ function PressPackageBuilderInner() {
             <div className="text-[11.5px]" style={{ color: '#a1a1a6', marginTop: 8, paddingLeft: 20, maxWidth: 560, lineHeight: 1.5 }} data-testid="anchor-note">
               Priced at {anchorQty.toLocaleString()} units — the smallest quantity still shown to artists, and the most they&rsquo;d pay. Bigger runs only get cheaper.
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 460px', gap: 40, alignItems: 'stretch', marginTop: 24 }}>
-              {/* The package itself, full quantity-stage size (Bill, Aug 22
-                  2026): same geometry as the quantity stage — jacket, inner
-                  sleeve tucked properly, record — vertically centered so the
-                  album runs from the top of the Per-record box to the bottom
-                  of the run total. */}
+            <div className="grid grid-cols-1 xl:grid-cols-[minmax(280px,0.85fr)_minmax(420px,1.15fr)] items-center gap-10" style={{ marginTop: 24, paddingLeft: 20, paddingRight: 20 }}>
+              {/* The final package preview lives beside the final price only.
+                  Its geometry is bounded to its own column so it never crosses
+                  into the pricing record. */}
               <div className="min-w-0 flex items-center justify-center">
-                <div className="relative group" style={{ width: JS_BASE + 140, height: JS_BASE + 12 }} data-testid="save-package-stage">
+                <div className="relative group w-full max-w-[420px] h-[312px]" data-testid="save-package-stage">
                   <div
-                    className="absolute transition-transform duration-500 ease-out group-hover:translate-x-11"
-                    style={{ left: 140, top: 14, width: JS_BASE - 16, height: JS_BASE - 16, zIndex: 1, borderRadius: '50%', boxShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
+                    className="absolute transition-transform duration-500 ease-out group-hover:translate-x-8"
+                    style={{ left: 118, top: 14, width: 284, height: 284, zIndex: 1, borderRadius: '50%', boxShadow: '0 2px 14px rgba(0,0,0,0.35)' }}
                     aria-hidden
                   >
-                    <VinylDisc size={JS_BASE - 16} swatch={color} />
+                    <VinylDisc size={284} swatch={color} />
                   </div>
                   <div
-                    className="absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-6"
+                    className="absolute rounded-sm transition-transform duration-500 ease-out group-hover:translate-x-5"
                     style={{
-                      left: 38, top: 10, width: JS_BASE - 12, height: JS_BASE - 12, zIndex: 2,
+                      left: 32, top: 10, width: 288, height: 288, zIndex: 2,
                       background: look.printed
                         ? 'linear-gradient(155deg, #1e1e26 0%, #0f0f14 100%)'
                         : look.color === 'black' ? '#0a0a0a' : '#ffffff',
@@ -4853,10 +4862,10 @@ function PressPackageBuilderInner() {
                     {look.printed && (useArtistArt ? (
                       <img src={californialandInnerSleeve} alt="" aria-hidden className="w-full h-full object-cover" />
                     ) : (
-                      <RainbowPrintFace logoSize={(JS_BASE - 12) * 0.42} />
+                      <RainbowPrintFace logoSize={121} />
                     ))}
                   </div>
-                  <div className="absolute overflow-hidden rounded-sm" style={{ left: 0, top: 0, width: JS_BASE, height: JS_BASE, zIndex: 3, boxShadow: '0 4px 22px rgba(0,0,0,0.35)' }}>
+                  <div className="absolute overflow-hidden rounded-sm" style={{ left: 0, top: 0, width: 300, height: 300, zIndex: 3, boxShadow: '0 4px 22px rgba(0,0,0,0.35)' }}>
                     {useArtistArt ? (
                       <img src={californialandCover} alt="Artist cover" className="w-full h-full object-cover" />
                     ) : (
@@ -4867,8 +4876,6 @@ function PressPackageBuilderInner() {
                   </div>
                 </div>
               </div>
-
-              {/* The math on the right (Bill, Aug 22 2026), a bit wider. */}
               <div className="min-w-0 flex flex-col">
                 {/* Honest math, big finish — now in lockstep with the client
                     estimate (Bill, Aug 16 2026): Per record expands to the full
