@@ -1,0 +1,30 @@
+Yes. I checked Stripe’s current documentation, and that structure is supported.
+
+A U.S. Stripe Connect platform can create a direct charge in CAD on a Canadian Standard connected account and collect an `application_fee_amount`. Stripe specifically recommends direct charges for Standard connected accounts. ([Stripe Docs][1])
+
+For example:
+
+> Customer pays: CA$40.00
+> Charge belongs to: Canadian pressing plant’s Stripe account
+> GoodTunes application fee: CA$4.50
+> Canadian press receives: CA$35.50 less its Stripe processing fees
+> GoodTunes receives: the application fee, converted to the platform’s settlement currency (presumably USD)
+
+Stripe says that with direct charges, funds settle in the connected account’s country, and the connected account is the merchant of record. The platform’s application fee is transferred to the platform account. ([Stripe Docs][2])
+
+The cross-currency piece is especially clear: for direct charges, Stripe converts the application fee into the platform’s default currency. So if the Canadian account is settling CAD and GoodTunes is a U.S./USD account, the CA$4.50 fee would normally arrive at GoodTunes converted to USD, subject to Stripe's applicable FX treatment. ([Stripe Docs][3])
+
+And because it's a Standard account, the Canadian press ordinarily pays its own Stripe processing fees and bears its own refund/dispute liability. ([Stripe Docs][4])
+
+So for what I think you're trying to accomplish, the flow can be:
+
+**Canadian customer → Canadian press's Stripe account in CAD → GoodTunes takes its application fee → GoodTunes receives its fee in USD.**
+
+You do **not** have to charge the customer through GoodTunes' U.S. Stripe account and then transfer the balance to Canada.
+
+That distinction may be quite important for the Canadian-press setup we've been discussing.
+
+[1]: https://docs.stripe.com/connect/direct-charges?utm_source=chatgpt.com "Create direct charges | Stripe Documentation"
+[2]: https://docs.stripe.com/connect/charges?locale=en-GB&utm_source=chatgpt.com "Understand how charges work in a Connect integration | Stripe Documentation"
+[3]: https://docs.stripe.com/connect/currencies/fx-quotes-api?utm_source=chatgpt.com "Use the FX Quotes API in Connect | Stripe Documentation"
+[4]: https://docs.stripe.com/connect/direct-charges-fee-payer-behavior?utm_source=chatgpt.com "Fee behavior on connected accounts | Stripe Documentation"
