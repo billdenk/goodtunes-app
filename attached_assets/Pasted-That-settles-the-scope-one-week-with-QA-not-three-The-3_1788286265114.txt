@@ -1,0 +1,25 @@
+That settles the scope — **one week with QA, not three.** The 3% stops competing with Odoo and deposits.
+
+And Otis has given you the fee base, which is the decision you owe me. His wording:
+
+> *3% of the pre-tax project subtotal, excluding shipping, separately passed-through payment-processing charges, and refunds.*
+
+That's the right shape, and the card-surcharge exclusion is a good catch I'd missed — on that MRP screen the customer pays $325 plus a $9.73 card fee. Charging 3% on Stripe's fee would be indefensible the first time anyone noticed.
+
+**One thing he flagged that you have to decide: does setup count?** On that same screen, set-up costs were $1,295 of a $5,755 job — 22% of it. Include setup and your fee is ~$173; exclude it and it's ~$134. Travis said "3% on gross," and setup is a real part of the project you're administering — it's on the estimate, it's collected through the platform, it's tracked in the workflow. **I'd include it.** The exclusions that hold up are the ones that aren't your services at all: tax, shipping, and Stripe's surcharge.
+
+So my recommended base, which I'll put in all three letters unless you say otherwise:
+
+> **3% of the pre-tax project subtotal — including setup and manufacturing — excluding sales tax, shipping, and separately passed-through payment-processing charges. Refunded principal reverses the corresponding fee.**
+
+---
+
+**Two things in his currency answer worth keeping.**
+
+**Build Task #3459 currency-generic, not CAD-specific.** He's right, and it matters more than it sounds — it means the Viryl work becomes the foundation for every non-US plant in the 42, instead of a one-off you rebuild for the first European plant.
+
+**And you don't need a European bank account to accept EUR card payments.** That removes what I'd assumed was a treasury blocker on the international channel. It becomes a question of whether you want to *hold* EUR, not whether you can take it.
+
+**One flag for your own reporting:** he warns against summing mixed currencies into a single revenue total without currency columns or a dated conversion. You're raising. Get that right before CAD, GBP and EUR are all in the same number.
+
+Give me a yes on the fee base and I'll build all three.

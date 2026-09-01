@@ -1,0 +1,22 @@
+Yes — three things, because one of them changes how Task #3459 should be built.
+
+**Message for Otis:**
+
+> Following up on currency. We worked through the Canadian economics and it changes the target design.
+>
+> **1. Direct charges — not destination — is what we're aiming at, and the reason is tax, not money.** With direct charges the charge is created *on the plant's* connected account, so the plant is merchant of record on their own domestic sale and handles their own GST/HST. With destination charges the money routes the same way but GoodTunes stays merchant of record on a Canadian transaction, which puts us in a Canadian tax question we don't want. Standard connected accounts, as you identified.
+>
+> **2. Task #3459 has a dependency I don't think we modeled.** Your CAD scope assumed the current platform-charge-then-transfer architecture, "accepting any Stripe FX implications." We priced those implications: **CAD in, converted to USD, converted back to pay the plant is roughly 2% of every Canadian job** — about $48 on a $2,400 run, against a 3% fee of $72. It eats two-thirds of what we make on the job. On direct charges to a Canadian account, CAD never converts at all — only our 3% does, so the same job costs us under a dollar.
+>
+> So CAD card checkout for Viryl is really **CAD + direct charges together**. Building CAD on the current architecture would ship the expensive version. Still build the data model currency-generic as you proposed — that part was right.
+>
+> **3. Do not build platform multi-currency balances.** Stripe's multi-currency settlement would let us hold CAD, and it solves the FX, but it leaves the tax question open and adds multi-currency reconciliation for no benefit direct charges doesn't already give us. Worth revisiting when we're collecting fees in three currencies from a dozen plants — not now.
+>
+> **Three things someone with production Stripe access needs to confirm:**
+> - Which Connect pricing model the account uses (Stripe-handled or platform-handled)
+> - Whether our platform qualifies for cross-border payouts, and whether direct charges on a **Canadian** Standard connected account is enabled for us
+> - Whether Stripe's "connected account must be in the same region as the platform" rule for multi-currency settlement has any bearing on a US platform with a Canadian connected account — their examples are Australia/Australia and EEA/EEA, nothing about North America
+>
+> None of this blocks Hellbender. It does mean direct charges moves from "after Hellbender" to "before any non-US plant goes live," which is the same slot in practice but a different reason.
+
+That last line matters — you're not asking him to reprioritize, you're telling him the dependency so Viryl's launch date is honest when you talk to Rob.

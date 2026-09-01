@@ -1,0 +1,27 @@
+Here's the full set — organized by what each answer unblocks.
+
+**Blocking the Hellbender LOI and my reply to Travis**
+
+1. The milestone machinery is clearly running on GoodTunes-managed projects — set-up costs, deposit, balance, each held and released. **How much of that is reusable for the white-label portal estimate flow?** Is it wiring the existing payment-request and ledger machinery to a different entry point, or does the portal path genuinely need its own payment records, milestone definitions and balance logic? If it's a build, does your 2–3 week estimate still hold?
+
+2. **What can Hellbender have at launch?** I need one sentence I can put in a signed document: staged payment in the portal is available at launch / shortly after / on a roadmap with no date. Pick one.
+
+3. **Can the deposits work run parallel with the Odoo CRM/Projects bridge, or does it queue behind it?**
+
+4. Moving the usage fee from $100 flat to 3% — you said that's fine for application fees. **Confirming nothing else is affected** (Odoo payloads, reporting, the payouts screen).
+
+**Sequencing**
+
+5. With Odoo (~1 week) and possibly deposits (2–3 weeks) now in front of it, **where does direct charges land?** Still worth doing before the Hellbender launch, or after?
+
+6. **Clickwrap terms at admin login, the name/email watermark, and read-audit logging** — you scoped those at a few days combined. Are they scheduled? They're the cheapest protection we have and MRP is GZ-owned.
+
+7. **The full plant data export bundle** — you said a few days. Scheduled or not? It's a commitment in all three LOIs.
+
+**Viryl and cross-border (not blocking Hellbender)**
+
+8. **Multi-currency checkout** — is a Canadian plant's customer quoted and charged in CAD today, or is that a build? You covered CAD settlement but not what the customer sees at checkout. This determines whether the Viryl channel is a Q4 conversation or next year.
+
+9. **Which Stripe Connect pricing model are we on** — Stripe-handles-pricing (no platform account or payout fees) or we-handle-pricing ($2 per monthly active account plus 0.25% + 25¢ per payout)? Only affects our own cost line, but it scales with every plant we add.
+
+Answers to 1 and 2 are what I need to finish the LOI. The rest can come back at his pace.
