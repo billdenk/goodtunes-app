@@ -60,12 +60,23 @@ fixed platform-wide.
 ## Manufacturing-ledger payments (money MRP or artists pay in)
 
 - Manufacturing ledger steps (deposits, balance-of-run, etc.) are payable by
-  **US bank transfer** — Stripe `customer_balance` push transfers, with
-  virtual-account details (routing/account/reference) issued per payment.
-  **No card fees apply on the bank-transfer path.**
-- **Card remains the fallback**, and when used its processing fee is added
-  server-side as **its own disclosed line item** at checkout — never buried in
-  the price.
+  **USD transfer from a US bank** — Stripe `customer_balance` push transfers,
+  with virtual-account details issued per payment. The payer chooses an
+  **ACH credit** (usually 1–2 business days) or **domestic wire** (usually same
+  business day). This is not ACH Direct Debit: GoodTunes never pulls funds.
+- The bank option adds **no card surcharge**. Stripe may still charge GoodTunes
+  the rail-specific published fee: 0.5% capped at $5 for USD bank transfer,
+  plus $15 when the sender uses a domestic wire (terms verified 2026-09-01;
+  the $5 cap was also observed on a settled live GoodTunes ACH credit).
+- **Card remains the fallback.** Stripe identifies the actual card before the
+  amount is fixed; its server-owned domestic or international surcharge is
+  grossed up to cover Stripe charging its percentage on the surcharge itself
+  and is disclosed as a separate line. Unknown issuer or conversion conditions
+  are refused rather than quoted falsely. The live
+  account's fee ledger confirms 2.9% + 30¢ domestic and 4.4% + 30¢
+  international; Stripe publishes another 1% where it performs conversion.
+- Canada is not routed through this USD/US-bank flow. Canadian domestic rails
+  are EFT (push), PAD (debit), and Interac; adding them is separate scope.
 - Underpayments within a small operator-configured threshold auto-close;
   larger shortfalls stay open showing received vs. remaining until a second
   transfer completes them. Overpayments sit in the payer's Stripe cash balance

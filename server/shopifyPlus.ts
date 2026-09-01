@@ -16,7 +16,8 @@
 //                                 virtual account details shown in-app,
 //                                 Task #3004) or, as a fallback, a card
 //                                 Checkout with the card fee added as a
-//                                 disclosed line item. ACH debit
+//                                 disclosed server-quoted PaymentIntent
+//                                 amount. ACH debit
 //                                 (us_bank_account) was removed.
 //
 // When a payment SETTLES into the platform balance we mint a HELD
@@ -59,7 +60,10 @@ import { getUserRole, listSuperAdminEmails } from "./auth/roles";
 import { sendPartnerNotificationEmail, notifySuperAdmins } from "./mail";
 import { partnerEmailHtml } from "./partnerNotifications";
 import { formatUsdCents } from "@shared/money";
-import { cardFeeCents } from "@shared/breakEven";
+import {
+  cardFeeConditionsFromStripe,
+  quoteCardSurcharge,
+} from "@shared/breakEven";
 import {
   MANUFACTURING_PLATFORM_FEE_BPS,
   allocateManufacturingPlatformFeeCents,
@@ -173,6 +177,8 @@ export async function reallocateEditableManufacturingFees(
     priorPrincipal += principal;
   }
 }
+
+
 
 // ── Task #3004 — inbound bank-transfer (push) payments ────────────────
 // A transfer that lands a few dollars short (sender bank fees deducted
@@ -571,7 +577,7 @@ async function notifyScopeOfPaymentRequest(opts: {
     const bodyLines = [
       `GoodTunes has requested a manufacturing payment of ${amount} for ${albumTitle}.`,
       `Reason: ${opts.description}`,
-      `Open the release's Payments tab to review and pay by bank transfer (ACH).`,
+      `Open the release's Payments tab to review and pay by ACH credit or domestic USD wire.`,
     ];
     const html = partnerEmailHtml({
       heading: "Payment requested",
@@ -595,8 +601,8 @@ async function notifyScopeOfPaymentRequest(opts: {
   }
 }
 
-// ── Operator notification on ACH settlement (Task #2785) ──────────────
-// When an artist_direct step's ACH debit settles, Bill needs to know
+// ── Operator notification on bank-transfer settlement (Task #2785) ────
+// When an artist_direct pushed transfer settles, Bill needs to know
 // that funds are held and ready to release to the plant. Best-effort.
 async function notifyOperatorOfArtistPayment(opts: {
   stepId: string;
@@ -756,7 +762,10 @@ async function notifyScopeOfPaymentReceived(opts: {
 async function markStepPaid(
   stepId: string,
   paymentIntentId: string | null,
-  opts?: { amountReceivedCents?: number },
+  opts?: {
+    amountReceivedCents?: number;
+    expectedCheckoutSessionId?: string | null;
+  },
 ) {
   const [step] = await db
     .select()
@@ -767,6 +776,20 @@ async function markStepPaid(
     return;
   }
   if (step.status === "paid") return; // idempotent
+  const checkoutSessionMatches =
+    !!opts?.expectedCheckoutSessionId &&
+    step.stripeCheckoutSessionId === opts.expectedCheckoutSessionId;
+  const paymentIntentMatches =
+    !!paymentIntentId && step.stripePaymentIntentId === paymentIntentId;
+  if (
+    (opts?.expectedCheckoutSessionId && !checkoutSessionMatches) ||
+    (paymentIntentId && !paymentIntentMatches && !checkoutSessionMatches)
+  ) {
+    console.warn(
+      `[shopify-plus] ignoring stale paid event for step ${step.id} (PI ${paymentIntentId ?? "none"}, session ${opts?.expectedCheckoutSessionId ?? "none"})`,
+    );
+    return;
+  }
 
   const manufacturerId =
     step.manufacturerId ?? (await resolveAlbumManufacturer(step.albumId))?.id ?? null;
@@ -798,15 +821,24 @@ async function markStepPaid(
   // Task #3004 — record what actually arrived. A full payment records the
   // step total; an under-threshold short transfer records the (smaller)
   // received amount so operators can see the shortfall on the row.
+  const bankAmountReceivedCents =
+    step.paymentMethod === "bank_transfer" ? opts?.amountReceivedCents : undefined;
   const receivedCents =
-    opts?.amountReceivedCents ??
+    bankAmountReceivedCents ??
     (step.amountReceivedCents > 0
       ? step.amountReceivedCents
       : manufacturingStepTotalCents(step));
+  const reconciledBankAmounts =
+    bankAmountReceivedCents != null &&
+    bankAmountReceivedCents > 0 &&
+    bankAmountReceivedCents < manufacturingStepTotalCents(step)
+      ? adjustedManufacturingStepAmounts(step, bankAmountReceivedCents)
+      : {};
 
-  await db
+  const [transitioned] = await db
     .update(manufacturerPaymentSteps)
     .set({
+      ...reconciledBankAmounts,
       status: "paid",
       paidAt: new Date(),
       stripePaymentIntentId: paymentIntentId ?? step.stripePaymentIntentId,
@@ -815,7 +847,20 @@ async function markStepPaid(
       earmarkId,
       lastError: null,
     })
-    .where(eq(manufacturerPaymentSteps.id, step.id));
+    .where(
+      and(
+        eq(manufacturerPaymentSteps.id, step.id),
+        sql`${manufacturerPaymentSteps.stripePaymentIntentId} IS NOT DISTINCT FROM ${step.stripePaymentIntentId}`,
+        sql`${manufacturerPaymentSteps.stripeCheckoutSessionId} IS NOT DISTINCT FROM ${step.stripeCheckoutSessionId}`,
+      ),
+    )
+    .returning({ id: manufacturerPaymentSteps.id });
+  if (!transitioned) {
+    console.warn(
+      `[shopify-plus] paid event lost an artifact race for step ${step.id}; leaving the newer attempt untouched`,
+    );
+    return;
+  }
   console.log(`[shopify-plus] step ${step.id} → paid (earmark ${earmarkId ?? "none"})`);
 
   // Task #2785 — notify Bill when an artist_direct payment settles so he
@@ -846,6 +891,19 @@ async function markStepProcessing(
     .from(manufacturerPaymentSteps)
     .where(eq(manufacturerPaymentSteps.id, stepId));
   if (!step || step.status === "paid") return;
+  if (
+    (step.stripeCheckoutSessionId &&
+      sessionId &&
+      step.stripeCheckoutSessionId !== sessionId) ||
+    (step.stripePaymentIntentId &&
+      paymentIntentId &&
+      step.stripePaymentIntentId !== paymentIntentId)
+  ) {
+    console.warn(
+      `[shopify-plus] ignoring stale processing event for step ${step.id}`,
+    );
+    return;
+  }
   await db
     .update(manufacturerPaymentSteps)
     .set({
@@ -854,25 +912,72 @@ async function markStepProcessing(
       stripePaymentIntentId: paymentIntentId ?? step.stripePaymentIntentId,
       lastError: null,
     })
-    .where(eq(manufacturerPaymentSteps.id, step.id));
+    .where(
+      and(
+        eq(manufacturerPaymentSteps.id, step.id),
+        sql`${manufacturerPaymentSteps.stripePaymentIntentId} IS NOT DISTINCT FROM ${step.stripePaymentIntentId}`,
+        sql`${manufacturerPaymentSteps.stripeCheckoutSessionId} IS NOT DISTINCT FROM ${step.stripeCheckoutSessionId}`,
+      ),
+    );
   console.log(`[shopify-plus] step ${step.id} → processing`);
 }
 
-async function markStepFailed(stepId: string, reason: string) {
+async function markStepFailed(
+  stepId: string,
+  reason: string,
+  expected: {
+    paymentIntentId?: string | null;
+    checkoutSessionId?: string | null;
+  },
+) {
   const [step] = await db
     .select()
     .from(manufacturerPaymentSteps)
     .where(eq(manufacturerPaymentSteps.id, stepId));
   if (!step || step.status === "paid") return;
-  await db
+  if (step.lastError === BANK_AUTO_CLOSE_MARKER) {
+    console.warn(
+      `[shopify-plus] deferring failed event while bank auto-close owns step ${step.id}`,
+    );
+    return;
+  }
+  const paymentIntentMatches =
+    !!expected.paymentIntentId &&
+    step.stripePaymentIntentId === expected.paymentIntentId;
+  const checkoutSessionMatches =
+    !!expected.checkoutSessionId &&
+    step.stripeCheckoutSessionId === expected.checkoutSessionId;
+  if (!paymentIntentMatches && !checkoutSessionMatches) {
+    console.warn(
+      `[shopify-plus] ignoring stale failed event for step ${step.id} (PI ${expected.paymentIntentId ?? "none"}, session ${expected.checkoutSessionId ?? "none"})`,
+    );
+    return;
+  }
+  const [transitioned] = await db
     .update(manufacturerPaymentSteps)
     .set({ status: "unpaid", lastError: reason.slice(0, 500) })
-    .where(eq(manufacturerPaymentSteps.id, step.id));
+    .where(
+      and(
+        eq(manufacturerPaymentSteps.id, step.id),
+        ne(manufacturerPaymentSteps.status, "paid"),
+        eq(manufacturerPaymentSteps.status, step.status),
+        sql`${manufacturerPaymentSteps.lastError} IS NOT DISTINCT FROM ${step.lastError}`,
+        sql`${manufacturerPaymentSteps.stripePaymentIntentId} IS NOT DISTINCT FROM ${step.stripePaymentIntentId}`,
+        sql`${manufacturerPaymentSteps.stripeCheckoutSessionId} IS NOT DISTINCT FROM ${step.stripeCheckoutSessionId}`,
+      ),
+    )
+    .returning({ id: manufacturerPaymentSteps.id });
+  if (!transitioned) {
+    console.warn(
+      `[shopify-plus] failed event lost an artifact race for step ${step.id}; leaving the newer attempt untouched`,
+    );
+    return;
+  }
   console.log(`[shopify-plus] step ${step.id} → unpaid (failed: ${reason})`);
 }
 
-// Free a step that was claimed for a Checkout attempt the customer then
-// abandoned (closed the tab / never submitted the bank debit). Stripe fires
+// Free a step that was claimed for a legacy Checkout attempt the customer then
+// abandoned (closed the tab / never submitted payment). Stripe fires
 // checkout.session.expired only for sessions that were NEVER completed, so a
 // match here is always a dead attempt — but we still guard on the session id
 // and a null payment intent so we can never clobber a real in-flight debit.
@@ -896,13 +1001,13 @@ async function releaseAbandonedStep(stepId: string, sessionId: string) {
 }
 
 // ── Task #2929 — operator reset for a stuck "Paying" step ─────────────
-// Clicking Pay flips a step to `processing` the moment the Stripe ACH
-// Checkout Session is minted; if the payer abandons the checkout the step
+// Clicking Pay flips a step to `processing` before Stripe creates a payment
+// artifact; if the payer abandons the payment the step
 // is stuck on "Paying" until checkout.session.expired fires (and forever
 // if that webhook is missed). This lets an operator expire the session and
 // return the step to payable — but it REFUSES whenever the session has
 // completed or a payment intent is actually moving money, so a real
-// in-flight ACH debit is never silently orphaned.
+// in-flight payment is never silently orphaned.
 //
 // The Stripe surface is injected so tests can drive it hermetically
 // (mirrors the materializeOrderFromSession {stripe} seam).
@@ -928,6 +1033,8 @@ export type StepResetResult =
 
 // Payment-intent states where real money is (or already has been) moving.
 const PI_IN_FLIGHT = new Set(["processing", "succeeded", "requires_capture"]);
+export const STRIPE_OBJECT_MAY_EXIST_PREFIX = "[stripe-object-may-exist]";
+export const BANK_AUTO_CLOSE_MARKER = "[bank-auto-close-in-progress]";
 
 export async function resetStuckPaymentStep(opts: {
   albumId: string;
@@ -957,6 +1064,26 @@ export async function resetStuckPaymentStep(opts: {
       ok: false,
       status: 409,
       message: `Only a step that's currently Paying can be reset (this one is ${step.status}).`,
+    };
+  }
+  if (
+    !step.stripeCheckoutSessionId &&
+    !step.stripePaymentIntentId &&
+    step.lastError?.startsWith(STRIPE_OBJECT_MAY_EXIST_PREFIX)
+  ) {
+    return {
+      ok: false,
+      status: 409,
+      message:
+        "Stripe may have created a payment that was not recorded locally. Reconcile this attempt in Stripe before resetting; it is not safe to reopen.",
+    };
+  }
+  if (step.lastError === BANK_AUTO_CLOSE_MARKER) {
+    return {
+      ok: false,
+      status: 409,
+      message:
+        "This bank transfer is being reconciled with Stripe right now and cannot be reset. Refresh in a moment.",
     };
   }
 
@@ -1015,7 +1142,7 @@ export async function resetStuckPaymentStep(opts: {
           return {
             ok: false,
             status: 409,
-            message: `A bank debit for this step is ${pi.status === "succeeded" ? "already settled" : "in flight"} at Stripe — it can't be reset. Wait for the webhook to finish it.`,
+                message: `A payment for this step is ${pi.status === "succeeded" ? "already settled" : "in flight"} at Stripe — it can't be reset. Wait for the webhook to finish it.`,
           };
         }
       } catch (e: any) {
@@ -1067,7 +1194,7 @@ export async function resetStuckPaymentStep(opts: {
           ok: false,
           status: 409,
           message:
-            "A bank debit for this step is in flight at Stripe — it can't be reset.",
+            "A payment for this step is in flight at Stripe — it can't be reset.",
         };
       }
     } catch (e: any) {
@@ -1743,6 +1870,16 @@ export async function handleShopifyPlusWebhookEvent(
       if (!step || step.status === "paid") return true;
 
       const piId = String(obj.id ?? "") || null;
+      if (
+        !piId ||
+        step.status !== "awaiting_transfer" ||
+        step.stripePaymentIntentId !== piId
+      ) {
+        console.warn(
+          `[shopify-plus] ignoring stale partial-funding event for step ${step.id} (PI ${piId ?? "none"})`,
+        );
+        return true;
+      }
       const dueCents = Number(obj.amount ?? manufacturingStepTotalCents(step));
       const customerId =
         (typeof obj.customer === "string" ? obj.customer : obj.customer?.id) ??
@@ -1779,13 +1916,26 @@ export async function handleShopifyPlusWebhookEvent(
       }
       const receivedCents = availableCents ?? step.amountReceivedCents;
 
-      await db
+      const [recorded] = await db
         .update(manufacturerPaymentSteps)
         .set({
           amountReceivedCents: Math.max(receivedCents, step.amountReceivedCents),
-          stripePaymentIntentId: piId ?? step.stripePaymentIntentId,
         })
-        .where(eq(manufacturerPaymentSteps.id, step.id));
+        .where(
+          and(
+            eq(manufacturerPaymentSteps.id, step.id),
+            eq(manufacturerPaymentSteps.status, "awaiting_transfer"),
+            eq(manufacturerPaymentSteps.stripePaymentIntentId, piId),
+            sql`${manufacturerPaymentSteps.stripeCheckoutSessionId} IS NOT DISTINCT FROM ${step.stripeCheckoutSessionId}`,
+          ),
+        )
+        .returning({ id: manufacturerPaymentSteps.id });
+      if (!recorded) {
+        console.warn(
+          `[shopify-plus] partial-funding event lost an artifact race for step ${step.id}; leaving the newer attempt untouched`,
+        );
+        return true;
+      }
       console.log(
         `[shopify-plus] step ${step.id} partial funding: ${receivedCents}¢ of ${dueCents}¢`,
       );
@@ -1799,6 +1949,27 @@ export async function handleShopifyPlusWebhookEvent(
         shortfall > 0 &&
         shortfall <= threshold
       ) {
+        const [autoCloseClaim] = await db
+          .update(manufacturerPaymentSteps)
+          .set({
+            status: "processing",
+            lastError: BANK_AUTO_CLOSE_MARKER,
+          })
+          .where(
+            and(
+              eq(manufacturerPaymentSteps.id, step.id),
+              eq(manufacturerPaymentSteps.status, "awaiting_transfer"),
+              eq(manufacturerPaymentSteps.stripePaymentIntentId, piId),
+              sql`${manufacturerPaymentSteps.stripeCheckoutSessionId} IS NOT DISTINCT FROM ${step.stripeCheckoutSessionId}`,
+            ),
+          )
+          .returning({ id: manufacturerPaymentSteps.id });
+        if (!autoCloseClaim) {
+          console.warn(
+            `[shopify-plus] partial-funding auto-close lost an artifact race for step ${step.id}; leaving the newer attempt untouched`,
+          );
+          return true;
+        }
         // Within the underpayment threshold — accept what arrived: shrink
         // the PI to the funds on hand and confirm so it succeeds from the
         // cash balance. payment_intent.succeeded then flips the step Paid
@@ -1809,21 +1980,33 @@ export async function handleShopifyPlusWebhookEvent(
           console.log(
             `[shopify-plus] step ${step.id} under-threshold shortfall ${shortfall}¢ (≤${threshold}¢) — PI shrunk to ${receivedCents}¢, confirm → ${confirmed?.status}`,
           );
-          if (confirmed?.status === "succeeded") {
-            await db
-              .update(manufacturerPaymentSteps)
-              .set(adjustedManufacturingStepAmounts(step, receivedCents))
-              .where(
-                and(
-                  eq(manufacturerPaymentSteps.id, step.id),
-                  eq(manufacturerPaymentSteps.status, "awaiting_transfer"),
-                ),
-              );
-            await markStepPaid(step.id, piId, {
-              amountReceivedCents: receivedCents,
-            });
+          if (confirmed?.status !== "succeeded") {
+            throw new Error(
+              `Stripe returned ${confirmed?.status ?? "an unknown status"} while auto-closing the transfer`,
+            );
           }
+          await markStepPaid(step.id, piId, {
+            amountReceivedCents: receivedCents,
+          });
         } catch (e) {
+          await db
+            .update(manufacturerPaymentSteps)
+            .set({
+              status: "awaiting_transfer",
+              lastError: `Bank auto-close failed: ${(e as Error)?.message ?? e}`.slice(
+                0,
+                500,
+              ),
+            })
+            .where(
+              and(
+                eq(manufacturerPaymentSteps.id, step.id),
+                eq(manufacturerPaymentSteps.status, "processing"),
+                eq(manufacturerPaymentSteps.lastError, BANK_AUTO_CLOSE_MARKER),
+                eq(manufacturerPaymentSteps.stripePaymentIntentId, piId),
+                sql`${manufacturerPaymentSteps.stripeCheckoutSessionId} IS NOT DISTINCT FROM ${step.stripeCheckoutSessionId}`,
+              ),
+            );
           console.error(
             `[shopify-plus] step ${step.id} under-threshold auto-close failed:`,
             (e as Error)?.message ?? e,
@@ -1880,7 +2063,9 @@ export async function handleShopifyPlusWebhookEvent(
         typeof obj.payment_intent === "string" ? obj.payment_intent : null;
       // Card-style immediate success is possible in theory; ACH is not.
       if (obj.payment_status === "paid") {
-        await markStepPaid(stepId, piId);
+        await markStepPaid(stepId, piId, {
+          expectedCheckoutSessionId: String(obj.id ?? "") || null,
+        });
       } else {
         await markStepProcessing(stepId, String(obj.id ?? "") || null, piId);
       }
@@ -1891,13 +2076,40 @@ export async function handleShopifyPlusWebhookEvent(
       const stepId = String(meta.gt_step_id ?? "");
       const piId =
         typeof obj.payment_intent === "string" ? obj.payment_intent : null;
-      if (stepId) await markStepPaid(stepId, piId);
+      if (stepId) {
+        await markStepPaid(stepId, piId, {
+          expectedCheckoutSessionId: String(obj.id ?? "") || null,
+        });
+      }
       return true;
     }
     case "payment_intent.succeeded": {
       if (!isStep) return false;
       const stepId = String(meta.gt_step_id ?? "");
-      if (stepId) await markStepPaid(stepId, String(obj.id ?? "") || null);
+      const piId = String(obj.id ?? "") || null;
+      const amountReceivedCents = Number(obj.amount_received ?? obj.amount);
+      if (stepId && piId) {
+        await markStepPaid(stepId, piId, {
+          ...(Number.isSafeInteger(amountReceivedCents) &&
+          amountReceivedCents > 0
+            ? { amountReceivedCents }
+            : {}),
+        });
+      }
+      return true;
+    }
+    case "payment_intent.payment_failed": {
+      if (!isStep) return false;
+      const stepId = String(meta.gt_step_id ?? "");
+      const piId = String(obj.id ?? "") || null;
+      if (stepId && piId) {
+        await markStepFailed(
+          stepId,
+          obj.last_payment_error?.message ??
+            "The card payment failed. Ask the customer to retry or use bank transfer.",
+          { paymentIntentId: piId },
+        );
+      }
       return true;
     }
     case "checkout.session.async_payment_failed": {
@@ -1906,7 +2118,8 @@ export async function handleShopifyPlusWebhookEvent(
       if (stepId) {
         await markStepFailed(
           stepId,
-          "The bank debit failed. Ask the customer to retry or use a different account.",
+          "The legacy Checkout payment failed. Ask the customer to retry or use bank transfer.",
+          { checkoutSessionId: String(obj.id ?? "") || null },
         );
       }
       return true;
@@ -2224,7 +2437,8 @@ export function registerShopifyPlusRoutes(app: Express) {
       // must never reach an artist.
       const stepsForCaller = callerIsOperator
         ? stepsWithEarmark
-        : stepsWithEarmark.map((s) => ({
+        : stepsWithEarmark.map((s) => {
+          return {
             id: s.id,
             albumId: s.albumId,
             manufacturerId: s.manufacturerId,
@@ -2248,7 +2462,8 @@ export function registerShopifyPlusRoutes(app: Express) {
             earmark: s.earmark,
             fundingInstructions:
               s.fundingSource === "artist_direct" ? s.fundingInstructions : null,
-          }));
+          };
+        });
 
       res.json({
         manufacturer,
@@ -2877,8 +3092,8 @@ export function registerShopifyPlusRoutes(app: Express) {
     },
   );
 
-  // Start an ACH bank-debit checkout for a step. Returns a hosted Stripe
-  // Checkout URL. Allowed only while unpaid (a "failed" attempt is reset
+  // Start a pushed bank transfer or card checkout for a step. Allowed only
+  // while unpaid (a "failed" attempt is reset
   // to unpaid by the webhook, so this covers retries too).
   //
   // Task #2785 — gating: artist_direct steps can only be paid by the
@@ -2888,6 +3103,69 @@ export function registerShopifyPlusRoutes(app: Express) {
   // because the UI already hides the Pay button from the wrong party and
   // the gatePayouts check covers both (operator passes as super_admin/admin,
   // partner passes as the album's scope member with manage_payouts).
+  app.post(
+    "/api/admin/albums/:albumId/manufacturing-ledger/steps/:stepId/card-quote",
+    async (req, res) => {
+      const albumId = String(req.params.albumId);
+      const stepId = String(req.params.stepId);
+      const userId = await gatePayouts(req, res, albumId);
+      if (!userId) return;
+      const [step] = await db
+        .select()
+        .from(manufacturerPaymentSteps)
+        .where(eq(manufacturerPaymentSteps.id, stepId));
+      if (!step || step.albumId !== albumId) {
+        return res.status(404).json({ message: "Step not found" });
+      }
+      if (step.status !== "unpaid" && step.status !== "failed") {
+        return res.status(409).json({
+          message: `This step is already ${step.status}.`,
+        });
+      }
+      const paymentMethodId = String(
+        (req.body as any)?.paymentMethodId ?? "",
+      );
+      if (!paymentMethodId.startsWith("pm_")) {
+        return res.status(422).json({
+          message: "Enter a valid card before requesting its fee quote.",
+        });
+      }
+      try {
+        const stripe = await getStripe();
+        const paymentMethod = await stripe.paymentMethods.retrieve(
+          paymentMethodId,
+        );
+        const issuerCountry = paymentMethod.card?.country?.toUpperCase() ?? null;
+        const quote = quoteCardSurcharge(
+          manufacturingStepTotalCents(step),
+          cardFeeConditionsFromStripe({
+            issuerCountry,
+            accountCountry: "US",
+            presentmentCurrency: "usd",
+            settlementCurrency: "usd",
+          }),
+        );
+        if (!quote.supported) {
+          return res.status(422).json({ message: quote.reason, quote });
+        }
+        return res.json({
+          quote,
+          card: {
+            brand: paymentMethod.card?.brand ?? null,
+            last4: paymentMethod.card?.last4 ?? null,
+            issuerCountry,
+          },
+        });
+      } catch (e: any) {
+        return res.status(502).json({
+          message:
+            e?.message ??
+            "Stripe couldn't identify this card, so no exact surcharge was quoted.",
+        });
+      }
+    },
+  );
+
   app.post(
     "/api/admin/albums/:albumId/manufacturing-ledger/steps/:stepId/pay",
     async (req, res) => {
@@ -2926,6 +3204,9 @@ export function registerShopifyPlusRoutes(app: Express) {
         String((req.body as any)?.method ?? "bank_transfer") === "card"
           ? "card"
           : "bank_transfer";
+      const paymentMethodId = String(
+        (req.body as any)?.paymentMethodId ?? "",
+      );
 
       // Task #2785 — enforce funding-source authorization server-side.
       // goodtunes_sales steps are operator-funded (only admin/super_admin may pay).
@@ -2945,6 +3226,13 @@ export function registerShopifyPlusRoutes(app: Express) {
           .json({ message: "This step must be paid by the artist." });
       }
 
+      if (method === "card" && !paymentMethodId.startsWith("pm_")) {
+        return res.status(422).json({
+          message:
+            "Stripe must identify the card before an exact surcharge can be charged.",
+        });
+      }
+
       const manufacturer = await resolveAlbumManufacturer(albumId);
       if (!manufacturer) {
         return res.status(422).json({
@@ -2955,6 +3243,41 @@ export function registerShopifyPlusRoutes(app: Express) {
 
       const album = await storage.getAlbumById(albumId, { includeHidden: true });
       const totalCents = manufacturingStepTotalCents(step);
+      let trustedCardQuote:
+        | Extract<
+            ReturnType<typeof quoteCardSurcharge>,
+            { supported: true }
+          >
+        | null = null;
+      let stripeForCard: Awaited<ReturnType<typeof getStripe>> | null = null;
+      if (method === "card") {
+        try {
+          stripeForCard = await getStripe();
+          const paymentMethod =
+            await stripeForCard.paymentMethods.retrieve(paymentMethodId);
+          const issuerCountry =
+            paymentMethod.card?.country?.toUpperCase() ?? null;
+          const quote = quoteCardSurcharge(
+            totalCents,
+            cardFeeConditionsFromStripe({
+              issuerCountry,
+              accountCountry: "US",
+              presentmentCurrency: "usd",
+              settlementCurrency: "usd",
+            }),
+          );
+          if (!quote.supported) {
+            return res.status(422).json({ message: quote.reason });
+          }
+          trustedCardQuote = quote;
+        } catch (e: any) {
+          return res.status(502).json({
+            message:
+              e?.message ??
+              "Stripe couldn't identify this card, so no exact surcharge was charged.",
+          });
+        }
+      }
 
       // Atomically claim the step before minting a Checkout Session. Only ONE
       // in-flight ACH attempt is allowed per step: a second concurrent (or
@@ -3014,6 +3337,7 @@ export function registerShopifyPlusRoutes(app: Express) {
         // virtual-account funding instructions on the step; the artist
         // pushes a wire/ACH-credit from their bank and the webhook
         // reconciles it. No Checkout Session is involved.
+        let stripeObjectMayExist = false;
         try {
           const stripe = await getStripe();
 
@@ -3055,22 +3379,26 @@ export function registerShopifyPlusRoutes(app: Express) {
             customerId = customer.id;
           }
 
-          const pi = await stripe.paymentIntents.create({
-            amount: totalCents,
-            currency: "usd",
-            customer: customerId,
-            payment_method_types: ["customer_balance"],
-            payment_method_data: { type: "customer_balance" } as any,
-            payment_method_options: {
-              customer_balance: {
-                funding_type: "bank_transfer",
-                bank_transfer: { type: "us_bank_transfer" },
-              },
-            } as any,
-            confirm: true,
-            description: `${step.description} — ${(album as any)?.title ?? albumId}`,
-            metadata,
-          });
+          stripeObjectMayExist = true;
+          const pi = await stripe.paymentIntents.create(
+            {
+              amount: totalCents,
+              currency: "usd",
+              customer: customerId,
+              payment_method_types: ["customer_balance"],
+              payment_method_data: { type: "customer_balance" } as any,
+              payment_method_options: {
+                customer_balance: {
+                  funding_type: "bank_transfer",
+                  bank_transfer: { type: "us_bank_transfer" },
+                },
+              } as any,
+              confirm: true,
+              description: `${step.description} — ${(album as any)?.title ?? albumId}`,
+              metadata,
+            },
+            { idempotencyKey: `shopify-plus-bank-${step.id}` },
+          );
 
           const instructions = extractFundingInstructions(pi, totalCents);
           if (!instructions) {
@@ -3097,8 +3425,13 @@ export function registerShopifyPlusRoutes(app: Express) {
           await db
             .update(manufacturerPaymentSteps)
             .set({
-              status: "unpaid",
-              lastError: e?.message?.slice(0, 500) ?? "Stripe error",
+              status: stripeObjectMayExist ? "processing" : "unpaid",
+              lastError: stripeObjectMayExist
+                ? `${STRIPE_OBJECT_MAY_EXIST_PREFIX} ${e?.message ?? "Stripe error"}`.slice(
+                    0,
+                    500,
+                  )
+                : e?.message?.slice(0, 500) ?? "Stripe error",
             })
             .where(eq(manufacturerPaymentSteps.id, step.id));
           console.error(
@@ -3112,68 +3445,68 @@ export function registerShopifyPlusRoutes(app: Express) {
         }
       }
 
-      // ── Card fallback — hosted Checkout with the card fee added on top,
-      // disclosed as its own line item (the client shows it before confirm).
-      const feeCents = cardFeeCents(totalCents);
+      // ── Card fallback — Stripe identified the immutable PaymentMethod first,
+      // so issuer country is trustworthy before the server fixes the amount.
+      // The browser only confirms this exact PaymentIntent; it never supplies
+      // rates or arithmetic.
+      const cardQuote = trustedCardQuote!;
+      const feeCents = cardQuote.surchargeCents;
+      let stripeObjectMayExist = false;
       try {
-        const stripe = await getStripe();
-        const session = await stripe.checkout.sessions.create({
-          mode: "payment",
+        const stripe = stripeForCard!;
+        stripeObjectMayExist = true;
+        const paymentIntent = await stripe.paymentIntents.create(
+          {
+          amount: cardQuote.totalChargeCents,
+          currency: "usd",
           payment_method_types: ["card"],
-          line_items: [
-            {
-              price_data: {
-                currency: "usd",
-                unit_amount: totalCents,
-                product_data: {
-                  name: step.description,
-                  description: `Manufacturing payment for ${(album as any)?.title ?? albumId}`,
-                },
-              },
-              quantity: 1,
-            },
-            {
-              price_data: {
-                currency: "usd",
-                unit_amount: feeCents,
-                product_data: {
-                  name: "Card processing fee",
-                  description:
-                    "Added when paying by card. Pay by bank transfer to avoid this fee.",
-                },
-              },
-              quantity: 1,
-            },
-          ],
-          payment_intent_data: { metadata },
+          payment_method: paymentMethodId,
+          description: `${step.description} — ${(album as any)?.title ?? albumId}`,
           metadata,
-          success_url: `${returnBase}&payment=success`,
-          cancel_url: `${returnBase}&payment=cancelled`,
-          // 30-minute session window; the step is reset by session.expired.
-          expires_at: Math.floor(Date.now() / 1000) + 1800,
-        });
+          },
+          {
+            // If the API response is lost, Stripe returns the same PI rather
+            // than creating a second collectible payment.
+            idempotencyKey: `shopify-plus-card-${step.id}-${paymentMethodId}`,
+          },
+        );
 
-        // Persist the session ID so releaseAbandonedStep() can validate it on
-        // checkout.session.expired — without this, any expired session could
-        // reset ANY processing step for this album, not just the right one.
         await db
           .update(manufacturerPaymentSteps)
           .set({
-            stripeCheckoutSessionId: session.id,
+            stripeCheckoutSessionId: null,
+            stripePaymentIntentId: paymentIntent.id,
             paymentMethod: "card",
             cardFeeCents: feeCents,
           })
           .where(eq(manufacturerPaymentSteps.id, step.id));
 
-        res.json({ url: session.url });
+        if (!paymentIntent.client_secret) {
+          throw new Error("Stripe did not return a client secret for this card payment.");
+        }
+        res.json({
+          clientSecret: paymentIntent.client_secret,
+          returnUrl: `${returnBase}&payment=success`,
+          cardFeeQuote: cardQuote,
+        });
       } catch (e: any) {
-        // Release the step back to unpaid so it can be retried.
+        // Once Stripe may have created a PI, fail closed in processing. The
+        // stable idempotency key prevents a duplicate object, and an operator
+        // can reconcile/reset after checking Stripe.
         await db
           .update(manufacturerPaymentSteps)
-          .set({ status: "unpaid", lastError: e?.message?.slice(0, 500) ?? "Stripe error" })
+          .set({
+            status: stripeObjectMayExist ? "processing" : "unpaid",
+            lastError: stripeObjectMayExist
+              ? `${STRIPE_OBJECT_MAY_EXIST_PREFIX} ${e?.message ?? "Stripe error"}`.slice(
+                  0,
+                  500,
+                )
+              : e?.message?.slice(0, 500) ?? "Stripe error",
+          })
           .where(eq(manufacturerPaymentSteps.id, step.id));
-        console.error(`[shopify-plus] checkout session create failed: ${e?.message}`);
-        res.status(502).json({ message: e?.message ?? "Failed to create checkout session" });
+        console.error(`[shopify-plus] card PaymentIntent create failed: ${e?.message}`);
+        res.status(502).json({ message: e?.message ?? "Failed to create card payment" });
       }
     },
   );

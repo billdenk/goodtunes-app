@@ -21,7 +21,12 @@ import { eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { db, pool } from "./db";
 import { manufacturerPaymentSteps } from "@shared/schema";
-import { resetStuckPaymentStep, type StepResetStripe } from "./shopifyPlus";
+import {
+  BANK_AUTO_CLOSE_MARKER,
+  resetStuckPaymentStep,
+  STRIPE_OBJECT_MAY_EXIST_PREFIX,
+  type StepResetStripe,
+} from "./shopifyPlus";
 
 const albumId = `sp-reset-album-${randomUUID().slice(0, 8)}`;
 
@@ -219,6 +224,99 @@ test("a transient Stripe error fails CLOSED — the step stays processing", asyn
     .where(eq(manufacturerPaymentSteps.id, step.id));
   assert.equal(after1.status, "processing");
   assert.ok(after1.stripeCheckoutSessionId);
+});
+
+test("an ambiguous Stripe create with no saved object ID cannot be reopened", async () => {
+  const step = await seedStep({
+    stripeCheckoutSessionId: null,
+    stripePaymentIntentId: null,
+    lastError: `${STRIPE_OBJECT_MAY_EXIST_PREFIX} connection reset after create`,
+  });
+  let stripeReads = 0;
+  const stripe: StepResetStripe = {
+    checkout: {
+      sessions: {
+        retrieve: async () => {
+          stripeReads++;
+          throw new Error("must not query an unknown object");
+        },
+        expire: async () => {
+          throw new Error("must not expire an unknown object");
+        },
+      },
+    },
+    paymentIntents: {
+      retrieve: async () => {
+        stripeReads++;
+        throw new Error("must not query an unknown object");
+      },
+    },
+  };
+  const res = await resetStuckPaymentStep({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe,
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) {
+    assert.equal(res.status, 409);
+    assert.match(res.message, /Reconcile this attempt in Stripe/);
+  }
+  assert.equal(stripeReads, 0);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "processing");
+  assert.equal(after1.lastError, step.lastError);
+});
+
+test("operator reset cannot clear a bank auto-close reservation", async () => {
+  const step = await seedStep({
+    stripeCheckoutSessionId: null,
+    stripePaymentIntentId: `pi_autoclose_${randomUUID().slice(0, 8)}`,
+    lastError: BANK_AUTO_CLOSE_MARKER,
+  });
+  let stripeReads = 0;
+  const stripe: StepResetStripe = {
+    checkout: {
+      sessions: {
+        retrieve: async () => {
+          stripeReads++;
+          throw new Error("must not inspect Stripe during auto-close");
+        },
+        expire: async () => {
+          throw new Error("must not expire during auto-close");
+        },
+      },
+    },
+    paymentIntents: {
+      retrieve: async () => {
+        stripeReads++;
+        return { status: "requires_action" };
+      },
+    },
+  };
+  const res = await resetStuckPaymentStep({
+    albumId,
+    stepId: step.id,
+    callerRole: "super_admin",
+    stripe,
+  });
+  assert.equal(res.ok, false);
+  if (!res.ok) {
+    assert.equal(res.status, 409);
+    assert.match(res.message, /being reconciled with Stripe/);
+  }
+  assert.equal(stripeReads, 0);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "processing");
+  assert.equal(after1.stripePaymentIntentId, step.stripePaymentIntentId);
+  assert.equal(after1.lastError, BANK_AUTO_CLOSE_MARKER);
 });
 
 test("a session Stripe positively reports as missing (resource_missing) is treated as dead", async () => {

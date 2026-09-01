@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  CardElement,
+  Elements,
+  useElements,
+  useStripe,
+} from "@stripe/react-stripe-js";
+import { loadStripe, type Stripe } from "@stripe/stripe-js";
+import {
   BadgeCheck,
   Truck,
   FileText,
@@ -28,12 +35,12 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, apiErrorStatus } from "@/lib/queryClient";
 import { formatUsdCents } from "@shared/money";
-import { cardFeeCents } from "@shared/breakEven";
+import { US_BANK_TRANSFER_COPY } from "@shared/breakEven";
 
 // Task #2428 — GoodTunes Shopify+ (prepaid manufacturing). This panel is the
 // "Payments" tab for a shopify_plus album: the customer sells on their own
 // Shopify but runs the full Direct production pipeline (press → GoodDeed →
-// optional fulfillment), prepaid via a staged ACH ledger. There is NO
+// optional fulfillment), prepaid via staged push transfers or card. There is NO
 // GoodTunes fan checkout and NO fan-sale pool for these releases.
 //
 // The panel has two stacked sections:
@@ -41,8 +48,8 @@ import { cardFeeCents } from "@shared/breakEven";
 //      fulfillment-partner picker (auto-save on change).
 //   2. Prepaid manufacturing ledger — the resolved plant, the quote PDF(s)
 //      for records, and an open-ended series of payment steps. Each step is
-//      paid with a US bank debit (ACH) via a hosted Stripe Checkout; once the
-//      debit settles we mint a HELD earmark owed to the plant that Bill
+//      paid with a US ACH credit/domestic wire or a Stripe-identified card;
+//      once payment settles we mint a HELD earmark owed to the plant that Bill
 //      releases from the existing /admin/payouts-release queue.
 //
 // Light admin (slate) theme — this is an operator surface, never the navy fan
@@ -477,9 +484,10 @@ function TransferInstructionsModal({
         <tr><td>Account holder</td><td>${esc(ins.accountHolderName)}</td></tr>
         ${ins.reference ? `<tr><td>Reference</td><td>${esc(ins.reference)}</td></tr>` : ""}
       </table>
-      <p>Send a domestic USD wire or bank transfer (push) from your bank to the account above.
-      Include the reference if your bank offers a memo/reference field. The invoice updates
-      automatically when the funds arrive — usually the same business day for wires.</p>
+      <p>Send an ACH credit (typically 1–2 business days) or domestic USD wire
+      (typically same business day) from a US bank to the account above. This is a push
+      payment, not ACH Direct Debit. Include the reference if your bank offers a memo field.
+      No card surcharge is added; Stripe may charge GoodTunes a bank-rail fee.</p>
       </body></html>`);
     w.document.close();
     w.print();
@@ -516,9 +524,8 @@ function TransferInstructionsModal({
 
         <div className="mt-3 rounded-xl bg-sky-50 ring-1 ring-sky-100 px-3 py-2.5 text-xs text-sky-800">
           Send a <b>{formatUsdCents(remaining || total)}</b> USD bank transfer
-          (wire or ACH credit) from your bank to the account below. This is a
-          push payment — we never debit your account. The invoice flips to Paid
-          automatically when the funds arrive.
+          to the account below. {US_BANK_TRANSFER_COPY.mechanism} The invoice
+          flips to Paid when the funds arrive.
         </div>
 
         {received > 0 && (
@@ -542,9 +549,9 @@ function TransferInstructionsModal({
         </div>
 
         <p className="mt-3 text-xs text-slate-500">
-          Wires usually land the same business day; ACH credits can take 1–2
-          business days. Small bank fees deducted in transit are okay — we
-          absorb minor shortfalls automatically.
+          {US_BANK_TRANSFER_COPY.timing} {US_BANK_TRANSFER_COPY.surcharge} Small
+          sender-bank deductions are okay — we absorb minor shortfalls
+          automatically.
         </p>
 
         <div className="mt-4 flex items-center justify-between">
@@ -567,6 +574,253 @@ function TransferInstructionsModal({
         </div>
       </div>
     </div>
+  );
+}
+
+let manufacturingStripePromise: Promise<Stripe | null> | null = null;
+function getManufacturingStripe(): Promise<Stripe | null> {
+  if (!manufacturingStripePromise) {
+    manufacturingStripePromise = (async () => {
+      const response = await apiRequest(
+        "GET",
+        "/api/checkout/publishable-key",
+      );
+      const data = await response.json();
+      if (!data?.publishableKey) {
+        throw new Error("Stripe isn't configured yet.");
+      }
+      return loadStripe(data.publishableKey);
+    })();
+  }
+  return manufacturingStripePromise;
+}
+
+type ExactCardQuote = {
+  supported: true;
+  surchargeCents: number;
+  totalChargeCents: number;
+  rateBps: number;
+  effectiveDate: string;
+};
+
+function CardPaymentForm({
+  albumId,
+  step,
+  onClose,
+  onComplete,
+}: {
+  albumId: string;
+  step: LedgerStep;
+  onClose: () => void;
+  onComplete: () => Promise<void>;
+}) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const { toast } = useToast();
+  const [busy, setBusy] = useState<"quote" | "pay" | null>(null);
+  const [paymentMethodId, setPaymentMethodId] = useState<string | null>(null);
+  const [quote, setQuote] = useState<ExactCardQuote | null>(null);
+  const [cardLabel, setCardLabel] = useState("");
+  const invoiceCents = stepTotalCents(step);
+
+  async function reviewFee() {
+    const card = elements?.getElement(CardElement);
+    if (!stripe || !card) return;
+    setBusy("quote");
+    try {
+      const created = await stripe.createPaymentMethod({
+        type: "card",
+        card,
+      });
+      if (created.error || !created.paymentMethod) {
+        throw new Error(created.error?.message ?? "Enter a valid card.");
+      }
+      const response = await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/manufacturing-ledger/steps/${step.id}/card-quote`,
+        { paymentMethodId: created.paymentMethod.id },
+      );
+      const data = await response.json();
+      if (!data?.quote?.supported) {
+        throw new Error(
+          data?.quote?.reason ?? "Stripe couldn't produce an exact quote.",
+        );
+      }
+      setPaymentMethodId(created.paymentMethod.id);
+      setQuote(data.quote);
+      const brand = String(data?.card?.brand ?? "card").replace(/_/g, " ");
+      setCardLabel(
+        `${brand}${data?.card?.last4 ? ` •••• ${data.card.last4}` : ""}${
+          data?.card?.issuerCountry ? ` (${data.card.issuerCountry})` : ""
+        }`,
+      );
+    } catch (error: any) {
+      toast({
+        title: "Couldn't quote this card",
+        description: String(error?.message ?? error),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function submitPayment() {
+    if (!stripe || !paymentMethodId || !quote) return;
+    setBusy("pay");
+    try {
+      const response = await apiRequest(
+        "POST",
+        `/api/admin/albums/${albumId}/manufacturing-ledger/steps/${step.id}/pay`,
+        { method: "card", paymentMethodId },
+      );
+      const data = await response.json();
+      if (!data?.clientSecret || !data?.cardFeeQuote?.supported) {
+        throw new Error("Stripe didn't return a confirmable card payment.");
+      }
+      if (
+        data.cardFeeQuote.surchargeCents !== quote.surchargeCents ||
+        data.cardFeeQuote.totalChargeCents !== quote.totalChargeCents
+      ) {
+        throw new Error(
+          "The invoice or Stripe fee changed. Close this window and review a fresh quote.",
+        );
+      }
+      const confirmed = await stripe.confirmCardPayment(data.clientSecret, {
+        payment_method: paymentMethodId,
+        return_url: data.returnUrl,
+      });
+      if (confirmed.error) {
+        throw new Error(confirmed.error.message ?? "Card confirmation failed.");
+      }
+      await onComplete();
+      toast({
+        title:
+          confirmed.paymentIntent?.status === "succeeded"
+            ? "Card payment received"
+            : "Card payment submitted",
+        description:
+          "Stripe is updating the manufacturing payment status now.",
+      });
+      onClose();
+    } catch (error: any) {
+      await onComplete();
+      toast({
+        title: "Couldn't complete the card payment",
+        description: String(error?.message ?? error),
+        variant: "destructive",
+      });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">
+              Pay manufacturing invoice by card
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Stripe identifies the card first so the server can include the
+              exact domestic or international fee.
+            </p>
+          </div>
+          <IconButton
+            label="Close card payment"
+            onClick={onClose}
+          >
+            <X />
+          </IconButton>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-3">
+          <CardElement
+            onChange={() => {
+              setPaymentMethodId(null);
+              setQuote(null);
+              setCardLabel("");
+            }}
+            options={{
+              hidePostalCode: false,
+              style: {
+                base: {
+                  color: "#0f172a",
+                  fontFamily: "system-ui, sans-serif",
+                  fontSize: "16px",
+                  "::placeholder": { color: "#94a3b8" },
+                },
+              },
+            }}
+          />
+        </div>
+
+        {quote ? (
+          <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
+            <div className="mb-2 text-xs font-medium text-slate-500">
+              {cardLabel}
+            </div>
+            <div className="flex justify-between">
+              <span>Invoice</span>
+              <span>{formatUsdCents(invoiceCents)}</span>
+            </div>
+            <div className="mt-1 flex justify-between">
+              <span>Card surcharge</span>
+              <span>{formatUsdCents(quote.surchargeCents)}</span>
+            </div>
+            <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 font-semibold text-slate-900">
+              <span>Total charged</span>
+              <span>{formatUsdCents(quote.totalChargeCents)}</span>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">
+              The surcharge is server-calculated from Stripe's card-country
+              result and includes the fee charged on the surcharge itself.
+            </p>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-slate-500">
+            No charge is made while reviewing the fee. Pay by US bank transfer
+            instead to avoid the card surcharge.
+          </p>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="outline" onClick={onClose} disabled={busy !== null}>
+            Cancel
+          </Button>
+          {quote ? (
+            <Button onClick={submitPayment} disabled={busy !== null || !stripe}>
+              {busy === "pay" && (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              )}
+              Pay {formatUsdCents(quote.totalChargeCents)}
+            </Button>
+          ) : (
+            <Button onClick={reviewFee} disabled={busy !== null || !stripe}>
+              {busy === "quote" && (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              )}
+              Review exact fee
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CardPaymentModal(props: {
+  albumId: string;
+  step: LedgerStep;
+  onClose: () => void;
+  onComplete: () => Promise<void>;
+}) {
+  return (
+    <Elements stripe={getManufacturingStripe()}>
+      <CardPaymentForm {...props} />
+    </Elements>
   );
 }
 
@@ -674,6 +928,7 @@ export function ManufacturingLedger({
   // Must be declared ABOVE the 403 early return below: hooks after a
   // conditional return crash with React #300 the moment the query errors.
   const [instructionsFor, setInstructionsFor] = useState<string | null>(null);
+  const [cardFor, setCardFor] = useState<string | null>(null);
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: ledgerKey });
@@ -735,24 +990,15 @@ export function ManufacturingLedger({
 
   // Task #3004 — bank transfer (push) is the default; card is the fallback
   // with the processing fee added and disclosed BEFORE confirming.
-  async function pay(step: LedgerStep, method: "bank_transfer" | "card") {
-    if (method === "card") {
-      const total = stepTotalCents(step);
-      const fee = cardFeeCents(total);
-      const ok = window.confirm(
-        `Paying by card adds a ${formatUsdCents(fee)} card-processing fee.\n\n` +
-          `Invoice: ${formatUsdCents(total)}\nCard fee: ${formatUsdCents(fee)}\n` +
-          `Total charged: ${formatUsdCents(total + fee)}\n\n` +
-          `Pay by bank transfer instead to avoid the fee. Continue with card?`,
-      );
-      if (!ok) return;
-    }
+  async function pay(step: LedgerStep, method: "bank_transfer") {
     setBusy(`pay-${step.id}`);
     try {
       const res = await apiRequest(
         "POST",
         `/api/admin/albums/${albumId}/manufacturing-ledger/steps/${step.id}/pay`,
-        { method },
+        {
+          method,
+        },
       );
       const data = await res.json();
       if (data?.status === "awaiting_transfer") {
@@ -761,8 +1007,7 @@ export function ManufacturingLedger({
         setBusy(null);
         return;
       }
-      if (!data?.url) throw new Error("No checkout URL returned");
-      window.location.href = data.url;
+      throw new Error("Bank-transfer instructions were not returned.");
     } catch (e: any) {
       toast({
         title: "Couldn't start the payment",
@@ -779,7 +1024,7 @@ export function ManufacturingLedger({
   async function resetPayment(step: LedgerStep) {
     if (
       !window.confirm(
-        "Cancel this payment link? The Stripe checkout session is expired and the request goes back to payable. If the payment actually went through, this is refused.",
+        "Cancel this payment attempt? Stripe must show that no payment is moving before the request goes back to payable. If the payment actually went through, this is refused.",
       )
     ) {
       return;
@@ -1071,6 +1316,7 @@ export function ManufacturingLedger({
   // Task #3004 — resolve the step whose transfer instructions are open.
   const instructionsStep =
     (instructionsFor && steps.find((s) => s.id === instructionsFor)) || null;
+  const cardStep = (cardFor && steps.find((s) => s.id === cardFor)) || null;
 
   return (
     <div
@@ -1081,6 +1327,14 @@ export function ManufacturingLedger({
         <TransferInstructionsModal
           step={instructionsStep}
           onClose={() => setInstructionsFor(null)}
+        />
+      )}
+      {cardStep && (
+        <CardPaymentModal
+          albumId={albumId}
+          step={cardStep}
+          onClose={() => setCardFor(null)}
+          onComplete={refresh}
         />
       )}
 
@@ -1115,10 +1369,11 @@ export function ManufacturingLedger({
           </h3>
           <p className="text-slate-500 text-xs mt-0.5">
             Pay the plant for this run in stages by pushing a bank transfer
-            from your bank (no processing fee), or by card with a card fee
-            added. GoodTunes charges a 3% platform fee on setup and
-            manufacturing only; tax, shipping, and payment-processing charges
-            are excluded. Once a payment lands it's queued for release to the plant.
+             from a US bank (no card surcharge), or by card with an exact
+             server-quoted surcharge. GoodTunes charges a 3% platform fee on setup
+             and manufacturing only; tax, shipping, and payment-processing charges
+             are excluded. Stripe may still charge GoodTunes a bank-rail fee. Once
+             payment lands it's queued for release to the plant.
           </p>
           <p className="text-xs mt-1 text-slate-600" data-testid="text-ledger-manufacturer">
             Manufacturer:{" "}
@@ -1495,7 +1750,7 @@ export function ManufacturingLedger({
                             )}
 
                           {/* Task #3004 — Pay buttons, shown only to the right
-                              party. Bank transfer (push, no fee) is primary;
+                              party. Bank transfer (push, no card surcharge) is primary;
                               card is the fallback with the fee disclosed. */}
                           {canPayThisStep &&
                             (step.status === "unpaid" || step.status === "failed") && (
@@ -1505,7 +1760,7 @@ export function ManufacturingLedger({
                                   disabled={busy === `pay-${step.id}` || !manufacturer}
                                   className="h-9 inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
                                   data-testid={`button-pay-step-${step.id}`}
-                                  title="Push a wire or bank transfer from your bank — no processing fee"
+                                  title="Push an ACH credit or domestic USD wire from a US bank — no card surcharge"
                                 >
                                   {busy === `pay-${step.id}` ? (
                                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1515,16 +1770,16 @@ export function ManufacturingLedger({
                                   Pay by bank transfer
                                 </button>
                                 <button
-                                  onClick={() => pay(step, "card")}
+                                  onClick={() => setCardFor(step.id)}
                                   disabled={busy === `pay-${step.id}` || !manufacturer}
                                   className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                                   data-testid={`button-pay-card-step-${step.id}`}
-                                  title={`Card adds a ${formatUsdCents(cardFeeCents(stepTotalCents(step)))} processing fee`}
+                                  title="Enter the card to receive an exact server-calculated surcharge"
                                 >
                                   <CreditCard className="w-3.5 h-3.5" />
                                   Card
                                   <span className="text-slate-400 font-normal">
-                                    +{formatUsdCents(cardFeeCents(stepTotalCents(step)))} fee
+                                    fee shown next
                                   </span>
                                 </button>
                               </>

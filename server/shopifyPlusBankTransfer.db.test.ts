@@ -22,7 +22,7 @@
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db, pool } from "./db";
 import { manufacturerPaymentSteps } from "@shared/schema";
 import {
@@ -45,9 +45,9 @@ function stubStripe(opts: {
   confirmStatus?: string;
   updateError?: string;
   confirmError?: string;
-  onUpdate?: (id: string, params: any) => void;
+  onUpdate?: (id: string, params: any) => void | Promise<void>;
   onConfirm?: (id: string) => void;
-  onCustomerRetrieve?: () => void;
+  onCustomerRetrieve?: () => void | Promise<void>;
   /** Initial PaymentIntent amount reported by retrieve (default 500000). */
   piAmount?: number;
   /** Funds already allocated to this partially-funded PaymentIntent. */
@@ -75,7 +75,7 @@ function stubStripe(opts: {
   return {
     customers: {
       retrieve: async () => {
-        opts.onCustomerRetrieve?.();
+        await opts.onCustomerRetrieve?.();
         return {
           cash_balance: {
             available:
@@ -108,7 +108,7 @@ function stubStripe(opts: {
           throw new Error(opts.updateError);
         }
         if (typeof params?.amount === "number") piAmount = params.amount;
-        opts.onUpdate?.(id, params);
+        await opts.onUpdate?.(id, params);
         return {};
       },
       confirm: async (id) => {
@@ -254,6 +254,72 @@ test("full funding: payment_intent.succeeded flips awaiting_transfer → paid", 
   assert.ok(after1.paidAt);
 });
 
+test("stale PaymentIntent failure and success replays cannot displace a newer card attempt", async () => {
+  const piA = `pi_card_a_${randomUUID().slice(0, 8)}`;
+  const piB = `pi_card_b_${randomUUID().slice(0, 8)}`;
+  const step = await seedStep({
+    status: "processing",
+    paymentMethod: "card",
+    stripePaymentIntentId: piA,
+    stripeCheckoutSessionId: null,
+  });
+  const event = (
+    type: "payment_intent.payment_failed" | "payment_intent.succeeded",
+    id: string,
+  ) => ({
+    type,
+    data: {
+      object: {
+        id,
+        metadata: { gt_kind: "shopify_plus_step", gt_step_id: step.id },
+        last_payment_error: { message: "Card declined" },
+      },
+    },
+  });
+
+  await handleShopifyPlusWebhookEvent(
+    event("payment_intent.payment_failed", piA),
+  );
+  const [afterFailureA] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(afterFailureA.status, "unpaid");
+
+  await db
+    .update(manufacturerPaymentSteps)
+    .set({
+      status: "processing",
+      stripePaymentIntentId: piB,
+      lastError: null,
+    })
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+
+  await handleShopifyPlusWebhookEvent(
+    event("payment_intent.payment_failed", piA),
+  );
+  await handleShopifyPlusWebhookEvent(
+    event("payment_intent.succeeded", piA),
+  );
+  const [afterStaleReplays] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(afterStaleReplays.status, "processing");
+  assert.equal(afterStaleReplays.stripePaymentIntentId, piB);
+  assert.equal(afterStaleReplays.lastError, null);
+
+  await handleShopifyPlusWebhookEvent(
+    event("payment_intent.succeeded", piB),
+  );
+  const [afterSuccessB] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(afterSuccessB.status, "paid");
+  assert.equal(afterSuccessB.stripePaymentIntentId, piB);
+});
+
 test("under-threshold short transfer auto-closes: PI shrunk to funds on hand + confirmed + paid", async () => {
   const step = await seedStep();
   const updates: any[] = [];
@@ -392,6 +458,90 @@ test("a partially_funded event for a foreign PI is ignored", async () => {
     { stripe: stubStripe({ cashUsdCents: 100 }) },
   );
   assert.equal(handled, false);
+});
+
+test("a partial-funding read from attempt A cannot overwrite replacement attempt B", async () => {
+  const piA = `pi_partial_a_${randomUUID().slice(0, 8)}`;
+  const piB = `pi_partial_b_${randomUUID().slice(0, 8)}`;
+  const step = await seedStep({ stripePaymentIntentId: piA });
+  const handled = await handleShopifyPlusWebhookEvent(
+    {
+      type: "payment_intent.partially_funded",
+      data: {
+        object: {
+          id: piA,
+          amount: step.amountCents,
+          customer: step.stripeCustomerId,
+          metadata: { gt_kind: "shopify_plus_step", gt_step_id: step.id },
+        },
+      },
+    },
+    {
+      stripe: stubStripe({
+        cashUsdCents: 200000,
+        onCustomerRetrieve: async () => {
+          await db
+            .update(manufacturerPaymentSteps)
+            .set({
+              status: "processing",
+              paymentMethod: "card",
+              stripePaymentIntentId: piB,
+              amountReceivedCents: 0,
+            })
+            .where(eq(manufacturerPaymentSteps.id, step.id));
+        },
+      }),
+    },
+  );
+  assert.equal(handled, true);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "processing");
+  assert.equal(after1.paymentMethod, "card");
+  assert.equal(after1.stripePaymentIntentId, piB);
+  assert.equal(after1.amountReceivedCents, 0);
+});
+
+test("bank auto-close reserves attempt A before Stripe mutation so attempt B cannot start", async () => {
+  const piA = `pi_claim_a_${randomUUID().slice(0, 8)}`;
+  const piB = `pi_claim_b_${randomUUID().slice(0, 8)}`;
+  const step = await seedStep({ stripePaymentIntentId: piA });
+  let replacementClaims = 0;
+  await handleShopifyPlusWebhookEvent(
+    partiallyFundedEvent(step),
+    {
+      stripe: stubStripe({
+        cashUsdCents: 499000,
+        onUpdate: async () => {
+          const claimedB = await db
+            .update(manufacturerPaymentSteps)
+            .set({
+              status: "processing",
+              paymentMethod: "card",
+              stripePaymentIntentId: piB,
+            })
+            .where(
+              and(
+                eq(manufacturerPaymentSteps.id, step.id),
+                eq(manufacturerPaymentSteps.status, "unpaid"),
+              ),
+            )
+            .returning({ id: manufacturerPaymentSteps.id });
+          replacementClaims = claimedB.length;
+        },
+      }),
+    },
+  );
+  assert.equal(replacementClaims, 0);
+  const [after1] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  assert.equal(after1.status, "paid");
+  assert.equal(after1.stripePaymentIntentId, piA);
+  assert.equal(after1.amountReceivedCents, 499000);
 });
 
 // ── Task #3380 — operator accepts a partial transfer as paid in full ──

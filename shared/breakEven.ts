@@ -27,11 +27,154 @@ export const MECH_RATE_CENTS_PER_TRACK = 25.4;
 // default) so the artist's net-per-copy here matches the breakdown.
 export const PLATFORM_MARGIN_CENTS = 450;
 
-// Stripe card fee on a charged amount: 2.9% + 30¢, rounded the same
-// way the Sell panel breakdown rounds it.
+// Stripe's US standard online-card terms, verified against Stripe's official
+// pricing page on 2026-09-01. Keep the effective date/source beside the values:
+// Stripe can change published terms, and custom account pricing must replace
+// this profile rather than silently inheriting it.
+export const STRIPE_US_CARD_FEE_TERMS = {
+  effectiveDate: "2026-09-01",
+  sourceUrl: "https://stripe.com/pricing/local-payment-methods",
+  domesticRateBps: 290,
+  internationalPremiumBps: 150,
+  currencyConversionPremiumBps: 100,
+  fixedCents: 30,
+} as const;
+
+export const US_BANK_TRANSFER_COPY = {
+  mechanism:
+    "Choose an ACH credit (not ACH Direct Debit) or a domestic USD wire from a US bank. This is a push payment — GoodTunes never debits your account.",
+  timing:
+    "ACH credits usually take 1–2 business days; domestic wires usually land the same business day.",
+  surcharge:
+    "No card surcharge is added to bank transfer. Stripe may still charge GoodTunes a rail-specific fee.",
+} as const;
+
+export type CardFeeConditions = {
+  cardOrigin: "domestic" | "international" | "unknown";
+  currencyConversion: boolean | "unknown";
+};
+
+export function cardFeeConditionsFromStripe(input: {
+  issuerCountry: string | null | undefined;
+  accountCountry: string;
+  presentmentCurrency: string | null | undefined;
+  settlementCurrency: string | null | undefined;
+}): CardFeeConditions {
+  const issuer = input.issuerCountry?.trim().toUpperCase();
+  const account = input.accountCountry.trim().toUpperCase();
+  const presentment = input.presentmentCurrency?.trim().toLowerCase();
+  const settlement = input.settlementCurrency?.trim().toLowerCase();
+  return {
+    cardOrigin:
+      !issuer || !account
+        ? "unknown"
+        : issuer === account
+          ? "domestic"
+          : "international",
+    currencyConversion:
+      !presentment || !settlement ? "unknown" : presentment !== settlement,
+  };
+}
+
+export type CardSurchargeQuote =
+  | {
+      supported: true;
+      baseAmountCents: number;
+      surchargeCents: number;
+      totalChargeCents: number;
+      rateBps: number;
+      fixedCents: number;
+      conditions: Exclude<CardFeeConditions, { cardOrigin: "unknown" }> & {
+        currencyConversion: boolean;
+      };
+      effectiveDate: string;
+    }
+  | {
+      supported: false;
+      reason: string;
+    };
+
+// Fee Stripe retains from an already-known charged amount. This remains the
+// break-even/reporting helper; a surcharge added on top must use the gross-up
+// helper below because Stripe also charges its percentage on the surcharge.
 export function cardFeeCents(amountCents: number): number {
   if (amountCents <= 0) return 0;
-  return Math.round(amountCents * 0.029) + 30;
+  return (
+    Math.round(
+      amountCents * (STRIPE_US_CARD_FEE_TERMS.domesticRateBps / 10_000),
+    ) + STRIPE_US_CARD_FEE_TERMS.fixedCents
+  );
+}
+
+/**
+ * Return the smallest whole-cent surcharge that covers Stripe's complete fee
+ * on base + surcharge. Unknown issuer/conversion conditions intentionally do
+ * not produce a falsely exact number.
+ */
+export function quoteCardSurcharge(
+  baseAmountCents: number,
+  conditions: CardFeeConditions,
+): CardSurchargeQuote {
+  if (!Number.isSafeInteger(baseAmountCents) || baseAmountCents <= 0) {
+    return { supported: false, reason: "The payment amount is invalid." };
+  }
+  if (conditions.cardOrigin === "unknown") {
+    return {
+      supported: false,
+      reason:
+        "The card's issuing country is not known, so an exact card surcharge is unavailable.",
+    };
+  }
+  if (conditions.currencyConversion === "unknown") {
+    return {
+      supported: false,
+      reason:
+        "Whether Stripe must convert currency is not known, so an exact card surcharge is unavailable.",
+    };
+  }
+
+  const terms = STRIPE_US_CARD_FEE_TERMS;
+  const rateBps =
+    terms.domesticRateBps +
+    (conditions.cardOrigin === "international"
+      ? terms.internationalPremiumBps
+      : 0) +
+    (conditions.currencyConversion ? terms.currencyConversionPremiumBps : 0);
+  const rate = rateBps / 10_000;
+  if (rate <= 0 || rate >= 1) {
+    return { supported: false, reason: "The configured card fee rate is invalid." };
+  }
+
+  // Algebra gives an upper-bound candidate. Walk down across Stripe's
+  // whole-cent rounding boundary so the result is the minimum covering cent.
+  let surchargeCents = Math.ceil(
+    (baseAmountCents * rate + terms.fixedCents) / (1 - rate),
+  );
+  const chargedFee = (surcharge: number) =>
+    Math.round((baseAmountCents + surcharge) * rate) + terms.fixedCents;
+  while (
+    surchargeCents > 0 &&
+    surchargeCents - 1 >= chargedFee(surchargeCents - 1)
+  ) {
+    surchargeCents--;
+  }
+  while (surchargeCents < chargedFee(surchargeCents)) {
+    surchargeCents++;
+  }
+
+  return {
+    supported: true,
+    baseAmountCents,
+    surchargeCents,
+    totalChargeCents: baseAmountCents + surchargeCents,
+    rateBps,
+    fixedCents: terms.fixedCents,
+    conditions: {
+      cardOrigin: conditions.cardOrigin,
+      currencyConversion: conditions.currencyConversion,
+    },
+    effectiveDate: terms.effectiveDate,
+  };
 }
 
 export type BreakEvenGoodDeedInput = {

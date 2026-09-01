@@ -290,12 +290,13 @@ wires money to a virtual account Stripe assigns them, the money lands
 as a credit on their Stripe customer balance, and invoices we issue
 draw down that balance with effectively no per-invoice fee.
 
-Stripe's current published fees for that path (re-confirm before
-quoting to a label):
+Stripe's US fees for that path, verified 2026-09-01 against the official
+schedule and the live GoodTunes fee ledger (which shows the $5 cap on a
+settled ACH credit):
 
-- US ACH credit transfer into customer balance: ~$1 flat per transfer
-- US domestic wire into customer balance: ~$8 flat per transfer
-- International wire: higher, region-dependent
+- USD bank transfer by ACH credit: 0.5%, capped at $5
+- Domestic USD wire: the same 0.5% capped at $5, plus $15 per wire payment
+- International wires are unsupported in our flow
 
 So wires *are* usable, but only as a top-up — not per order. They only
 pencil out paired with batching (one wire covers many orders).
@@ -308,10 +309,16 @@ options assume a representative $500/week rollup per label.
 | # | Mechanism | Fee per $10 line | Settlement latency | Label friction | Our ops lift |
 |---|---|---|---|---|---|
 | A | Card-on-file, per order (original plan) | $0.59 (5.9%) | T+2 | low | low |
+> **Historical analysis only:** the ACH Direct Debit options below are not the
+> live manufacturing-invoice payment flow and must not be quoted to payers.
+> Live invoices use payer-initiated ACH credit or domestic USD wire through
+> Stripe customer balance, with card as the fallback. Reintroducing ACH Direct
+> Debit is explicitly out of scope.
+
 | B | ACH Direct Debit, per order | $0.08 (0.8%, $5 cap) | T+4 | medium (bank connect) | low |
 | C | Weekly net-invoice rollup, card | ~$14.80 on $500 (3.0%) | T+7 to T+9 | low | medium |
 | D | **Weekly net-invoice rollup, ACH Direct Debit** | **$5 max regardless of size** (1.0% on $500, 0.25% on $2,000) | T+7 to T+11 | medium | medium |
-| E | Monthly prepaid wallet, funded by ACH credit / wire into Stripe customer balance | $1 (ACH) or $8 (wire) per top-up, amortized to ~$0.01/order | prepaid | high upfront | medium |
+| E | Monthly prepaid wallet, funded by ACH credit / wire into Stripe customer balance | 0.5% capped at $5 (ACH credit), plus $15 for a domestic wire | prepaid | high upfront | medium |
 | F | Merchant-of-record on our slice via Shopify Collective / split-at-checkout | $0 to us (fan absorbs) | T+2 | very high (Collective is US-only and invitation-gated) | high |
 | G | Hybrid: D for ≥$X/mo labels, A for everyone else | mix | mix | tiered | medium |
 
@@ -376,7 +383,7 @@ the integration cost is justified by the fee savings on F.
    as the existing fan-unlock refund path, just bookkept against an
    invoice instead of a single charge.
 
-### Open numbers Nick has to confirm before this goes live
+### Terms to re-confirm before this goes live
 
 - **Stripe ACH cap at our volume.** Published cap is $5/transaction;
   Stripe negotiates lower at scale. Ask the rep what the floor is
@@ -384,9 +391,10 @@ the integration cost is justified by the fee savings on F.
 - **Plaid vs. Stripe Financial Connections.** Per-link / per-month
   pricing on bank-connect. Confirm which is cheaper for our usage
   pattern (one connect per label, infrequent re-link).
-- **Stripe customer-balance bank-transfer fees, current.** Published
-  as $1 (US ACH credit) / $8 (US wire) but verify before promising
-  labels free-after-top-up.
+- **Stripe customer-balance bank-transfer fees.** As of 2026-09-01 Stripe's
+  official US schedule is 0.5% capped at $5, plus $15 for domestic wire.
+  Re-check the official schedule and any GoodTunes custom-pricing amendment
+  before changing customer copy.
 - **Shopify Collective eligibility.** Even though it's deferred,
   get a yes/no on whether GoodTunes qualifies, so we know whether F
   is a future lane or off the table.
