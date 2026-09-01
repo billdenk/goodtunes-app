@@ -9387,6 +9387,31 @@ SQL
 migrate_shopify_plus_bank_transfer dev  "${DATABASE_URL:-}"
 migrate_shopify_plus_bank_transfer prod "${PROD_DATABASE_URL:-}"
 
+# Manufacturing platform-fee snapshots. Existing rows remain historical:
+# nullable policy columns are not backfilled, and legacy margin_cents stays
+# authoritative. New rows snapshot 300 bps + fee cents in application code.
+migrate_manufacturing_platform_fee_snapshots() {
+  local label="$1" url="$2"
+  [ -z "$url" ] && { echo "post-merge: skipping manufacturing fee snapshots on $label (no URL set)"; return 0; }
+  psql "$url" -v ON_ERROR_STOP=1 <<'SQL'
+ALTER TABLE manufacturer_payment_steps
+  ADD COLUMN IF NOT EXISTS eligible_principal_cents integer,
+  ADD COLUMN IF NOT EXISTS platform_fee_rate_bps integer,
+  ADD COLUMN IF NOT EXISTS platform_fee_cents integer,
+  ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'usd',
+  ADD COLUMN IF NOT EXISTS refunded_principal_cents integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS refunded_platform_fee_cents integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS stripe_refunded_cents integer NOT NULL DEFAULT 0;
+ALTER TABLE payout_earmarks
+  ADD COLUMN IF NOT EXISTS reversed_amount_cents integer NOT NULL DEFAULT 0;
+CREATE UNIQUE INDEX IF NOT EXISTS payout_earmarks_shopify_plus_step_unique
+  ON payout_earmarks (source_kind, source_ref)
+  WHERE source_kind = 'shopify_plus_step';
+SQL
+}
+migrate_manufacturing_platform_fee_snapshots dev  "${DATABASE_URL:-}"
+migrate_manufacturing_platform_fee_snapshots prod "${PROD_DATABASE_URL:-}"
+
 # ─── Task #2428 — Shopify+ per-mapping "offer digital unlock" flag ─────
 # For a shopify_plus album the fulfillment-only feed is the baseline; the
 # operator opts a product mapping IN to also mint the GoodTunes digital

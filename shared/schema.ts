@@ -4889,6 +4889,9 @@ export const payoutEarmarks = pgTable(
     rejectionReason: text("rejection_reason"),
     // Stripe Connect transfer id stamped on release. NULL until released.
     stripeTransferId: text("stripe_transfer_id"),
+    // Cumulative principal returned from an already-released transfer.
+    // Keeps money-out reporting reconcilable after partial/full refunds.
+    reversedAmountCents: integer("reversed_amount_cents").notNull().default(0),
     // Last release-attempt failure surfaced in the UI for retry.
     transferError: text("transfer_error"),
     // Free-text operator note (e.g. "Hold-longer until tour kickoff").
@@ -4904,6 +4907,11 @@ export const payoutEarmarks = pgTable(
     statusIdx: index("payout_earmarks_status_idx").on(t.status),
     ownerIdx: index("payout_earmarks_owner_idx").on(t.ownerKind, t.ownerId),
     sourceIdx: index("payout_earmarks_source_idx").on(t.sourceKind, t.sourceRef),
+    shopifyPlusStepUnique: uniqueIndex(
+      "payout_earmarks_shopify_plus_step_unique",
+    )
+      .on(t.sourceKind, t.sourceRef)
+      .where(sql`${t.sourceKind} = 'shopify_plus_step'`),
   }),
 );
 
@@ -4994,6 +5002,16 @@ export const manufacturerPaymentSteps = pgTable(
     // pass-through. Charged to the customer on top of amountCents; stays
     // in the platform balance (never earmarked to the plant).
     marginCents: integer("margin_cents").notNull().default(0),
+    // New manufacturing payments snapshot the 3% GoodTunes platform fee
+    // separately from legacy hand-entered margin. NULL rate/eligible fields
+    // identify historical rows; their stored margin remains authoritative.
+    eligiblePrincipalCents: integer("eligible_principal_cents"),
+    platformFeeRateBps: integer("platform_fee_rate_bps"),
+    platformFeeCents: integer("platform_fee_cents"),
+    currency: text("currency").notNull().default("usd"),
+    refundedPrincipalCents: integer("refunded_principal_cents").notNull().default(0),
+    refundedPlatformFeeCents: integer("refunded_platform_fee_cents").notNull().default(0),
+    stripeRefundedCents: integer("stripe_refunded_cents").notNull().default(0),
     sortOrder: integer("sort_order").notNull().default(0),
     // Who funds this step. 'goodtunes_sales' = Bill clicks Pay (funded from
     // platform sales balance); 'artist_direct' = artist sends funds via ACH,

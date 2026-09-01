@@ -36,7 +36,7 @@
 import type { Express, Request, Response } from "express";
 import { and, asc, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "./db";
+import { db, pool } from "./db";
 import {
   albumManufacturerQuotes,
   albums,
@@ -60,6 +60,119 @@ import { sendPartnerNotificationEmail, notifySuperAdmins } from "./mail";
 import { partnerEmailHtml } from "./partnerNotifications";
 import { formatUsdCents } from "@shared/money";
 import { cardFeeCents } from "@shared/breakEven";
+import {
+  MANUFACTURING_PLATFORM_FEE_BPS,
+  allocateManufacturingPlatformFeeCents,
+  manufacturingPlatformFeeCents,
+  manufacturingRefundAllocation,
+} from "@shared/manufacturingFee";
+
+export function manufacturingStepPlatformFeeCents(
+  step: Pick<ManufacturerPaymentStep, "platformFeeCents">,
+): number {
+  return step.platformFeeCents ?? 0;
+}
+
+export function manufacturingStepTotalCents(
+  step: Pick<ManufacturerPaymentStep, "amountCents" | "marginCents" | "platformFeeCents">,
+): number {
+  return (
+    step.amountCents +
+    step.marginCents +
+    manufacturingStepPlatformFeeCents(step)
+  );
+}
+
+export function adjustedManufacturingStepAmounts(
+  step: Pick<
+    ManufacturerPaymentStep,
+    | "amountCents"
+    | "marginCents"
+    | "platformFeeRateBps"
+    | "platformFeeCents"
+    | "eligiblePrincipalCents"
+  >,
+  settledCents: number,
+) {
+  const marginCents = Math.min(step.marginCents, settledCents);
+  const afterLegacyMargin = settledCents - marginCents;
+  const amountCents =
+    step.platformFeeRateBps != null
+      ? Math.min(
+          step.amountCents,
+          Math.floor(
+            (afterLegacyMargin * 10_000) /
+              (10_000 + step.platformFeeRateBps),
+          ),
+        )
+      : afterLegacyMargin;
+  return {
+    amountCents,
+    marginCents,
+    eligiblePrincipalCents:
+      step.platformFeeRateBps != null
+        ? amountCents
+        : step.eligiblePrincipalCents,
+    platformFeeCents:
+      step.platformFeeRateBps != null
+        ? afterLegacyMargin - amountCents
+        : step.platformFeeCents,
+  };
+}
+
+export async function reallocateEditableManufacturingFees(
+  albumId: string,
+  executor: any = db,
+) {
+  const rows: ManufacturerPaymentStep[] = await executor
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.albumId, albumId))
+    .orderBy(
+      asc(manufacturerPaymentSteps.sortOrder),
+      asc(manufacturerPaymentSteps.createdAt),
+    );
+  // Frozen snapshots consume their principal + fee first, regardless of
+  // display order. Operators may reorder editable rows visually, but that
+  // must never move a new rounding cent ahead of a fee already charged.
+  const frozen = rows.filter(
+    (row) =>
+      row.platformFeeRateBps != null &&
+      row.status !== "unpaid" &&
+      row.status !== "failed",
+  );
+  const editable = rows.filter(
+    (row) =>
+      row.platformFeeRateBps != null &&
+      (row.status === "unpaid" || row.status === "failed"),
+  );
+  let priorPrincipal = frozen.reduce(
+    (sum, row) => sum + (row.eligiblePrincipalCents ?? row.amountCents),
+    0,
+  );
+  let priorFee = frozen.reduce(
+    (sum, row) => sum + (row.platformFeeCents ?? 0),
+    0,
+  );
+  for (const row of editable) {
+    if (row.platformFeeRateBps == null) continue;
+    const principal = row.eligiblePrincipalCents ?? row.amountCents;
+    const fee = allocateManufacturingPlatformFeeCents({
+      priorEligiblePrincipalCents: priorPrincipal,
+      priorAllocatedFeeCents: priorFee,
+      stepEligiblePrincipalCents: principal,
+      rateBps: row.platformFeeRateBps,
+    });
+    if (fee !== row.platformFeeCents) {
+      await executor
+        .update(manufacturerPaymentSteps)
+        .set({ platformFeeCents: fee })
+        .where(eq(manufacturerPaymentSteps.id, row.id));
+    }
+    priorFee += fee;
+    priorPrincipal += principal;
+  }
+}
 
 // ── Task #3004 — inbound bank-transfer (push) payments ────────────────
 // A transfer that lands a few dollars short (sender bank fees deducted
@@ -154,7 +267,149 @@ export type BankTransferStripe = {
       status?: string | null;
     }>;
   };
+  transfers?: {
+    createReversal: (
+      transferId: string,
+      params: { amount: number; metadata: Record<string, string> },
+      options: { idempotencyKey: string },
+    ) => Promise<unknown>;
+  };
 };
+
+export async function reconcileManufacturingStepRefund(opts: {
+  stepId: string;
+  cumulativeRefundedCents: number;
+  stripe?: BankTransferStripe;
+}): Promise<boolean> {
+  const lockClient = await pool.connect();
+  const lockKey = `manufacturing-refund:${opts.stepId}`;
+  await lockClient.query("SELECT pg_advisory_lock(hashtext($1))", [lockKey]);
+  try {
+  const [step] = await db
+    .select()
+    .from(manufacturerPaymentSteps)
+    .where(eq(manufacturerPaymentSteps.id, opts.stepId));
+  if (!step || step.status !== "paid") return false;
+
+  const cumulative = Math.min(
+    Math.max(0, Math.floor(opts.cumulativeRefundedCents)),
+    manufacturingStepTotalCents(step) + (step.cardFeeCents ?? 0),
+  );
+  if (cumulative <= step.stripeRefundedCents) return true;
+
+  // Processing surcharges are excluded from the policy. Allocate only the
+  // portion of the cumulative refund that reaches manufacturing principal
+  // and its stored platform fee.
+  const policyGrossCents =
+    (step.eligiblePrincipalCents ?? step.amountCents) +
+    manufacturingStepPlatformFeeCents(step);
+  const totalChargedCents = manufacturingStepTotalCents(step) + (step.cardFeeCents ?? 0);
+  const policyRefundTotal =
+    totalChargedCents <= 0
+      ? 0
+      : Math.min(
+          policyGrossCents,
+          Math.floor(
+            (cumulative * policyGrossCents + Math.floor(totalChargedCents / 2)) /
+              totalChargedCents,
+          ),
+        );
+  const targetRefundedPrincipal =
+    policyGrossCents <= 0
+      ? 0
+      : Math.min(
+          step.eligiblePrincipalCents ?? step.amountCents,
+          Math.floor(
+            (policyRefundTotal *
+              (step.eligiblePrincipalCents ?? step.amountCents) +
+              Math.floor(policyGrossCents / 2)) /
+              policyGrossCents,
+          ),
+        );
+  const allocation = manufacturingRefundAllocation({
+    eligiblePrincipalCents: step.eligiblePrincipalCents ?? step.amountCents,
+    platformFeeCents: manufacturingStepPlatformFeeCents(step),
+    refundedPrincipalCents: step.refundedPrincipalCents,
+    refundedFeeCents: step.refundedPlatformFeeCents,
+    newRefundPrincipalCents: Math.max(
+      0,
+      targetRefundedPrincipal - step.refundedPrincipalCents,
+    ),
+  });
+  const nextPrincipal = step.refundedPrincipalCents + allocation.principalCents;
+  const nextFee = step.refundedPlatformFeeCents + allocation.feeCents;
+  const [earmark] = await db
+    .select()
+    .from(payoutEarmarks)
+    .where(
+      and(
+        eq(payoutEarmarks.sourceKind, "shopify_plus_step"),
+        eq(payoutEarmarks.sourceRef, step.id),
+      ),
+    )
+    .orderBy(desc(payoutEarmarks.heldAt))
+    .limit(1);
+
+  if (earmark && allocation.principalCents > 0) {
+    if (earmark.status === "released" && earmark.stripeTransferId) {
+      const stripe =
+        opts.stripe ?? ((await getStripe()) as unknown as BankTransferStripe);
+      if (!stripe.transfers) {
+        throw new Error("Stripe transfer reversal API is unavailable");
+      }
+      await stripe.transfers.createReversal(
+        earmark.stripeTransferId,
+        {
+          amount: allocation.principalCents,
+          metadata: {
+            gt_step_id: step.id,
+            gt_refunded_principal_cents: String(nextPrincipal),
+          },
+        },
+        {
+          idempotencyKey: `shopify_plus_refund_${step.id}_${nextPrincipal}`,
+        },
+      );
+      await db
+        .update(payoutEarmarks)
+        .set({
+          reversedAmountCents:
+            earmark.reversedAmountCents + allocation.principalCents,
+        })
+        .where(eq(payoutEarmarks.id, earmark.id));
+    } else if (earmark.status === "held" || earmark.status === "failed") {
+      const remaining = Math.max(step.amountCents - nextPrincipal, 0);
+      await db
+        .update(payoutEarmarks)
+        .set({
+          amountCents: remaining,
+          notes: `${earmark.notes ?? ""}${earmark.notes ? " · " : ""}Refunded manufacturing principal: ${nextPrincipal}c`,
+          ...(remaining === 0
+            ? {
+                status: "rejected",
+                rejectedAt: new Date(),
+                rejectionReason: "Manufacturing payment fully refunded",
+              }
+            : {}),
+        })
+        .where(eq(payoutEarmarks.id, earmark.id));
+    }
+  }
+
+  await db
+    .update(manufacturerPaymentSteps)
+    .set({
+      stripeRefundedCents: cumulative,
+      refundedPrincipalCents: nextPrincipal,
+      refundedPlatformFeeCents: nextFee,
+    })
+    .where(eq(manufacturerPaymentSteps.id, step.id));
+  return true;
+  } finally {
+    await lockClient.query("SELECT pg_advisory_unlock(hashtext($1))", [lockKey]);
+    lockClient.release();
+  }
+}
 
 // ── Quote-PDF total extraction (Task #2697) ───────────────────────────
 // Best-effort: pull the dollar total out of an uploaded quote PDF's text.
@@ -528,6 +783,7 @@ async function markStepPaid(
         ownerKind: "manufacturer",
         ownerId: manufacturerId,
         amountCents: step.amountCents,
+        currency: step.currency,
         notes: `Shopify+ manufacturing: ${step.description}`,
       });
       earmarkId = earmark.id;
@@ -546,7 +802,7 @@ async function markStepPaid(
     opts?.amountReceivedCents ??
     (step.amountReceivedCents > 0
       ? step.amountReceivedCents
-      : step.amountCents + step.marginCents);
+      : manufacturingStepTotalCents(step));
 
   await db
     .update(manufacturerPaymentSteps)
@@ -945,7 +1201,7 @@ export async function acceptPartialTransferAsPaid(opts: {
     };
   }
 
-  const dueCents = step.amountCents + step.marginCents;
+  const dueCents = manufacturingStepTotalCents(step);
 
   // What's actually received comes from Stripe LIVE:
   //   1. amount_received on THIS partially-funded PaymentIntent (Stripe has
@@ -1157,15 +1413,13 @@ export async function acceptPartialTransferAsPaid(opts: {
   //    EXACTLY as we verified it — zero rows means a webhook settled the
   //    (still full-amount) PI first; nothing at Stripe was touched, so we
   //    just bail.
-  const newMarginCents = Math.min(step.marginCents, acceptedCents);
-  const newAmountCents = acceptedCents - newMarginCents;
+  const adjustedAmounts = adjustedManufacturingStepAmounts(step, acceptedCents);
   let adjusted: ManufacturerPaymentStep | undefined;
   try {
     [adjusted] = await db
       .update(manufacturerPaymentSteps)
       .set({
-        amountCents: newAmountCents,
-        marginCents: newMarginCents,
+        ...adjustedAmounts,
         amountReceivedCents: Math.max(
           acceptedCents,
           step.amountReceivedCents ?? 0,
@@ -1219,7 +1473,12 @@ export async function acceptPartialTransferAsPaid(opts: {
           );
       await db
         .update(manufacturerPaymentSteps)
-        .set({ amountCents: step.amountCents, marginCents: step.marginCents })
+        .set({
+          amountCents: step.amountCents,
+          marginCents: step.marginCents,
+          eligiblePrincipalCents: step.eligiblePrincipalCents,
+          platformFeeCents: step.platformFeeCents,
+        })
         .where(where);
       return true;
     } catch (restoreErr: any) {
@@ -1260,13 +1519,15 @@ export async function acceptPartialTransferAsPaid(opts: {
     settledCents: number,
   ): Promise<AcceptPartialResult> => {
     if (settledCents !== acceptedCents) {
-      const settledMargin = Math.min(step.marginCents, settledCents);
+      const settledAmounts = adjustedManufacturingStepAmounts(
+        step,
+        settledCents,
+      );
       try {
         await db
           .update(manufacturerPaymentSteps)
           .set({
-            amountCents: settledCents - settledMargin,
-            marginCents: settledMargin,
+            ...settledAmounts,
             amountReceivedCents: settledCents,
           })
           .where(
@@ -1443,6 +1704,29 @@ export async function handleShopifyPlusWebhookEvent(
   const isStep = meta?.gt_kind === "shopify_plus_step";
 
   switch (event.type) {
+    case "charge.refunded": {
+      let stepId = String(meta.gt_step_id ?? "");
+      if (!stepId) {
+        const piId =
+          typeof obj.payment_intent === "string"
+            ? obj.payment_intent
+            : obj.payment_intent?.id;
+        if (!piId) return false;
+        const [matched] = await db
+          .select({ id: manufacturerPaymentSteps.id })
+          .from(manufacturerPaymentSteps)
+          .where(eq(manufacturerPaymentSteps.stripePaymentIntentId, piId))
+          .limit(1);
+        if (!matched) return false;
+        stepId = matched.id;
+      }
+      await reconcileManufacturingStepRefund({
+        stepId,
+        cumulativeRefundedCents: Number(obj.amount_refunded ?? 0),
+        stripe: deps?.stripe,
+      });
+      return true;
+    }
     // Task #3004 — a pushed bank transfer arrived but didn't fully fund
     // the PaymentIntent (bank fees deducted in transit, or a deliberate
     // partial payment). Record what arrived; when the shortfall is within
@@ -1459,7 +1743,7 @@ export async function handleShopifyPlusWebhookEvent(
       if (!step || step.status === "paid") return true;
 
       const piId = String(obj.id ?? "") || null;
-      const dueCents = Number(obj.amount ?? step.amountCents + step.marginCents);
+      const dueCents = Number(obj.amount ?? manufacturingStepTotalCents(step));
       const customerId =
         (typeof obj.customer === "string" ? obj.customer : obj.customer?.id) ??
         step.stripeCustomerId ??
@@ -1526,6 +1810,15 @@ export async function handleShopifyPlusWebhookEvent(
             `[shopify-plus] step ${step.id} under-threshold shortfall ${shortfall}¢ (≤${threshold}¢) — PI shrunk to ${receivedCents}¢, confirm → ${confirmed?.status}`,
           );
           if (confirmed?.status === "succeeded") {
+            await db
+              .update(manufacturerPaymentSteps)
+              .set(adjustedManufacturingStepAmounts(step, receivedCents))
+              .where(
+                and(
+                  eq(manufacturerPaymentSteps.id, step.id),
+                  eq(manufacturerPaymentSteps.status, "awaiting_transfer"),
+                ),
+              );
             await markStepPaid(step.id, piId, {
               amountReceivedCents: receivedCents,
             });
@@ -1839,7 +2132,7 @@ export function registerShopifyPlusRoutes(app: Express) {
         }
       }
       const stepsSumCents = steps.reduce(
-        (s, r) => s + r.amountCents + r.marginCents,
+        (s, r) => s + manufacturingStepTotalCents(r),
         0,
       );
       let quotedCents: number;
@@ -1856,11 +2149,31 @@ export function registerShopifyPlusRoutes(app: Express) {
       }
       const paidCents = steps
         .filter((r) => r.status === "paid")
-        .reduce((s, r) => s + r.amountCents + r.marginCents, 0);
+        .reduce((s, r) => s + manufacturingStepTotalCents(r), 0);
       const processingCents = steps
         .filter((r) => r.status === "processing" || r.status === "awaiting_transfer")
-        .reduce((s, r) => s + r.amountCents + r.marginCents, 0);
+        .reduce((s, r) => s + manufacturingStepTotalCents(r), 0);
       const outstandingCents = quotedCents - paidCents;
+      const platformFeeCents = steps
+        .filter((r) => r.status === "paid")
+        .reduce(
+          (sum, r) =>
+            sum +
+            manufacturingStepPlatformFeeCents(r) -
+            r.refundedPlatformFeeCents,
+          0,
+        );
+      const refundedCents = steps.reduce(
+        (sum, r) =>
+          sum + r.refundedPrincipalCents + r.refundedPlatformFeeCents,
+        0,
+      );
+      const plantFundsCents = steps
+        .filter((r) => r.status === "paid")
+        .reduce(
+          (sum, r) => sum + r.amountCents - r.refundedPrincipalCents,
+          0,
+        );
 
       // Task #3004 — surface nonzero Stripe customer cash balances to
       // OPERATORS so leftover/over-paid transfer funds don't sit silently
@@ -1918,6 +2231,12 @@ export function registerShopifyPlusRoutes(app: Express) {
             description: s.description,
             amountCents: s.amountCents,
             marginCents: s.marginCents,
+            eligiblePrincipalCents: s.eligiblePrincipalCents,
+            platformFeeRateBps: s.platformFeeRateBps,
+            platformFeeCents: s.platformFeeCents,
+            currency: s.currency,
+            refundedPrincipalCents: s.refundedPrincipalCents,
+            refundedPlatformFeeCents: s.refundedPlatformFeeCents,
             sortOrder: s.sortOrder,
             status: s.status,
             fundingSource: s.fundingSource,
@@ -1942,6 +2261,9 @@ export function registerShopifyPlusRoutes(app: Express) {
           paidCents,
           processingCents,
           outstandingCents,
+          platformFeeCents,
+          refundedCents,
+          plantFundsCents,
         },
         runClosedAt: albumRow?.runClosedAt ?? null,
         // Operator-only (null for partners): nonzero customer cash balances
@@ -2272,7 +2594,6 @@ export function registerShopifyPlusRoutes(app: Express) {
       const schema = z.object({
         description: z.string().trim().min(1).max(200),
         amountCents: z.number().int().min(1),
-        marginCents: z.number().int().min(0).optional(),
         sortOrder: z.number().int().optional(),
         // Task #2785 — who funds this step.
         fundingSource: z
@@ -2286,17 +2607,50 @@ export function registerShopifyPlusRoutes(app: Express) {
           .status(400)
           .json({ message: parsed.error.issues[0]?.message ?? "Invalid step" });
       }
-      const [row] = await db
-        .insert(manufacturerPaymentSteps)
-        .values({
-          albumId,
-          description: parsed.data.description,
-          amountCents: parsed.data.amountCents,
-          marginCents: parsed.data.marginCents ?? 0,
-          sortOrder: parsed.data.sortOrder ?? 0,
-          fundingSource: parsed.data.fundingSource,
-        })
-        .returning();
+      const row = await db.transaction(async (tx) => {
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`manufacturing-fee:${albumId}`}))`);
+        const existing = await tx
+          .select({
+            eligible: manufacturerPaymentSteps.eligiblePrincipalCents,
+            fee: manufacturerPaymentSteps.platformFeeCents,
+          })
+          .from(manufacturerPaymentSteps)
+          .where(eq(manufacturerPaymentSteps.albumId, albumId));
+        const priorEligiblePrincipalCents = existing.reduce(
+          (sum, r) => sum + (r.eligible ?? 0),
+          0,
+        );
+        const priorAllocatedFeeCents = existing.reduce(
+          (sum, r) => sum + (r.fee ?? 0),
+          0,
+        );
+        const platformFeeCents = allocateManufacturingPlatformFeeCents({
+          priorEligiblePrincipalCents,
+          priorAllocatedFeeCents,
+          stepEligiblePrincipalCents: parsed.data.amountCents,
+        });
+        const [inserted] = await tx
+          .insert(manufacturerPaymentSteps)
+          .values({
+            albumId,
+            description: parsed.data.description,
+            amountCents: parsed.data.amountCents,
+            marginCents: 0,
+            eligiblePrincipalCents: parsed.data.amountCents,
+            platformFeeRateBps: MANUFACTURING_PLATFORM_FEE_BPS,
+            platformFeeCents,
+            currency: "usd",
+            sortOrder: parsed.data.sortOrder ?? 0,
+            fundingSource: parsed.data.fundingSource,
+          })
+          .returning();
+        await reallocateEditableManufacturingFees(albumId, tx);
+        const [fresh] = await tx
+          .select()
+          .from(manufacturerPaymentSteps)
+          .where(eq(manufacturerPaymentSteps.id, inserted.id));
+        return fresh ?? inserted;
+      });
 
       // Task #2785 — notify the artist/label scope only for artist_direct steps.
       // goodtunes_sales steps are funded by Bill from platform balance; no need
@@ -2307,7 +2661,7 @@ export function registerShopifyPlusRoutes(app: Express) {
           albumId,
           description: parsed.data.description,
           totalCents:
-            parsed.data.amountCents + (parsed.data.marginCents ?? 0),
+            manufacturingStepTotalCents(row),
         });
       }
       res.json({ ok: true, step: row });
@@ -2339,7 +2693,6 @@ export function registerShopifyPlusRoutes(app: Express) {
       const schema = z.object({
         description: z.string().trim().min(1).max(200).optional(),
         amountCents: z.number().int().min(1).optional(),
-        marginCents: z.number().int().min(0).optional(),
         sortOrder: z.number().int().optional(),
         fundingSource: z.enum(["goodtunes_sales", "artist_direct"]).optional(),
       });
@@ -2349,17 +2702,26 @@ export function registerShopifyPlusRoutes(app: Express) {
           .status(400)
           .json({ message: parsed.error.issues[0]?.message ?? "Invalid step" });
       }
-      const [row] = await db
-        .update(manufacturerPaymentSteps)
-        .set({
+      const row = await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${`manufacturing-fee:${albumId}`}))`,
+        );
+        const [updated] = await tx
+          .update(manufacturerPaymentSteps)
+          .set({
           ...(parsed.data.description !== undefined && {
             description: parsed.data.description,
           }),
           ...(parsed.data.amountCents !== undefined && {
             amountCents: parsed.data.amountCents,
-          }),
-          ...(parsed.data.marginCents !== undefined && {
-            marginCents: parsed.data.marginCents,
+            eligiblePrincipalCents: parsed.data.amountCents,
+            platformFeeCents:
+              step.platformFeeRateBps != null
+                ? manufacturingPlatformFeeCents(
+                    parsed.data.amountCents,
+                    step.platformFeeRateBps,
+                  )
+                : step.platformFeeCents,
           }),
           ...(parsed.data.sortOrder !== undefined && {
             sortOrder: parsed.data.sortOrder,
@@ -2367,9 +2729,21 @@ export function registerShopifyPlusRoutes(app: Express) {
           ...(parsed.data.fundingSource !== undefined && {
             fundingSource: parsed.data.fundingSource,
           }),
-        })
-        .where(eq(manufacturerPaymentSteps.id, stepId))
-        .returning();
+          })
+          .where(
+            and(
+              eq(manufacturerPaymentSteps.id, stepId),
+              eq(manufacturerPaymentSteps.status, "unpaid"),
+            ),
+          )
+          .returning();
+        await reallocateEditableManufacturingFees(albumId, tx);
+        const [fresh] = await tx
+          .select()
+          .from(manufacturerPaymentSteps)
+          .where(eq(manufacturerPaymentSteps.id, stepId));
+        return fresh ?? updated;
+      });
       res.json({ ok: true, step: row });
     },
   );
@@ -2393,9 +2767,20 @@ export function registerShopifyPlusRoutes(app: Express) {
           .status(409)
           .json({ message: "Only unpaid steps can be deleted" });
       }
-      await db
-        .delete(manufacturerPaymentSteps)
-        .where(eq(manufacturerPaymentSteps.id, stepId));
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext(${`manufacturing-fee:${albumId}`}))`,
+        );
+        await tx
+          .delete(manufacturerPaymentSteps)
+          .where(
+            and(
+              eq(manufacturerPaymentSteps.id, stepId),
+              eq(manufacturerPaymentSteps.status, "unpaid"),
+            ),
+          );
+        await reallocateEditableManufacturingFees(albumId, tx);
+      });
       res.json({ ok: true });
     },
   );
@@ -2432,7 +2817,7 @@ export function registerShopifyPlusRoutes(app: Express) {
           req,
           albumId,
           description: step.description,
-          totalCents: step.amountCents + step.marginCents,
+          totalCents: manufacturingStepTotalCents(step),
         });
         res.json({ ok: true });
       } catch (e) {
@@ -2569,7 +2954,7 @@ export function registerShopifyPlusRoutes(app: Express) {
       }
 
       const album = await storage.getAlbumById(albumId, { includeHidden: true });
-      const totalCents = step.amountCents + step.marginCents;
+      const totalCents = manufacturingStepTotalCents(step);
 
       // Atomically claim the step before minting a Checkout Session. Only ONE
       // in-flight ACH attempt is allowed per step: a second concurrent (or
@@ -2618,6 +3003,8 @@ export function registerShopifyPlusRoutes(app: Express) {
         gt_manufacturer_id: manufacturer.id,
         gt_amount_owed: String(step.amountCents),
         gt_margin: String(step.marginCents),
+        gt_platform_fee_rate_bps: String(step.platformFeeRateBps ?? ""),
+        gt_platform_fee: String(step.platformFeeCents ?? 0),
         gt_payment_method: method,
       };
 

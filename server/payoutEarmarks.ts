@@ -114,20 +114,41 @@ export async function createEarmarkIfAbsent(
     )
     .limit(1);
   if (existing) return existing;
-  const [row] = await exec
-    .insert(payoutEarmarks)
-    .values({
-      sourceKind: input.sourceKind,
-      sourceRef: input.sourceRef,
-      albumId: input.albumId ?? null,
-      ownerKind: input.ownerKind,
-      ownerId: input.ownerId,
-      amountCents: input.amountCents,
-      currency: input.currency ?? "usd",
-      status: "held",
-      notes: input.notes ?? null,
-    })
-    .returning();
+  let row: PayoutEarmark | undefined;
+  try {
+    [row] = await exec
+      .insert(payoutEarmarks)
+      .values({
+        sourceKind: input.sourceKind,
+        sourceRef: input.sourceRef,
+        albumId: input.albumId ?? null,
+        ownerKind: input.ownerKind,
+        ownerId: input.ownerId,
+        amountCents: input.amountCents,
+        currency: input.currency ?? "usd",
+        status: "held",
+        notes: input.notes ?? null,
+      })
+      .returning();
+  } catch (error: any) {
+    if (
+      input.sourceKind !== "shopify_plus_step" ||
+      (error?.code ?? error?.cause?.code) !== "23505"
+    ) {
+      throw error;
+    }
+    [row] = await exec
+      .select()
+      .from(payoutEarmarks)
+      .where(
+        and(
+          eq(payoutEarmarks.sourceKind, input.sourceKind),
+          eq(payoutEarmarks.sourceRef, input.sourceRef),
+        ),
+      )
+      .limit(1);
+  }
+  if (!row) throw new Error("Failed to create or recover payout earmark");
   console.log(
     `[earmark] held kind=${input.sourceKind} ref=${input.sourceRef} owner=${input.ownerKind}:${input.ownerId} amount=${input.amountCents}c id=${row.id}`,
   );

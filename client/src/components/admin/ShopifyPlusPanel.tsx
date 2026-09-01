@@ -312,6 +312,12 @@ interface LedgerStep {
   description: string;
   amountCents: number;
   marginCents: number;
+  eligiblePrincipalCents?: number | null;
+  platformFeeRateBps?: number | null;
+  platformFeeCents?: number | null;
+  currency?: string;
+  refundedPrincipalCents?: number;
+  refundedPlatformFeeCents?: number;
   fundingSource: "goodtunes_sales" | "artist_direct";
   status: "unpaid" | "processing" | "awaiting_transfer" | "paid" | "failed";
   sortOrder: number;
@@ -325,6 +331,10 @@ interface LedgerStep {
   amountReceivedCents?: number;
   cardFeeCents?: number | null;
 }
+
+const stepPlatformFeeCents = (step: LedgerStep) => step.platformFeeCents ?? 0;
+const stepTotalCents = (step: LedgerStep) =>
+  step.amountCents + step.marginCents + stepPlatformFeeCents(step);
 
 // Task #3004 — persisted snapshot of Stripe's virtual-account details.
 interface FundingInstructions {
@@ -350,6 +360,9 @@ interface LedgerData {
     paidCents: number;
     processingCents: number;
     outstandingCents: number;
+    platformFeeCents: number;
+    refundedCents: number;
+    plantFundsCents: number;
   };
   runClosedAt: string | null;
   // Task #3004 — operator-only: nonzero Stripe customer cash balances from
@@ -442,7 +455,7 @@ function TransferInstructionsModal({
 }) {
   const ins = step.fundingInstructions;
   if (!ins) return null;
-  const total = ins.amountCents || step.amountCents + step.marginCents;
+  const total = ins.amountCents || stepTotalCents(step);
   const received = step.amountReceivedCents ?? 0;
   const remaining = Math.max(total - received, 0);
 
@@ -652,7 +665,6 @@ export function ManufacturingLedger({
   const [uploading, setUploading] = useState(false);
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
-  const [margin, setMargin] = useState("");
   // Task #2785 — funding source for the new step form.
   const [fundingSource, setFundingSource] = useState<"goodtunes_sales" | "artist_direct">(
     "artist_direct",
@@ -696,7 +708,6 @@ export function ManufacturingLedger({
       toast({ title: "Enter the amount owed", variant: "destructive" });
       return;
     }
-    const marginCents = Math.round(parseFloat(margin || "0") * 100);
     setBusy("add");
     try {
       await apiRequest(
@@ -705,13 +716,11 @@ export function ManufacturingLedger({
         {
           description: desc.trim(),
           amountCents: cents,
-          marginCents: marginCents > 0 ? marginCents : 0,
           fundingSource,
         },
       );
       setDesc("");
       setAmount("");
-      setMargin("");
       await refresh();
     } catch (e: any) {
       toast({
@@ -728,7 +737,7 @@ export function ManufacturingLedger({
   // with the processing fee added and disclosed BEFORE confirming.
   async function pay(step: LedgerStep, method: "bank_transfer" | "card") {
     if (method === "card") {
-      const total = step.amountCents + step.marginCents;
+      const total = stepTotalCents(step);
       const fee = cardFeeCents(total);
       const ok = window.confirm(
         `Paying by card adds a ${formatUsdCents(fee)} card-processing fee.\n\n` +
@@ -799,7 +808,7 @@ export function ManufacturingLedger({
   // on hand, confirms from the cash balance, flips the step Paid, and
   // adjusts the recorded total to what was actually collected.
   async function acceptPartial(step: LedgerStep) {
-    const requested = step.amountCents + step.marginCents;
+    const requested = stepTotalCents(step);
     const recorded = Math.min(step.amountReceivedCents ?? 0, requested);
     // The webhook tally can lag (or be missing entirely) — the server does a
     // fresh cash-balance read from Stripe and refuses if nothing arrived.
@@ -1032,6 +1041,9 @@ export function ManufacturingLedger({
       paidCents: 0,
       processingCents: 0,
       outstandingCents: 0,
+      platformFeeCents: 0,
+      refundedCents: 0,
+      plantFundsCents: 0,
     };
   const runClosed = Boolean(data?.runClosedAt);
 
@@ -1044,14 +1056,10 @@ export function ManufacturingLedger({
   // requests, it can't be exceeded.
   const draftCents = (() => {
     const a = Math.round(parseFloat(amount || "0") * 100);
-    const m = Math.round(parseFloat(margin || "0") * 100);
-    return (
-      (Number.isFinite(a) && a > 0 ? a : 0) +
-      (Number.isFinite(m) && m > 0 ? m : 0)
-    );
+    return Number.isFinite(a) && a > 0 ? a + Math.round(a * 0.03) : 0;
   })();
   const stepsSumCents = steps.reduce(
-    (s, r) => s + r.amountCents + r.marginCents,
+    (s, r) => s + stepTotalCents(r),
     0,
   );
   const projectedRequestedCents = stepsSumCents + draftCents;
@@ -1108,7 +1116,9 @@ export function ManufacturingLedger({
           <p className="text-slate-500 text-xs mt-0.5">
             Pay the plant for this run in stages by pushing a bank transfer
             from your bank (no processing fee), or by card with a card fee
-            added. Once a payment lands it's queued for release to the plant.
+            added. GoodTunes charges a 3% platform fee on setup and
+            manufacturing only; tax, shipping, and payment-processing charges
+            are excluded. Once a payment lands it's queued for release to the plant.
           </p>
           <p className="text-xs mt-1 text-slate-600" data-testid="text-ledger-manufacturer">
             Manufacturer:{" "}
@@ -1159,6 +1169,14 @@ export function ManufacturingLedger({
             Estimated: {QUOTED_SOURCE_CAPTION[totals.quotedSource]}. Outstanding =
             estimated − paid. The estimated figure is the plant's estimate and may
             change with the press's ±10% run tolerance.
+          </p>
+          <p className="text-xs text-slate-500 mt-1.5" data-testid="text-ledger-reconciliation">
+            Reconciliation: plant funds{" "}
+            <b>{formatUsdCents(totals.plantFundsCents)}</b> + GoodTunes platform
+            fee <b>{formatUsdCents(totals.platformFeeCents)}</b>
+            {totals.refundedCents > 0
+              ? ` · refunds ${formatUsdCents(totals.refundedCents)}`
+              : ""}. Card processing is separate and excluded.
           </p>
           {totals.processingCents > 0 && (
             <p className="text-xs text-amber-700 mt-2" data-testid="text-ledger-processing">
@@ -1306,14 +1324,22 @@ export function ManufacturingLedger({
                             {step.description}
                           </div>
                           <div className="text-xs text-slate-500">
-                            {formatUsdCents(step.amountCents + step.marginCents)}
-                            {step.marginCents > 0 && (
+                            {formatUsdCents(stepTotalCents(step))}
+                            {step.platformFeeRateBps != null ? (
+                              <span className="text-slate-400">
+                                {" "}
+                                ({formatUsdCents(step.amountCents)} eligible
+                                principal + {formatUsdCents(stepPlatformFeeCents(step))}{" "}
+                                GoodTunes platform fee at{" "}
+                                {(step.platformFeeRateBps / 100).toFixed(2).replace(/\.00$/, "")}%)
+                              </span>
+                            ) : step.marginCents > 0 ? (
                               <span className="text-slate-400">
                                 {" "}
                                 ({formatUsdCents(step.amountCents)} to plant +{" "}
-                                {formatUsdCents(step.marginCents)} margin)
+                                {formatUsdCents(step.marginCents)} legacy usage fee)
                               </span>
-                            )}
+                            ) : null}
                             {/* Task #2785 — show funding source badge inline. */}
                             <span
                               className={`ml-2 text-xs font-medium ${
@@ -1332,6 +1358,22 @@ export function ManufacturingLedger({
                               {step.lastError}
                             </div>
                           )}
+                          {(step.refundedPrincipalCents ?? 0) +
+                            (step.refundedPlatformFeeCents ?? 0) >
+                            0 && (
+                            <div className="text-xs text-rose-600 mt-0.5">
+                              Refunded{" "}
+                              {formatUsdCents(
+                                (step.refundedPrincipalCents ?? 0) +
+                                  (step.refundedPlatformFeeCents ?? 0),
+                              )}{" "}
+                              (including{" "}
+                              {formatUsdCents(
+                                step.refundedPlatformFeeCents ?? 0,
+                              )}{" "}
+                              platform-fee reversal)
+                            </div>
+                          )}
                           {/* Task #3004 — partial-payment progress on an
                               awaiting-transfer step. */}
                           {step.status === "awaiting_transfer" &&
@@ -1342,12 +1384,11 @@ export function ManufacturingLedger({
                               >
                                 Received{" "}
                                 {formatUsdCents(step.amountReceivedCents ?? 0)} of{" "}
-                                {formatUsdCents(step.amountCents + step.marginCents)}{" "}
+                                {formatUsdCents(stepTotalCents(step))}{" "}
                                 — remaining{" "}
                                 {formatUsdCents(
                                   Math.max(
-                                    step.amountCents +
-                                      step.marginCents -
+                                    stepTotalCents(step) -
                                       (step.amountReceivedCents ?? 0),
                                     0,
                                   ),
@@ -1478,12 +1519,12 @@ export function ManufacturingLedger({
                                   disabled={busy === `pay-${step.id}` || !manufacturer}
                                   className="h-9 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                                   data-testid={`button-pay-card-step-${step.id}`}
-                                  title={`Card adds a ${formatUsdCents(cardFeeCents(step.amountCents + step.marginCents))} processing fee`}
+                                  title={`Card adds a ${formatUsdCents(cardFeeCents(stepTotalCents(step)))} processing fee`}
                                 >
                                   <CreditCard className="w-3.5 h-3.5" />
                                   Card
                                   <span className="text-slate-400 font-normal">
-                                    +{formatUsdCents(cardFeeCents(step.amountCents + step.marginCents))} fee
+                                    +{formatUsdCents(cardFeeCents(stepTotalCents(step)))} fee
                                   </span>
                                 </button>
                               </>
@@ -1634,9 +1675,9 @@ export function ManufacturingLedger({
                       data-testid="input-step-description"
                     />
                   </div>
-                  <div className="w-28">
+                  <div className="w-32">
                     <label className="block text-xs text-slate-500 mb-1">
-                      To plant $
+                      Setup / manufacturing $
                     </label>
                     <input
                       value={amount}
@@ -1646,20 +1687,6 @@ export function ManufacturingLedger({
                       placeholder="0.00"
                       className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
                       data-testid="input-step-amount"
-                    />
-                  </div>
-                  <div className="w-28">
-                    <label className="block text-xs text-slate-500 mb-1">
-                      Margin $
-                    </label>
-                    <input
-                      value={margin}
-                      onChange={(e) => setMargin(e.target.value)}
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
-                      className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-[#319ED8] focus:ring-2 focus:ring-[#319ED8]/20"
-                      data-testid="input-step-margin"
                     />
                   </div>
                   <button
@@ -1713,13 +1740,16 @@ function VendorMoneyOut({ albumId }: { albumId: string }) {
   const { toast } = useToast();
   const ledgerKey = ["/api/admin/albums", albumId, "vendor-ledger"];
   const { data: ledger } = useQuery<{
-    moneyIn: { id: string; description: string; amountCents: number; marginCents: number }[];
+    moneyIn: { id: string; description: string; amountCents: number; marginCents: number; platformFeeCents?: number | null }[];
     moneyInTotalCents: number;
+    platformFeeTotalCents: number;
+    plantFundsTotalCents: number;
     moneyOut: {
       id: string;
       vendorName: string;
       manufacturerId: string;
       amountCents: number;
+      reversedAmountCents?: number;
       status: string;
       stripeTransferId: string | null;
       transferError: string | null;
@@ -1796,6 +1826,10 @@ function VendorMoneyOut({ albumId }: { albumId: string }) {
             Manual Stripe Connect transfers to the press for this project. Money in (paid steps):{" "}
             <strong>{formatUsdCents(ledger?.moneyInTotalCents ?? 0)}</strong> · paid out:{" "}
             <strong>{formatUsdCents(ledger?.moneyOutTotalCents ?? 0)}</strong>
+            {" "}· plant funds:{" "}
+            <strong>{formatUsdCents(ledger?.plantFundsTotalCents ?? 0)}</strong>
+            {" "}· GoodTunes 3% platform fees:{" "}
+            <strong>{formatUsdCents(ledger?.platformFeeTotalCents ?? 0)}</strong>
           </p>
         </div>
       </div>

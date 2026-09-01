@@ -443,6 +443,10 @@ export function registerVendorPayoutRoutes(app: Express) {
           description: manufacturerPaymentSteps.description,
           amountCents: manufacturerPaymentSteps.amountCents,
           marginCents: manufacturerPaymentSteps.marginCents,
+          platformFeeCents: manufacturerPaymentSteps.platformFeeCents,
+          refundedPrincipalCents: manufacturerPaymentSteps.refundedPrincipalCents,
+          refundedPlatformFeeCents:
+            manufacturerPaymentSteps.refundedPlatformFeeCents,
           status: manufacturerPaymentSteps.status,
           paymentMethod: manufacturerPaymentSteps.paymentMethod,
         })
@@ -474,13 +478,32 @@ export function registerVendorPayoutRoutes(app: Express) {
         ? await db.select({ id: users.id, email: users.email, username: users.username }).from(users).where(inArray(users.id, adminIds))
         : [];
       const adminName = new Map(adminRows.map((u) => [u.id, u.username || u.email || u.id]));
-      const moneyInTotal = moneyIn.reduce((s, r) => s + r.amountCents + (r.marginCents ?? 0), 0);
+      const moneyInTotal = moneyIn.reduce(
+        (s, r) =>
+          s +
+          r.amountCents +
+          (r.marginCents ?? 0) +
+          (r.platformFeeCents ?? 0) -
+          r.refundedPrincipalCents -
+          r.refundedPlatformFeeCents,
+        0,
+      );
+      const platformFeeTotal = moneyIn.reduce(
+        (s, r) =>
+          s + (r.platformFeeCents ?? 0) - r.refundedPlatformFeeCents,
+        0,
+      );
+      const plantFundsTotal = moneyIn.reduce(
+        (s, r) => s + r.amountCents - r.refundedPrincipalCents,
+        0,
+      );
       const moneyOut = outRows.map((r) => ({
         id: r.id,
         sourceKind: r.sourceKind,
         vendorName: pressName.get(r.ownerId) ?? r.ownerId,
         manufacturerId: r.ownerId,
         amountCents: r.amountCents,
+        reversedAmountCents: r.reversedAmountCents,
         status: r.status,
         stripeTransferId: r.stripeTransferId,
         transferError: r.transferError,
@@ -488,10 +511,14 @@ export function registerVendorPayoutRoutes(app: Express) {
         initiatedBy: r.createdByUserId ? adminName.get(r.createdByUserId) ?? r.createdByUserId : null,
         inboundRefs: r.inboundRefs ?? [],
       }));
-      const moneyOutTotal = moneyOut.filter((r) => r.status === "released").reduce((s, r) => s + r.amountCents, 0);
+      const moneyOutTotal = moneyOut
+        .filter((r) => r.status === "released")
+        .reduce((s, r) => s + r.amountCents - r.reversedAmountCents, 0);
       res.json({
         moneyIn,
         moneyInTotalCents: moneyInTotal,
+        platformFeeTotalCents: platformFeeTotal,
+        plantFundsTotalCents: plantFundsTotal,
         moneyOut,
         moneyOutTotalCents: moneyOutTotal,
         attempts: attempts.map((a) => ({
