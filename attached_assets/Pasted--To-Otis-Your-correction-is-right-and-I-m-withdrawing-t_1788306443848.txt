@@ -1,0 +1,44 @@
+**To Otis:**
+
+Your correction is right and I'm withdrawing the CAD 0.72 figure — it priced direct charges, which is a proposal, not what we've built. Thanks for catching it before it went into a partner document.
+
+One thing has changed since you scoped this. The Viryl LOI I'm sending this week describes CAD settlement and Viryl as merchant of record on their own projects. That means these confirmations no longer block a ticket — they block what I can sign. Please treat them accordingly.
+
+Six things.
+
+**1. Ask the same-region question first, on its own.**
+
+Your item 3 is a gate, not a line item. If Stripe restricts direct charges to same-region platform/account pairs, then a US platform cannot create direct charges on a Canadian connected account at all, and items 1, 2, 4 and 5 are moot — along with the entire money-flow section of the LOI. Get that yes/no back before you spend time on the rest. If it's a no, tell me the same day; I have a letter to rewrite.
+
+**2. Price the current architecture too, so I can compare.**
+
+The five confirmations all describe the direct-charge model. I also need the cost of what we have today, or I can't judge whether waiting for direct charges is worth it. For each:
+
+- **A — current:** US platform creates the CAD charge, separate Connect transfer to Viryl's Canadian account.
+- **B — proposed:** Direct charge on Viryl's Canadian connected account, GoodTunes takes `application_fee_amount`.
+
+Give me one number for each: total cost to GoodTunes and to Viryl on a CAD 2,400 project, stated in the currency it lands in. Which balance converts, on what amount, and every FX and cross-border fee in writing from Stripe — not inferred from docs.
+
+**3. Reconcile the two plans.**
+
+Your #3459 note says direct/destination charges are out of scope and platform-charges-plus-transfers is the active plan. The confirmations list says these items block the CAD direct-charge flow. Those are two different architectures. Which one is September? If it's the current one, I need to know the FX cost Viryl actually absorbs, because the letter says they absorb none.
+
+**4. Split #3459 so we don't build twice.**
+
+Tell me which parts are architecture-independent — CAD presentment, pricing display, estimate and PDF currency — and which are architecture-dependent — charge creation, transfer, fee capture. Ship the first group now, hold the second until Stripe answers.
+
+**5. I need the September fallback before my call with Rob this week.**
+
+If direct charges aren't confirmed in time, which is it: bring Viryl up configured and demoing without live payments, or go live on the current architecture and eat the FX while we build the other? Feasibility is your call, what I promise is mine — but I can't promise anything until you tell me what's real.
+
+**6. Link rollout, two items.**
+
+It lands September 21, inside our launch window. Does it apply to **Canadian** Connect onboarding? Viryl is a connected account too, and this will be their first hands-on experience of the platform. And should Andrew reshoot the onboarding screens before the 21st so training materials aren't stale on day one?
+
+On the tax side — your evidence list is the right one and I'm handing it to our adviser verbatim: contracts, receipt and statement identity, Stripe Tax registration, checkout language, and ownership of refunds and disputes.
+
+If Stripe support is slow, open the ticket today rather than waiting for standup. Item 1 above is the one I need soonest.Text is above and in the file.
+
+The two lines doing the most work are the framing at the top — *these block what I can sign, not a ticket* — and item 1. Everything else can run in parallel; the same-region answer is the one that either confirms the letter or forces you to rewrite its money flow before Rob sees it.
+
+Item 5 is the one you need back fastest in practice, since the call is this week and it determines whether "September launch" means live payments or configured-and-demoing.

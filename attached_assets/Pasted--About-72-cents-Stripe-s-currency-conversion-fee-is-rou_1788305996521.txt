@@ -1,0 +1,28 @@
+**About 72 cents.**
+
+Stripe's currency conversion fee is roughly 1%, and it applies only to the fee crossing the border — not the project. So on Viryl's CAD $2,400 job:
+
+| | |
+|---|---|
+| Project subtotal | CAD $2,400 |
+| Your 3% | CAD $72 |
+| Conversion at ~1% | **$0.72** |
+| You net | ~USD $51 |
+
+Across Rob's 16–20 jobs a month that's roughly **$155 a year**, against about **$11,200** in platform fees from that plant. **1.4% of what you collect from him.**
+
+Worth remembering what it replaces. Under the old platform-charge-then-transfer structure, conversion hit the *gross* — about **$48 on that same job**, two-thirds of your entire fee. Direct charges moved it from $48 to $0.72. That's the whole reason the money-flow section is written the way it is.
+
+**On scaling — the FX half does, the tax half doesn't.**
+
+The mechanism is Stripe Connect direct charges with an application fee, which works in 45+ Connect countries. And the cost is always ~1% *of your fee*, never of the project. So it scales with your revenue rather than with job size or job count — a $50,000 job costs you $15 instead of $500. It never becomes a real number, which means it's a promise you can keep permanently and put in every letter without a sunset. That's rare and worth knowing you have it.
+
+What doesn't come free per country:
+
+- **VAT/GST on your platform fee.** In the EU your 3% is a digital service sold to a business — usually reverse-charged, but registration thresholds and obligations vary and that's a real workstream. This is the same flag as the Canadian GST/HST question, which is still open with your adviser.
+- **Local payment methods.** SEPA, iDEAL, Bacs all have different economics than cards, so the pass-through line at checkout differs by market.
+- **Connect country support.** Most vinyl-producing countries are covered, but confirm before promising a specific plant.
+
+So the line in the email is true and safe to say. If you're ever asked whether the same applies in Europe, the honest answer is *the money movement works identically; the tax treatment needs a look first.*
+
+One caveat: the 1% conversion figure is Stripe's US rate and it's on your list of open Stripe confirmations. Worth nailing down with Otis alongside the other four — it's the only number in that paragraph you're stating as fact.
