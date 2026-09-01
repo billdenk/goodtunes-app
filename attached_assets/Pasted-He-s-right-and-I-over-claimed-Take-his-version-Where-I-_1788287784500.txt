@@ -1,0 +1,15 @@
+He's right, and I over-claimed. Take his version.
+
+**Where I got ahead of myself:** I said direct charges means the plant handles its own GST/HST. That's the *typical* consequence of the model, not a determination. His line is the correct one — *"code structure is evidence of the commercial arrangement, but it does not establish it by itself."* The receipt name, who Stripe Tax is registered to, who owns refunds and disputes, and whether your own checkout copy accidentally positions GoodTunes as the seller all matter. Don't carry my confidence into a conversation with Rob or an accountant.
+
+**His two added confirmations are both good**, and one is a direct check on me: validate the application-fee conversion cost against Stripe's actual pricing rather than my "under a dollar," which I computed from published rates, not your account.
+
+**And his Task #3460 design is better than what I proposed.** A fee resolver that produces the amount in the charge currency, consumed by either payment path, with both storing original amount and currency. That means **the 3% work isn't blocked by any of this** — it proceeds now, serves Hellbender, and doesn't need redoing when direct charges lands. That's the part that keeps your launch window intact.
+
+**The five confirmations are yours, not his.** They're Dashboard lookups and a conversation with Stripe support — days, not weeks. But they're now the formal blocker on Viryl, so if nobody picks them up this week they quietly become the reason Viryl slips. Worth doing before you next talk timing with Rob.
+
+**And I'd upgrade one of his qualifiers.** He wrote *"if necessary, the relevant tax adviser."* Make that a definitely. Cross-border merchant-of-record on manufacturing services is exactly the kind of question you don't reason your way through in a Slack thread — and it's the same accountant conversation that's been outstanding since we first hit the Canadian question.
+
+**Nothing in the LOI needs to change.** The Viryl letter states direct settlement as the intended model in a non-binding document, and the Launch clause already gates live transactions on it being available. That's consistent with "blocked until confirmed." Just don't let the merchant-of-record sentence migrate into the definitive agreement before Stripe confirms the account pairing.
+
+One observation worth keeping: he pushed back on an architectural claim with a specific, correct qualification instead of just agreeing with it. Given how fast you're moving and how many external commitments are in flight, that's worth more than the speed.
