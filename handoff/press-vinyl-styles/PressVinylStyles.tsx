@@ -5331,7 +5331,7 @@ export function PressVinylPhotoshopMockup() {
                     <Plus className="w-3 h-3" strokeWidth={2.5} />
                   </span>
                   <span className="text-[13px] font-semibold" style={{ color: t.blue }}>
-                    Add style
+                    Add type
                   </span>
                 </button>
               </div>

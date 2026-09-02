@@ -17,7 +17,7 @@ The press Catalog → Vinyl page rebuilt around the **style generator**: styles 
 
 ## Must work (wire these; anything not listed is decorative chrome)
 - Style cards: click selects; ••• menu → **Edit** (opens sheet on default color), **Duplicate** (full copy: every color, sizes, finishes, name + " copy"), **Archive** (hairline-separated bottom row).
-- **Add style** → creator sheet with the style picker gallery (Black leads; Double Double + Metallic Blend use gradient maps over their texture PNGs).
+- **Add type** → creator sheet with the style picker gallery (Black leads; Double Double + Metallic Blend use gradient maps over their texture PNGs).
 - **Add color** on a style → sheet opens directly in a fresh color editor for that style.
 - Sheet **Change style** while editing = starts a NEW style preseeded, never mutates the current one.
 - Style-level edit sheet: **Style name** field renames the style everywhere on Update; "Restore “<picker name>”" link resets it; header STYLE card previews the typed name live.
