@@ -392,3 +392,18 @@ uri = "file://docs/mrp-sow-status-monday.md"
 type = "text"
 title = "MRP SOW status — Monday edition"
 description = "Ask-by-ask status sheet updated Aug 22 for the Monday session — copy/paste or download for the MRP presentation."
+logical_id = "46ea681a-7265-43ab-a1a1-008e41eb3ce9"
+
+[[outputs]]
+id = "tf8YdYuM70gvVJ2ScRbMb"
+uri = "file://docs/viryl-cad-direct-charge-validation-packet.md"
+type = "text"
+title = "Viryl CAD Direct-Charge Validation Packet"
+description = "Download this packet, send its copy-ready questions to Stripe, Viryl, and tax/legal, or paste it into Claude with the responses to produce a cited launch decision."
+logical_id = "354944f3-334c-4cb6-9731-07de504a736d"
+content_hash = "sha256:3ecc619defa62e02d288eb6029e6b813e84d3d253f619dab7d14d3276ea9135d"
+size = 15322
+mtime_ms = 1788317968667
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:5293185b-8e25-4d4f-b8b2-dc5494b9adc6/354944f3-334c-4cb6-9731-07de504a736d/a33e0ea8-e4ed-4f3a-9407-7123fd974c40"
+storage_version_token = "1788317986985058"
+content_type = "text/markdown"
