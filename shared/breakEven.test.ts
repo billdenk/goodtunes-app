@@ -122,8 +122,8 @@ test("gross-up uses the minimum covering cent at rounding boundaries", () => {
 });
 
 test("vinyl-only break-even ceils fixed cost over net per copy", () => {
-  // 100 copies × $5 mfg + $200 prep + (10 tracks × 25.4¢ → 254¢) × 100
-  //  = 50000 + 20000 + 25400 = 95400¢ fixed.
+  // 100 copies × $5 mfg + $200 prep + (10 tracks × 26.2¢ → 262¢) × 100
+  //  = 50000 + 20000 + 26200 = 96200¢ fixed.
   // net = 3000 − cardFee(3000)=117 − donation 0 − 450 = 2433¢.
   const r = computeBreakEven({
     runQty: 100,
@@ -135,9 +135,9 @@ test("vinyl-only break-even ceils fixed cost over net per copy", () => {
     goodDeed: null,
   });
   assert.equal(r.computable, true);
-  assert.equal(r.fixedRunCostCents, 95400);
+  assert.equal(r.fixedRunCostCents, 96200);
   assert.equal(r.vinylNetCents, 2433);
-  assert.equal(r.vinylBreakEvenUnits, Math.ceil(95400 / 2433)); // 40
+  assert.equal(r.vinylBreakEvenUnits, Math.ceil(96200 / 2433)); // 40
   assert.equal(r.goodDeed, null);
 });
 
@@ -203,6 +203,6 @@ test("no/zero planned cert quantity yields no with-GoodDeeds break-even", () => 
 });
 
 test("mechanicals rate and platform margin are the shared constants", () => {
-  assert.equal(MECH_RATE_CENTS_PER_TRACK, 25.4);
+  assert.equal(MECH_RATE_CENTS_PER_TRACK, 26.2);
   assert.equal(PLATFORM_MARGIN_CENTS, 450);
 });

@@ -1265,7 +1265,7 @@ migrate_external_sale_url prod "${PROD_DATABASE_URL:-}"
 
 # Publishing-payout settlement columns — `organizations.pay_to_org_id`
 # (administered-by routing, e.g. Songs of Kaotic → Hipgnosis),
-# `payout_settings.mechanical_rate_micros` (statutory $0.127/unit default),
+# `payout_settings.mechanical_rate_micros` (current statutory $0.131/unit default),
 # and `albums.mechanical_units_pressed` (operator-recorded pressing count, the
 # settlement-basis fallback for runs pressed offline that never went through
 # the in-app pressing_order_requests pipeline — e.g. Nick Carter's catalog).
@@ -1282,7 +1282,12 @@ BEGIN;
 ALTER TABLE IF EXISTS organizations
   ADD COLUMN IF NOT EXISTS pay_to_org_id varchar;
 ALTER TABLE IF EXISTS payout_settings
-  ADD COLUMN IF NOT EXISTS mechanical_rate_micros integer NOT NULL DEFAULT 127000;
+  ADD COLUMN IF NOT EXISTS mechanical_rate_micros integer NOT NULL DEFAULT 131000;
+ALTER TABLE IF EXISTS payout_settings
+  ALTER COLUMN mechanical_rate_micros SET DEFAULT 131000;
+UPDATE payout_settings
+SET mechanical_rate_micros = 131000
+WHERE id = 'default' AND mechanical_rate_micros = 127000;
 ALTER TABLE IF EXISTS albums
   ADD COLUMN IF NOT EXISTS mechanical_units_pressed integer;
 COMMIT;

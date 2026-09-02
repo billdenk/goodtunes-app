@@ -16,11 +16,15 @@
 // inputs once and the client render them without re-deriving anything,
 // and lets a unit test pin the formula without a database.
 
-// Single source of truth for the mechanicals rate used by the Sell
-// panel Publishing line and the break-even fixed-cost stack. $0.127 ×
-// 2 (vinyl + digital mechanicals) = 25.4¢ per track. Imported by
-// SellPanel so the two paths can never drift.
-export const MECH_RATE_CENTS_PER_TRACK = 25.4;
+// Single source of truth for the current U.S. mechanical rate used by
+// publishing settlement and the Sell/break-even cost stack. One side is
+// $0.131 per track per unit; package economics reserve both vinyl + digital,
+// so that projection uses 26.2¢ per track.
+export const MECHANICAL_RATE_MICROS_PER_TRACK_SIDE = 131_000;
+export const MECHANICAL_RATE_DOLLARS_PER_TRACK_SIDE =
+  MECHANICAL_RATE_MICROS_PER_TRACK_SIDE / 1_000_000;
+export const MECH_RATE_CENTS_PER_TRACK =
+  (MECHANICAL_RATE_MICROS_PER_TRACK_SIDE * 2) / 10_000;
 
 // Platform margin per unit, in cents. Mirrors the Sell panel cost
 // snapshot's GoodTunes line (payout_format_costs.goodtunes_cents

@@ -123,8 +123,8 @@ const parseDollars = (v: string): number | null => {
 };
 
 // Task #423 — single source of truth for the mechanicals rate used by
-// the Publishing line in the SellPanel breakdown. $0.127/track × 2
-// covers vinyl + digital mechanicals (industry standard), i.e. 25.4¢
+// the Publishing line in the SellPanel breakdown. $0.131/track × 2
+// covers vinyl + digital mechanicals, i.e. 26.2¢
 // per track. Centralised in shared/breakEven.ts (Task #1963) so the
 // snapshot path, the live-preview path, and the break-even calculator
 // can't drift the way they used to (the comment said 0.254 but the
@@ -394,8 +394,8 @@ export function SellPanel({
   primaryArtistId?: string | null;
   artworkUrl?: string | null;
   // Task #393 — number of songs on this album. Threaded into the vinyl
-  // card's cost breakdown so Publishing reads `trackCount × $0.257`
-  // (industry standard: $0.127/track each for vinyl + digital). Caller
+  // card's cost breakdown so Publishing reads `trackCount × $0.262`
+  // ($0.131/track each for vinyl + digital). Caller
   // (AdminAlbum) derives from `album.songs.length`.
   trackCount?: number;
   // Task #619 — total runtime (seconds) of all uploaded masters on
@@ -3107,8 +3107,8 @@ function SkuRow({
   // computed live from real formulas instead of reading whatever the
   // payout-cost defaults table returns (which was $0 for every saved
   // row that hadn't been re-snapshotted). Formulas:
-  //   • Publishing       = trackCount × $0.254  ($0.127/track × 2 for
-  //                        vinyl + digital mechanicals, industry std).
+  //   • Publishing       = trackCount × $0.262  ($0.131/track × 2 for
+  //                        vinyl + digital mechanicals).
   //   • Payment proc.    = round(retail × 2.9%) + $0.30 (Stripe-style;
   //                        placeholder for fulfillment + GoodDeed + tax).
   //   • GoodTunes        = flat $4.50 per unit.
@@ -5664,7 +5664,7 @@ function SkuRow({
                       </div>
                     )}
                     <div className="flex items-center justify-between gap-6 text-xs text-slate-600">
-                      <span>Publishing: ($0.127 × 2 [vinyl+digital]) × {breakdown.publishingTrackCount} tracks</span>
+                      <span>Publishing: ($0.131 × 2 [vinyl+digital]) × {breakdown.publishingTrackCount} tracks</span>
                       <span className="tabular-nums">{dollars(econ.pub)}</span>
                     </div>
                     <div className="flex items-center justify-between gap-6 text-xs text-slate-600">

@@ -4122,12 +4122,11 @@ export const payoutSettings = pgTable("payout_settings", {
   defaultHologramVendorId: varchar("default_hologram_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
   defaultInsertionVendorId: varchar("default_insertion_vendor_id").references(() => vendors.id, { onDelete: "set null" }),
   // Publishing mechanical-royalty rate, in MICRO-DOLLARS per pressed unit
-  // ($1 = 1,000,000 micros). Default 127,000 = $0.127/unit, the U.S.
-  // statutory Section-115 physical/DPD rate honored in Nick Carter's signed
-  // Hipgnosis license #24084. The publishing-settlement engine computes
+  // ($1 = 1,000,000 micros). Default 131,000 = $0.131/unit, the current U.S.
+  // statutory Section-115 physical/DPD rate. The publishing-settlement engine computes
   // owed = rateMicros × unitsPressed × (percentBp / 10000) per split, so
   // changing the statutory rate here re-prices every open settlement.
-  mechanicalRateMicros: integer("mechanical_rate_micros").notNull().default(127000),
+  mechanicalRateMicros: integer("mechanical_rate_micros").notNull().default(131000),
   // Task #550 — gifting window. Fan can convert a kept copy into a
   // gift from their library for this many days after purchase. Default
   // 30; editable on AdminPlatformPricing. The checkout-time gift path

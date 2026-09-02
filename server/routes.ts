@@ -75,6 +75,7 @@ import { ALBUM_FORMATS, type AlbumFormat, EMAIL_HERO_FORMAT_KINDS } from "@share
 import { SHORT_CATEGORIES } from "@shared/categories";
 import { SHARE_LINK_HOST } from "@shared/shareSlug";
 import { normalizeAudioUrl } from "@shared/audioUrl";
+import { MECHANICAL_RATE_MICROS_PER_TRACK_SIDE } from "@shared/breakEven";
 import { sqlPersonInPressScopeFor } from "./pressPortal";
 import {
   evaluateAutoSyncRun,
@@ -2301,25 +2302,35 @@ export async function registerRoutes(
   // registered here means it wins over both the dev Vite catch-all and
   // the prod SPA fallback, on every host.
   app.get("/investors", async (_req, res) => {
-    const path = await import("path");
-    res.sendFile(
-      path.join(process.cwd(), "server", "assets", "investor-snapshot.html"),
-      {
-        headers: {
+    try {
+      const { promises: fs } = await import("fs");
+      const path = await import("path");
+      let body = await fs.readFile(
+        path.join(process.cwd(), "server", "assets", "investor-snapshot.html"),
+        "utf8",
+      );
+      // The uploaded deck is intentionally retained as the archival source,
+      // but its public page must show the current shared statutory rate. This
+      // prevents a future static re-upload from silently restoring stale copy.
+      const currentRateCents =
+        MECHANICAL_RATE_MICROS_PER_TRACK_SIDE / 10_000;
+      body = body.replace(
+        /\d+(?:\.\d+)?¢ × 2 per track/g,
+        `${currentRateCents.toFixed(1)}¢ × 2 per track`,
+      );
+      return res
+        .set({
           "Content-Type": "text/html; charset=utf-8",
           "X-Robots-Tag": "noindex, nofollow",
           "Cache-Control": "no-store, must-revalidate",
-        },
-      },
-      (err?: Error) => {
-        // Mid-stream aborts (client navigated away) arrive here with
-        // headersSent=true — nothing to do. A genuinely missing file
-        // (should never happen; it's committed) gets a plain 404.
-        if (err && !res.headersSent) {
-          res.status(404).type("text/plain").send("investor snapshot is not available");
-        }
-      },
-    );
+        })
+        .send(body);
+    } catch {
+      return res
+        .status(404)
+        .type("text/plain")
+        .send("investor snapshot is not available");
+    }
   });
 
   // ─── Switchbridge standalone page ──────────────────────────────────

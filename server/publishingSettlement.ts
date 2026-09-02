@@ -5,7 +5,7 @@
 //
 //     owed = statutoryRate × unitsPressed × (publisher share)
 //
-// where statutoryRate defaults to $0.127/unit (the U.S. Section-115
+// where statutoryRate defaults to $0.131/unit (the current U.S. Section-115
 // physical/DPD rate honored in the signed Hipgnosis license #24084) and the
 // publisher share is `percentBp / 10000`. This is the MECHANICAL settlement —
 // it is driven by units PRESSED, not units sold, and is a separate ledger
@@ -31,8 +31,11 @@ import {
   songs,
   trackPublishingSplits,
 } from "@shared/schema";
+import { MECHANICAL_RATE_MICROS_PER_TRACK_SIDE } from "@shared/breakEven";
 
-export const DEFAULT_MECHANICAL_RATE_MICROS = 127_000; // $0.127 / unit
+export const DEFAULT_MECHANICAL_RATE_MICROS =
+  MECHANICAL_RATE_MICROS_PER_TRACK_SIDE; // $0.131 / unit
+const LEGACY_DEFAULT_MECHANICAL_RATE_MICROS = 127_000;
 const MICROS_PER_DOLLAR = 1_000_000;
 
 export interface SettlementPayee {
@@ -89,7 +92,16 @@ export async function getMechanicalRateMicros(): Promise<number> {
     .from(payoutSettings)
     .where(eq(payoutSettings.id, "default"))
     .limit(1);
-  return row?.rate ?? DEFAULT_MECHANICAL_RATE_MICROS;
+  // Deploying the code and applying the data migration are separate events.
+  // Treat the exact former default as uncustomized so a freshly deployed
+  // calculator cannot keep quoting 12.7¢ while the migration catches up.
+  if (
+    row?.rate == null ||
+    row.rate === LEGACY_DEFAULT_MECHANICAL_RATE_MICROS
+  ) {
+    return DEFAULT_MECHANICAL_RATE_MICROS;
+  }
+  return row.rate;
 }
 
 /**

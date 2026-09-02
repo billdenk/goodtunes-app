@@ -1621,13 +1621,13 @@ export function PressAlbumPackageBuilder() {
   const [showCost, setShowCost] = useState(false);
   const costParts = useMemo(() => {
     const tracks = Math.max(1, parseInt(trackCount, 10) || 12);
-    const publishing = 0.127 * 2 * tracks; // (vinyl + digital) per track
+    const publishing = 0.131 * 2 * tracks; // (vinyl + digital) per track
     const payment = retail * 0.029 + 0.3;
     const goodtunes = 4.5;
     const manufacturing = Math.max(0, packageCost - publishing - payment - goodtunes);
     return [
       { label: 'Manufacturing', value: manufacturing },
-      { label: `Publishing · ($0.127 × 2 [vinyl + digital]) × ${tracks} tracks`, value: publishing },
+      { label: `Publishing · ($0.131 × 2 [vinyl + digital]) × ${tracks} tracks`, value: publishing },
       { label: 'Payment processing', value: payment },
       { label: 'GoodTunes', value: goodtunes },
     ];

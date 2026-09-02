@@ -23,6 +23,7 @@ import { sql } from "drizzle-orm";
 import { pgArray } from "./lib/pgArray";
 import { getUserRole } from "./auth/roles";
 import { storage } from "./storage";
+import { MECH_RATE_CENTS_PER_TRACK } from "@shared/breakEven";
 
 type ScopeKind = "label" | "npo" | "vendor" | "artist";
 type RangePreset = "today" | "7d" | "30d" | "90d" | "all";
@@ -115,7 +116,6 @@ function priorOf(r: RangeWindow): RangeWindow | null {
 // the Stripe processing fee is taken ONCE PER ORDER on the real
 // transaction total (incl. shipping + add-ons), per spec. Shipping
 // itself is paid by the fan and never deducted from the artist.
-const MECH_RATE_CENTS_PER_TRACK = 25.4; // 2 × $0.127 (vinyl + digital mechanicals)
 const PLATFORM_FEE_CENTS = 450;
 // Physical (pressed) formats — used to scope a press's unit count to the
 // copies it actually manufactures (digital copies aren't pressed).

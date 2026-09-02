@@ -1323,7 +1323,7 @@ export function PressAlbumPackageBuilder({
     mfgCents != null
       ? [
           { label: "Manufacturing", value: mfgCents },
-          { label: `Publishing · ($0.127 × 2 [vinyl + digital]) × ${Math.max(1, trackCount)} tracks`, value: publishingCents },
+          { label: `Publishing · ($0.131 × 2 [vinyl + digital]) × ${Math.max(1, trackCount)} tracks`, value: publishingCents },
           { label: "Payment processing", value: paymentCents },
           { label: "GoodTunes", value: PLATFORM_MARGIN_CENTS },
         ]

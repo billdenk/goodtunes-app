@@ -87,7 +87,7 @@ const fmtUSD = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 });
 const fmtUSD0 = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-// Three-decimal for the per-track publishing rate ($0.127).
+// Three-decimal for the per-track publishing rate ($0.131).
 const fmtUSD3 = (n: number) =>
   n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
@@ -943,7 +943,7 @@ function mfgUnitFor(run: number): number {
   const tier = MFG_LADDER.find((t) => run >= t.min && run <= t.max);
   return tier ? tier.unit : MFG_LADDER[MFG_LADDER.length - 1].unit;
 }
-const PUBLISHING_PER_TRACK_SIDE = 0.127;
+const PUBLISHING_PER_TRACK_SIDE = 0.131;
 const PAYMENT_RATE = 0.029143;
 const GOODTUNES_UNIT = 4.5;
 const round2 = (n: number) => Math.round(n * 100) / 100;

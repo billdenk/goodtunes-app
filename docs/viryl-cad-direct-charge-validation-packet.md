@@ -1,7 +1,7 @@
 # Viryl CAD Direct-Charge Validation Packet
 
 **Prepared for:** GoodTunes / GoGoods  
-**Date:** September 1, 2026  
+**Date:** September 2, 2026
 **Purpose:** Collect the account-specific Stripe, Viryl, pricing, and tax answers required to safely launch CAD card checkout for Viryl manufacturing projects.
 
 ## How to use this packet

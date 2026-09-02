@@ -2808,7 +2808,7 @@ export function ArtistReleaseDraftBuilder() {
   // wired estimate math; a caveat line says it firms up when Memphis confirms.
   const usd = (n: number, cents = true) =>
     n.toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: cents ? 2 : 0, maximumFractionDigits: cents ? 2 : 0 });
-  const PUBLISHING_UNIT = 0.127 * 2 * 12; // $0.127 × 2 (vinyl+digital) × 12 tracks
+  const PUBLISHING_UNIT = 0.131 * 2 * 12; // $0.131 × 2 (vinyl+digital) × 12 tracks
   const GOODTUNES_UNIT = 4.50;
   const processingUnit = (retail: number) => retail * 0.029 + 0.30;
   // Per-record manufacturing at a given run size — same wired math as above.

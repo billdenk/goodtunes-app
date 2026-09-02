@@ -6,7 +6,7 @@
 //   /admin/publishing/payee?key=<payeeKey>  track-by-track statement for one payee
 //
 // The mechanical settlement pays each publisher/writer on the basis Bill
-// confirmed: statutoryRate ($0.127/unit) × unitsPressed × split%. This
+// confirmed: statutoryRate ($0.131/unit) × unitsPressed × split%. This
 // section is the transparency surface — a publisher can see exactly what
 // they're owed and whether they've onboarded to be paid, and the operator
 // can see, per song, whether the splits are documented and sum to 100%.
