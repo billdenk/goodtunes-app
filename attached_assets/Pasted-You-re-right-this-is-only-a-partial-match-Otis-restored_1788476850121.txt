@@ -1,0 +1,41 @@
+You’re right—this is only a partial match. Otis restored the broader Assets structure, but the **Bonus workspace is still the legacy production surface**, not the approved GoodStudio treatment.
+
+### What is correct
+
+- **Art · Audio · Bonus** hierarchy
+- Bonus separated from product-specific assets
+- **Videos · Photos** choices
+- Super Admin “view as artist” context
+
+### What is wrong
+
+- The giant drop zone is the old uploader.
+- **“Click to browse” opens the native file picker directly**, violating the shared Canon importer requirement.
+- The approved compact Bonus media cards/rows were not applied.
+- The legacy **Advanced** dropdown remains.
+- The unexplained floating **+** launcher remains.
+- The release navigation appears to be missing **Package** compared with the approved workspace.
+- Otis’s completion report only claimed the shared importer for **Vinyl artwork**; it did not complete the required importer sweep across Bonus media.
+
+So this should not be accepted as a full Artist Assets match.
+
+The correction to Otis should be:
+
+> **ZERO FUNCTIONALITY CHANGES — SKIN ONLY.**
+>
+> The current Bonus screen still renders the legacy uploader and does not match the supplied Artist Assets source snapshot.
+>
+> Apply the handed-off Bonus workspace exactly:
+>
+> - Preserve existing Videos, Photos, permissions, limits, metadata, storage, and read-only behavior.
+> - Replace the giant legacy drop zone with the approved Bonus media tile/card treatment from the handoff.
+> - Every Add, Upload, Replace, empty-state, and floating-plus launcher must open the shared Canon importer.
+> - Native file selection may appear only through **Choose file** inside that importer.
+> - Do not retain a direct “click to browse” launcher.
+> - Remove or correctly integrate the legacy Advanced control; do not leave two competing upload systems.
+> - Remove the unexplained floating `+` if it duplicates the approved media-card launchers.
+> - Verify whether **Package** was incorrectly removed from this release’s approved navigation and restore it when applicable.
+> - Preserve Bonus as **Videos · Photos** and do not add a product selector to Bonus.
+> - Compare the finished route directly against the supplied `ArtistAssetsTaskFirstVariant.tsx` snapshot before declaring it complete.
+
+This is an Otis implementation miss, not a reason to redesign the GoodStudio version.

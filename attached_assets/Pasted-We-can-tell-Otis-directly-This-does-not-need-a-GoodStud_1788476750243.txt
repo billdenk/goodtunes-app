@@ -1,0 +1,47 @@
+We can tell Otis directly. This does **not** need a GoodStudio R&D pass first because the screenshot documents a previously available Super Admin entry point, and Otis already has the underlying fulfillment routes, data, permissions, and configuration.
+
+Send Otis this:
+
+---
+
+## Restore Super Admin release-level Fulfillment access
+
+**ZERO FUNCTIONALITY CHANGES — SKIN ONLY. RESTORE EXISTING VISIBILITY; DO NOT CREATE A NEW FULFILLMENT SYSTEM.**
+
+Restore the Super Admin release/project navigation shown in the pre-published production screen:
+
+**Physical**
+- Audio
+- Art
+- Fulfillment
+
+### Requirements
+
+- Add **Fulfillment** beside **Audio** and **Art** within the release-level Physical workspace for Super Admins.
+- Reuse Otis’s existing:
+  - Release fulfillment destination/configuration
+  - Fulfillment partner records
+  - Press fulfillment capabilities
+  - Permissions and role checks
+  - Routes, APIs, and production data
+- Do not duplicate the global Fulfillment partner-management area.
+- Do not create a new fulfillment model, route family, permission system, or database field.
+- Preserve current Audio and Art behavior exactly.
+- Preserve the existing release Overview fulfillment panel; the restored tab may expose the same underlying configuration in the Physical workspace.
+- Do not add Fulfillment to the Artist Assets hierarchy. Artist Assets remains:
+  - **Art · Audio · Bonus**
+- Do not expose this Super Admin operational control to Artists unless an existing production permission explicitly authorizes it.
+- Preserve press and white-label identity, permissions, pricing, builders, estimates, and fulfillment wiring.
+
+### Acceptance criteria
+
+- A Super Admin can open a release, select **Physical**, and choose **Audio**, **Art**, or **Fulfillment**.
+- The Fulfillment view displays the release’s real fulfillment destination and partner configuration.
+- Changes made through existing authorized controls remain reflected in the existing Overview and fulfillment-management surfaces.
+- Artists do not receive new permissions.
+- No new fulfillment records or parallel state are created.
+- Existing builds and automated tests continue to pass.
+
+---
+
+The GoodDeed cost-versus-earnings split is different: that should go through R&D first because it changes the information architecture and financial presentation. Fulfillment is a straightforward restoration Otis can perform now.
