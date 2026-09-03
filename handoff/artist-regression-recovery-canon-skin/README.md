@@ -1,5 +1,18 @@
 # Note for Otis
 
+## Delivery clarification
+
+> **This documentation-only handoff commit changed no production functionality or UI. The production integration described by the note did include approved UI and navigation changes while preserving existing functionality.**
+
+The production integration:
+
+- reorganized Artist Assets around **Art / Audio**;
+- re-exposed the existing production Tracks tools;
+- added the GoodDeed entry point using Otis’s unchanged production renderer; and
+- applied Apple Canon styling to admin surfaces and shared controls.
+
+It did **not** change backend functionality, pricing logic, builders, permissions, services, schemas, or the GoodDeed renderer.
+
 > **REGRESSION RECOVERY + CANON SKIN**
 >
 > Restore and preserve the complete production Artist toolset, including master uploads, preview controls, Lyrics/LyricFlow™, credits, splits, artwork Test/Certify, and advanced track actions.
