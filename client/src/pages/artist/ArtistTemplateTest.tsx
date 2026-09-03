@@ -31,7 +31,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type * as pdfjsTypes from 'pdfjs-dist';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { useRoute } from 'wouter';
+import { useRoute, useSearch } from 'wouter';
 import {
   ChevronRight,
   ChevronDown,
@@ -44,6 +44,7 @@ import {
   Lock,
   Circle,
   ArrowLeftRight,
+  ArrowLeft,
   History,
   X,
   Clock,
@@ -193,6 +194,13 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   const innerPad = embedded ? '8px 0 96px' : '32px 40px 96px';
   const albumId = params?.id ?? '';
   const componentId = params?.componentId ? decodeURIComponent(params.componentId) : '';
+  const search = useSearch();
+  const backToAssets = (() => {
+    const query = new URLSearchParams(search);
+    query.set('tab', 'assets');
+    const serialized = query.toString();
+    return `/artist/albums/${albumId}${serialized ? `?${serialized}` : ''}`;
+  })();
 
   const dark = useAdminDark();
   const mode: 'light' | 'dark' = dark ? 'dark' : 'light';
@@ -531,7 +539,7 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
           <nav aria-label="breadcrumb" data-testid="breadcrumb">
             <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
               <li className="inline-flex items-center">
-                <a href={`/artist/albums/${albumId}`} className="transition-opacity hover:opacity-80" data-testid="link-back-assets">Assets</a>
+                <a href={backToAssets} className="inline-flex h-11 items-center gap-1.5 rounded-full px-3 font-semibold transition-colors hover:bg-[var(--apple-track)]" style={{ color: t.ink, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="link-back-assets"><ArrowLeft style={{ width: 14, height: 14 }} />Back to Assets</a>
               </li>
             </ol>
           </nav>
@@ -709,7 +717,7 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
           <nav aria-label="breadcrumb" data-testid="breadcrumb">
             <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
               <li className="inline-flex items-center">
-                <a href={`/artist/albums/${albumId}`} className="transition-opacity hover:opacity-80" data-testid="link-back-assets">Assets</a>
+                <a href={backToAssets} className="inline-flex h-11 items-center gap-1.5 rounded-full px-3 font-semibold transition-colors hover:bg-[var(--apple-track)]" style={{ color: t.ink, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="link-back-assets"><ArrowLeft style={{ width: 14, height: 14 }} />Back to Assets</a>
               </li>
               <li aria-hidden><ChevronRight className="w-3.5 h-3.5" /></li>
               <li className="inline-flex items-center"><span aria-current="page" style={{ color: t.ink }}>{ART.title}</span></li>
@@ -746,7 +754,7 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
         <nav aria-label="breadcrumb" data-testid="breadcrumb">
           <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
             <li className="inline-flex items-center">
-              <a href={`/artist/albums/${albumId}`} className="transition-opacity hover:opacity-80" data-testid="link-back-assets">Assets</a>
+              <a href={backToAssets} className="inline-flex h-11 items-center gap-1.5 rounded-full px-3 font-semibold transition-colors hover:bg-[var(--apple-track)]" style={{ color: t.ink, border: `1px solid ${t.hairline}`, background: t.card }} data-testid="link-back-assets"><ArrowLeft style={{ width: 14, height: 14 }} />Back to Assets</a>
             </li>
             <li aria-hidden><ChevronRight className="w-3.5 h-3.5" /></li>
             <li className="inline-flex items-center"><span aria-current="page" style={{ color: t.ink }}>{ART.title}</span></li>

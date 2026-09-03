@@ -16132,7 +16132,7 @@ type PhotoSheetMode =
   | { kind: "new"; initialFile?: File }
   | { kind: "edit"; photo: AlbumPhoto };
 
-function BonusVideos({
+export function BonusVideos({
   albumId,
   onEdit: _onEdit,
 }: {
@@ -16318,7 +16318,7 @@ function BonusVideos({
   );
 }
 
-function BonusPhotos({
+export function BonusPhotos({
   albumId,
   onEdit: _onEdit,
 }: {

@@ -26,7 +26,9 @@ import { useUploadManager } from '@/context/UploadManagerContext';
 import { NewAlbumModeDialog } from '@/components/admin/NewAlbumModeDialog';
 import { ManufacturingLedger } from '@/components/admin/ShopifyPlusPanel';
 import { PageColumn, PageHeader } from '@/components/admin/PageShell';
+import { IconButton } from '@/components/ui/IconButton';
 import { ArtistReleaseTrackRows } from '@/pages/AdminAlbum';
+import { BonusPhotos, BonusVideos } from '@/pages/AdminAlbum';
 import {
   ALBUM_PHYSICAL_FORMAT_LABEL,
   type AlbumPhysicalFormat,
@@ -382,11 +384,97 @@ type VinylArtBlock = {
   imageUrl: string | null;
 };
 
-function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: Theme }) {
+function MediaImportDialog({ block, t, onClose, onConfirm }: {
+  block: VinylArtBlock;
+  t: Theme;
+  onClose: () => void;
+  onConfirm: (file: File) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [method, setMethod] = useState<'upload' | 'url'>('upload');
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [invalidFile, setInvalidFile] = useState(false);
+  const choose = (candidate?: File) => {
+    if (!candidate) return;
+    const valid = candidate.type === 'application/pdf' || candidate.type.startsWith('image/') || /\.(pdf|png|jpe?g|tiff?|webp)$/i.test(candidate.name);
+    setInvalidFile(!valid);
+    if (valid) setFile(candidate);
+  };
+  const guidance = block.title.toLowerCase().includes('label')
+    ? 'PDF or print-ready label artwork. Include the full panel at the press template size.'
+    : 'PDF or image artwork. Include the full panel at the press template size.';
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center p-4" style={{ background: 'rgba(20,20,22,0.46)', backdropFilter: 'blur(2px)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-[440px] rounded-2xl" role="dialog" aria-modal="true" aria-label={`Import ${block.title} art`} data-testid={`media-import-dialog-${block.id}`} style={{ background: t.card, border: `1px solid ${t.hairline}`, boxShadow: '0 24px 70px rgba(0,0,0,.34)', padding: 20 }}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold" style={{ color: t.ink }}>Import {block.title} art</h2>
+            <p className="mt-1 text-xs" style={{ color: t.subink }}>{guidance}</p>
+          </div>
+          <IconButton type="button" onClick={onClose} label="Close import dialog" variant="ghost" style={{ color: t.subink }} data-testid="media-import-close"><X /></IconButton>
+        </div>
+        <div className="mt-4 flex gap-1 rounded-xl p-1" style={{ background: t.soft }}>
+          {(['upload', 'url'] as const).map((value) => (
+            <button key={value} type="button" onClick={() => setMethod(value)} className="flex-1 rounded-lg px-3 py-2 text-xs font-semibold" style={{ background: method === value ? t.card : 'transparent', color: method === value ? t.ink : t.subink, boxShadow: method === value ? '0 1px 3px rgba(0,0,0,.08)' : undefined }} data-testid={`media-import-method-${value}`}>
+              {value === 'upload' ? 'Upload file' : 'Paste a URL'}
+            </button>
+          ))}
+        </div>
+        {method === 'upload' ? (
+          <>
+            <input ref={inputRef} type="file" accept=".pdf,image/*" className="sr-only" onChange={(e) => choose(e.target.files?.[0])} data-testid={`media-import-input-${block.id}`} />
+            <div
+              className="mt-3 flex w-full flex-col items-center justify-center rounded-xl text-center"
+              style={{ minHeight: 150, padding: '24px 16px', border: `1.5px dashed ${dragging ? BLUE : t.dashed}`, background: dragging ? t.soft : t.dropEmpty, color: t.subink }}
+              onDragEnter={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragOver={(e) => e.preventDefault()}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); choose(e.dataTransfer.files?.[0]); }}
+              data-testid={`media-import-drop-${block.id}`}
+            >
+              {file ? (
+                <span className="inline-flex items-center gap-2 text-sm font-medium" style={{ color: t.ink }}><FileImage className="h-4 w-4" />{file.name}<Check className="h-4 w-4" style={{ color: t.ready }} /></span>
+              ) : (
+                <>
+                  <UploadCloud className="h-6 w-6" />
+                  <span className="mt-2 text-sm font-semibold" style={{ color: t.ink }}>Drop your artwork here</span>
+                  <button
+                    type="button"
+                    className="mt-3 rounded-full px-4 py-2 text-sm font-semibold"
+                    style={{ color: BLUE, border: `1px solid ${BLUE}`, background: 'transparent' }}
+                    onClick={() => inputRef.current?.click()}
+                    data-testid={`media-import-choose-${block.id}`}
+                  >
+                    Choose file
+                  </button>
+                </>
+              )}
+            </div>
+            <p className="mt-2 text-xs" style={{ color: t.faint }}>Accepted: PDF, PNG, JPG, TIFF, or WebP. Files are checked against the press template after upload.</p>
+            {invalidFile && <p className="mt-1 text-xs" style={{ color: t.fail }}>That file type cannot be used for this art slot. Choose a PDF or image file.</p>}
+          </>
+        ) : (
+          <div className="mt-3 rounded-xl p-4" style={{ background: t.soft, border: `1px solid ${t.hairline}` }}>
+            <p className="text-xs font-semibold" style={{ color: t.ink }}>URL import isn’t available for this art surface</p>
+            <p className="mt-1 text-xs leading-relaxed" style={{ color: t.subink }}>Choose a local file instead. There is no existing production URL-mirroring path for completed-template artwork, so this action is intentionally unavailable.</p>
+          </div>
+        )}
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-full px-3.5 py-2 text-sm font-medium" style={{ color: t.subink }}>Cancel</button>
+          <button type="button" disabled={method !== 'upload' || !file} onClick={() => file && onConfirm(file)} className="rounded-full px-4 py-2 text-sm font-semibold" style={method === 'upload' && file ? { background: BLUE, color: '#fff' } : { border: `1px solid ${t.hairline}`, color: t.faint, cursor: 'not-allowed' }} data-testid={`media-import-confirm-${block.id}`}>Upload</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlockCard({ block, href, t, canUpload }: { block: VinylArtBlock; href: string; t: Theme; canUpload: boolean }) {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
-  const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const launcherRef = useRef<HTMLButtonElement>(null);
   const { toast } = useToast();
   const albumId = href.split('/')[3] ?? '';
   const upload = async (file: File | undefined) => {
@@ -405,7 +493,8 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
       toast({ description: error?.message || 'Couldn’t upload that art', variant: 'destructive' });
     } finally {
       setUploading(false);
-      if (inputRef.current) inputRef.current.value = '';
+      setDialogOpen(false);
+      launcherRef.current?.focus();
     }
   };
   const status = block.status === 'custom'
@@ -420,17 +509,13 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
       data-testid={`block-${block.id}`}
     >
       <button
+        ref={launcherRef}
         type="button"
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          void upload(event.dataTransfer.files?.[0]);
-        }}
+        onClick={() => canUpload && setDialogOpen(true)}
         className="relative block w-full flex-shrink-0 overflow-hidden"
         style={{ height: 240, backgroundColor: t.dropEmpty, borderBottom: `1px solid ${t.hairline}` }}
         data-testid={`upload-target-${block.id}`}
-        aria-label={`Upload ${block.title} art`}
+         aria-label={canUpload ? `${block.status === 'custom' ? 'Replace' : 'Upload'} ${block.title} art` : `${block.title} art`}
       >
         {block.imageUrl ? (
           <img
@@ -440,26 +525,19 @@ function BlockCard({ block, href, t }: { block: VinylArtBlock; href: string; t: 
             data-testid={`img-block-${block.id}`}
           />
         ) : (
-          <span className="absolute inset-0 flex flex-col items-center justify-center text-center" style={{ border: `1px dashed ${t.dashed}` }}>
+            <span className="absolute inset-0 flex flex-col items-center justify-center text-center" style={{ border: `1px dashed ${t.dashed}` }}>
             <UploadCloud className="w-6 h-6" style={{ color: t.faint }} aria-hidden />
-            <span className="text-[12.5px] font-medium" style={{ marginTop: 8, color: t.subink }}>{uploading ? 'Uploading…' : 'Drop file or tap to upload'}</span>
+            <span className="text-xs font-medium" style={{ marginTop: 8, color: t.subink }}>{uploading ? 'Uploading…' : canUpload ? 'Upload artwork' : 'Artwork upload locked'}</span>
           </span>
         )}
       </button>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".pdf,image/*"
-        className="sr-only"
-        onChange={(event) => void upload(event.target.files?.[0])}
-      />
-
       <div className="w-full flex flex-col" style={{ height: 78, padding: '14px 18px 16px' }}>
         <button type="button" onClick={() => navigate(href)} className="text-left text-[15px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{block.title}</button>
         <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ marginTop: 'auto', color: t.subink }}>
           {status.icon} {status.label}
         </span>
       </div>
+      {dialogOpen && <MediaImportDialog block={block} t={t} onClose={() => { setDialogOpen(false); launcherRef.current?.focus(); }} onConfirm={(file) => void upload(file)} />}
     </div>
   );
 }
@@ -523,6 +601,9 @@ function AudioMasterList({
   const [dragging, setDragging] = useState(false);
   const { toast } = useToast();
   const forVinyl = assetFormat === 'vinyl';
+  // Uploads remain canonical-source actions. The task-first Player view must
+  // not hide the production master uploader that formerly lived under Master.
+  const canUploadSourceMasters = canUpload && (assetFormat === 'master' || assetFormat === 'digital');
   const acceptFiles = (files: FileList | null) => {
     if (!files?.length) return;
     const accepted = Array.from(files).filter((file) => /\.(mp3|m4a|aac|wav|flac|ogg|aif|aiff)$/i.test(file.name));
@@ -557,7 +638,7 @@ function AudioMasterList({
         style={tracks.length === 0 ? { border: `1px solid ${t.hairline}`, background: t.card } : undefined}
         data-testid={forVinyl ? 'audio-list-vinyl' : 'audio-list-master'}
       >
-        {assetFormat === 'master' && canUpload && (
+        {canUploadSourceMasters && (
           <input
             ref={inputRef}
             type="file"
@@ -569,7 +650,7 @@ function AudioMasterList({
           />
         )}
         {tracks.length === 0 ? (
-          assetFormat === 'master' && canUpload ? (
+          canUploadSourceMasters ? (
             <div
               className="flex flex-col items-center justify-center text-center"
               style={{ padding: '42px 20px', background: dragging ? t.soft : t.card }}
@@ -616,7 +697,7 @@ function AudioMasterList({
         ) : (
           <>
             <ArtistReleaseTrackRows albumId={albumId} />
-            {assetFormat === 'master' && canUpload && (
+            {canUploadSourceMasters && (
               <div className="flex justify-end pt-3">
                 <button
                   type="button"
@@ -646,14 +727,18 @@ const COMPONENT_SLOTS: Record<string, { title: string }> = {
   booklet: { title: 'Booklet' },
 };
 
-function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId: string; t: Theme }) {
+function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; albumId: string; t: Theme; search: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const hasVinyl = portal.formats.some((f) => f.kind === 'vinyl');
   const vinylFormat = portal.formats.find((f) => f.kind === 'vinyl');
   const pressName = vinylFormat?.pressName ?? 'the press';
-  const [lane, setLane] = useState<'art' | 'audio'>('art');
-  const [assetFormat, setAssetFormat] = useState<'digital' | 'master' | 'vinyl'>(hasVinyl ? 'vinyl' : 'master');
+  const [lane, setLane] = useState<'art' | 'audio' | 'bonus'>('art');
+  // `master` is a source-management mode, not a product selector option.
+  // Keeping it in state preserves the former production uploader without
+  // advertising an invalid product/task combination.
+  const [assetFormat, setAssetFormat] = useState<'digital' | 'gooddeed' | 'vinyl' | 'master'>(hasVinyl ? 'vinyl' : 'digital');
+  const [bonusType, setBonusType] = useState<'videos' | 'photos'>('videos');
   const [addFormatOpen, setAddFormatOpen] = useState(false);
   const addFormat = useMutation({
     mutationFn: async ({ sellMode, physicalFormat }: { sellMode: AlbumSellMode; physicalFormat: AlbumPhysicalFormat | null }) => {
@@ -685,6 +770,27 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
   });
 
   const tracks = album.data?.songs ?? [];
+  const products: Array<['digital' | 'gooddeed' | 'vinyl', string]> =
+    lane === 'art'
+      ? [
+          ...(hasVinyl ? ([['vinyl', 'Vinyl']] as Array<['vinyl', string]>) : []),
+          ['digital', 'GoodTunes® Player'],
+          ['gooddeed', 'GoodDeed®'],
+        ]
+      : lane === 'audio'
+        ? [
+            ...(hasVinyl ? ([['vinyl', 'Vinyl']] as Array<['vinyl', string]>) : []),
+            ['digital', 'GoodTunes® Player'],
+          ]
+        : [];
+  const selectLane = (next: 'art' | 'audio' | 'bonus') => {
+    setLane(next);
+    if (next === 'art' && assetFormat === 'master') {
+      setAssetFormat('digital');
+    } else if (next === 'audio' && assetFormat === 'gooddeed') {
+      setAssetFormat(hasVinyl ? 'vinyl' : 'digital');
+    }
+  };
 
   const blocks: VinylArtBlock[] = useMemo(() => {
     // requiredComponents rows are objects ({id, label, …}) from the
@@ -714,20 +820,26 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
 
   return (
     <>
-      {/* Top row — just the format chip + expanding "+". The Art / Audio lane
-          chip has moved down to the lane-heading row. Formats stay in sync
-          across both lanes (the SAME list drives both). */}
-      <div className="flex items-center gap-2 flex-wrap" style={{ marginTop: 14 }} data-testid="asset-lane-row">
+      <div className="flex items-center justify-between gap-4 flex-wrap" style={{ marginTop: 14 }} data-testid="asset-lane-row">
         <SegChip
-          options={hasVinyl
-            ? [['master', 'Master'], ['digital', 'GoodTunes\u00AE Player'], ['vinyl', 'Vinyl']]
-            : [['master', 'Master'], ['digital', 'GoodTunes\u00AE Player']]}
-          value={assetFormat}
-          onChange={(v) => setAssetFormat(v)}
-          ariaLabel="Asset format"
-          testPrefix="assetformat"
+          options={[['art', 'Art'], ['audio', 'Audio'], ['bonus', 'Bonus']]}
+          value={lane}
+          onChange={selectLane}
+          ariaLabel="Asset family"
+          testPrefix="lane"
           t={t}
+          size="lg"
         />
+        {lane !== 'bonus' && (
+          <SegChip
+            options={products}
+            value={assetFormat}
+            onChange={setAssetFormat}
+            ariaLabel="Product"
+            testPrefix="assetformat"
+            t={t}
+          />
+        )}
         {/* A "+" that grows rightward on hover to
             reveal "Add format" (smooth width/opacity), apple-clean. Scoped
             CSS keeps the width/opacity transition off arbitrary utilities. */}
@@ -758,83 +870,97 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
         onSubmit={(selection) => addFormat.mutate(selection)}
       />
 
-      {lane === 'audio' ? (
+      {lane === 'bonus' ? (
         <>
           <PageHeader
             as="h2"
             className="mt-9"
-            title={`${FORMAT_WORD[assetFormat]} audio`}
+            title="Bonus"
+            subtitle="Extras for fans in the GoodTunes® Player."
+            actions={<SegChip
+              options={[['videos', 'Videos'], ['photos', 'Photos']]}
+              value={bonusType}
+              onChange={setBonusType}
+              ariaLabel="Bonus media"
+              testPrefix="bonus"
+              t={t}
+            />}
+          />
+          <div className="mt-5" id="album-bonus-content">
+            {(portal.access?.canEditMetadata ?? false) ? (
+              bonusType === 'videos'
+                ? <BonusVideos albumId={albumId} onEdit={() => {
+                    queryClient.invalidateQueries({ queryKey: ['/api/albums', albumId, 'videos'] });
+                  }} />
+                : <BonusPhotos albumId={albumId} onEdit={() => {
+                    queryClient.invalidateQueries({ queryKey: ['/api/albums', albumId, 'photos'] });
+                  }} />
+            ) : (
+              <div className="rounded-2xl border p-6 text-center" style={{ borderColor: t.hairline, background: t.card }} data-testid="bonus-read-only">
+              <p className="text-sm font-semibold" style={{ color: t.ink }}>Bonus content is read-only</p>
+              <p className="mt-1 text-xs" style={{ color: t.subink }}>Your current release permissions allow viewing, but not adding or removing player extras.</p>
+              </div>
+            )}
+          </div>
+        </>
+      ) : lane === 'audio' ? (
+        <>
+          <PageHeader
+            as="h2"
+            className="mt-9"
+            title={assetFormat === 'master' ? 'Canonical masters' : `${assetFormat === 'digital' ? 'GoodTunes® Player' : 'Vinyl'} audio`}
             titleExtras={<>
               {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
-              {assetFormat === 'digital' && (
-                  <button
-                    type="button"
-                    onClick={() => document.getElementById('album-bonus-content')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                    className="inline-flex items-center gap-1.5 text-[13px] font-medium flex-shrink-0 transition-opacity hover:opacity-80"
-                    style={{ color: t.subink }}
-                    data-testid="button-add-bonus-content"
-                    title="Add bonus content to the GoodTunes® Player"
-                  >
-                    <Plus className="w-3.5 h-3.5 flex-shrink-0" /> Add bonus content
-                  </button>
+              {assetFormat !== 'master' && (
+                <button type="button" onClick={() => setAssetFormat('master')} className="text-sm font-medium transition-opacity hover:opacity-80" style={{ color: t.subink }} data-testid="button-show-source-masters">
+                  Manage source masters
+                </button>
               )}
             </>}
             subtitle={
               <>
-                {assetFormat === 'vinyl'
+                {assetFormat === 'master'
+                  ? 'The canonical files behind every format. Uploads, downloads, extraction, lyrics, credits, splits, and track actions stay on Individual Tracks.'
+                  : assetFormat === 'vinyl'
                   ? 'The lacquer-ready set for this pressing. Uses your album masters for this pressing.'
-                  : assetFormat === 'digital'
-                    ? 'What buyers stream in the GoodTunes® Player. Uses your album masters — add any bonus content you want in the player.'
-                    : 'Your canonical album masters. Every format references them until you override.'}
+                    : 'What buyers stream in the GoodTunes® Player. Individual Tracks owns masters, ordering, downloads, lyrics, credits, splits, and track actions.'}
               </>
             }
-            actions={<SegChip
-              options={[['art', 'Art'], ['audio', 'Audio']]}
-              value={lane}
-              onChange={(v) => setLane(v)}
-              ariaLabel="Asset lane"
-              testPrefix="lane"
-              t={t}
-              icons={{ art: FileImage, audio: Disc3 }}
-            />}
           />
-          <AudioMasterList tracks={tracks} assetFormat={assetFormat} albumId={albumId} canUpload={portal.access?.canUploadMasters ?? portal.release.editing === 'Open'} t={t} onShowMaster={() => setAssetFormat('master')} />
+          <AudioMasterList tracks={tracks} assetFormat={assetFormat === 'gooddeed' ? 'digital' : assetFormat} albumId={albumId} canUpload={portal.access?.canUploadMasters ?? portal.release.editing === 'Open'} t={t} onShowMaster={() => setAssetFormat('master')} />
         </>
       ) : (
         <>
           <PageHeader
             as="h2"
             className="mt-9"
-            title={`${FORMAT_WORD[assetFormat]} art`}
+            title={`${assetFormat === 'digital' ? 'GoodTunes® Player' : assetFormat === 'gooddeed' ? 'GoodDeed®' : 'Vinyl'} art`}
             titleExtras={<>
-              {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
-              <TemplatesChip t={t} />
+                {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
+                {assetFormat === 'vinyl' && <TemplatesChip t={t} />}
             </>}
             subtitle={
               <>
-                {assetFormat === 'master'
-                  ? 'Your canonical album art. Every format references it until you override.'
-                  : assetFormat === 'digital'
+                {assetFormat === 'digital'
                     ? 'What buyers see in the GoodTunes® Player. Uses your album art as-is — no press template to meet.'
+                    : assetFormat === 'gooddeed'
+                      ? 'The production GoodDeed® certificate remains the trusted renderer for every export.'
                     : `Each piece references your album art until you drop a file to ${pressName}'s templates. Tap any piece to open its test view.`}
               </>
             }
-            actions={<SegChip
-              options={[['art', 'Art'], ['audio', 'Audio']]}
-              value={lane}
-              onChange={(v) => setLane(v)}
-              ariaLabel="Asset lane"
-              testPrefix="lane"
-              t={t}
-              icons={{ art: FileImage, audio: Disc3 }}
-            />}
           />
 
           {assetFormat === 'vinyl' ? (
             blocks.length > 0 ? (
               <div style={{ marginTop: 18, display: 'grid', gridAutoFlow: 'column', gridAutoColumns: 'minmax(260px, 1fr)', gap: 18, overflowX: 'auto' }}>
                 {blocks.map((b) => (
-                  <BlockCard key={b.id} block={b} href={`/artist/albums/${albumId}/art-test/${b.id}`} t={t} />
+                  <BlockCard
+                    key={b.id}
+                    block={b}
+                    href={`/artist/albums/${albumId}/art-test/${b.id}${search ? `?${search}` : ''}`}
+                    t={t}
+                    canUpload={portal.access?.canEditMetadata ?? portal.release.editing === 'Open'}
+                  />
                 ))}
               </div>
             ) : (
@@ -843,20 +969,23 @@ function ReleaseAssets({ portal, albumId, t }: { portal: PortalPayload; albumId:
                 <p className="text-[12.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>Once {pressName} scans your finished print files, each piece shows up here checked against the press template.</p>
               </div>
             )
+          ) : assetFormat === 'gooddeed' ? (
+            <div className="rounded-2xl flex flex-col items-center justify-center text-center" style={{ marginTop: 18, padding: '48px 24px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="gooddeed-production-note">
+              <p className="text-sm font-semibold" style={{ color: t.ink }}>GoodDeed® production artwork</p>
+              <p className="text-xs" style={{ marginTop: 6, color: t.subink, maxWidth: 460 }}>
+                GoodDeed® artwork is generated from the production certificate when a copy is certified. No mock preview or replacement art is used here.
+              </p>
+            </div>
           ) : (
             <div className="rounded-2xl flex flex-col items-center justify-center text-center" style={{ marginTop: 18, padding: '48px 24px', border: `1px solid ${t.hairline}`, background: t.card }}>
               {portal.release.artworkUrl ? (
                 <img src={portal.release.artworkUrl} alt={`${portal.release.title} album art`} className="rounded-xl" style={{ width: 180, height: 180, objectFit: 'cover', border: `1px solid ${t.hairline}` }} data-testid="img-master-art" />
               ) : null}
               <p className="text-[14px] font-semibold" style={{ marginTop: portal.release.artworkUrl ? 16 : 0, color: t.ink }}>
-                {assetFormat === 'digital' ? 'Player art — uses your album art' : 'Album art — the canonical source'}
+                Player artwork
               </p>
               <p className="text-[12.5px]" style={{ marginTop: 6, color: t.subink, maxWidth: 420 }}>
-                {assetFormat === 'digital'
-                  ? 'The GoodTunes® Player shows your album art as-is — no press template to meet.'
-                  : hasVinyl
-                    ? 'Uploaded once at Master. Switch to a physical format (Vinyl) to see each piece checked against that press template.'
-                    : 'Uploaded once at Master. Every format references it until you override.'}
+                The GoodTunes® Player shows the release image at a 1080×1080 target.
               </p>
               {hasVinyl && (
                 <button type="button" onClick={() => setAssetFormat('vinyl')} className="text-[13px] font-semibold" style={{ marginTop: 14, color: BLUE }}>Show vinyl art</button>
@@ -1220,7 +1349,7 @@ export function ArtistRelease({ albumId }: { albumId: string }) {
       ) : tab === 'details' ? (
         <ReleaseDetails portal={portal} albumId={albumId} portalQueryKey={portalQueryKey} t={t} />
       ) : tab === 'assets' ? (
-        <ReleaseAssets portal={portal} albumId={albumId} t={t} />
+        <ReleaseAssets portal={portal} albumId={albumId} t={t} search={search} />
       ) : tab === 'store' ? (
         <ReleaseStore portal={portal} albumId={albumId} t={t} />
       ) : (
