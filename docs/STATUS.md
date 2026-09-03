@@ -2,6 +2,8 @@
 
 Last updated: 2026-09-02
 
+- **Otis regression-recovery and canon-skin boundary recorded (Sep 2 2026, gogoods)**: `handoff/artist-regression-recovery-canon-skin/README.md` is the authoritative implementation note: restore and preserve the full production Artist toolset; keep the production `GoodDeedCertificate` renderer unchanged; organize Artist Assets by Art / Audio while mounting the Tracks editor exactly once; show Vinyl only for actual Vinyl releases; treat Press/Super Admin work as skin-only with zero functionality changes; and keep Packages absent from the Artist estimator top pending a separate design task.
+
 - **Ruby's approved GoodDeed artwork canon packaged for transfer (Sep 2 2026, gogoods)**: `exports/gooddeed-canon-2026-06.zip` contains the exact orange-frame source family, native-size Square (1080×1080), Medium/Portrait (1080×1350), Tall/Story (1080×1920), and Texting/OG (1200×840) PNGs, plus current US Letter and A4 PDFs in both approved free-logo and signed/hologram-guide states with 300-DPI PNG renders. The manifest records Canvas approval evidence, source commit/date provenance, intended use, dimensions, and SHA-256 checksums; older rainbow-border PDFs, the early 1200×630 OG image, long-name/blur experiments, and review screenshots are explicitly segregated or excluded. Archival/export only — no production behavior changed.
 
 - **Vinyl component creator action renamed to “Add type” (Sep 2 2026, gogoods)**: the press Vinyl component page and maintained handoff copies now label the action by the type of vinyl being added rather than calling it a style.
