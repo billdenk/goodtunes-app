@@ -30,11 +30,82 @@ accents on ~14%-alpha translucent washes — see tokens).
 ## Typography
 
 - Typography leads; generous air; nothing shouts. Inter/system sans.
-- **Two-tone headings**: "Bold clause. Quiet clause." — semibold ink lead
-  followed by a medium-weight subink continuation. Page h1 ~30px,
-  letter-spacing -0.02/-0.03em; section headings 20–22px.
+- **Two-tone headings — the semantic rule.** A two-tone heading is not two
+  atmospheric sentences. The **bold lead** states *what the section is* (a short
+  noun) or *the action* (a concise imperative). It is semibold ink and owns its
+  own period. The **quiet continuation** describes the *benefit, insight,
+  question, or next action* — a normal sentence or question in medium-weight
+  subink. **Time ranges belong in controls and data labels, never as the section
+  identity.**
+  - Good: “Plays. The tracks fans love.”
+  - Good: “Activity. Insights for you.”
+  - Good: “Finish. Pick your favorite.”
+  - Good: “Storage. How much space do you need?”
+  - Bad: “This week. A quiet look at the last seven days.” — a time range is not
+    an identity, and both clauses are atmospheric with no noun or imperative.
+  - Bad: “Your music. Everything in one calm place.” — the lead is vague mood,
+    not a concrete noun/imperative, and the continuation states no benefit,
+    insight, question, or next action.
+  - Punctuation is fixed: the lead owns its period; the continuation is a normal
+    sentence or question. Page h1 ~30px, letter-spacing -0.02/-0.03em; section
+    headings 20–22px.
 - Big numbers (KPIs) are large (≈38px), semibold, `tabular-nums`, tight
   letter-spacing — elegant, not loud.
+- **One content identity per level.** A product/tab shell and its mounted panel
+  never render competing headings and subheads for the same thing. Keep the
+  shell H1 plus one requirement or metadata line; panel content starts with its
+  controls or first real section. Repeating “Vinyl music” and “Physical audio”
+  is hierarchy drift, not useful context.
+
+## No-drift implementation protocol (ratified Aug 30 2026)
+
+This protocol is mandatory for changes to an existing GoodTunes surface. It
+exists so reviewers do not have to repeatedly re-identify canon that already
+lives in the app or style guide.
+
+1. **Find the source of truth before designing.** Read the current project
+   status and this canon, then locate the live route, component, shared
+   primitive, and approved screenshot for the surface. Record whether each
+   requested page is `EXACT`, `RELATED`, or `ABSENT`.
+2. **Reuse `EXACT`; never redraw it.** Extract or import the existing component
+   and preserve its geometry, copy, states, assets, and responsive behavior.
+   A Super-admin version adds permission and scope only; it does not receive a
+   parallel visual implementation.
+3. **Never substitute `RELATED`.** A release-art page is not an artist Cover
+   page; release Billing is not artist Payouts. Similar naming is not evidence
+   of shared semantics.
+4. **Stop at `ABSENT`.** Request the current implementation, screenshot, or an
+   explicit product decision. Do not fill the gap with a plausible dashboard,
+   summary card, placeholder content, or remembered design.
+5. **Use shared canon primitives.** Containers, headings, cards, segmented
+   controls, dialog shells, close controls, buttons, service marks, and rows
+   come from the approved implementation or design system. Do not restyle them
+   locally to solve one screenshot.
+6. **Reconcile the two sources of truth; never blindly rank one.** Current
+   Git/Otis code owns behavior, data contracts, routes, permissions, and
+   functionality. The newest explicitly approved Playground/GoodStudio
+   component owns visual and UX improvements that may not have reached
+   production yet. Pulling newer Git must not regress an approved mock to older
+   styling, and promoting a newer mock must not drop behavior that exists in
+   Git. When recency or approval is unclear, stop and show the difference
+   before editing. Exploratory flows remain non-canonical.
+7. **Verify visually, not only statically.** Typecheck and diff checks are
+   necessary but insufficient. Before presenting work, compare rendered
+   screenshots against the approved source at desktop and 768px, in dark and
+   light themes, including changed interaction states.
+8. **Reject geometry drift.** Verify the shared 1240px container, gutters,
+   heading scale, card rhythm, target sizes, and responsive collapse. For
+   filters and dialogs, compare bounding boxes across states so controls do not
+   move under the pointer.
+9. **Demonstrate every changed action.** Open, confirm, cancel, success,
+   empty/read-only, and return-focus states must work. No dead buttons, native
+   tooltips, developer state chrome, or unexplained duplicate actions.
+10. **Do not declare completion from a delegated report alone.** The main
+    reviewer must inspect the final rendered route and the exact changed states
+    before calling the work complete.
+
+If any step cannot be satisfied, report the missing source explicitly and wait
+for it. Accuracy outranks filling every tab.
 
 ## Buttons — the weight rule
 
@@ -55,6 +126,15 @@ accents on ~14%-alpha translucent washes — see tokens).
   **quiet borderless text buttons** (blue for the main verb, subink for the
   rest) with a soft hover tint (`#f0f7fc` for blue, light gray otherwise).
   Rows of equal-weight labeled pills are NOT Apple.
+- **Segmented controls share one geometry.** On a given surface, every
+  segmented control uses the same height, inset, radius, type size, selected
+  shadow, and focus treatment. Segment widths may follow label length; hierarchy
+  comes from placement and labels, never from arbitrarily larger pills.
+- **History controls reflect the cursor.** Undo, Redo, and Reset are disabled
+  and visibly dimmed when unavailable. Initially all three are dimmed. A change
+  enables Undo and Reset; Undo enables Redo; returning to the original cursor
+  disables Undo and Reset; a new change after Undo discards the redo branch.
+  Never render unavailable history actions at normal contrast.
 - **Header utility actions (e.g. the Feedback button) are ghost pills** —
   rounded-full, subink text + icon, transparent with a light-gray hover tint,
   never filled blue. A filled Feedback pill would steal the screen's one
@@ -73,8 +153,47 @@ accents on ~14%-alpha translucent washes — see tokens).
   small quiet `ⓘ` (faint, cursor-help, tooltip) — never a paragraph in the
   sheet. (Ratified 2026-08-15, upload-template sheet.)
 
+### Entity deletion — Danger Zone (ratified, operator)
+
+- Entity-level deletion lives at the **bottom of Settings in a subdued Danger
+  Zone** — never in page headers, tab strips, or primary navigation.
+- Use an explicit **named confirmation** (name the entity being destroyed).
+- Artist/account deletion **requires typing the entity name** before the
+  destructive confirm — the rightmost confirm stays disabled until the typed
+  name matches. (Confirm remains rightmost; Cancel is the quiet borderless text
+  button immediately to its left.)
+
 ## Controls & chrome
 
+- **Navigation vs. state controls (ratified, operator).** Peer
+  destinations/routes use **text tabs with an active underline**. Chips and
+  segmented pills are ONLY for local mutually-exclusive state or filter changes
+  (date range, metric, format) — never for primary navigation. A segmented pill
+  standing in for peer navigation is a canon violation.
+- **Global operator chrome shows the GoodTunes logo only — exactly once per
+  screen.** Do not append redundant role labels like "Super admin" to the global
+  chrome when the nav rail or context already establishes the role. Role is
+  scope, not a wordmark suffix.
+- **The GoodTunes wordmark must never appear in both the global header and the
+  rail simultaneously.** Full operator shells place the single wordmark in the
+  sticky global header and pass `showLogo={false}` to `OperatorRail` — the rail
+  then omits the logo block entirely (no dead vertical gap) and the search box
+  becomes the first rail element. Standalone / rail-only contexts (demos,
+  embedded previews, any layout without a branded global header) may leave
+  `showLogo` at its default (`true`), keeping the wordmark in the rail. Pick one
+  location per screen; never both.
+- **The operator left rail is a single owned component — import it, never
+  rebuild it.** The one canonical operator/super-admin rail is the design
+  system's `OperatorRail` (`@workspace/goodtunes-design-system/components/operator-rail`),
+  driven by the typed semantic registry `ADMIN_NAV_CANON`
+  (`.../components/operator-nav`). Screens render `<OperatorRail activeId onNavigate />`
+  and nothing else. **Local rail markup, local nav arrays, and local label→icon
+  maps are prohibited** — the registry owns the tree, the ids, the labels, the
+  default counts, and every Lucide icon; consumers never select an icon. This
+  replaces the earlier "copy this rail block into admin mocks verbatim" /
+  "every admin mock copies this rail" advice from `AdminRailCanon`: there is no
+  copying anymore, only import. When the rail changes, it changes in
+  `operator-nav.tsx` / `operator-rail.tsx` once, and every surface inherits it.
 - Segmented control: a **fully-rounded pill track** (`rounded-full`,
   `--apple-track`) holding a **raised, fully-rounded active thumb**
   (`rounded-full`; white in light mode with `0 1px 3px rgba(0,0,0,0.08)`,
@@ -100,7 +219,231 @@ accents on ~14%-alpha translucent washes — see tokens).
   hover may add a whisper of shadow.
 - Bottom scroll-fade gradient on scrolling panes; hides at the bottom.
 
+### Dialogs, sheets & chooser panels (ratified Aug 30 2026)
+
+- **Dialog hierarchy:** dialog titles are 26–30px semibold INK with
+  `-0.02em` to `-0.03em` tracking. Their single-line supporting copy is
+  15–17px SUBINK. Modal titles must never inherit row-label or small
+  section-card sizing.
+- Reuse the canon gray-circle × close control, aligned to the title row.
+- **Chooser tiles choose; buttons act.** A chooser option is a whole-target,
+  large rounded rectangle: 76–92px minimum height on desktop/tablet, a
+  40–44px icon carrier, 16–17px choice label, and the real logo whenever it
+  exists.
+- Filters reuse the compact rounded segmented pill. Segment target geometry is
+  stable and equal across selected states.
+- **Stable without dead space:** filtering must not resize/recenter a dialog
+  or move its filters. Stabilize the header and a bounded internal result
+  viewport (about 2.5–3 rows), then scroll results inside it. Never freeze a
+  dialog to the tallest category and leave a large empty body; empty states
+  occupy the bounded result viewport.
+- Dialog width follows the task (a chooser is typically 620–720px on desktop)
+
+### Uploads use one Canon importer
+
+- Every user-facing **Add**, **Upload**, **Replace**, attachment tile, and empty
+  asset slot opens the same Canon importer. A launcher must never open the
+  operating-system file picker directly.
+- The importer always offers **Upload file** and **Paste a URL**. Upload file
+  contains the drag-and-drop target plus a **Choose file** action; only that
+  action may open the native picker.
+- Guidance is contextual: show the accepted formats, size limit, dimensions,
+  template requirement, or duration needed for the selected asset.
+- Empty tiles are launchers, not miniature drop zones. Keep one empty Add tile
+  per collection; open the importer for drag/drop and URL entry.
+- Replace uses the same importer as Add. Download remains a direct action.
+- Use the shared Canon dialog geometry, segmented source control, charcoal
+  semantic tokens, close control, focus return, and enabled-confirm rules on
+  every operator, artist, press, and NPO surface. Local importer variants and
+  inert upload approximations are prohibited.
+  and max-height is viewport-safe. At 768 use safe insets, not edge-to-edge
+  unless it is a true sheet.
+- One Add entry point transitions within the same dialog to its detail/form;
+  never add a nested “More…” page when a scroll region fits all choices.
+  Confirm remains rightmost, Cancel immediately left; inherited focus and
+  reduced-motion rules still apply.
+
+### Service identity (ratified Aug 30 2026)
+
+The repeated icon + title + secondary-text semantic is always the design-system
+`ServiceIdentity` component, never local markup. Its geometry is fixed: 44px
+carrier, 32px logo slot, 12px icon/text gap, 15px semibold title, and 13px
+regular secondary text. Apple Music, Spotify, Shopify, and future integrations
+use the same carrier and logo bounds, preserving aspect ratio within the slot.
+Surrounding cards determine outside padding only and cannot restyle these
+internals. Once a repeated pattern is approved and added to the canon/library,
+all future implementations import it; fixes happen centrally.
+
+**Carrier (ratified — brand marks are never navy tiles).** `ServiceIdentity`
+exposes `carrier?: 'muted' | 'brand'` (default `'muted'`). `'muted'` is the
+generic monochrome tile — a `bg-muted` carrier with a hairline border for
+currentColor glyphs. **External brand marks use `carrier='brand'`:** the same
+44px optical slot with a transparent background and no invented border/tile;
+the native `img`/`svg` mark keeps its original color and is never inverted or
+recolored, and full-square app marks and portrait bag marks both fit the slot
+without distortion. **Never place an external brand mark on GoodTunes blue /
+fan navy** (the default `muted` tile inherits it on dark operator surfaces)
+unless that color is part of the official asset itself. `data-carrier`
+mirrors the prop on the root and carrier nodes for testing.
+
+### Operator rail (ratified — import-only ownership)
+
+The operator/super-admin left rail has exactly ONE implementation:
+`OperatorRail`, driven by the typed registry `ADMIN_NAV_CANON`. There is no
+"copy the rail" step and no per-screen Theme object — theme comes from the DS
+`--apple-*` variables via the active class context (`.dark` / `.gt-admin-dark`).
+
+```tsx
+import { OperatorRail } from "@workspace/goodtunes-design-system/components/operator-rail"
+import { ADMIN_NAV_CANON } from "@workspace/goodtunes-design-system/components/operator-nav"
+
+// Full operator shell — global header owns the wordmark:
+<OperatorRail
+  activeId="presses"              // stable id from the registry; drives aria-current + active pill
+  onNavigate={(id) => go(id)}     // called with the stable id
+  showLogo={false}                // header already has the wordmark — rail omits it, no dead gap
+  // optional:
+  // countOverrides={{ "fan-orders": 12, feedback: 0 }}  // live counts by id (0 renders as 0)
+  // defaultOpenGroupIds={["partners"]}                   // defaults to the group holding activeId
+  // onSearch={(q) => ...}          // makes the h-9 search box interactive
+  // searchPlaceholder="Search admin…"  searchHint="⌘K"  // hint; pass null to hide
+  // className="gt-admin-dark"      // or inherit theme from an ancestor
+/>
+
+// Standalone / rail-only (demo, embedded preview, no branded header):
+<OperatorRail
+  activeId="presses"
+  onNavigate={(id) => go(id)}
+  // showLogo defaults to true — wordmark renders inside the rail
+  // logoSrc={goodtunesWordmark}    // DS ships no bundled logo → text wordmark fallback
+/>
+```
+
+Registry API (`operator-nav.tsx`): `ADMIN_NAV_CANON` (the typed tree),
+`OperatorNavItem` / `OperatorNavChild` / `OperatorNavIcon` types,
+`getAllOperatorNavIds()`, and `findOperatorNavGroupId(id)`. The registry owns
+every icon component (exact Lucide mapping) — **consumers never import or select
+a Lucide icon for the rail.** Stable ids: `dashboard`, `people`, `catalog`
+(`projects`/`gear`/`custom-add-ons`), `partners` (`labels`/`managers`/`npos`/
+`presses`/`makers`/`resellers`/`fulfillment`/`team-accounts`), `queues`
+(`press-orders`/`fan-orders`/`cert-names`/`early-cut-review`/`jobs`/`feedback`),
+`audience` (`customers`/`welcome-back`), `reports`, `gooddeed`, `publishing`,
+`system` (`platform-pricing`/`payouts-to-release`/`vendor-payees`/
+`payment-requests`/`invites`/`invite-tree`/`invite-directory`).
+
+Geometry (canon, baked into the component): 256px width; GoodTunes wordmark only;
+h-9 fully-rounded search; h-9 rows; 16px icons at Lucide default stroke 2 /
+currentColor; 28px child indent; active = raised card pill (ink + subtle shadow),
+idle = subink, hover wash; counts ride the right edge as quiet numbers (0 shows,
+never hidden); the group holding the active page opens on arrival, chevron
+rotates, nothing slides. Admin dark is charcoal, never navy. Accessibility:
+`<aside>` + `<nav>` labels, real button/anchor semantics, `aria-current="page"`,
+`aria-expanded` on groups, focus rings, and comfortable targets.
+
+**Wordmark placement rule:** the GoodTunes wordmark appears exactly once per
+screen. Full shells: header owns it → `showLogo={false}` on the rail. Standalone
+contexts (no branded header): `showLogo` defaults to `true` → wordmark in the
+rail. Showing it in both places simultaneously is a canon violation.
+
+**Prohibited:** a second rail component, a locally-declared nav array, a
+local label→icon map, a per-screen `Theme` prop, or duplicate wordmarks (header
+AND rail). Fix the rail once in `operator-nav.tsx` / `operator-rail.tsx`; every
+surface inherits it.
+
+### Artist, Press, and NPO chrome (ratified — import-only ownership)
+
+Artist, Press, and NPO navigation is likewise import-only. Use
+`ARTIST_NAV_CANON`, `PRESS_NAV_CANON`, or `NPO_NAV_CANON` from
+`@workspace/goodtunes-design-system/components/role-nav`, rendered through
+`RoleRail` from `components/role-rail`. `RoleHeader` and `RoleShell` from
+`components/role-chrome` are route-agnostic chrome primitives. They accept
+identity/actions/content; `RoleRail` accepts `activeId` and `onNavigate`.
+Routes translate stable ids inside `onNavigate`; registries own labels, Lucide
+icons, groups, and Press's pinned Settings group. No local fallback arrays or
+label-to-icon maps are permitted.
+
+`CANON_FOUNDATION_AUTHORITY` in `components/canon-authority` is the typed
+authority record for role rails/top rails, role workspaces, and workflow owners.
+Its owner import path is authoritative for changes. Estimate and package builders
+remain owned by their existing exact route implementations (`PressQuoteBuilder`
+and `PressPackageBuilder`): chrome does **not** own or replace their calculations,
+pricing, state, or delivery behavior until safely decomposed.
+
+R&D may promote a role pattern to Canon only after its registry, semantic-token
+primitive, authority entry, docs, and dependent migration plan land together.
+Until then, R&D retains its source-route owner; a screenshot or a copied rail is
+not a Canon dependency update.
+
+### Canonical primitives
+
+| Semantic need | Design-system component | Prohibited local alternative |
+| --- | --- | --- |
+| Operator page margins | `ApplePageContainer` | Per-page max widths/gutters |
+| Page, section, utility headings | `AppleHeading` | Local text-size/tracking recipes |
+| Operator boxes and hairlines | `AppleCard` / `AppleSectionHeader` | Hand-built bordered divs or styled `<hr>` |
+| Section + Add | `AppleSectionHeader` + `AppleQuietAction` | One-off header/action alignment |
+| Quiet actions | `AppleQuietAction` | Local icon/text button styling |
+| Status language | `AppleStatus` | Color-only status labels |
+| Service logo/title/secondary | `ServiceIdentity` | Bespoke service media rows |
+| Dialog title, close, body, actions | `AppleDialogShell` | Local modal shells |
+| Operator/super-admin left rail | `OperatorRail` + `ADMIN_NAV_CANON` | Copied rail blocks, local nav arrays, local label→icon maps |
+
+Acceptance lifecycle: explore once → approve → add component, token, docs, and
+demo → migrate existing uses → all future pages import it → changes happen
+centrally → sync to Otis/GitHub.
+
 ## Page layout (ratified Aug 11 2026)
+
+### Role parity & permission deltas
+
+Artist, press, partner, and Super-admin surfaces use the same shell geometry,
+typography, cards, rows, tabs, status language, controls, and responsive
+rules. Roles change data scope and available actions only; Super-admin powers
+are quiet contextual actions, overflow menus, or dialogs—not louder styling or
+denser chrome. Read-only roles hide mutations or state their limitation
+explicitly, never show fake enabled actions. Reuse an approved artist component
+or pattern before authoring an admin analogue.
+
+Super-admin is the functional superset: it retains the shared page body and may
+receive additional scoped data and quiet operator actions. Artist, Label, Press,
+NPO, and other roles render that same approved visual system with only the
+capabilities their permissions allow.
+
+**Artist greetings belong to Artist (or explicit View-as-Artist) mode only.** A
+Super-admin viewing an artist profile uses the **artist identity header** and
+suppresses first-person artist greeting copy ("Good afternoon, [artist]"). The
+operator is not the artist; personal greetings render only in the artist's own
+context or an explicit View-as-Artist mode.
+
+### Git → Playground → Otis promotion loop
+
+1. Fetch the current Git implementation and inventory its routes, data,
+   permissions, states, and actions.
+2. Compare it with the newest approved GoodStudio component. Preserve newer
+   approved look-and-feel even when production still carries an older visual
+   treatment.
+3. Improve through shared canon tokens and components. Do not create
+   role-specific visual forks.
+4. Verify that no current Git behavior was lost: navigation, loading, empty,
+   error, read-only, mutation, confirmation, success, and return states.
+5. Review and approve the improved component in Playground/GoodStudio.
+6. Promote source code, assets, canon documentation, and behavior notes to
+   Otis/GitHub together. Screenshots support the handoff but never replace
+   reusable source.
+7. After Otis ships it, treat Git as the functional baseline for the next
+   round while retaining the approved GoodStudio component as the record of
+   any visual work still awaiting promotion.
+
+Sample Series press profiles follow the dedicated
+[`Sample Series → Otis handoff`](./sample-series-otis-handoff.md) contract.
+GoodStudio may preview a reserved `get.goodtune.music/press/:pressSlug` address,
+but only Otis persists assets, reserves the slug, and publishes that route.
+
+R&D artist association and comments follow the
+[`R&D → Otis artist lookup handoff`](./r-and-d-otis-handoff.md) contract. The
+approved mockup keeps catalog-first search with the main application's existing
+Spotify fallback; production credentials, IDs, permissions, and persistence
+remain Otis-owned.
 
 - **Content container**: every operator/partner page uses one container —
   centered, `max-width: 1240px`, padding `32px 40px 96px`. Left and right
@@ -135,6 +478,10 @@ accents on ~14%-alpha translucent washes — see tokens).
   below, hover lifts the tile slightly and reveals the `···` circle.
   Archive is a header-level filter toggle, not a bottom section; archived
   tiles render dimmed inline. Archive-only — no Delete.
+- **Clickable experience thumbnails**: the thumbnail itself is the link and
+  keeps visible hover and keyboard-focus feedback. Do not cover its artwork
+  with an “Open live view” pill or replacement badge; use an accessible link
+  name to describe the destination instead.
 - **Ranked lists**: rank number in faint gray, thumb (projects = rounded-rect,
   presses = white circle logo), revenue right-aligned, thin blue progress bar
   aligned to the title column.
@@ -144,6 +491,10 @@ accents on ~14%-alpha translucent washes — see tokens).
   events get gray rounded-square icon chips.
 - Status dots (green/gray) + short phrase for item state ("Priced — ready to
   press", "Draft — no artwork yet").
+- **Overflow glyph direction (ratified Aug 30 2026):** circular overflow-action
+  controls always use a horizontal ellipsis (`…` / `MoreHorizontal`). Do not use
+  vertical dots inside circles. Vertical ellipsis belongs only to legacy row
+  menus that have not yet migrated to the circular-action canon.
 - **Breadcrumbs** (ratified Aug 2026): use the GDS `Breadcrumb` component
   pattern — muted (FAINT) crumb links, `ChevronRight` (w-3.5) separators,
   current page in INK, ~13px text, no uppercase, no `·` middot separators.
@@ -192,6 +543,22 @@ invisible dark partner marks on dark chrome in the live admin.
 - **Everyone else** (artists, NPOs, staff, any non-press account): PNG/JPG
   icons are fully supported everywhere. No SVG requirement.
 
+### Vinyl selector thumbnails (ratified Aug 29 2026)
+
+- **Type and color choices are records, never dots or spheres.** Every selectable
+  vinyl type card and color card renders the same miniature record treatment as
+  the primary preview: edge, grooves/material, center label, spindle, and shine.
+- **Miniatures keep their press mark.** Small size is not a reason to suppress
+  the center-label logo. Scale the mark down with the record.
+- **Press center treatments stay literal.** Hellbender uses a neutral black
+  center label with its white symbol-only icon. Paramount uses its standalone
+  record symbol with no generated copy. Memphis keeps its established MRP
+  treatment. Never infer a center-label fill from a press palette.
+- **One rule across flows.** The package builder, press estimator, artist
+  estimate builder, vinyl catalog/setup, and desktop/mobile artist builders use
+  this same selector treatment. A generic color dot is acceptable only as a
+  non-interactive status indicator in a summary strip.
+
 ## Dark controls & surfaces
 
 The dark admin canon (charcoal, never navy) extends to every control. Never
@@ -211,6 +578,13 @@ leave light-mode leftovers — a white input pill on a near-black card is a bug.
   family never appears on dark).
 - **Popovers**: dark frosted glass — same blur and structure as light mode's
   frosted panels, dark surface, deeper shadows (`0 20px 48px rgba(0,0,0,0.55)`).
+- **Portal surfaces inherit the operator theme explicitly.** Dialogs, dropdowns,
+  popovers, sheets, command menus, and tooltips render outside the page DOM.
+  Every operator/artist portal must carry `gt-admin-dark` (or an equivalent
+  propagated theme context) so both Apple tokens and semantic `background`,
+  `card`, `popover`, `muted`, `border`, and text tokens resolve to charcoal.
+  Generic `.dark` alone is fan navy and is forbidden on operator/artist portals.
+  Navy or white portal content over a charcoal page is an acceptance failure.
 - **Disabled/inactive on dark (ratified 2026-08-09):** inactive or disabled
   regions — table cells, tiers not yet unlocked, grayed rows, disabled
   controls — **dim via reduced opacity on the dark surface** (e.g.
@@ -252,6 +626,31 @@ Reference implementation: the dark Catalog mockup
 - Admin dark is charcoal, never navy — navy belongs to the fan shell only.
 - Nothing shouts: severity is communicated with restraint (dot + label, quiet
   washes), not banners.
+- **GoodDeed historical references are evidence, not replacement templates.**
+  An older artist-specific PDF may be used to confirm an approved invariant
+  such as the orange print perimeter, but its album artwork, recipient,
+  certificate number, copy, or geometry must not replace current Otis data or
+  the locked Otis renderer. Preserve the Canon orange border while generating
+  the current artist/release through Otis; GoodStudio displays that output and
+  never rebuilds it.
+- **GoodDeed social Canon begins with Otis actuals, not a GoodStudio
+  reconstruction.** After an approved push, Otis must return the exact current
+  Square (1080×1080), Portrait (1080×1350), and Story (1080×1920) source
+  component/assets plus representative rendered PNGs. Archive that package as
+  the GoodStudio baseline before proposing visual changes.
+- Current Otis social evidence includes square card corners, the orange frame,
+  the production GoodTunes mark, and a centered owner avatar. Preserve these as
+  observed production facts until a separately approved redesign changes them.
+- A Story safe-zone overlay is reference-only and must never be baked into the
+  exported certificate. Do not draw it from a convenient inset or infer it from
+  a screenshot. It must name the target platform and derive from verified pixel
+  bounds on the 1080×1920 output. Until those measurements are supplied and
+  checked, the safe-zone control remains unavailable and is not Canon.
+- Source switches own their content: **Individual tracks** contains individual
+  masters; **Side masters** contains Side A/B files. Generation belongs in an
+  empty or incomplete Side masters state. Extraction belongs in an empty or
+  incomplete Individual tracks state. Never render both asset sets unchanged
+  under both tabs or place source-specific instructions above both tabs.
 
 
 ## Theming & breakpoints (ratified Aug 11 2026)
