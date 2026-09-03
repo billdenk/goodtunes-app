@@ -449,3 +449,17 @@ mtime_ms = 1788475098995
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:5293185b-8e25-4d4f-b8b2-dc5494b9adc6/c1f88acd-91a3-4217-aca0-f022467a1da2/c4acb205-2943-4929-a2ae-ec6943ab3e32"
 storage_version_token = "1788475112383006"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "tJttMm4xzkdv3w2nUyxLY"
+uri = "file://exports/gooddeed-social-actuals-for-ruby.html"
+type = "text"
+title = "Open GoodDeed downloads"
+description = "Open this page, then use the orange button to download the complete ZIP or download the individual production renders and source files."
+logical_id = "0d5f93be-576d-48f7-8ad7-33fa0933a295"
+content_hash = "sha256:b2a2d479daae6d3db5ace523490b6f04f190b3616761a30138117366b8191ef5"
+size = 11959964
+mtime_ms = 1788475650011
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:5293185b-8e25-4d4f-b8b2-dc5494b9adc6/0d5f93be-576d-48f7-8ad7-33fa0933a295/b3c7a2c0-6003-4fe2-b5e4-c6e2e557f88d"
+storage_version_token = "1788475658774166"
+content_type = "text/html"
