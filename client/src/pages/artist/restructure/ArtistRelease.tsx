@@ -20,13 +20,17 @@ import {
   Download, ExternalLink, Eye, FileImage, Link2, Lock, Mail, Pencil, Plus, UploadCloud, X,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { apiRequest } from '@/lib/queryClient';
+import { apiRequest, fetchBlob } from '@/lib/queryClient';
 import { uploadAdminDocWithProgress } from '@/lib/adminUpload';
 import { useUploadManager } from '@/context/UploadManagerContext';
 import { NewAlbumModeDialog } from '@/components/admin/NewAlbumModeDialog';
 import { ManufacturingLedger } from '@/components/admin/ShopifyPlusPanel';
 import { PageColumn, PageHeader } from '@/components/admin/PageShell';
 import { IconButton } from '@/components/ui/IconButton';
+import {
+  PressTemplateComponentIcon,
+  type PressTemplateIconKind,
+} from '@/components/admin/PressTemplateComponentIcon';
 import { ArtistReleaseTrackRows } from '@/pages/AdminAlbum';
 import { BonusPhotos, BonusVideos } from '@/pages/AdminAlbum';
 import {
@@ -384,6 +388,17 @@ type VinylArtBlock = {
   imageUrl: string | null;
 };
 
+function templateIconKind(id: string, title: string): PressTemplateIconKind {
+  const key = `${id} ${title}`.toLowerCase();
+  if (key.includes('label') || key.includes('disc face') || key.includes('shell print')) return 'labels';
+  if (key.includes('sticker')) return 'sticker';
+  if (key.includes('inner') || key.includes('sleeve') || key.includes('tray card')) return 'sleeve';
+  if (key.includes('booklet') || key.includes('j-card')) return 'booklet';
+  if (key.includes('insert') || key.includes('obi')) return 'insert';
+  if (key.includes('jacket') || key.includes('cover') || key.includes('gatefold') || key.includes('o-card')) return 'jacket';
+  return 'other';
+}
+
 function MediaImportDialog({ block, t, onClose, onConfirm }: {
   block: VinylArtBlock;
   t: Theme;
@@ -477,6 +492,7 @@ function BlockCard({ block, href, t, canUpload }: { block: VinylArtBlock; href: 
   const launcherRef = useRef<HTMLButtonElement>(null);
   const { toast } = useToast();
   const albumId = href.split('/')[3] ?? '';
+  const openTest = () => navigate(`${href.split('?')[0]}${window.location.search}`);
   const upload = async (file: File | undefined) => {
     if (!file || uploading || !albumId) return;
     setUploading(true);
@@ -511,11 +527,14 @@ function BlockCard({ block, href, t, canUpload }: { block: VinylArtBlock; href: 
       <button
         ref={launcherRef}
         type="button"
-        onClick={() => canUpload && setDialogOpen(true)}
+        onClick={() => {
+          if (block.status === 'custom') openTest();
+          else if (canUpload) setDialogOpen(true);
+        }}
         className="relative block w-full flex-shrink-0 overflow-hidden"
         style={{ height: 240, backgroundColor: t.dropEmpty, borderBottom: `1px solid ${t.hairline}` }}
-        data-testid={`upload-target-${block.id}`}
-         aria-label={canUpload ? `${block.status === 'custom' ? 'Replace' : 'Upload'} ${block.title} art` : `${block.title} art`}
+        data-testid={block.status === 'custom' ? `open-art-test-${block.id}` : `open-artwork-importer-${block.id}`}
+        aria-label={block.status === 'custom' ? `Open Test and Certify for ${block.title}` : canUpload ? `Open artwork importer for ${block.title}` : `${block.title} art`}
       >
         {block.imageUrl ? (
           <img
@@ -525,14 +544,19 @@ function BlockCard({ block, href, t, canUpload }: { block: VinylArtBlock; href: 
             data-testid={`img-block-${block.id}`}
           />
         ) : (
-            <span className="absolute inset-0 flex flex-col items-center justify-center text-center" style={{ border: `1px dashed ${t.dashed}` }}>
-            <UploadCloud className="w-6 h-6" style={{ color: t.faint }} aria-hidden />
-            <span className="text-xs font-medium" style={{ marginTop: 8, color: t.subink }}>{uploading ? 'Uploading…' : canUpload ? 'Upload artwork' : 'Artwork upload locked'}</span>
+          <span className="absolute inset-0 flex flex-col items-center justify-center text-center">
+            <PressTemplateComponentIcon
+              kind={templateIconKind(block.id, block.title)}
+              color={t.faint}
+              fill={t.dropEmpty}
+              size={70}
+            />
+            <span className="text-xs font-medium" style={{ marginTop: 8, color: t.subink }}>{uploading ? 'Uploading…' : canUpload ? 'Open artwork importer' : 'Artwork upload locked'}</span>
           </span>
         )}
       </button>
       <div className="w-full flex flex-col" style={{ height: 78, padding: '14px 18px 16px' }}>
-        <button type="button" onClick={() => navigate(href)} className="text-left text-[15px] font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{block.title}</button>
+        <button type="button" onClick={() => block.status === 'custom' ? openTest() : canUpload && setDialogOpen(true)} className="text-left text-sm font-semibold truncate" style={{ color: t.ink, letterSpacing: '-0.01em' }} data-testid={block.status === 'custom' ? `open-art-test-title-${block.id}` : `open-artwork-importer-title-${block.id}`}>{block.title}</button>
         <span className="inline-flex items-center gap-1.5 text-[12px] font-medium" style={{ marginTop: 'auto', color: t.subink }}>
           {status.icon} {status.label}
         </span>
@@ -547,29 +571,138 @@ function BlockCard({ block, href, t, canUpload }: { block: VinylArtBlock; href: 
 function PressAttribution({ pressName, t }: { pressName: string; t: Theme }) {
   return (
     <span
-      className="inline-flex items-center gap-1.5 text-[13px] font-medium flex-shrink-0 transition-opacity hover:opacity-80"
+      className="inline-flex items-center gap-1.5 text-sm font-medium flex-shrink-0"
       style={{ color: t.faint }}
       data-testid="press-attribution"
       title={`Press: ${pressName}`}
     >
-      <img src={mrpLabelLogo} alt={pressName} className="h-3.5 w-auto flex-shrink-0" style={{ filter: t.logoFilter === 'none' ? 'brightness(0)' : 'brightness(0) invert(1)', opacity: 0.55 }} />
-      Press
+      <Disc3 className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+      {pressName}
     </span>
   );
 }
 
 // Templates — quiet inline text+icon utility, grayed to t.faint; no pill/border.
-function TemplatesChip({ t }: { t: Theme }) {
+function TemplatesChip({ albumId, search, t }: { albumId: string; search: string; t: Theme }) {
+  const [, navigate] = useLocation();
+  const openTemplates = () => {
+    const liveSearch = window.location.search.replace(/^\?/, '') || search;
+    const current = new URLSearchParams(liveSearch);
+    current.set('tab', 'assets');
+    current.set('templateLibrary', '1');
+    navigate(`/artist/albums/${albumId}?${current.toString()}`);
+  };
   return (
     <button
       type="button"
+      onClick={openTemplates}
       className="inline-flex items-center gap-1.5 text-[13px] font-medium flex-shrink-0 transition-opacity hover:opacity-80"
       style={{ color: t.faint }}
-      data-testid="button-download-templates"
-      title="Download the PDF templates"
+      data-testid="button-open-press-templates"
+      title="Open press templates"
     >
       <Download className="w-3.5 h-3.5 flex-shrink-0" /> Templates
     </button>
+  );
+}
+
+type ArtistTemplateSpec = {
+  id: string;
+  label?: string;
+  templatePageInches?: { w: number; h: number } | null;
+  finishedInches?: { w: number; h: number } | null;
+  bleedInches?: number | null;
+  expectedPages?: number | null;
+  templateFileUrl?: string | null;
+  printRules?: Record<string, unknown> | null;
+};
+
+function TemplateLibrary({ albumId, pressName, specs, loading, error, t, onBack }: {
+  albumId: string;
+  pressName: string;
+  specs: ArtistTemplateSpec[];
+  loading: boolean;
+  error: boolean;
+  t: Theme;
+  onBack: () => void;
+}) {
+  const { toast } = useToast();
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const download = async (spec: ArtistTemplateSpec) => {
+    if (!spec.templateFileUrl || downloading) return;
+    setDownloading(spec.id);
+    try {
+      const blob = await fetchBlob(`/api/admin/albums/${albumId}/completed-template/template-file/${encodeURIComponent(spec.id)}`);
+      const anchor = document.createElement('a');
+      const href = URL.createObjectURL(blob);
+      anchor.href = href;
+      anchor.download = `${(spec.label || spec.id).replace(/[^\w\- ]+/g, '')} - press template.pdf`;
+      anchor.click();
+      setTimeout(() => URL.revokeObjectURL(href), 30_000);
+    } catch (e: any) {
+      toast({ description: e?.message || 'The template could not be downloaded', variant: 'destructive' });
+    } finally {
+      setDownloading(null);
+    }
+  };
+  const instructions = (spec: ArtistTemplateSpec) => {
+    const rules = spec.printRules ?? {};
+    const notes = [
+      typeof rules.acceptedFormatsNote === 'string' ? rules.acceptedFormatsNote : null,
+      typeof rules.placedImageRule === 'string' ? rules.placedImageRule : null,
+      ...(Array.isArray(rules.advisories) ? rules.advisories.filter((value): value is string => typeof value === 'string') : []),
+      ...(Array.isArray(rules.labelAdvisories) ? rules.labelAdvisories.filter((value): value is string => typeof value === 'string') : []),
+    ].filter(Boolean);
+    return notes.length ? notes.join(' · ') : 'No additional production instructions were provided.';
+  };
+  return (
+    <section className="mt-7" data-testid="artist-template-library">
+      <button type="button" onClick={onBack} className="inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-sm font-semibold" style={{ color: t.subink }}>
+        <ArrowRight className="h-4 w-4 rotate-180" aria-hidden /> Back to Assets
+      </button>
+      <PageHeader as="h2" className="mt-5" title="Press templates" subtitle={`Production files supplied by ${pressName}. Download these before preparing artwork.`} />
+      {loading ? (
+        <div className="mt-5 space-y-3" data-testid="template-library-loading">{[0, 1, 2].map((n) => <div key={n} className="h-28 animate-pulse rounded-2xl" style={{ background: t.soft }} />)}</div>
+      ) : error ? (
+        <div className="mt-5 rounded-2xl p-6" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid="template-library-error">
+          <p className="text-sm font-semibold" style={{ color: t.ink }}>Templates couldn’t be loaded</p>
+          <p className="mt-1 text-xs" style={{ color: t.subink }}>Return to Assets and try again. Your album access has not changed.</p>
+        </div>
+      ) : specs.length === 0 ? (
+        <div className="mt-5 rounded-2xl p-8 text-center" style={{ border: `1px solid ${t.hairline}`, background: t.card }} data-testid="template-library-empty">
+          <p className="text-sm font-semibold" style={{ color: t.ink }}>Templates pending</p>
+          <p className="mt-1 text-xs" style={{ color: t.subink }}>{pressName} has not supplied a template package for this album yet.</p>
+        </div>
+      ) : (
+        <ol className="mt-5 overflow-hidden rounded-2xl" style={{ border: `1px solid ${t.hairline}`, background: t.card }}>
+          {specs.map((spec, index) => {
+            const dimensions = spec.templatePageInches ?? spec.finishedInches;
+            const available = !!spec.templateFileUrl;
+            return <li key={spec.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center" style={{ borderTop: index ? `1px solid ${t.hairline}` : undefined }} data-testid={`template-row-${spec.id}`}>
+              <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-xl" style={{ background: t.soft }}>
+                <PressTemplateComponentIcon kind={templateIconKind(spec.id, spec.label ?? '')} color={t.subink} fill={t.card} size={38} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold" style={{ color: t.ink }}>{spec.label || spec.id}</p>
+                <p className="mt-1 text-xs" style={{ color: t.subink }}>
+                  {dimensions ? `${dimensions.w} × ${dimensions.h} in` : 'Dimensions pending'}
+                  {spec.expectedPages ? ` · ${spec.expectedPages} ${spec.expectedPages === 1 ? 'page' : 'pages'}` : ''}
+                  {spec.bleedInches != null ? ` · ${spec.bleedInches} in bleed` : ''}
+                </p>
+                <p className="mt-1 text-xs leading-relaxed" style={{ color: t.faint }}>{instructions(spec)}</p>
+              </div>
+              {available ? (
+                <button type="button" disabled={downloading === spec.id} onClick={() => void download(spec)} className="inline-flex min-h-10 items-center justify-center gap-2 rounded-full px-4 text-sm font-semibold disabled:opacity-50" style={{ color: BLUE, border: `1px solid ${BLUE}` }}>
+                  <Download className="h-4 w-4" /> {downloading === spec.id ? 'Downloading…' : 'Download'}
+                </button>
+              ) : (
+                <span className="inline-flex items-center gap-2 text-xs font-semibold" style={{ color: t.faint }}><Clock className="h-4 w-4" /> Unavailable</span>
+              )}
+            </li>;
+          })}
+        </ol>
+      )}
+    </section>
   );
 }
 
@@ -722,23 +855,33 @@ const COMPONENT_SLOTS: Record<string, { title: string }> = {
   jacket: { title: 'Cover · jacket' },
   labels: { title: 'Center labels' },
   sleeve: { title: 'Printed inner sleeve' },
-  inner_sleeve: { title: 'Printed inner sleeve' },
+  inner_sleeve: { title: 'Printed inner sleeve · spread' },
   insert: { title: 'Insert' },
   booklet: { title: 'Booklet' },
 };
 
 function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; albumId: string; t: Theme; search: string }) {
+  const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const hasVinyl = portal.formats.some((f) => f.kind === 'vinyl');
   const vinylFormat = portal.formats.find((f) => f.kind === 'vinyl');
-  const pressName = vinylFormat?.pressName ?? 'the press';
-  const [lane, setLane] = useState<'art' | 'audio' | 'bonus'>('art');
+  const pressName = vinylFormat?.pressName?.trim() || 'Press not assigned';
+  const initialContext = new URLSearchParams(search);
+  const initialLane = initialContext.get('assetLane');
+  const [lane, setLane] = useState<'art' | 'audio' | 'bonus'>(
+    initialLane === 'audio' || initialLane === 'bonus' ? initialLane : 'art',
+  );
   // `master` is a source-management mode, not a product selector option.
   // Keeping it in state preserves the former production uploader without
   // advertising an invalid product/task combination.
-  const [assetFormat, setAssetFormat] = useState<'digital' | 'gooddeed' | 'vinyl' | 'master'>(hasVinyl ? 'vinyl' : 'digital');
-  const [bonusType, setBonusType] = useState<'videos' | 'photos'>('videos');
+  const initialProduct = initialContext.get('assetProduct');
+  const [assetFormat, setAssetFormat] = useState<'digital' | 'gooddeed' | 'vinyl' | 'master'>(
+    initialProduct === 'digital' || initialProduct === 'gooddeed' || (initialProduct === 'vinyl' && hasVinyl)
+      ? initialProduct
+      : hasVinyl ? 'vinyl' : 'digital',
+  );
+  const [bonusType, setBonusType] = useState<'videos' | 'photos'>(initialContext.get('bonusType') === 'photos' ? 'photos' : 'videos');
   const [addFormatOpen, setAddFormatOpen] = useState(false);
   const addFormat = useMutation({
     mutationFn: async ({ sellMode, physicalFormat }: { sellMode: AlbumSellMode; physicalFormat: AlbumPhysicalFormat | null }) => {
@@ -757,12 +900,7 @@ function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; 
   const album = useQuery<{ songs?: Array<{ title: string; trackNumber?: number }> }>({ queryKey: [`/api/albums/${albumId}`] });
   const scan = useQuery<{
     components?: Array<{ componentId: string; fileName?: string | null; previewUrl?: string | null }>;
-    requiredComponents?: Array<string | {
-      id: string;
-      label?: string;
-      templatePageInches?: { w: number; h: number } | null;
-      finishedInches?: { w: number; h: number } | null;
-    }>;
+    requiredComponents?: Array<string | ArtistTemplateSpec>;
   }>({
     queryKey: [`/api/admin/albums/${albumId}/completed-template`],
     enabled: hasVinyl,
@@ -770,6 +908,15 @@ function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; 
   });
 
   const tracks = album.data?.songs ?? [];
+  const templateLibraryOpen = initialContext.get('templateLibrary') === '1';
+  const closeTemplateLibrary = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete('templateLibrary');
+    navigate(`${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`);
+  };
+  const templateSpecs: ArtistTemplateSpec[] = (scan.data?.requiredComponents ?? []).map((spec) =>
+    typeof spec === 'string' ? { id: spec } : spec,
+  );
   const products: Array<['digital' | 'gooddeed' | 'vinyl', string]> =
     lane === 'art'
       ? [
@@ -785,11 +932,29 @@ function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; 
         : [];
   const selectLane = (next: 'art' | 'audio' | 'bonus') => {
     setLane(next);
+    const params = new URLSearchParams(window.location.search);
+    params.set('assetLane', next);
     if (next === 'art' && assetFormat === 'master') {
       setAssetFormat('digital');
+      params.set('assetProduct', 'digital');
     } else if (next === 'audio' && assetFormat === 'gooddeed') {
-      setAssetFormat(hasVinyl ? 'vinyl' : 'digital');
+      const fallback = hasVinyl ? 'vinyl' : 'digital';
+      setAssetFormat(fallback);
+      params.set('assetProduct', fallback);
     }
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}`);
+  };
+  const selectProduct = (next: 'digital' | 'gooddeed' | 'vinyl') => {
+    setAssetFormat(next);
+    const params = new URLSearchParams(window.location.search);
+    params.set('assetProduct', next);
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}`);
+  };
+  const selectBonusType = (next: 'videos' | 'photos') => {
+    setBonusType(next);
+    const params = new URLSearchParams(window.location.search);
+    params.set('bonusType', next);
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}?${params.toString()}`);
   };
 
   const blocks: VinylArtBlock[] = useMemo(() => {
@@ -800,13 +965,22 @@ function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; 
         ? { id: r, label: undefined as string | undefined, templatePageInches: null, finishedInches: null }
         : r);
     const byId = new Map((scan.data?.components ?? []).map((c) => [c.componentId, c]));
-    const rows = required.length
+    const selectedRows = required.length
       ? required
       : Array.from(byId.keys()).map((id) => ({ id, label: undefined as string | undefined, templatePageInches: null, finishedInches: null }));
+    // The package/order-version list is authoritative. De-duplicate only exact
+    // component ids at this normalization boundary; similarly named, separately
+    // selected pieces remain legitimate rows and keep their production labels.
+    const seen = new Set<string>();
+    const rows = selectedRows.filter(({ id }) => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
     return rows.map(({ id, label }) => {
       const c = byId.get(id);
       const slotKey = id.startsWith('inner_sleeve') ? 'inner_sleeve' : id;
-      const meta = COMPONENT_SLOTS[slotKey] ?? { title: label ?? id.charAt(0).toUpperCase() + id.slice(1) };
+      const meta = { title: label?.trim() || COMPONENT_SLOTS[slotKey]?.title || id.charAt(0).toUpperCase() + id.slice(1) };
       const hasCustomArt = !!c?.fileName;
       const hasAlbumArt = !!portal.release.artworkUrl;
       return {
@@ -818,9 +992,14 @@ function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; 
     });
   }, [portal.release.artworkUrl, scan.data]);
 
+  if (templateLibraryOpen) {
+    return <TemplateLibrary albumId={albumId} pressName={pressName} specs={templateSpecs} loading={scan.isLoading} error={scan.isError} t={t} onBack={closeTemplateLibrary} />;
+  }
+
   return (
     <>
-      <div className="flex items-center justify-between gap-4 flex-wrap" style={{ marginTop: 14 }} data-testid="asset-lane-row">
+      <div style={{ marginTop: 22 }} data-testid="asset-lane-row">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider" style={{ color: t.faint }}>What are you working on?</p>
         <SegChip
           options={[['art', 'Art'], ['audio', 'Audio'], ['bonus', 'Bonus']]}
           value={lane}
@@ -830,36 +1009,27 @@ function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; 
           t={t}
           size="lg"
         />
-        {lane !== 'bonus' && (
-          <SegChip
-            options={products}
-            value={assetFormat}
-            onChange={setAssetFormat}
-            ariaLabel="Product"
-            testPrefix="assetformat"
-            t={t}
-          />
-        )}
-        {/* A "+" that grows rightward on hover to
-            reveal "Add format" (smooth width/opacity), apple-clean. Scoped
-            CSS keeps the width/opacity transition off arbitrary utilities. */}
-        <style>{`
-          .apr-add{transition:background-color .15s ease}
-          .apr-add .apr-add-label{max-width:0;opacity:0;margin-left:0;overflow:hidden;white-space:nowrap;transition:max-width .22s ease,opacity .18s ease,margin-left .22s ease}
-          .apr-add:hover .apr-add-label,.apr-add:focus-visible .apr-add-label{max-width:96px;opacity:1;margin-left:6px}
-        `}</style>
-        <button
+        {lane !== 'bonus' && <div className="mt-7 flex items-end justify-between gap-5 border-b" style={{ borderColor: t.hairline }}>
+          <div>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider" style={{ color: t.faint }}>Choose a product</p>
+            <div className="flex flex-wrap gap-7" role="tablist" aria-label="Product">
+              {products.map(([id, label]) => {
+                const active = assetFormat === id;
+                return <button key={id} type="button" role="tab" aria-selected={active} onClick={() => selectProduct(id)} className="relative pb-3 text-sm font-semibold transition-opacity hover:opacity-80" style={{ color: active ? t.ink : t.subink }} data-testid={`assetformat-${id}`}>
+                  {label}
+                  {active && <span className="absolute inset-x-0 bottom-[-1px] h-0.5 rounded-full" style={{ background: BLUE }} />}
+                </button>;
+              })}
+            </div>
+          </div>
+          <button
           type="button"
           onClick={() => setAddFormatOpen(true)}
-          className={cn('apr-add inline-flex items-center h-9 px-2.5 rounded-full text-[13px] font-semibold flex-shrink-0', t.hoverCard)}
           style={{ color: t.subink, border: `1px solid ${t.hairline}` }}
           data-testid="button-add-format"
-          aria-label="Add format"
-          title="Add format"
-        >
-          <Plus className="w-3.5 h-3.5 flex-shrink-0" />
-          <span className="apr-add-label">Add format</span>
-        </button>
+          className={cn('mb-2 inline-flex items-center h-9 px-3 rounded-full text-sm font-semibold flex-shrink-0', t.hoverCard)}
+        ><Plus className="w-3.5 h-3.5 mr-1.5" />Add format</button>
+        </div>}
       </div>
       <NewAlbumModeDialog
         open={addFormatOpen}
@@ -880,7 +1050,7 @@ function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; 
             actions={<SegChip
               options={[['videos', 'Videos'], ['photos', 'Photos']]}
               value={bonusType}
-              onChange={setBonusType}
+               onChange={selectBonusType}
               ariaLabel="Bonus media"
               testPrefix="bonus"
               t={t}
@@ -889,10 +1059,10 @@ function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; 
           <div className="mt-5" id="album-bonus-content">
             {(portal.access?.canEditMetadata ?? false) ? (
               bonusType === 'videos'
-                ? <BonusVideos albumId={albumId} onEdit={() => {
+                ? <BonusVideos albumId={albumId} presentation="artist-assets" onEdit={() => {
                     queryClient.invalidateQueries({ queryKey: ['/api/albums', albumId, 'videos'] });
                   }} />
-                : <BonusPhotos albumId={albumId} onEdit={() => {
+                : <BonusPhotos albumId={albumId} presentation="artist-assets" onEdit={() => {
                     queryClient.invalidateQueries({ queryKey: ['/api/albums', albumId, 'photos'] });
                   }} />
             ) : (
@@ -937,7 +1107,7 @@ function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; 
             title={`${assetFormat === 'digital' ? 'GoodTunes® Player' : assetFormat === 'gooddeed' ? 'GoodDeed®' : 'Vinyl'} art`}
             titleExtras={<>
                 {assetFormat === 'vinyl' && <PressAttribution pressName={pressName} t={t} />}
-                {assetFormat === 'vinyl' && <TemplatesChip t={t} />}
+                {assetFormat === 'vinyl' && <TemplatesChip albumId={albumId} search={search} t={t} />}
             </>}
             subtitle={
               <>
@@ -945,14 +1115,14 @@ function ReleaseAssets({ portal, albumId, t, search }: { portal: PortalPayload; 
                     ? 'What buyers see in the GoodTunes® Player. Uses your album art as-is — no press template to meet.'
                     : assetFormat === 'gooddeed'
                       ? 'The production GoodDeed® certificate remains the trusted renderer for every export.'
-                    : `Each piece references your album art until you drop a file to ${pressName}'s templates. Tap any piece to open its test view.`}
+                    : 'Download the press templates, prepare each artwork file, then select a piece below to import and test it.'}
               </>
             }
           />
 
           {assetFormat === 'vinyl' ? (
             blocks.length > 0 ? (
-              <div style={{ marginTop: 18, display: 'grid', gridAutoFlow: 'column', gridAutoColumns: 'minmax(260px, 1fr)', gap: 18, overflowX: 'auto' }}>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3" style={{ marginTop: 18 }}>
                 {blocks.map((b) => (
                   <BlockCard
                     key={b.id}

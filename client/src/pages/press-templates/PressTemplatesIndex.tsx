@@ -21,6 +21,10 @@ import {
   BadgeCheck, Clock3, XCircle, AlertTriangle, History, Upload, X,
   MoreHorizontal, Archive, RotateCcw, Loader2, AlertCircle, Plus, Layers, Pencil, Trash2, Info, Download,
 } from "lucide-react";
+import {
+  PressTemplateComponentIcon as ComponentIcon,
+  type PressTemplateIconKind as IconKind,
+} from "@/components/admin/PressTemplateComponentIcon";
 // Live-test flow (handoff, Aug 14 2026): the upload sheet stashes the chosen
 // PDF in the transit store, then the tab routes to the Live test page.
 import { pendingTemplateFile, freshLiveSave } from "./PressTemplateLiveTest";
@@ -160,66 +164,6 @@ function StatusChip({ status, t }: { status: SlotStatus; t: Theme }) {
       {label}
     </span>
   );
-}
-
-// ─── Component icons — blueprint die-line canon (handoff-verbatim) ──
-type IconKind = "jacket" | "sleeve" | "labels" | "booklet";
-
-function ComponentIcon({
-  kind,
-  color,
-  fill,
-  size = 44,
-}: {
-  kind: IconKind;
-  color: string;
-  fill: string;
-  size?: number;
-}) {
-  const s: React.SVGProps<SVGSVGElement> = {
-    width: size,
-    height: size,
-    viewBox: "0 0 26 26",
-    fill: "none",
-    stroke: color,
-    strokeWidth: 0.9,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-  };
-  switch (kind) {
-    case "jacket":
-      return (
-        <svg {...s} aria-hidden>
-          <circle cx="17.5" cy="13" r="6.5" strokeDasharray="2 2.2" opacity={0.7} />
-          <circle cx="17.5" cy="13" r="1.4" strokeDasharray="1.2 1.6" opacity={0.7} />
-          <rect x="3" y="4" width="18" height="18" rx="1.2" fill={fill} />
-        </svg>
-      );
-    case "labels":
-      return (
-        <svg {...s} aria-hidden>
-          <circle cx="13" cy="13" r="11" strokeDasharray="2 2.2" opacity={0.7} />
-          <circle cx="13" cy="13" r="6.5" fill={fill} />
-          <circle cx="13" cy="13" r="1.3" />
-          <path d="M9.6 10.4a4.6 4.6 0 0 1 6.8 0" opacity={0.6} />
-        </svg>
-      );
-    case "sleeve":
-      return (
-        <svg {...s} aria-hidden>
-          <rect x="9" y="5.5" width="15" height="15" rx="1" fill={fill} />
-          <rect x="2" y="5" width="16" height="16" rx="1.2" strokeDasharray="2 2.2" opacity={0.7} fill={fill} />
-        </svg>
-      );
-    case "booklet":
-      return (
-        <svg {...s} aria-hidden>
-          <rect x="4" y="4.5" width="18" height="17" rx="1.2" fill={fill} />
-          <path d="M13 4.5v17" strokeDasharray="2 2.2" opacity={0.7} />
-          <path d="M7 9.5h3.5M7 12.5h3.5M7 15.5h2.5M15.5 9.5h3.5M15.5 12.5h3.5" opacity={0.7} />
-        </svg>
-      );
-  }
 }
 
 // ─── Slot vocabulary — Ruby SLOT_SETS mapped to DB coords ──

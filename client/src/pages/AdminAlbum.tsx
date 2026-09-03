@@ -16132,18 +16132,106 @@ type PhotoSheetMode =
   | { kind: "new"; initialFile?: File }
   | { kind: "edit"; photo: AlbumPhoto };
 
+type BonusImporterKind = "video" | "photo";
+
+function CanonBonusMediaImporter({
+  kind,
+  open,
+  onOpenChange,
+  onFile,
+  onUrl,
+}: {
+  kind: BonusImporterKind;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onFile: (file: File) => void;
+  onUrl?: (url: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [source, setSource] = useState<"file" | "url">("file");
+  const [dragging, setDragging] = useState(false);
+  const [error, setError] = useState("");
+  const [url, setUrl] = useState("");
+  const maxBytes = kind === "video" ? 500 * 1024 * 1024 : 8 * 1024 * 1024;
+  const accept = kind === "video" ? "video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" : "image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp";
+  const validate = (file?: File) => {
+    if (!file) return;
+    const extensionOk = kind === "video"
+      ? /\.(mp4|mov|webm)$/i.test(file.name)
+      : /\.(jpe?g|png|webp)$/i.test(file.name);
+    if (!extensionOk) {
+      setError(kind === "video" ? "Choose an MP4, MOV, or WebM file." : "Choose a JPG, PNG, or WebP file.");
+      return;
+    }
+    if (file.size > maxBytes) {
+      setError(`That file is larger than the ${kind === "video" ? "500 MB" : "8 MB"} limit.`);
+      return;
+    }
+    setError("");
+    onOpenChange(false);
+    onFile(file);
+  };
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md" data-testid={`dialog-canon-${kind}-importer`}>
+        <DialogHeader>
+          <DialogTitle>Import {kind}</DialogTitle>
+          <DialogDescription>
+            {kind === "video" ? "MP4, MOV, or WebM · up to 500 MB" : "JPG, PNG, or WebP · up to 8 MB"}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Import source">
+          <button type="button" role="tab" aria-selected={source === "file"} onClick={() => setSource("file")} className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold ${source === "file" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>Upload file</button>
+          <button type="button" role="tab" aria-selected={source === "url"} onClick={() => setSource("url")} className={`flex-1 rounded-md px-3 py-2 text-xs font-semibold ${source === "url" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>Paste a URL</button>
+        </div>
+        {source === "file" ? (
+          <>
+            <input ref={inputRef} type="file" accept={accept} className="sr-only" onChange={(e) => { validate(e.target.files?.[0]); e.target.value = ""; }} />
+            <div
+              className={`flex min-h-40 flex-col items-center justify-center rounded-xl border border-dashed px-5 text-center ${dragging ? "border-[var(--brand-blue)] bg-sky-50/60" : "border-slate-300 bg-slate-50"}`}
+              onDragEnter={(e) => { e.preventDefault(); setDragging(true); }}
+              onDragOver={(e) => e.preventDefault()}
+              onDragLeave={() => setDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); validate(e.dataTransfer.files?.[0]); }}
+              data-testid={`drop-canon-${kind}`}
+            >
+              <Upload className="h-5 w-5 text-slate-400" />
+              <p className="mt-2 text-sm font-semibold text-slate-800">Drop your {kind} here</p>
+              <button type="button" onClick={() => inputRef.current?.click()} className="mt-3 rounded-full border border-[var(--brand-blue)] px-4 py-2 text-xs font-semibold text-[var(--brand-blue)]">Choose file</button>
+            </div>
+          </>
+        ) : onUrl ? (
+          <div className="space-y-3">
+            <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" aria-label={`${kind} URL`} />
+            <Button type="button" disabled={!/^https?:\/\//i.test(url.trim())} onClick={() => { onOpenChange(false); onUrl(url.trim()); }}>Continue</Button>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold text-slate-800">URL import isn’t available for photos</p>
+            <p className="mt-1 text-xs text-slate-500">Choose a local file instead. There is no production photo URL import route.</p>
+          </div>
+        )}
+        {error && <p className="text-xs font-medium text-rose-600" role="alert">{error}</p>}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function BonusVideos({
   albumId,
   onEdit: _onEdit,
+  presentation = "admin",
 }: {
   albumId: string;
   onEdit: () => void;
+  presentation?: "admin" | "artist-assets";
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [sheet, setSheet] = useState<VideoSheetMode>({ kind: "closed" });
   // Bulk Dropbox-folder import — mirrors the Tracks-tab Advanced flow.
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [importerOpen, setImporterOpen] = useState(false);
   // Styled delete confirm — holds the video pending removal (replaces the
   // old window.confirm); both the tile and the edit sheet route through it.
   const [videoToDelete, setVideoToDelete] = useState<AlbumVideo | null>(null);
@@ -16192,20 +16280,20 @@ export function BonusVideos({
               chrome matches "Add Person" / "Add Gear" / "Add Label"
               across admin (white outline, slate text). Don't reinvent
               the button here — the design system has one. */}
-          <AddEntityButton
+          {presentation === "admin" && <AddEntityButton
             label="Add Video"
             onClick={() => setSheet({ kind: "new" })}
             testId="button-add-video"
-          />
+          />}
           {/* Advanced menu — same visual treatment as the Tracks tab. Only
               one item today (bulk import from Dropbox), but the menu shape
               leaves room for future bulk video actions without rewiring
               the header. */}
-          <BulkBonusAdvancedMenu
+          {presentation === "admin" && <BulkBonusAdvancedMenu
             label="Upload multiple videos"
             description="Dropbox — .mp4 / .mov / .webm files."
             onPick={() => setBulkOpen(true)}
-          />
+          />}
         </div>
       </div>
       <div className="p-5">
@@ -16213,7 +16301,7 @@ export function BonusVideos({
           <div className="py-10 flex items-center justify-center">
             <Spinner className="w-5 h-5 text-slate-400 animate-spin" />
           </div>
-        ) : videos.length === 0 ? (
+        ) : videos.length === 0 && presentation === "admin" ? (
           // Empty state — full-width rich dropzone with drag/drop, click-to-
           // browse, and URL ingest. Dropping a file (or pasting a URL) opens
           // the sheet primed with the file/URL so the user just confirms
@@ -16239,9 +16327,17 @@ export function BonusVideos({
                   busy={deleteMut.isPending}
                 />
               ))}
+            {presentation === "artist-assets" && <AddTile busy={false} label="Add video" onClick={() => setImporterOpen(true)} testId="tile-add-video" />}
           </div>
         )}
       </div>
+      <CanonBonusMediaImporter
+        kind="video"
+        open={importerOpen}
+        onOpenChange={setImporterOpen}
+        onFile={(file) => setSheet({ kind: "new", initialFile: file })}
+        onUrl={(initialUrl) => setSheet({ kind: "new", initialUrl })}
+      />
       {sheet.kind !== "closed" && (
         <AlbumVideoSheet
           mode={sheet}
@@ -16321,14 +16417,17 @@ export function BonusVideos({
 export function BonusPhotos({
   albumId,
   onEdit: _onEdit,
+  presentation = "admin",
 }: {
   albumId: string;
   onEdit: () => void;
+  presentation?: "admin" | "artist-assets";
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [sheet, setSheet] = useState<PhotoSheetMode>({ kind: "closed" });
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [importerOpen, setImporterOpen] = useState(false);
   // Styled delete confirm — holds the photo pending removal (replaces the
   // old window.confirm); both the tile and the edit sheet route through it.
   const [photoToDelete, setPhotoToDelete] = useState<AlbumPhoto | null>(null);
@@ -16372,18 +16471,18 @@ export function BonusPhotos({
             JPG / PNG / WebP · up to 8 MB
           </p>
         </div>
-        <BulkBonusAdvancedMenu
+        {presentation === "admin" && <BulkBonusAdvancedMenu
           label="Upload multiple photos"
           description="Dropbox — .jpg / .png / .webp files."
           onPick={() => setBulkOpen(true)}
-        />
+        />}
       </div>
       <div className="p-5">
         {isLoading ? (
           <div className="py-10 flex items-center justify-center">
             <Spinner className="w-5 h-5 text-slate-400 animate-spin" />
           </div>
-        ) : photos.length === 0 ? (
+        ) : photos.length === 0 && presentation === "admin" ? (
           // Empty state — full-width rich dropzone (drag/drop + browse).
           // Dropping a file opens the sheet with the upload already in
           // flight; the user just adds an optional caption and saves.
@@ -16409,12 +16508,18 @@ export function BonusPhotos({
             <AddTile
               busy={false}
               label="Add photo"
-              onClick={() => setSheet({ kind: "new" })}
+              onClick={() => presentation === "artist-assets" ? setImporterOpen(true) : setSheet({ kind: "new" })}
               testId="button-add-photo"
             />
           </div>
         )}
       </div>
+      <CanonBonusMediaImporter
+        kind="photo"
+        open={importerOpen}
+        onOpenChange={setImporterOpen}
+        onFile={(file) => setSheet({ kind: "new", initialFile: file })}
+      />
       {sheet.kind !== "closed" && (
         <AlbumPhotoSheet
           mode={sheet}
@@ -17901,7 +18006,7 @@ function AlbumPhotoSheet({
   onSaved,
   onRequestDelete,
 }: {
-  mode: { kind: "new" } | { kind: "edit"; photo: AlbumPhoto };
+  mode: Exclude<PhotoSheetMode, { kind: "closed" }>;
   albumId: string;
   onClose: () => void;
   onSaved: () => void;
