@@ -421,3 +421,31 @@ mtime_ms = 1788403700382
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:5293185b-8e25-4d4f-b8b2-dc5494b9adc6/bb253448-718d-4782-a095-188eaf73081a/ef30aa9a-b0bb-47d3-97ee-3182d398bea0"
 storage_version_token = "1788403742449880"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "QgB0Jh9b4scey4-_ku6y8"
+uri = "file://exports/shopify-plus-payments-production-baseline-for-ruby.zip"
+type = "unspecified"
+title = "Shopify+ Payments production baseline for Ruby"
+description = "Byte-for-byte copy of the current 2,403-line ShopifyPlusPanel.tsx plus provenance and authority notes, covering the real estimate, payment request, ledger, status, and payout queue baseline for CAD/USD Canvas R&D."
+logical_id = "80f4edcd-f53f-4279-b14a-2d3bcf1191d6"
+content_hash = "sha256:4f22ae8d8f4620ea4804138221ba4157d4a066984bdf278b3553a3014517522a"
+size = 23932
+mtime_ms = 1788452241935
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:5293185b-8e25-4d4f-b8b2-dc5494b9adc6/80f4edcd-f53f-4279-b14a-2d3bcf1191d6/81584780-d0b1-404e-9e82-ec0725aa56e3"
+storage_version_token = "1788452552062947"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "iZYqLD7GOoswvGxeWUP6r"
+uri = "file://exports/gooddeed-social-actuals-for-ruby.zip"
+type = "unspecified"
+title = "GoodDeed production social actuals for Ruby"
+description = "Committed production renderer snapshot, exact logo/sample assets, fresh Square/Portrait/Story PNG renders, manifest, and SHA-256 checksums. Evidence package only; not a GoodStudio Canon declaration."
+logical_id = "c1f88acd-91a3-4217-aca0-f022467a1da2"
+content_hash = "sha256:49933c2271e49d06e47e04e51019174250178c627ad68840f7e6b118abb6e01e"
+size = 3206172
+mtime_ms = 1788475098995
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:5293185b-8e25-4d4f-b8b2-dc5494b9adc6/c1f88acd-91a3-4217-aca0-f022467a1da2/c4acb205-2943-4929-a2ae-ec6943ab3e32"
+storage_version_token = "1788475112383006"
+content_type = "application/octet-stream"
