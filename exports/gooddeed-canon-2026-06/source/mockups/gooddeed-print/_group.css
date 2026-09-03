@@ -1,0 +1,11 @@
+/* Brand tokens pulled from the main app's client/src/index.css so these
+   GoodDeed print previews render with the real GoodTunes palette instead of
+   the sandbox defaults. Scoped to this group via explicit import. */
+:root {
+  --brand-blue: #319ED8;
+  --brand-purple: #7F10A7;
+  --brand-mint: #4AFFCA;
+  --brand-heart: #FF5470;
+  --brand-orange: #FF7C06;
+  --brand-bg: #00062B;
+}

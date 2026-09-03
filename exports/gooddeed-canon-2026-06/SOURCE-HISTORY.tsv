@@ -1,0 +1,14 @@
+source_path	commit	commit_date
+artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/SquareBordered.tsx	efb8dda9c90aca7ca458141585f0198cd9b169a1	2026-06-01T05:56:10Z
+artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/PortraitBordered.tsx	9bb998639336a366b6ecdde201b0e7ab03342b87	2026-06-01T05:54:08Z
+artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/StoriesBordered.tsx	bc0c9b9547c382a405d3817d72ca5a5ef9aa4727	2026-05-31T07:11:51Z
+artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/StoriesBorderedSafe.tsx	e1b77bed6b126927c39aec29010b49d7623fd332	2026-05-31T06:32:56Z
+artifacts/mockup-sandbox/src/components/mockups/gooddeed-cert/OgBordered.tsx	805c4efe97671d1d4ca5eafc91e163ee78c4b4cc	2026-05-31T07:47:49Z
+artifacts/mockup-sandbox/src/components/mockups/gooddeed-print/LetterBorderThin.tsx	1c8eefee59801f1630250b20e0016defdfb7929b	2026-06-01T01:18:25Z
+artifacts/mockup-sandbox/src/components/mockups/gooddeed-print/LetterBorderThinSigned.tsx	72c295781c75b0ac425ffdd48bdabf739e710701	2026-06-01T02:57:14Z
+artifacts/mockup-sandbox/src/components/mockups/gooddeed-print/A4BorderThin.tsx	4c0a20ddd66342818f43d286723c0a5ebce2b9ca	2026-05-31T22:29:49Z
+artifacts/mockup-sandbox/src/components/mockups/gooddeed-print/A4BorderThinSigned.tsx	72c295781c75b0ac425ffdd48bdabf739e710701	2026-06-01T02:57:14Z
+artifacts/mockup-sandbox/src/components/mockups/gooddeed-print/_CertPrint.tsx	9cfed7d1461b8f554152a1b53ea61e7390e9e25f	2026-06-01T05:18:14Z
+client/src/components/GoodDeedCertificate.tsx	30ac57c0b24a6ee39f70a807d2f3b9c5cfa5c682	2026-07-15T15:44:34Z
+server/certOgImage.ts	aba319dc222f55d3aef0dd5ac6d3c9ad23eb2b98	2026-06-01T18:38:35Z
+server/goodDeedPrintTemplate.ts	509a52d861c11f81506895950f4f96053e69168f	2026-06-07T02:58:24Z

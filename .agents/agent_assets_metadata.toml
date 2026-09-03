@@ -407,3 +407,17 @@ mtime_ms = 1788317968667
 storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:5293185b-8e25-4d4f-b8b2-dc5494b9adc6/354944f3-334c-4cb6-9731-07de504a736d/a33e0ea8-e4ed-4f3a-9407-7123fd974c40"
 storage_version_token = "1788317986985058"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "MuzWwhHLUyNPC8zBwDoG-"
+uri = "file://exports/gooddeed-canon-2026-06.zip"
+type = "unspecified"
+title = "Ruby’s GoodDeed approved artwork canon"
+description = "Validated 23 MB transfer archive with exact approved source files; Square, Medium/Portrait, Tall/Story, Texting/OG, US Letter, and A4 renders; free and signed print variants; approval evidence; Git provenance; and SHA-256 checksums. Historical non-canon exports are clearly segregated."
+logical_id = "bb253448-718d-4782-a095-188eaf73081a"
+content_hash = "sha256:79031126819c7945d0bf2c6bca1fc368885c5449e0bf5c5783f7cc9fdf6d2b45"
+size = 24090770
+mtime_ms = 1788403700382
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:5293185b-8e25-4d4f-b8b2-dc5494b9adc6/bb253448-718d-4782-a095-188eaf73081a/ef30aa9a-b0bb-47d3-97ee-3182d398bea0"
+storage_version_token = "1788403742449880"
+content_type = "application/octet-stream"
