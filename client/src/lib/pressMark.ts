@@ -21,3 +21,12 @@ export function pressMarkFilter(surface: PressMarkSurface): string {
 export const PRESS_MARK_ON_DARK = pressMarkFilter('dark');
 /** Dark glyph for light surfaces (white labels, stickers, paper). */
 export const PRESS_MARK_ON_LIGHT = pressMarkFilter('light');
+
+/**
+ * Partner-shell SVG marks may have only a dark-background (white) upload.
+ * Keep dark-mode rendering byte-for-byte unchanged, but collapse every SVG
+ * silhouette to dark ink on light chrome so no press-specific tuning is needed.
+ */
+export function pressMarkShellFilter(isLightMonochromeMark: boolean, darkMode: boolean): string | undefined {
+  return !darkMode && isLightMonochromeMark ? PRESS_MARK_ON_LIGHT : undefined;
+}

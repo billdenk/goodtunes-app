@@ -78,6 +78,7 @@ export function onAdminAppearanceChange(fn: () => void): () => void {
 // average the luminance of its opaque pixels. Same-origin `/objects/` uploads
 // draw cleanly; a tainted/cross-origin failure just means "not a dark mark".
 const darkMarkCache = new Map<string, boolean>();
+const lightMonochromeMarkCache = new Map<string, boolean>();
 
 function sampleIsDarkMark(url: string): Promise<boolean | null> {
   return new Promise((resolve) => {
@@ -105,6 +106,44 @@ function sampleIsDarkMark(url: string): Promise<boolean | null> {
         resolve(lumSum / opaque < 70);
       } catch {
         resolve(null); // tainted canvas / decode issue — fall back to the URL heuristic
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+function sampleIsLightMonochromeMark(url: string): Promise<boolean | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const size = 32;
+        const canvas = document.createElement("canvas");
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return resolve(null);
+        ctx.drawImage(img, 0, 0, size, size);
+        const { data } = ctx.getImageData(0, 0, size, size);
+        let opaque = 0;
+        let lumSum = 0;
+        let chromaSum = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          const a = data[i + 3];
+          if (a < 32) continue;
+          const r = data[i];
+          const g = data[i + 1];
+          const b = data[i + 2];
+          opaque++;
+          lumSum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          chromaSum += Math.max(r, g, b) - Math.min(r, g, b);
+        }
+        if (opaque === 0) return resolve(null);
+        resolve(lumSum / opaque > 160 && chromaSum / opaque < 24);
+      } catch {
+        resolve(null);
       }
     };
     img.onerror = () => resolve(null);
@@ -161,6 +200,25 @@ export function useDarkMarkLogo(url: string | null | undefined): boolean {
   const getSnapshot = () => {
     if (!url) return false;
     return darkMarkCache.get(url) ?? darkMarkFallback(url);
+  };
+  return useSyncExternalStore(subscribe, getSnapshot, () => false);
+}
+
+/** True only for a sampled near-white monochrome logo mark. This lets light
+ * chrome darken white SVG/PNG marks without flattening full-color brand art. */
+export function useLightMonochromeMarkLogo(url: string | null | undefined): boolean {
+  const subscribe = (fn: () => void) => {
+    if (url && !lightMonochromeMarkCache.has(url)) {
+      sampleIsLightMonochromeMark(url).then((light) => {
+        lightMonochromeMarkCache.set(url, light ?? false);
+        fn();
+      });
+    }
+    return () => {};
+  };
+  const getSnapshot = () => {
+    if (!url) return false;
+    return lightMonochromeMarkCache.get(url) ?? false;
   };
   return useSyncExternalStore(subscribe, getSnapshot, () => false);
 }

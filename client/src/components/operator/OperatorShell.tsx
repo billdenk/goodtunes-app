@@ -37,7 +37,8 @@ import { AdminSearchBar } from "@/components/admin/AdminSearchBar";
 import { FeedbackLauncher } from "@/components/operator/FeedbackLauncher";
 import { ViewAsPill } from "@/components/admin/ViewAsBanner";
 import { cn } from "@/lib/utils";
-import { useAdminDark, useDarkMarkLogo } from "@/lib/adminAppearance";
+import { useAdminDark, useDarkMarkLogo, useLightMonochromeMarkLogo } from "@/lib/adminAppearance";
+import { pressMarkShellFilter } from "@/lib/pressMark";
 import gtLogo from "@assets/2025_GoodTunes_Logo-dark.1_1778271422870.png";
 
 /** Extra left-nav destinations that aren't in-page tabs — e.g. label /
@@ -205,10 +206,14 @@ export function OperatorShell<TabId extends string>({
   const resolvedNavLogoUrl = (adminDark ? navLogoUrl ?? lightNavLogoUrl : lightNavLogoUrl ?? navLogoUrl) ?? null;
   const logoIsDarkMark = useDarkMarkLogo(resolvedLogoUrl);
   const navLogoIsDarkMark = useDarkMarkLogo(resolvedNavLogoUrl);
+  const logoIsLightMonochromeMark = useLightMonochromeMarkLogo(resolvedLogoUrl);
+  const navLogoIsLightMonochromeMark = useLightMonochromeMarkLogo(resolvedNavLogoUrl);
   // Force-white chip: the blanket `.bg-white` dark remap would repaint a
   // Tailwind class, so these use an inline style that the remap can't touch.
   const logoChipStyle = adminDark && logoIsDarkMark ? { backgroundColor: "#fff" } : undefined;
   const navLogoChipStyle = adminDark && navLogoIsDarkMark ? { backgroundColor: "#fff" } : undefined;
+  const logoImageStyle = { filter: pressMarkShellFilter(logoIsLightMonochromeMark, adminDark) };
+  const navLogoImageStyle = { filter: pressMarkShellFilter(navLogoIsLightMonochromeMark, adminDark) };
 
   // Task #2566 — collapsible rail sections, mirroring AdminFrame's
   // Stripe-style accordion (at most one section open at a time, choice
@@ -268,7 +273,7 @@ export function OperatorShell<TabId extends string>({
         data-testid="operator-shell-logo"
       >
         {resolvedLogoUrl ? (
-          <img src={resolvedLogoUrl} alt="" className="w-full h-full object-cover" />
+          <img src={resolvedLogoUrl} alt="" className="w-full h-full object-cover" style={logoImageStyle} />
         ) : (
           <FallbackIcon className="w-5 h-5 text-slate-400" />
         )}
@@ -323,7 +328,7 @@ export function OperatorShell<TabId extends string>({
                 className={cn("inline-flex items-center flex-shrink-0", navLogoChipStyle && "rounded-lg px-2 py-1")}
                 style={navLogoChipStyle}
               >
-                <img src={resolvedNavLogoUrl} alt={name} className="max-h-8 w-auto object-contain" />
+                <img src={resolvedNavLogoUrl} alt={name} className="max-h-8 w-auto object-contain" style={navLogoImageStyle} />
               </span>
             ) : (
               <span
@@ -333,7 +338,7 @@ export function OperatorShell<TabId extends string>({
                 )}
                 style={logoChipStyle}
               >
-                {resolvedLogoUrl ? <img src={resolvedLogoUrl} alt="" className="w-full h-full object-cover" /> : <FallbackIcon className="h-4 w-4 text-slate-400" />}
+                {resolvedLogoUrl ? <img src={resolvedLogoUrl} alt="" className="w-full h-full object-cover" style={logoImageStyle} /> : <FallbackIcon className="h-4 w-4 text-slate-400" />}
               </span>
             )}
             <span className="text-[15px] font-semibold text-slate-800 truncate" data-testid="text-operator-topbar-name">{name}</span>
