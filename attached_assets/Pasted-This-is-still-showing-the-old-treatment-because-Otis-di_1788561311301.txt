@@ -1,0 +1,48 @@
+This is still showing the old treatment because **Otis did not update this route**.
+
+The screenshots are from:
+
+`/admin/albums/:id?tab=sell`
+
+But Otis’s receipt only identifies these updated surfaces:
+
+- `/admin/people/:id` — Admin Artist Profile
+- `/vendor?tab=templates...` — Press Template Test
+
+It also explicitly says:
+
+- **“No unrelated changes were made to builders”**
+- Existing builders were preserved
+- The themed “embedded package builder” referred to the Artist Profile context—not this album **Sell** tab
+
+So this is probably **not a failed republish or browser cache issue**. It is a scope gap: the production album Sell builder never received the approved Canon skin and remains the existing narrow, dark, legacy presentation shown in your screenshots.
+
+### Paste this to Otis
+
+> `BLOCKED` — the republished build does not include the required Canon treatment on the production album Sell surface.
+>
+> Production evidence:
+>
+> `/admin/albums/a5e96e28-1961-4dd4-8184-e0ebf6446143?tab=sell`
+>
+> The complete Sell/package builder is still rendering with the legacy narrow, dark presentation. The previous implementation receipt covered `/admin/people/:id` and the vendor template routes but omitted `/admin/albums/:id?tab=sell`.
+>
+> Apply the approved Apple Canon skin to the existing production Sell builder and its complete scroll depth:
+>
+> - album/package header;
+> - artwork and vinyl preview;
+> - package card;
+> - size selector;
+> - vinyl type and color selectors;
+> - pricing and quantity controls;
+> - GoodDeed configuration;
+> - all remaining builder sections and states below the supplied screenshots;
+> - responsive layouts.
+>
+> This must be **ZERO FUNCTIONALITY CHANGES — SKIN ONLY**.
+>
+> Preserve the existing production builder component, handlers, selections, validation, pricing calculations, quantity behavior, GoodDeed behavior, persistence, permissions, routes, APIs, and data contracts. Do not replace the production builder with Canvas/mock handlers or a duplicate implementation.
+>
+> Verify the exact production URL after publishing in both light and approved charcoal dark appearance, across desktop, tablet, and mobile. Return `READY_FOR_CANON` only with production screenshots covering the complete builder and confirmation that the existing functionality remains unchanged.
+
+The previous `BLOCKED` receipt therefore remains blocked, and this Sell-route omission should be added as a third gate.

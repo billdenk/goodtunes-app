@@ -1,0 +1,47 @@
+You’re right. This production Artist **Test/Certify** screen also missed the approved treatment.
+
+The clearest visible failure is the **black top rail above an otherwise light interface**. The approved rule was explicit: light appearance must remain coherent across the left rail, top rail, content, Test/Certify controls, and embedded builder. Only the proof/artboard itself remains white in both modes.
+
+Otis’s receipt explains the omission:
+
+> “Artist proofing remains isolated and unchanged.”
+
+That conflicts with the requested scope. Artist proofing functionality was supposed to remain unchanged—but its **skin was not supposed to remain unchanged**.
+
+### Add this to the Otis correction
+
+> `BLOCKED` — Artist Test/Certify also did not receive the approved Canon skin.
+>
+> The published Artist proofing screen still has a mixed-theme presentation, including a dark top rail over a light Artist shell. This violates the approved light-mode continuity requirement.
+>
+> Apply the approved Apple Canon skin across the complete existing Artist Test/Certify experience:
+>
+> - top rail;
+> - left navigation;
+> - page heading and explanatory copy;
+> - checks summary;
+> - press/template information card;
+> - Full Template, Front, Back, and Spine controls;
+> - all GT Layer controls, including Bleed, Cut, Safety, and production-provided layers;
+> - history, replacement, overflow, visibility, and download controls;
+> - Line/Area controls;
+> - zoom and opacity controls;
+> - proof-stage chrome and surrounding surfaces;
+> - all loading, error, passing, failing, and unavailable states.
+>
+> The proof/art canvas itself must remain intentionally white in both themes.
+>
+> This is **ZERO FUNCTIONALITY CHANGES — SKIN ONLY**.
+>
+> Continue using Otis’s existing production proofing implementation. Preserve Full Template, Front, Back, Spine, all GT Layers, Line/Area, zoom, opacity, history, replacement, uploads, downloads, crop/transforms, saving, checks, and certification exactly as they work now. Do not copy Canvas handlers or replace production logic.
+>
+> The previous statement that “Artist proofing remains isolated and unchanged” is acceptable only for functionality and data behavior—not appearance. Artist proofing must remain functionally isolated while receiving the approved shared Canon skin.
+>
+> Return complete production screenshots in both light and approved charcoal dark appearance. Do not return `READY_FOR_CANON` until this screen, the album Sell builder, and the earlier external gates are all verified after publishing.
+
+So the current production build has at least **two visual scope omissions**:
+
+1. Album **Sell/package builder**
+2. Artist **Test/Certify**
+
+This should not be accepted as Canon-ready yet.

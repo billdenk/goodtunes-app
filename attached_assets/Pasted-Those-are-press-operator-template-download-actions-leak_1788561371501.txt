@@ -1,0 +1,50 @@
+Those are **press/operator template-download actions leaking into the Artist interface**:
+
+- **Design template**
+- **Template with guides**
+
+They should not appear anywhere in the Artist Test/Certify experience. Otis likely reused a shared template header without applying the role-specific action presentation.
+
+For a press user, both actions should remain available—but only inside the existing **“•••” overflow menu**, not as prominent header buttons.
+
+### Add this correction to Otis
+
+> `BLOCKED` — press-only template actions are exposed in the Artist Test/Certify header.
+>
+> The Artist currently sees:
+>
+> - “Design template”
+> - “Template with guides”
+>
+> Both actions must be removed from every Artist-facing proofing state. Artists should not be offered press production-template downloads from this interface.
+>
+> Role-specific behavior:
+>
+> **Artist**
+>
+> - Do not render either action.
+> - Do not leave empty spacing, separators, disabled buttons, tooltips, or keyboard-focusable remnants.
+> - Confirm that hiding the controls does not become the only authorization boundary; existing server-side access rules must remain authoritative.
+>
+> **Press/operator**
+>
+> - Keep both actions available.
+> - Move them into the existing **“•••” overflow menu**.
+> - Menu items:
+>   - Download design template
+>   - Download template with guides
+> - Preserve the existing production files, download handlers, permissions, audit behavior, and response contracts.
+>
+> Do not create new template files or substitute Canvas assets. Continue serving the real press sources.
+>
+> Verify:
+>
+> - Artist light and dark modes: neither action appears.
+> - Artist keyboard navigation: neither action is focusable.
+> - Press light and dark modes: both actions appear only within “•••”.
+> - Downloads still return their correct respective files.
+> - Direct requests remain governed by existing server authorization.
+>
+> This is a role-aware presentation correction. Do not change unrelated permissions, routes, APIs, proofing behavior, or data contracts.
+
+This is another Canon blocker, especially because it crosses the Artist/press responsibility boundary.

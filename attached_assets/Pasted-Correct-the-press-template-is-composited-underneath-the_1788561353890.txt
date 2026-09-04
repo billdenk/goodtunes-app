@@ -1,0 +1,45 @@
+Correct—the **press template is composited underneath the artwork**, rather than remaining visible above it.
+
+The screenshot shows only selected check overlays such as **Bleed** and **Cut** over the art. The actual press-template linework is not visible on top of the artwork. The “Art opacity” popover is effectively being used to reveal something buried underneath, which is not the approved proofing model.
+
+This is not merely a styling discrepancy; it is a **proof-compositing failure** and must block Canon.
+
+### Add this correction to Otis
+
+> `BLOCKED` — Artist Test/Certify is rendering the real press template below the artwork.
+>
+> In the published Full Template view, the artwork visually covers the template. Only individual check overlays such as Bleed and Cut remain visible. The real press-template linework must be composited above the real artwork.
+>
+> Restore the established production stack:
+>
+> 1. white proof surface;
+> 2. real seated artwork, preserving its production crop and transforms;
+> 3. real press template above the artwork;
+> 4. enabled GT Layer overlays above or within the template layer according to the existing production layer model;
+> 5. proofing controls and interaction chrome above the canvas.
+>
+> Requirements:
+>
+> - “Template on” must visibly show the real press template over the artwork.
+> - Template opacity must affect the template—not the artwork.
+> - Art opacity may remain available if it already exists in production, but it must not be required just to reveal a template incorrectly placed beneath the art.
+> - Full Template, Front, Back, and Spine must retain the same artwork/template alignment.
+> - Bleed, Cut, Safety, Spine, Front, Back, and every press-provided GT Layer must remain independently controllable.
+> - Main proof and thumbnails must use the same compositing order.
+> - Replacement, history, zoom, Line/Area, saving, downloads, crop/transforms, checks, and certification must remain unchanged.
+> - Use the real press source template and real persisted artwork. Do not redraw or substitute either one.
+>
+> This correction restores approved existing proof behavior; it is not permission to port Canvas mock handlers into Otis.
+>
+> Return production evidence showing:
+>
+> - Template off;
+> - Template on over the artwork;
+> - template opacity at multiple values;
+> - individual GT Layers toggled;
+> - Full Template, Front, Back, and Spine;
+> - matching primary-proof and thumbnail compositing.
+>
+> Do not return `READY_FOR_CANON` while the template is hidden beneath the art.
+
+This is now a third visible production problem, alongside the omitted Sell-builder skin and mixed-theme Artist Test/Certify chrome.
