@@ -113,6 +113,34 @@ function sampleIsDarkMark(url: string): Promise<boolean | null> {
   });
 }
 
+/**
+ * Pure detector seam for near-white logo marks.
+ *
+ * A low average chroma is not sufficient: a mostly-white brand logo can carry
+ * a small but meaningful colored accent, and flattening that whole asset to
+ * black destroys the brand art. Treat chroma as a per-pixel property and
+ * reject once more than 2% of opaque pixels are materially chromatic.
+ */
+export function classifyLightMonochromeMarkPixels(data: ArrayLike<number>): boolean | null {
+  let opaque = 0;
+  let lumSum = 0;
+  let chromatic = 0;
+  for (let i = 0; i + 3 < data.length; i += 4) {
+    const a = data[i + 3];
+    if (a < 32) continue;
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    opaque++;
+    lumSum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    if (max - min >= 24) chromatic++;
+  }
+  if (opaque === 0) return null;
+  return lumSum / opaque > 160 && chromatic / opaque <= 0.02;
+}
+
 function sampleIsLightMonochromeMark(url: string): Promise<boolean | null> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -127,21 +155,7 @@ function sampleIsLightMonochromeMark(url: string): Promise<boolean | null> {
         if (!ctx) return resolve(null);
         ctx.drawImage(img, 0, 0, size, size);
         const { data } = ctx.getImageData(0, 0, size, size);
-        let opaque = 0;
-        let lumSum = 0;
-        let chromaSum = 0;
-        for (let i = 0; i < data.length; i += 4) {
-          const a = data[i + 3];
-          if (a < 32) continue;
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          opaque++;
-          lumSum += 0.2126 * r + 0.7152 * g + 0.0722 * b;
-          chromaSum += Math.max(r, g, b) - Math.min(r, g, b);
-        }
-        if (opaque === 0) return resolve(null);
-        resolve(lumSum / opaque > 160 && chromaSum / opaque < 24);
+        resolve(classifyLightMonochromeMarkPixels(data));
       } catch {
         resolve(null);
       }
