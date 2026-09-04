@@ -1,0 +1,66 @@
+Tell Otis this:
+
+---
+
+## Artist Release Payments update
+
+**ZERO FUNCTIONALITY CHANGES — SKIN ONLY**
+
+Replace the current single **“Money out to the plant”** Payments body with the supplied two-direction Payments UI:
+
+- **Money out** — what the release owes and pays toward manufacturing
+- **Money in** — sales received, eligible payout, and payments made to the artist
+
+Use the supplied presentation code verbatim and wire it to Otis’s existing real data and actions. Do **not** build a new payment system.
+
+### Preserve unchanged
+
+- Existing Payments route and release context
+- Payment processing
+- Manufacturing balances
+- Estimates
+- Payment requests and milestones
+- Sales and payout records
+- Permissions
+- Existing Stripe/payment behavior
+- White-label behavior and identity
+- CALIFORNIALAND’s verified legacy MRP record
+
+### Required behavior
+
+- **Money out / Money in** switch between peer views without navigating away.
+- Money out displays the manufacturing estimate, paid/outstanding totals, source estimate, and payment requests.
+- Credit card and bank transfer continue using Otis’s existing payment actions.
+- Money in displays real sales received, eligible payout, and paid-to-artist history.
+- New releases show explicit empty states and em dashes until real records exist.
+- White-label portals use the same shared functional body with their approved skin—no behavioral forks.
+
+### Source package
+
+Send Otis this complete folder:
+
+`handoff/artist-release-payments/`
+
+It contains:
+
+- `ArtistReleasePayments.tsx`
+- `README.md`
+- `HANDOFF-MANIFEST.json`
+
+### Required response from Otis
+
+Otis must return:
+
+1. The Otis commit that applied the handoff.
+2. For every manifest item, whether it was:
+   - applied verbatim,
+   - applied with an Otis update,
+   - superseded, or
+   - rejected.
+3. Every Otis-authored difference and why.
+4. Screenshots/evidence for both payment directions, both themes, and the required states.
+5. Confirmation of what is currently live.
+
+**Do not mark this Canon in GoodStudio until that applied receipt is returned and reconciled.**
+
+---
