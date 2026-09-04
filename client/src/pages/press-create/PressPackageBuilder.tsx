@@ -370,7 +370,7 @@ export function VinylDisc({
             src={swatch.photo}
             alt=""
             aria-hidden
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.13)' }}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.16)' }}
           />
           {/* Press center label — same treatment as the catalog color-setup
               page (PressVinylColors), which always stamps the press's label
@@ -1826,7 +1826,7 @@ function LabelDisc({
             src={swatch.photo}
             alt=""
             aria-hidden
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.13)' }}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.16)' }}
           />
         ) : swatch ? (
           <>

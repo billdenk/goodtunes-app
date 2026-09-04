@@ -935,7 +935,10 @@ export function AdminPerson() {
         />
       }
     >
-      <div className="space-y-6">
+      <div
+        className={mirrorMode ? "gt-artist-profile-mirror space-y-6" : "space-y-6"}
+        data-artist-profile-theme={mirrorMode ? "admin" : undefined}
+      >
         {/* BREADCRUMB */}
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">

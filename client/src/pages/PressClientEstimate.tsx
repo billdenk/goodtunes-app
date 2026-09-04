@@ -435,7 +435,7 @@ export default function PressClientEstimate() {
                       <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: 'repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,0.045) 0 1px, transparent 1px 6px)' }} />
                     </div>
                   ) : (
-                    <img src={rubyVinylPhoto} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.13)' }} />
+                    <img src={rubyVinylPhoto} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.16)' }} />
                   )}
                   {/* label — covers the photo's baked-in label, spins with the record */}
                   <div style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', width: '40%', height: '40%', borderRadius: '50%', overflow: 'hidden' }}>

@@ -584,6 +584,27 @@ body.gt-admin.gt-admin-dark .gt-permissions-scope-note {
    (a wall of blue circles overwhelms the charcoal canvas — Bill, 2026-08-08).
    Photo avatars are untouched (the img covers the fill). */
 body.gt-admin.gt-admin-dark .gt-avatar-initials { background-color: var(--apple-track); }
+
+/* Ruby correction — the operator Artist Profile mirror is one continuous
+   admin surface. These aliases intentionally affect light appearance only;
+   dark remains governed byte-for-byte by the existing charcoal remap below.
+   The proof viewer's white artboard is deliberately not targeted. */
+body.gt-admin:not(.gt-admin-dark) .gt-artist-profile-mirror {
+  --artist-canvas: var(--apple-canvas);
+  --artist-rail: var(--apple-rail);
+  --artist-card: var(--apple-card);
+  --artist-soft: var(--apple-track);
+  --artist-hairline: var(--apple-hairline);
+  color: var(--apple-ink);
+}
+body.gt-admin:not(.gt-admin-dark) .gt-artist-profile-mirror [data-artist-surface="canvas"] {
+  background-color: var(--apple-canvas);
+}
+body.gt-admin:not(.gt-admin-dark) .gt-artist-profile-mirror [data-artist-surface="card"],
+body.gt-admin:not(.gt-admin-dark) .gt-artist-profile-mirror [data-testid="operator-package-glass"] {
+  background-color: var(--apple-card);
+  border-color: var(--apple-hairline);
+}
 /* Dark mode: the filled blue primary pill is too loud on charcoal — rest as a
    quiet chip, go blue on hover/focus (Bill, 2026-08-08). Light mode unchanged. */
 body.gt-admin.gt-admin-dark .bg-\[var\(--apple-blue\)\] {

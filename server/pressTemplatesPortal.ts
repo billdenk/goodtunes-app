@@ -14,6 +14,7 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { orderedPageProofSchema, proofCheck, runHasPassingOrderedPageProof, validateOrderedPageProof } from "./pressTemplateProofEvidence";
+import { analyzeServerPdfBytes, serverPagePass } from "./pressTemplateServerPageAnalysis";
 import { storage } from "./storage";
 import {
   resolveFinishedComponents,
@@ -229,6 +230,19 @@ const TEST_RUN_PROCESSING_TIMEOUT_MS = 10 * 60_000;
 // instance restarted mid-scan) — the templates GET sweeps it to a readable
 // error so the shelf never shows an eternal "Checking…".
 const TEST_RUN_STALE_MS = 15 * 60_000;
+
+async function analyzeStoredProofPdf(url: string) {
+  if (!url.startsWith("/objects/")) throw new Error("Certification analysis requires a mirrored server artifact.");
+  const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+  const file = await new ObjectStorageService().getObjectEntityFile(url);
+  const [metadata] = await file.getMetadata();
+  const size = Number(metadata?.size ?? 0);
+  if (!Number.isFinite(size) || size <= 0 || size > 300 * 1024 * 1024) {
+    throw new Error("Certification artifact is empty or too large for page analysis.");
+  }
+  const [buffer] = await file.download();
+  return analyzeServerPdfBytes(new Uint8Array(buffer));
+}
 
 const testSchema = z.object({
   url: z.string().min(1).max(2048),
@@ -1756,12 +1770,25 @@ export function registerPressTemplateFlowRoutes(
             // artifact pinned by this run. This rejects forged aggregate
             // booleans, stale page lists, and proof for a different template.
             const templateProofScan = await scanTemplateUrl(templateArtifactUrl);
+            const serverArtPages = await analyzeStoredProofPdf(fileUrl);
+            const minPpi = Number((slotSpecEff as any).minPpi ?? 300);
             const proofValidation = validateOrderedPageProof(
               orderedPageProof,
               templateProofScan.scan?.pageCount ?? 0,
               scan.pageCount,
               (templateProofScan.scan?.pageSizesInches ?? []).map((size) => ({ w: size.w * 25.4, h: size.h * 25.4 })),
               (scan.pageSizesInches ?? []).map((size) => ({ w: size.w * 25.4, h: size.h * 25.4 })),
+              serverArtPages.map((page) => ({
+                effectivePpi: page.minEffectivePpi,
+                color: {
+                  hasCmyk: page.hasCmyk,
+                  hasRgb: page.hasRgb,
+                  hasGray: page.hasGray,
+                  hasSpot: page.hasSpot,
+                },
+                gtLayerNames: page.referencedGtLayerNames,
+                pass: serverPagePass(page, Number.isFinite(minPpi) && minPpi > 0 ? minPpi : 300),
+              })),
             );
             // Task #3072 parity with the album-side route: when a line exists but
             // the art carries no trustworthy PDF boxes (print-ready exports strip
@@ -2413,15 +2440,6 @@ export function registerPressTemplateFlowRoutes(
             },
           };
         }
-        if (!runHasPassingOrderedPageProof(run.checks)) {
-          return {
-            status: 409,
-            body: {
-              message:
-                "This test has no validated passing ordered page proof — run the current template and artwork together again before certifying.",
-            },
-          };
-        }
         // State machine: a run may only certify the revision that is live
         // RIGHT NOW. A run pinned to a superseded/archived revision (the file
         // was replaced or pulled since the test) — or to no revision at all —
@@ -2440,6 +2458,18 @@ export function registerPressTemplateFlowRoutes(
             body: {
               message:
                 "This test ran against an older template revision — the template has changed since. Run the test again on the current file.",
+            },
+          };
+        }
+        // Preserve the state-machine error precedence: stale revision and
+        // missing-live-template errors remain authoritative. Proof integrity
+        // gates only a run that otherwise targets the current live revision.
+        if (!runHasPassingOrderedPageProof(run.checks)) {
+          return {
+            status: 409,
+            body: {
+              message:
+                "This test cannot certify the live template and is treated like an older template revision: it has no validated passing ordered page proof. Run the current template and artwork together again.",
             },
           };
         }

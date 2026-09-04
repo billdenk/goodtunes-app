@@ -34,6 +34,12 @@ export function validateOrderedPageProof(
   serverArtPages: number,
   serverTemplateSizesMm: Array<{ w: number; h: number }> = [],
   serverArtSizesMm: Array<{ w: number; h: number }> = [],
+  serverArtFacts: Array<{
+    effectivePpi: number | null;
+    color: { hasCmyk: boolean; hasRgb: boolean; hasGray: boolean; hasSpot: boolean };
+    gtLayerNames: string[];
+    pass: boolean;
+  }> = [],
 ): { ok: true; proof: OrderedPageProof } | { ok: false; message: string } {
   const parsed = orderedPageProofSchema.safeParse(value);
   if (!parsed.success) return { ok: false, message: "Ordered page proof is missing or malformed." };
@@ -54,6 +60,21 @@ export function validateOrderedPageProof(
       (Math.abs(claimed.widthMm - actual.h) <= 1 && Math.abs(claimed.heightMm - actual.w) <= 1);
     if (!sameSize(pair.template, serverTemplateSizesMm[index]) || !sameSize(pair.art, serverArtSizesMm[index])) {
       return { ok: false, message: `Ordered page proof geometry does not match page ${pair.page} of the server artifacts.` };
+    }
+    const facts = serverArtFacts[index];
+    if (facts) {
+      if (!facts.pass) return { ok: false, message: `Server page analysis fails on page ${pair.page}.` };
+      const ppiSame = pair.effectivePpi === facts.effectivePpi ||
+        (pair.effectivePpi != null && facts.effectivePpi != null && Math.abs(pair.effectivePpi - facts.effectivePpi) <= 0.5);
+      const colorsSame =
+        pair.color.hasCmyk === facts.color.hasCmyk &&
+        pair.color.hasRgb === facts.color.hasRgb &&
+        pair.color.hasGray === facts.color.hasGray &&
+        pair.color.hasSpot === facts.color.hasSpot;
+      const gtSame = [...pair.gtLayerNames].sort().join("\0") === [...facts.gtLayerNames].sort().join("\0");
+      if (!ppiSame || !colorsSame || !gtSame) {
+        return { ok: false, message: `Submitted proof facts do not match server analysis for page ${pair.page}.` };
+      }
     }
   }
   return { ok: true, proof };

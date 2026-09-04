@@ -111,6 +111,7 @@ export async function analyzePdfArtPage(
   pageNum: number,
   imageColors: Map<string, PdfColorKind[]>,
   OPS: Record<string, number>,
+  options: { trackOperatorColors?: boolean } = {},
 ): Promise<PdfPageAnalysis> {
   const page = await doc.getPage(pageNum);
   const operators = await page.getOperatorList();
@@ -159,10 +160,10 @@ export async function analyzePdfArtPage(
     else if (fn === OPS.setStrokeGray) strokeColor = 'gray';
     else if (fn === OPS.setFillColorN) fillColor = 'spot';
     else if (fn === OPS.setStrokeColorN) strokeColor = 'spot';
-    else if (fillOps.has(fn)) applyColor(fillColor);
-    else if (strokeOps.has(fn)) applyColor(strokeColor);
-    else if (bothOps.has(fn)) { applyColor(fillColor); applyColor(strokeColor); }
-    else if (textOps.has(fn) || maskOps.has(fn)) applyColor(fillColor);
+    else if (options.trackOperatorColors !== false && fillOps.has(fn)) applyColor(fillColor);
+    else if (options.trackOperatorColors !== false && strokeOps.has(fn)) applyColor(strokeColor);
+    else if (options.trackOperatorColors !== false && bothOps.has(fn)) { applyColor(fillColor); applyColor(strokeColor); }
+    else if (options.trackOperatorColors !== false && (textOps.has(fn) || maskOps.has(fn))) applyColor(fillColor);
     else if (fn === OPS.paintImageXObject) {
       const width = Number(args[1] ?? 0), height = Number(args[2] ?? 0);
       recordImage(width, height, imageColors.get(`${width}x${height}`) ?? []);

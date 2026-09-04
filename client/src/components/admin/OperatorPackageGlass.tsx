@@ -87,12 +87,12 @@ export function OperatorPackageGlass({
           </button>
         )}
       </div>
-      <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="mb-6 flex items-center justify-between gap-3 rounded-lg border border-[var(--apple-hairline)] bg-[var(--apple-card)] px-4 py-3">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-800">
+          <div className="text-sm font-semibold text-[var(--apple-ink)]">
             Share these estimates with the artist
           </div>
-          <div className="text-xs text-slate-500">
+          <div className="text-xs text-[var(--apple-subink)]">
             {primaryArtistId
               ? savedEstimateCount > 0
                 ? `Send ${artistName || "the artist"} a link — they sign in and land here with your saved estimates waiting.`
