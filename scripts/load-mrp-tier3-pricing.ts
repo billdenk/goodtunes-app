@@ -4,9 +4,11 @@
  * and backfill the named price lists for MRP + Viryl.
  *
  * Source of truth:
- *   attached_assets/GoodTunes___GoGoods-Tier3_1787269499765.xlsx
+ *   attached_assets/GoodTunes___GoGoods-Tier3-2_1788560794082.xlsx
  *   (TIER 3 PRICING, effective 09.01.2025, REV.08.07.25.)
  *   VISIBLE ROWS ONLY — Brandon: ignore hidden rows entirely.
+ *   The Tier3-2 workbook keeps the same numeric price books as the original
+ *   import and adds Cost Type / Charge Type / Coda code classification.
  *
  * LADDER SEMANTICS ARE ALL-IN, matching the Viryl loads and every ladder
  * consumer (SellPanel manufacturing cost, quote PDFs): a rung on a jacketed

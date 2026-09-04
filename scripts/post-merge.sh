@@ -12878,8 +12878,36 @@ seed_mrp_services_tier3() {
     PM_MRP_TIER3_FAILED=1
   fi
 }
+# Tier3-2 workbook correction — "Master" is now explicitly "DMM" for the
+# four source-owned metalwork rows. Numeric prices stay unchanged. The script
+# validates exact source/amount/basis and fails closed on operator-edited rows.
+update_mrp_tier3_2_dmm_labels() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping MRP Tier3-2 DMM labels on $label (no URL set)"
+    return 0
+  fi
+  local out
+  if out=$(DATABASE_URL="$url" npx tsx scripts/update-mrp-tier3-2-dmm-labels.ts 2>&1); then
+    echo "post-merge: MRP Tier3-2 DMM labels ok on $label"
+    echo "$out" | tail -6
+  else
+    echo "post-merge: WARNING — MRP Tier3-2 DMM labels failed on $label (continuing, marker withheld so next merge retries)"
+    echo "$out" | tail -10
+    PM_MRP_TIER3_FAILED=1
+  fi
+}
+# Existing databases: reconcile legacy rows before the DMM-aware seed can run.
+# Fresh databases: this defers without stamping; the second pass below validates
+# the newly seeded rows and records the marker.
+update_mrp_tier3_2_dmm_labels dev  "${DATABASE_URL:-}"
+update_mrp_tier3_2_dmm_labels prod "${PROD_DATABASE_URL:-}"
+
 seed_mrp_services_tier3 dev  "${DATABASE_URL:-}"
 seed_mrp_services_tier3 prod "${PROD_DATABASE_URL:-}"
+
+update_mrp_tier3_2_dmm_labels dev  "${DATABASE_URL:-}"
+update_mrp_tier3_2_dmm_labels prod "${PROD_DATABASE_URL:-}"
 
 # Task #3387 — MRP setup-fee RULES (first configuration of the press-generic
 # setup-fee rules engine). Marker-guarded inside the script (mrp_setup_rules_v1).

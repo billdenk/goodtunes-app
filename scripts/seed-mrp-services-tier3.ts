@@ -28,7 +28,7 @@
  * Dry:  add --dry
  */
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db, pool } from "../server/db";
 import {
   manufacturers,
@@ -55,10 +55,10 @@ type Item = {
 
 export const ITEMS: Item[] = [
   // ── Metalwork ──────────────────────────────────────────────────────
-  { category: "metalwork", label: '12"/10" Master Cutting', amountCents: 40000, unitBasis: "per_side" },
-  { category: "metalwork", label: '12"/10" Master Plating', amountCents: 30000, unitBasis: "per_side" },
-  { category: "metalwork", label: '7" Master Cutting', amountCents: 29000, unitBasis: "per_side" },
-  { category: "metalwork", label: '7" Master Plating', amountCents: 16000, unitBasis: "per_side" },
+  { category: "metalwork", label: '12"/10" DMM Cutting', amountCents: 40000, unitBasis: "per_side" },
+  { category: "metalwork", label: '12"/10" DMM Plating', amountCents: 30000, unitBasis: "per_side" },
+  { category: "metalwork", label: '7" DMM Cutting', amountCents: 29000, unitBasis: "per_side" },
+  { category: "metalwork", label: '7" DMM Plating', amountCents: 16000, unitBasis: "per_side" },
   // ── Test Pressings ─────────────────────────────────────────────────
   { category: "test_pressings", label: "Test Pressings (5 units)", amountCents: 12500, unitBasis: "per_order" },
   {
@@ -214,6 +214,13 @@ export const ITEMS: Item[] = [
   },
 ];
 
+const LEGACY_DMM_LABELS = [
+  '12"/10" Master Cutting',
+  '12"/10" Master Plating',
+  '7" Master Cutting',
+  '7" Master Plating',
+] as const;
+
 // ── Print-component ladders (full 8-rung quantity breaks) ─────────────
 type ComponentItem = { label: string; unitCents: number[]; note?: string };
 type ComponentGroup = { key: string; label: string; items: ComponentItem[] };
@@ -363,9 +370,33 @@ async function main() {
     const [press] = await db
       .select()
       .from(manufacturers)
-      .where(sql`${manufacturers.name} ILIKE '%memphis%'`);
-    if (!press) throw new Error("Memphis Record Pressing manufacturer not found — FATAL, not stamping.");
+      .where(
+        and(
+          eq(manufacturers.name, "Memphis Record Pressing"),
+          eq(manufacturers.domain, "memphisrecordpressing.com"),
+        ),
+      )
+      .limit(1);
+    if (!press) throw new Error("Canonical Memphis Record Pressing manufacturer not found — FATAL, not stamping.");
     console.log(`MRP press: ${press.id} (${press.name})`);
+
+    // An existing/partial legacy seed must be reconciled transactionally by
+    // update-mrp-tier3-2-dmm-labels.ts before this seed can insert anything.
+    const legacyRows = await db
+      .select({ label: pressServiceItems.label })
+      .from(pressServiceItems)
+      .where(
+        and(
+          eq(pressServiceItems.pressId, press.id),
+          inArray(pressServiceItems.label, [...LEGACY_DMM_LABELS]),
+          isNull(pressServiceItems.archivedAt),
+        ),
+      );
+    if (legacyRows.length > 0) {
+      throw new Error(
+        `Legacy MRP metalwork labels require transactional reconciliation first: ${legacyRows.map((r) => r.label).join(", ")}`,
+      );
+    }
 
     // ── Service items (per-item guard on pressId+category+label) ────────
     let inserted = 0;
@@ -373,7 +404,7 @@ async function main() {
     for (const item of ITEMS) {
       position += 1;
       const [existing] = await db
-        .select({ id: pressServiceItems.id })
+        .select()
         .from(pressServiceItems)
         .where(
           and(
