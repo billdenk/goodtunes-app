@@ -742,8 +742,29 @@ export function registerPressTemplateFlowRoutes(
   // the SSRF-guarded fetcher (a direct browser fetch would die on CORS); a
   // dead/not-a-PDF link answers 422 template_link_dead (Task #3154 — client
   // state, never a 5xx that pages ops).
-  const serveTemplatePdfSource = async (res: Response, url: string, tmpKey: string) => {
-    if (url.startsWith("/")) return res.redirect(url);
+  const serveTemplatePdfSource = async (res: Response, url: string, tmpKey: string, wantClean = false) => {
+    if (url.startsWith("/")) {
+      if (wantClean && url.startsWith("/objects/")) {
+        try {
+          const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+          const file = await new ObjectStorageService().getObjectEntityFile(url);
+          const { MAX_CLEAN_REWRITE_BYTES, hideGtLayersInPdf } = await import("./pdf/hideGtLayers");
+          const [meta] = await file.getMetadata();
+          const size = Number(meta.size ?? 0);
+          if (size > 0 && size <= MAX_CLEAN_REWRITE_BYTES) {
+            const [raw] = await file.download();
+            const clean = await hideGtLayersInPdf(raw);
+            if (clean) {
+              res.setHeader("Content-Type", "application/pdf");
+              return res.end(clean);
+            }
+          }
+        } catch {
+          // Preserve the established fail-open contract: serve the raw source.
+        }
+      }
+      return res.redirect(url);
+    }
     if (!/^https:\/\//i.test(url)) return res.status(409).json({ message: "This template's link can't be fetched." });
     const os = await import("node:os");
     const path = await import("node:path");
@@ -767,6 +788,22 @@ export function registerPressTemplateFlowRoutes(
       if (fetched.spooled !== true) {
         return res.status(502).json({ message: "Couldn't spool the template file." });
       }
+      if (wantClean) {
+        try {
+          const { MAX_CLEAN_REWRITE_BYTES, hideGtLayersInPdf } = await import("./pdf/hideGtLayers");
+          const size = fs.statSync(tmp).size;
+          if (size > 0 && size <= MAX_CLEAN_REWRITE_BYTES) {
+            const clean = await hideGtLayersInPdf(fs.readFileSync(tmp));
+            if (clean) {
+              fs.unlink(tmp, () => {});
+              res.setHeader("Content-Type", "application/pdf");
+              return res.end(clean);
+            }
+          }
+        } catch {
+          // Preserve the established fail-open contract: stream the raw source.
+        }
+      }
       res.setHeader("Content-Type", "application/pdf");
       const stream = fs.createReadStream(tmp);
       stream.on("close", () => fs.unlink(tmp, () => {}));
@@ -782,7 +819,7 @@ export function registerPressTemplateFlowRoutes(
     const pressId = String(req.params.id);
     const spec = await storage.getPressTemplateSpecById(pressId, String(req.params.specId));
     if (!spec?.templateFileUrl) return res.status(404).json({ message: "No template file on this slot." });
-    return serveTemplatePdfSource(res, spec.templateFileUrl, spec.id);
+    return serveTemplatePdfSource(res, spec.templateFileUrl, spec.id, req.query.clean === "1");
   });
 
   // GET /api/press/:id/templates/:specId/revisions/:revId/file — same-origin

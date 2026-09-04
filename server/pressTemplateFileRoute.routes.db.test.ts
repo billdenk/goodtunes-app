@@ -21,6 +21,7 @@ import { randomUUID } from "node:crypto";
 import { createServer, type Server as HttpServer } from "node:http";
 import { sql } from "drizzle-orm";
 import express from "express";
+import { PDFArray, PDFDict, PDFDocument, PDFName, PDFRef, PDFString } from "pdf-lib";
 import { db, pool } from "./db";
 import { storage } from "./storage";
 import { authKindMiddleware } from "./auth/host";
@@ -42,15 +43,28 @@ let adminToken = "";
 let objectSpecId = ""; // template_file_url = /objects/uploads/…
 let deadSpecId = ""; // external link → stub answers 404
 let htmlSpecId = ""; // external link → stub answers HTML, not a PDF
+let cleanSpecId = ""; // external layered PDF → raw or GT-hidden clean copy
 let emptySpecId = ""; // no template_file_url
+let cleanPdf = Buffer.alloc(0);
 
 const DEAD_URL = "https://203.0.113.10/legacy/template.pdf";
 const HTML_URL = "https://203.0.113.11/legacy/template.pdf";
+const CLEAN_URL = "https://203.0.113.12/legacy/layered-template.pdf";
 const OBJECT_PATH = "/objects/uploads/t3154-template.pdf";
 
 const realFetch = globalThis.fetch;
 
 before(async () => {
+  const doc = await PDFDocument.create();
+  doc.addPage([612, 792]);
+  const gtRef = doc.context.register(doc.context.obj({ Type: "OCG", Name: PDFString.of("GT CUT LINE") }));
+  const artRef = doc.context.register(doc.context.obj({ Type: "OCG", Name: PDFString.of("Artwork") }));
+  doc.catalog.set(
+    PDFName.of("OCProperties"),
+    doc.context.obj({ OCGs: [gtRef, artRef], D: doc.context.obj({ Order: [gtRef, artRef], ON: [gtRef, artRef] }) }),
+  );
+  cleanPdf = Buffer.from(await doc.save({ useObjectStreams: false }));
+
   // Stub the external hosts only; everything else (incl. our loopback
   // server) rides the real fetch.
   globalThis.fetch = (async (input: any, init?: any) => {
@@ -62,6 +76,12 @@ before(async () => {
       return new Response("<html><body>Sign in to view this file</body></html>", {
         status: 200,
         headers: { "content-type": "text/html", "content-length": "48" },
+      });
+    }
+    if (url.startsWith("https://203.0.113.12/")) {
+      return new Response(cleanPdf, {
+        status: 200,
+        headers: { "content-type": "application/pdf", "content-length": String(cleanPdf.length) },
       });
     }
     return realFetch(input, init);
@@ -107,6 +127,7 @@ before(async () => {
   objectSpecId = await seedSpec("jacket", OBJECT_PATH);
   deadSpecId = await seedSpec("labels", DEAD_URL);
   htmlSpecId = await seedSpec("inner_sleeve", HTML_URL);
+  cleanSpecId = await seedSpec("center_labels", CLEAN_URL);
   emptySpecId = await seedSpec("booklet", null);
 });
 
@@ -130,8 +151,8 @@ after(async () => {
 
 const filePath = (specId: string) => `/api/press/${pressId}/templates/${specId}/file`;
 
-async function get(specId: string): Promise<Response> {
-  return realFetch(`${baseUrl}${filePath(specId)}`, {
+async function get(specId: string, query = ""): Promise<Response> {
+  return realFetch(`${baseUrl}${filePath(specId)}${query}`, {
     headers: { authorization: `Bearer ${adminToken}` },
     redirect: "manual",
   });
@@ -156,6 +177,28 @@ test("external link serving HTML instead of a PDF → 422 template_link_dead", a
   assert.equal(res.status, 422);
   const body = (await res.json()) as { code?: string };
   assert.equal(body.code, "template_link_dead");
+});
+
+test("clean=1 hides GT layers while the default route preserves the raw source", async () => {
+  const rawRes = await get(cleanSpecId);
+  assert.equal(rawRes.status, 200);
+  assert.deepEqual(Buffer.from(await rawRes.arrayBuffer()), cleanPdf);
+
+  const cleanRes = await get(cleanSpecId, "?clean=1");
+  assert.equal(cleanRes.status, 200);
+  const clean = Buffer.from(await cleanRes.arrayBuffer());
+  const parsed = await PDFDocument.load(new Uint8Array(clean));
+  const ocProps = parsed.catalog.lookupMaybe(PDFName.of("OCProperties"), PDFDict)!;
+  const ocgs = ocProps.lookupMaybe(PDFName.of("OCGs"), PDFArray)!;
+  const namesByRef = new Map<string, string>();
+  for (let i = 0; i < ocgs.size(); i++) {
+    const ref = ocgs.get(i) as PDFRef;
+    const group = parsed.context.lookupMaybe(ref, PDFDict)!;
+    namesByRef.set(ref.toString(), (group.get(PDFName.of("Name")) as PDFString).decodeText());
+  }
+  const defaults = ocProps.lookupMaybe(PDFName.of("D"), PDFDict)!;
+  const off = defaults.lookupMaybe(PDFName.of("OFF"), PDFArray)!;
+  assert.deepEqual(off.asArray().map((entry) => namesByRef.get(entry.toString())), ["GT CUT LINE"]);
 });
 
 test("no file on the slot → 404", async () => {

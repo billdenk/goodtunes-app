@@ -47,7 +47,7 @@ export const freshLiveSave = { flag: false };
 
 export type SavedTest = { art: string; at: string; verdict: string };
 import {
-  CheckCircle2, XCircle, MinusCircle, AlertTriangle, FileText, ChevronRight, Upload, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck, RotateCcw,
+  CheckCircle2, XCircle, MinusCircle, AlertTriangle, FileText, ChevronRight, Upload, ZoomIn, ShieldCheck, X, Pencil, PenLine, PaintBucket, ChevronDown, Info, History, BadgeCheck, RotateCcw, Download, LayoutTemplate,
 } from 'lucide-react';
 import {
   specHistoryViewModel,
@@ -310,6 +310,7 @@ export default function PressTemplateLiveTest({
   // (replace = supersede: the old revision slides into history automatically,
   // per template canon; the new file loads here for testing) (Bill, Aug 15 2026).
   const [headerMenu, setHeaderMenu] = useState(false);
+  const [downloadBusy, setDownloadBusy] = useState<'design' | 'guides' | null>(null);
   const [showTests, setShowTests] = useState(false);
   const replacingName = useRef<string | null>(null);
   // True when the CURRENT file differs from the one stored on the saved row —
@@ -371,6 +372,45 @@ export default function PressTemplateLiveTest({
     }
     setHeaderMenu(false);
     templateInput.current?.click();
+  };
+  const downloadPressTemplate = async (variant: 'design' | 'guides') => {
+    if (downloadBusy || !currentFile.current) return;
+    setDownloadBusy(variant);
+    try {
+      let blob: Blob = currentFile.current;
+      const currentSpecId = specRef.current;
+      // Saved canonical templates use the same scoped source route as the live
+      // viewer. clean=1 flips only GT guide-layer default visibility; the raw
+      // source remains the "with guides" download.
+      if (currentSpecId && !viewingRev) {
+        const clean = variant === 'design' ? '?clean=1' : '';
+        const r = await fetch(`/api/press/${pressId}/templates/${currentSpecId}/file${clean}`, {
+          headers: { ...authHeaders() },
+          credentials: 'include',
+        });
+        if (!r.ok) throw new Error(`Couldn't download the template (${r.status})`);
+        blob = await r.blob();
+      }
+      const rawName = (template?.name ?? originalName ?? currentFile.current.name ?? 'press-template')
+        .replace(/\.pdf$/i, '')
+        .trim() || 'press-template';
+      const fileName = variant === 'design'
+        ? `${rawName} - design template.pdf`
+        : `${rawName} - template with guides.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      setHeaderMenu(false);
+    } catch (e: any) {
+      setError(e?.message ?? "Couldn't download the template.");
+    } finally {
+      setDownloadBusy(null);
+    }
   };
 
   const onPickTemplate = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2447,6 +2487,34 @@ export default function PressTemplateLiveTest({
                                 <History style={{ width: 14, height: 14, color: t.subink }} />
                                 History &amp; tests
                               </button>
+                              {!viewingRev && template && (
+                                <>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    disabled={downloadBusy !== null}
+                                    onClick={() => void downloadPressTemplate('design')}
+                                    className={cn('w-full text-left px-4 py-2 text-xs font-medium transition-colors flex items-center gap-2.5 disabled:opacity-50', t.hoverWash)}
+                                    style={{ color: t.ink }}
+                                    data-testid="menuitem-download-design-template"
+                                  >
+                                    <Download style={{ width: 14, height: 14, color: t.subink }} />
+                                    Download design template
+                                  </button>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    disabled={downloadBusy !== null}
+                                    onClick={() => void downloadPressTemplate('guides')}
+                                    className={cn('w-full text-left px-4 py-2 text-xs font-medium transition-colors flex items-center gap-2.5 disabled:opacity-50', t.hoverWash)}
+                                    style={{ color: t.ink }}
+                                    data-testid="menuitem-download-template-guides"
+                                  >
+                                    <LayoutTemplate style={{ width: 14, height: 14, color: t.subink }} />
+                                    Download template with guides
+                                  </button>
+                                </>
+                              )}
                               {canEdit && !viewingRev && (
                                 <button
                                   type="button"

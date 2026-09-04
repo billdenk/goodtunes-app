@@ -91,38 +91,38 @@ type Theme = {
 
 const THEMES: Record<'light' | 'dark', Theme> = {
   light: {
-    canvas: '#f5f5f7',
-    card: '#ffffff',
-    soft: '#f0f0f2',
-    ink: '#1d1d1f',
-    subink: '#6e6e73',
-    faint: '#a1a1a6',
-    hairline: '#e6e6ea',
-    ready: '#1c8a5b',
-    readyWash: '#eaf5ef',
-    chipBorder: '#d9d9de',
+    canvas: 'var(--apple-canvas)',
+    card: 'var(--apple-card)',
+    soft: 'var(--apple-track)',
+    ink: 'var(--apple-ink)',
+    subink: 'var(--apple-subink)',
+    faint: 'var(--apple-faint)',
+    hairline: 'var(--apple-hairline)',
+    ready: 'var(--apple-ready)',
+    readyWash: 'var(--apple-ready-wash)',
+    chipBorder: 'var(--apple-hairline)',
     hoverCard: 'hover:bg-slate-100',
     headerBg: 'rgba(255,255,255,0.72)',
-    blue: '#0071e3',
-    fail: '#d92d20',
+    blue: 'var(--apple-blue)',
+    fail: 'var(--apple-critical)',
     dashed: '#c9c9cf',
     dot: '#d0d0d5',
   },
   dark: {
-    canvas: '#161618',
-    card: '#1c1c1f',
-    soft: '#2a2a2f',
-    ink: '#f5f5f7',
-    subink: '#a1a1a6',
-    faint: '#6e6e73',
-    hairline: '#2e2e33',
-    ready: '#3fbf82',
-    readyWash: 'rgba(63,191,130,0.12)',
-    chipBorder: '#3a3a40',
+    canvas: 'var(--apple-canvas)',
+    card: 'var(--apple-card)',
+    soft: 'var(--apple-track)',
+    ink: 'var(--apple-ink)',
+    subink: 'var(--apple-subink)',
+    faint: 'var(--apple-faint)',
+    hairline: 'var(--apple-hairline)',
+    ready: 'var(--apple-ready)',
+    readyWash: 'var(--apple-ready-wash)',
+    chipBorder: 'var(--apple-hairline)',
     hoverCard: 'hover:bg-white/10',
     headerBg: 'rgba(22,22,24,0.72)',
-    blue: '#319ed8',
-    fail: '#f2555a',
+    blue: 'var(--apple-blue)',
+    fail: 'var(--apple-critical)',
     dashed: '#46464d',
     dot: '#46464d',
   },
@@ -364,46 +364,6 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
     return () => { cancelled = true; };
   }, [albumId, componentId, hasTemplateFile]);
 
-  // Download the template the artist is designing into (task: "view AND
-  // download"). Two flavors (Task #3307):
-  //   'design' — the CLEAN copy: same file, GT guide layers toggled off in
-  //     the PDF's layer-visibility config (re-enableable in Illustrator /
-  //     Acrobat; some quick-look previews ignore layer visibility and will
-  //     still show guides). Fetched from the server's ?clean=1 variant; any
-  //     failure falls back to the raw already-fetched blob — the artist
-  //     always gets a working file.
-  //   'guides' — the exact raw file served today, from the already-fetched
-  //     blob so auth headers never matter for the anchor.
-  const downloadBlob = (blob: Blob, name: string) => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = name;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 30_000);
-  };
-  const tplBaseName = (spec?.label ?? 'press-template').replace(/[^\w\- ]+/g, '');
-  const [cleanBusy, setCleanBusy] = useState(false);
-  const downloadTemplate = (variant: 'design' | 'guides' = 'design') => {
-    if (!tpl) return;
-    if (variant === 'guides') {
-      downloadBlob(tpl.blob, `${tplBaseName} - template with guides.pdf`);
-      return;
-    }
-    if (cleanBusy) return;
-    setCleanBusy(true);
-    void (async () => {
-      try {
-        const r = await apiRequest('GET', `/api/admin/albums/${albumId}/completed-template/template-file/${encodeURIComponent(componentId)}?clean=1`);
-        downloadBlob(await r.blob(), `${tplBaseName} - design template.pdf`);
-      } catch {
-        // Fail open — the raw file still works for designing.
-        downloadBlob(tpl.blob, `${tplBaseName} - design template.pdf`);
-      } finally {
-        setCleanBusy(false);
-      }
-    })();
-  };
-
   // ── The artist's checked art at real measured size, ALWAYS the full
   // artboard (Task #3348): the stored art PDF is fetched through the authed
   // artist-scoped art-file endpoint (it self-heals legacy external-link rows
@@ -534,7 +494,7 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
         ? "This test couldn't be loaded. You may not have access to this release, or something went wrong \u2014 try again."
         : 'No test found for this art file yet.';
     return (
-      <div className={wrapClass} style={{ background: embedded ? undefined : t.canvas, color: t.ink, ...wrapStyle }} data-testid="artist-template-test">
+      <div className={cn('gt-canon-artist-test', wrapClass)} style={{ background: embedded ? undefined : t.canvas, color: t.ink, ...wrapStyle }} data-testid="artist-template-test">
         <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: innerPad }}>
           <nav aria-label="breadcrumb" data-testid="breadcrumb">
             <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
@@ -674,31 +634,6 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
               >
                 <History className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> File history
               </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => { setFileMenuOpen(false); if (tpl) downloadTemplate('design'); }}
-                aria-disabled={!tpl}
-                className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', !!tpl && t.hoverCard)}
-                style={{ padding: '10px 14px', color: tpl ? t.ink : t.faint, borderTop: `1px solid ${t.hairline}`, cursor: tpl ? 'pointer' : 'not-allowed' }}
-                data-testid="file-menu-download"
-              >
-                <Download className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Design template
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => { setFileMenuOpen(false); if (tpl) downloadTemplate('guides'); }}
-                aria-disabled={!tpl}
-                className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', !!tpl && t.hoverCard)}
-                style={{ padding: '10px 14px', color: tpl ? t.ink : t.faint, cursor: tpl ? 'pointer' : 'not-allowed' }}
-                data-testid="file-menu-download-guides"
-              >
-                <LayoutTemplate className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Template with guides
-              </button>
-              <p className="text-[11.5px]" style={{ padding: '8px 14px 10px', color: t.faint, borderTop: `1px solid ${t.hairline}`, lineHeight: 1.45, maxWidth: 236 }} data-testid="file-menu-clean-note">
-                The design template opens with the GT guide layers hidden &mdash; turn them back on in Illustrator or Acrobat. Some quick-look previews ignore layer visibility.
-              </p>
             </div>
           </>
         )}
@@ -712,7 +647,7 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   // seated · not yet measured", never a green Passed (Ruby's Aug 19 ending).
   if (!hasArt) {
     return (
-      <div className={wrapClass} style={{ background: embedded ? undefined : t.canvas, color: t.ink, ...wrapStyle }} data-testid="artist-template-test">
+      <div className={cn('gt-canon-artist-test', wrapClass)} style={{ background: embedded ? undefined : t.canvas, color: t.ink, ...wrapStyle }} data-testid="artist-template-test">
         <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: innerPad }}>
           <nav aria-label="breadcrumb" data-testid="breadcrumb">
             <ol className="flex flex-wrap items-center gap-2 text-[13px]" style={{ color: t.faint }}>
@@ -738,8 +673,6 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
             measuring={check.isPending}
             onUploadFile={handleReplaceFile}
             onCheckUrl={(url) => check.mutate({ url, fileName: url.split('/').pop() || 'art.pdf' })}
-            onDownloadTemplate={downloadTemplate}
-            canDownload={!!tpl}
             historyRows={history}
           />
         </div>
@@ -748,7 +681,7 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
   }
 
   return (
-    <div className={wrapClass} style={{ background: embedded ? undefined : t.canvas, color: t.ink, ...wrapStyle }} data-testid="artist-template-test">
+    <div className={cn('gt-canon-artist-test', wrapClass)} style={{ background: embedded ? undefined : t.canvas, color: t.ink, ...wrapStyle }} data-testid="artist-template-test">
       <div className="mx-auto w-full" style={{ maxWidth: 1080, padding: innerPad }}>
         {/* 1 · Breadcrumb — back into the release Assets (artist grammar). */}
         <nav aria-label="breadcrumb" data-testid="breadcrumb">
@@ -898,30 +831,6 @@ export function ArtistTemplateTest({ embedded = false }: { embedded?: boolean } 
         <div className="rounded-2xl" style={{ marginTop: 16, padding: '18px 20px', border: `1px solid ${t.hairline}`, background: t.card }} data-testid="template-header">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h2 className="text-[16px] font-semibold" style={{ color: t.ink, letterSpacing: '-0.01em' }}>{TEMPLATE.name}</h2>
-            {tpl && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => downloadTemplate('design')}
-                  title="GT guide layers hidden — re-enable them in Illustrator or Acrobat. Some quick-look previews ignore layer visibility."
-                  className={cn('inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium transition-colors', t.hoverCard)}
-                  style={{ padding: '4px 12px', border: `1px solid ${t.hairline}`, color: t.subink }}
-                  data-testid="button-download-template"
-                >
-                  <Download className="w-3.5 h-3.5 flex-shrink-0" /> Design template
-                </button>
-                <button
-                  type="button"
-                  onClick={() => downloadTemplate('guides')}
-                  title="The exact raw press file, guides visible."
-                  className={cn('inline-flex items-center gap-1.5 rounded-full text-[12.5px] font-medium transition-colors', t.hoverCard)}
-                  style={{ padding: '4px 12px', border: `1px solid ${t.hairline}`, color: t.subink }}
-                  data-testid="button-download-template-guides"
-                >
-                  <LayoutTemplate className="w-3.5 h-3.5 flex-shrink-0" /> Template with guides
-                </button>
-              </>
-            )}
             {allPass && (
               <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold" style={{ color: t.ready }} data-testid="badge-certified">
                 <BadgeCheck className="w-4 h-4" /> Certified
@@ -1681,13 +1590,12 @@ function RawLinework({ area }: { area: RawArea }) {
 }
 
 // The whole pre-art scene — handoff SceneRawTemplate, wired to the real page.
-function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tplState, tplError, hasTemplateFile, busy, uploadPct, measuring, onUploadFile, onCheckUrl, onDownloadTemplate, canDownload, historyRows }: {
+function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tplState, tplError, hasTemplateFile, busy, uploadPct, measuring, onUploadFile, onCheckUrl, historyRows }: {
   t: Theme; pieceLabel: string; templateName: string; specLine: string;
   tplImg: string | null; tplAspect: number | null;
   tplState: 'loading' | 'ready' | 'error' | 'idle'; tplError: string | null; hasTemplateFile: boolean;
   busy: boolean; uploadPct: number | null; measuring: boolean;
   onUploadFile: (file: File | undefined) => void; onCheckUrl: (url: string) => void;
-  onDownloadTemplate: (variant: 'design' | 'guides') => void; canDownload: boolean;
   historyRows: FileEventRow[];
 }) {
   // Mode: per-panel images vs one full-template file. Handoff default 'images'.
@@ -1747,30 +1655,6 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
           ]}
           testPrefix="raw-entry-chips"
         />
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            type="button"
-            onClick={() => { if (canDownload) onDownloadTemplate('design'); }}
-            aria-disabled={!canDownload}
-            title="GT guide layers hidden — re-enable them in Illustrator or Acrobat. Some quick-look previews ignore layer visibility."
-            className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', canDownload && t.hoverCard)}
-            style={{ padding: '7px 14px', color: canDownload ? t.subink : t.faint, border: `1px solid ${t.hairline}`, opacity: canDownload ? 1 : 0.55, cursor: canDownload ? 'pointer' : 'not-allowed' }}
-            data-testid="button-download-raw"
-          >
-            <Download className="w-4 h-4 flex-shrink-0" /> Design template
-          </button>
-          <button
-            type="button"
-            onClick={() => { if (canDownload) onDownloadTemplate('guides'); }}
-            aria-disabled={!canDownload}
-            title="The exact raw press file, guides visible."
-            className={cn('inline-flex items-center gap-2 rounded-full text-[13px] font-medium transition-colors', canDownload && t.hoverCard)}
-            style={{ padding: '7px 14px', color: canDownload ? t.subink : t.faint, border: `1px solid ${t.hairline}`, opacity: canDownload ? 1 : 0.55, cursor: canDownload ? 'pointer' : 'not-allowed' }}
-            data-testid="button-download-raw-guides"
-          >
-            <LayoutTemplate className="w-4 h-4 flex-shrink-0" /> Template with guides
-          </button>
-        </div>
       </div>
 
       {/* Status card. The per-panel path can't be measured against the press
@@ -1929,31 +1813,6 @@ function RawFlow({ t, pieceLabel, templateName, specLine, tplImg, tplAspect, tpl
                   >
                     <History className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> File history
                   </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { setMenuOpen(false); if (canDownload) onDownloadTemplate('design'); }}
-                    aria-disabled={!canDownload}
-                    className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', canDownload && t.hoverCard)}
-                    style={{ padding: '10px 14px', color: canDownload ? t.ink : t.faint, borderTop: `1px solid ${t.hairline}`, cursor: canDownload ? 'pointer' : 'not-allowed' }}
-                    data-testid="file-menu-download"
-                  >
-                    <Download className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Design template
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { setMenuOpen(false); if (canDownload) onDownloadTemplate('guides'); }}
-                    aria-disabled={!canDownload}
-                    className={cn('w-full flex items-center gap-2.5 text-left text-[13px] transition-colors', canDownload && t.hoverCard)}
-                    style={{ padding: '10px 14px', color: canDownload ? t.ink : t.faint, cursor: canDownload ? 'pointer' : 'not-allowed' }}
-                    data-testid="file-menu-download-guides"
-                  >
-                    <LayoutTemplate className="w-4 h-4 flex-shrink-0" style={{ color: t.subink }} /> Template with guides
-                  </button>
-                  <p className="text-[11.5px]" style={{ padding: '8px 14px 10px', color: t.faint, borderTop: `1px solid ${t.hairline}`, lineHeight: 1.45, maxWidth: 236 }} data-testid="file-menu-clean-note">
-                    The design template opens with the GT guide layers hidden &mdash; turn them back on in Illustrator or Acrobat. Some quick-look previews ignore layer visibility.
-                  </p>
                 </div>
               </>
             )}

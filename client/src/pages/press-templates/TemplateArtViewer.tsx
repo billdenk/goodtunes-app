@@ -22,6 +22,11 @@ import { createFullSharpController } from './fullSharpRender';
 // the blurry base raster silently.
 import { renderCropOnce, runWithRetry, type CropRender } from './cropSharpRender';
 import { computePdfArtRect, computeRasterArtRect } from './artPlacement';
+import {
+  DEFAULT_TEMPLATE_OPACITY,
+  selectTemplateRaster,
+  templateCompositeStyle,
+} from './proofComposite';
 
 export type ViewerTemplate = { img: string; wMm: number; hMm: number; layers: GtLayer[] };
 export type ViewerArt = {
@@ -80,6 +85,7 @@ export function TemplateArtViewer({
   const [panC, setPanC] = useState<{ x: number; y: number } | null>(null);
   // Artist default: the template IS the point — arrive with it on under the art.
   const [showTemplate, setShowTemplate] = useState(true);
+  const [templateOpacity, setTemplateOpacity] = useState(DEFAULT_TEMPLATE_OPACITY);
   const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
   const [artOpacity, setArtOpacity] = useState(1);
   const [showLayers, setShowLayers] = useState(false);
@@ -261,6 +267,12 @@ export function TemplateArtViewer({
     if (viewArea === 'Spine') return zone === 'Spine' || zone.startsWith('Spine ');
     return zone.includes(viewArea) || zoneSide(zone) === viewArea;
   };
+  const templateRaster = selectTemplateRaster({
+    hasFullSharp: !!fullImg,
+    hasCropSharp: !!cropImg,
+    fullView: viewArea === 'full',
+    zoom,
+  });
 
   const pickView = (v: typeof viewArea) => { setViewArea(v); setPanC(null); setZoom(1); };
   const stepZoom = (dir: 1 | -1) => setZoom((z) => {
@@ -304,14 +316,25 @@ export function TemplateArtViewer({
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, W, H);
       const s = W / template.wMm; // mm → px
-      if ((!art || showTemplate) && template.img) {
-        try { ctx.drawImage(await loadImg(template.img), 0, 0, W, H); } catch { /* keep going */ }
-      }
       if (art && artRect && art.img) {
         try {
           ctx.globalAlpha = artOpacity;
           ctx.drawImage(await loadImg(art.img), artRect.xMm * s, artRect.yMm * s, artRect.wMm * s, artRect.hMm * s);
           ctx.globalAlpha = 1;
+        } catch { /* keep going */ }
+      }
+      if ((!art || showTemplate) && template.img) {
+        try {
+          const templateImage = await loadImg(template.img);
+          const composite = templateCompositeStyle(!!art, templateOpacity);
+          ctx.save();
+          try {
+            ctx.globalAlpha = composite.opacity;
+            ctx.globalCompositeOperation = composite.mixBlendMode;
+            ctx.drawImage(templateImage, 0, 0, W, H);
+          } finally {
+            ctx.restore();
+          }
         } catch { /* keep going */ }
       }
       const areaAlpha = dark ? 0.19 : 0.25;
@@ -479,11 +502,7 @@ export function TemplateArtViewer({
               >
                 <button
                   type="button"
-                  onClick={() => setShowTemplate((v) => {
-                    const on = !v;
-                    if (on) setArtOpacity(1);
-                    return on;
-                  })}
+                  onClick={() => setShowTemplate((v) => !v)}
                   className="inline-flex items-center gap-1.5 h-full pl-2.5 pr-1.5 text-[11px] font-medium"
                   style={{ color: showTemplate ? t.ink : t.faint }}
                   data-testid="chip-template-underlay"
@@ -522,6 +541,18 @@ export function TemplateArtViewer({
                       .gt-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 0.5px solid rgba(0,0,0,0.18); box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
                     `}</style>
                     <label className="block text-[11px] font-semibold" style={{ color: t.subink }}>
+                      Template opacity
+                      <input
+                        type="range" min={0} max={100} value={Math.round(templateOpacity * 100)}
+                        onChange={(e) => setTemplateOpacity(Number(e.target.value) / 100)}
+                        className="gt-slider block w-full mt-2"
+                        data-testid="slider-template-opacity"
+                      />
+                    </label>
+                    <div className="mt-1.5 text-[10.5px]" style={{ color: t.faint }}>
+                      Adjust the press template without changing your artwork.
+                    </div>
+                    <label className="mt-3 block text-xs font-semibold" style={{ color: t.subink }}>
                       Art opacity
                       <input
                         type="range" min={0} max={100} value={Math.round(artOpacity * 100)}
@@ -531,7 +562,7 @@ export function TemplateArtViewer({
                       />
                     </label>
                     <div className="mt-1.5 text-[10.5px]" style={{ color: t.faint }}>
-                      Lower it to see the template through your art.
+                      Adjust the artwork independently from the press template.
                     </div>
                   </div>
                 </>
@@ -798,7 +829,7 @@ export function TemplateArtViewer({
         </div>
       </div>
 
-      {/* The composite: template raster · art · GT overlays */}
+      {/* Canon composite: white proof · art · exactly one template raster · GT overlays */}
       <div
         className="flex justify-center rounded-2xl"
         style={{
@@ -815,7 +846,8 @@ export function TemplateArtViewer({
             width: `${viewportPct.toFixed(3)}%`,
             minWidth: 96,
             aspectRatio: focus ? `${focus.w} / ${focus.h}` : `${template.wMm} / ${template.hMm}`,
-            backgroundColor: 'transparent',
+            // The proof sheet is intentionally white in BOTH appearances.
+            backgroundColor: '#ffffff',
             border: '1px solid rgba(255,255,255,0.14)',
             boxShadow: dark ? '0 18px 42px rgba(0,0,0,0.42)' : '0 12px 30px rgba(0,0,0,0.12)',
             cursor: zoom !== 1 ? (dragRef.current ? 'grabbing' : 'grab') : 'default',
@@ -865,39 +897,6 @@ export function TemplateArtViewer({
                 Chromium's whole-pixel paint snapping can't shift/squeeze the
                 bitmap under the frame's huge crop scale (vector overlays are
                 immune and stay put; the rasters must match them). */}
-            {(!art || showTemplate) && (
-              <img
-                src={template.img}
-                alt="Template"
-                className="absolute"
-                style={rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s)}
-                draggable={false}
-              />
-            )}
-            {/* Sharp Full-Template raster (Task #3212): overlays the base render
-                once the zoom-sized re-render lands — crisp 200–400% zoom. */}
-            {(!art || showTemplate) && fullImg && viewArea === 'full' && zoom > 1 && (
-              <img
-                src={fullImg}
-                alt=""
-                draggable={false}
-                className="absolute pointer-events-none"
-                style={rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s)}
-                data-testid="img-full-sharp"
-              />
-            )}
-            {(!art || showTemplate) && cropImg && focus && viewArea !== 'full' && (
-              <img
-                src={cropImg.img}
-                alt=""
-                draggable={false}
-                className="absolute pointer-events-none"
-                // Task #3290 — stretch over the EXACT rect the raster covers
-                // (post canvas-size rounding), so raster and overlay share
-                // one coordinate frame and cannot diverge.
-                style={rasterCssLayout(cropImg.rectMm, template.wMm, template.hMm, viewT.s)}
-              />
-            )}
             {art && artRect && art.img && (
               <img
                 src={art.img}
@@ -909,6 +908,48 @@ export function TemplateArtViewer({
                   opacity: artOpacity,
                 }}
                 data-testid="img-art-overlay"
+              />
+            )}
+            {(!art || showTemplate) && templateRaster === 'base' && (
+              <img
+                src={template.img}
+                alt="Template"
+                className="absolute"
+                style={{
+                  ...rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s),
+                  ...templateCompositeStyle(!!art, templateOpacity),
+                }}
+                draggable={false}
+              />
+            )}
+            {/* Sharp Full-Template raster (Task #3212): overlays the base render
+                once the zoom-sized re-render lands — crisp 200–400% zoom. */}
+            {(!art || showTemplate) && fullImg && templateRaster === 'full' && (
+              <img
+                src={fullImg}
+                alt=""
+                draggable={false}
+                className="absolute pointer-events-none"
+                style={{
+                  ...rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s),
+                  ...templateCompositeStyle(!!art, templateOpacity),
+                }}
+                data-testid="img-full-sharp"
+              />
+            )}
+            {(!art || showTemplate) && cropImg && focus && templateRaster === 'crop' && (
+              <img
+                src={cropImg.img}
+                alt=""
+                draggable={false}
+                className="absolute pointer-events-none"
+                // Task #3290 — stretch over the EXACT rect the raster covers
+                // (post canvas-size rounding), so raster and overlay share
+                // one coordinate frame and cannot diverge.
+                style={{
+                  ...rasterCssLayout(cropImg.rectMm, template.wMm, template.hMm, viewT.s),
+                  ...templateCompositeStyle(!!art, templateOpacity),
+                }}
               />
             )}
             {zones.filter((z) => activeZones.has(z.zone) && zoneRelevant(z.zone)).map(({ zone, line, area }) => {

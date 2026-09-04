@@ -33,7 +33,7 @@ test("account presentation keeps the approved section order", () => {
 test("key account actions remain wired to their existing request contracts", () => {
   const contracts = [
     ['apiRequest("PUT", `/api/admin/people/${person.id}`', "identity, links, and artist URL"],
-    ['apiRequest("PATCH", `/api/admin/${kind}/${id}/invited-press`, { pressId })', "production press"],
+    ['apiRequest("PATCH", `/api/admin/${kind}/${id}/${assignmentRoute}`, { pressId })', "production press"],
     ['apiRequest("PATCH", `/api/admin/${kind}/${id}/press-mode`, { mode })', "press mode"],
     ['apiRequest("POST", `/api/admin/partners/${kind}/${id}/backfill-referral`', "referral back-fill"],
     ['queryKey: ["/api/admin/people", personId, "shopify"]', "Shopify status"],
@@ -43,6 +43,10 @@ test("key account actions remain wired to their existing request contracts", () 
     const body = label.startsWith("press") || label === "production press" ? pressSource : source;
     assert.ok(body.includes(needle), `${label} must retain its existing source-to-handler wiring`);
   }
+  assert.match(
+    pressSource,
+    /kind === "people" && !currentPressId \? "default-press" : "invited-press"/,
+  );
 });
 
 test("production press picker uses the live directory and mode-safe logo component", () => {

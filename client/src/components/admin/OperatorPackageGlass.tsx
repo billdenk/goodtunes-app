@@ -63,9 +63,12 @@ export function OperatorPackageGlass({
   const savedEstimateCount = new Set((sell?.skus ?? []).map((s) => s.format)).size;
 
   return (
-    <div data-testid="operator-package-glass">
+    <div
+      className="gt-canon-package-surface rounded-2xl border border-[var(--apple-hairline)] bg-[var(--apple-card)] p-3 sm:p-5"
+      data-testid="operator-package-glass"
+    >
       {/* ── Admin-only chrome — everything below it is the artist's page ── */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-[var(--apple-canvas)] p-3 sm:p-4">
         {/* Press assignment is display + directory info here; the actual
             assignment rides the album-level invited-press flow. */}
         <PrinterAndPressPanel
@@ -81,7 +84,7 @@ export function OperatorPackageGlass({
             disabled={changeModeDisabled}
             title={changeModeDisabled ? changeModeDisabledReason : undefined}
             data-testid="button-change-sell-mode"
-            className="text-xs font-semibold text-[color:var(--brand-blue)] hover:underline shrink-0 disabled:text-slate-400 disabled:hover:no-underline disabled:cursor-not-allowed"
+            className="gt-quiet-pill shrink-0 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
           >
             Change mode
           </button>
