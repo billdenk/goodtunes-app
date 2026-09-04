@@ -1,0 +1,116 @@
+Yes. Send Otis this exact update:
+
+---
+
+## Otis correction — Artist Profile theme consistency
+
+Apply this correction on top of the latest Otis reconciliation for:
+
+`handoff/otis-final-canon-readiness-2026-09-04/`
+
+### Absolute boundary
+
+**ZERO FUNCTIONALITY CHANGES — SKIN ONLY**
+
+For the Artist Profile and Artist Template Test/Certify surfaces, preserve all existing Otis production behavior. Do not replace production components or copy Canvas/mock control logic into Otis.
+
+### Correct the mixed-theme surfaces
+
+The active Artist appearance must remain consistent across the complete experience.
+
+#### Light appearance
+
+Use the approved light palette across:
+
+- Left navigation rail
+- Top navigation rail
+- Main content area
+- Next Steps strip, including collapsed and expanded states
+- Template Test/Certify status cards
+- Template-name and certification card
+- Template toolbar and chips
+- History and replacement controls
+- Embedded Artist package builder
+- Package summaries and component rows
+
+Do not leave blank/white rails beside dark content, and do not leave isolated charcoal cards inside the light experience.
+
+The proof/art canvas itself should remain white intentionally.
+
+#### Dark appearance
+
+Preserve the existing charcoal—not navy—appearance across the same surfaces. This correction must not visually alter the approved dark mode.
+
+### Preserve working production proof functionality
+
+Otis’s existing production behavior for the following controls is authoritative and must remain untouched:
+
+- Full Template
+- Front
+- Back
+- Spine
+- Bleed
+- Cut
+- Safety
+- All other GT Layers
+- Line/Area display
+- Zoom
+- Template opacity
+- Crop and transforms
+- Layer visibility
+- Navigation and history
+- Replacement and saving
+- Certification state and results
+
+Do not port the Canvas mock’s handlers, viewport calculations, or layer-toggle implementation. Canvas demonstrates approved visual states only; Otis must retain its already-working production logic and geometry.
+
+### Ruby vinyl correction
+
+Remove the unintended pale/white halo around the translucent Ruby vinyl preview by clipping/cropping only the transparent outer edge of its source image.
+
+Preserve:
+
+- Disc diameter and circular geometry
+- Vinyl color and translucency
+- Rotation and animation
+- Jacket overlap
+- Existing artwork and label
+- Production package data
+
+### Scope that remains unchanged
+
+The previously authorized Press ordered multi-page proofing upgrade remains separate and unchanged.
+
+Artist multi-page parsing remains deferred. Do not add it as part of this correction.
+
+### Acceptance check
+
+Before reporting completion, verify:
+
+1. Light appearance has a light left rail, light top rail, and light center content.
+2. No Artist nested surface remains charcoal in Light appearance.
+3. Dark appearance remains visually unchanged.
+4. The proof canvas remains white in both appearances.
+5. Front, Back, Spine, and every GT Layer still work using existing Otis production behavior.
+6. Zoom, opacity, history, replacement, saving, and certification still work.
+7. The Ruby vinyl has no pale outer halo.
+8. No routes, APIs, data contracts, permissions, pricing, builders, estimates, fulfillment, or white-label behavior changed.
+
+### Receipt
+
+Reply with one of:
+
+- `READY_FOR_CANON`
+- `BLOCKED`
+
+Include:
+
+- Files changed
+- Production controls explicitly verified
+- Light and dark screenshots
+- Confirmation: **ZERO FUNCTIONALITY CHANGES — SKIN ONLY**
+- Any blocker or production discrepancy found
+
+Do not state that production is updated until this correction is implemented, verified, and published.
+
+---
