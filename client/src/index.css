@@ -573,6 +573,13 @@ body.gt-admin.gt-admin-dark .bg-slate-200 { background-color: var(--apple-chip);
    the "quieter than the card" read with a subtle darker tint. */
 body.gt-admin.gt-admin-dark .bg-slate-50\/60,
 body.gt-admin.gt-admin-dark .bg-slate-50\/50 { background-color: rgba(0, 0, 0, 0.2); }
+/* Permissions scope notices deliberately keep their translucent slate wash in
+   light mode. In dark admin chrome, resolve both variants to the canonical
+   inset surface instead of letting the opacity-qualified utility leak pale. */
+body.gt-admin.gt-admin-dark .gt-permissions-scope-note {
+  background-color: var(--apple-track);
+  color: var(--apple-ink);
+}
 /* Initials-avatar fills: brand blue in light mode, quiet chip gray in dark
    (a wall of blue circles overwhelms the charcoal canvas — Bill, 2026-08-08).
    Photo avatars are untouched (the img covers the fill). */

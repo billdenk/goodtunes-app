@@ -1860,7 +1860,7 @@ function ArtistScopeNote({ person }: { person: PersonFull }) {
   const attachments = person.attachments ?? [];
   return (
     <div
-      className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 mb-4"
+      className="gt-permissions-scope-note rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 mb-4"
       data-testid="note-permissions-artist-scope"
     >
       <p className="text-sm text-slate-700">
@@ -1908,7 +1908,7 @@ function PartnerStaffScopeNote({ person }: { person: PersonFull }) {
   const attachments = person.attachments ?? [];
   return (
     <div
-      className="rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 mb-4"
+      className="gt-permissions-scope-note rounded-xl border border-slate-200 bg-slate-50/70 px-4 py-3 mb-4"
       data-testid="note-permissions-partner-staff-scope"
     >
       <p className="text-sm text-slate-700">
