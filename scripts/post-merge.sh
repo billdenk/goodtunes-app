@@ -912,6 +912,27 @@ SQL
 clear_phantom_press_default_homings dev  "${DATABASE_URL:-}"
 clear_phantom_press_default_homings prod "${PROD_DATABASE_URL:-}"
 
+# GoodTunes-owned artists created before MRP became the platform default.
+# This one-time, marker-guarded backfill intentionally runs AFTER the legacy
+# phantom-MRP cleanup above. It targets only provable GoodTunes artist signals
+# (artist account/membership, promoted artist, or primary artist on a
+# GoodTunes release), never generic imported credits/discography or contacts.
+backfill_goodtunes_artist_default_press() {
+  local label="$1" url="$2"
+  if [ -z "$url" ]; then
+    echo "post-merge: skipping GoodTunes artist default-press backfill on $label (no URL set)"
+    return 0
+  fi
+  if DATABASE_URL="$url" npx tsx scripts/backfill-goodtunes-default-press.ts >/dev/null 2>&1
+  then
+    echo "post-merge: GoodTunes artist default-press backfill ok on $label"
+  else
+    echo "post-merge: WARNING — GoodTunes artist default-press backfill failed on $label (continuing)"
+  fi
+}
+backfill_goodtunes_artist_default_press dev  "${DATABASE_URL:-}"
+backfill_goodtunes_artist_default_press prod "${PROD_DATABASE_URL:-}"
+
 # Real fan shipping — schema. orders gains a base/markup/charged/band
 # breakdown and a new shipping_rates rate-card table (one row per
 # partner × destination × band). shared/schema.ts declares both; we

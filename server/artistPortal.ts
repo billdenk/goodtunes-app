@@ -14,6 +14,7 @@ import { sql } from "drizzle-orm";
 import { pgArray } from "./lib/pgArray";
 import { resolveArtistScope } from "./artistReports";
 import { storage } from "./storage";
+import { resolvePressIdFromCandidates } from "./lib/pressPlaceholders";
 
 // Coarse format bucket for wall badges / heartbeat rows.
 function formatKind(fmt: string): "vinyl" | "cd" | "cassette" | "digital" | "other" {
@@ -42,6 +43,7 @@ type FmtRow = {
   priceCents: number;
   lockedAt: string | null;
   status: "live" | "press" | "draft";
+  pressName: string | null;
 };
 
 function skuStatus(album: any, active: boolean, kind: string): "live" | "press" | "draft" {
@@ -56,16 +58,25 @@ function skuStatus(album: any, active: boolean, kind: string): "live" | "press" 
 async function loadAlbums(albumIds: string[]) {
   if (!albumIds.length) return [] as any[];
   const r: any = await db.execute(sql`
-    SELECT id, title, artwork, year, good_tunes_release_date, share_slug,
-           is_prepping, is_hidden, first_sold_at, sell_mode, physical_format,
-           submitted_to_press_at, primary_artist_id,
-           catalog_number, upc, price_cents,
-           created_by_scope_kind, created_by_scope_id
+    SELECT albums.id, albums.title, albums.artwork, albums.year,
+           albums.good_tunes_release_date, albums.share_slug,
+           albums.is_prepping, albums.is_hidden, albums.first_sold_at,
+           albums.sell_mode, albums.physical_format,
+           albums.submitted_to_press_at, albums.primary_artist_id,
+           albums.catalog_number, albums.upc, albums.price_cents,
+           albums.created_by_scope_kind, albums.created_by_scope_id,
+           p.invited_by_press_id AS artist_invited_press_id,
+           p.default_press_id AS artist_default_press_id,
+           l.invited_by_press_id AS label_invited_press_id,
+           l.default_press_id AS label_default_press_id
     FROM albums
-    WHERE id = ANY(${pgArray(albumIds)})
-      AND deleted_at IS NULL
-      AND is_goodtunes_release = true
-    ORDER BY COALESCE(good_tunes_release_date, year::text) DESC NULLS LAST, title ASC
+    LEFT JOIN people p ON p.id = albums.primary_artist_id AND p.deleted_at IS NULL
+    LEFT JOIN labels l ON l.id = albums.label_id AND l.deleted_at IS NULL
+    WHERE albums.id = ANY(${pgArray(albumIds)})
+      AND albums.deleted_at IS NULL
+      AND albums.is_goodtunes_release = true
+    ORDER BY COALESCE(albums.good_tunes_release_date, albums.year::text) DESC NULLS LAST,
+             albums.title ASC
   `);
   return (r as any).rows ?? [];
 }
@@ -74,7 +85,7 @@ async function loadSkus(albumIds: string[]) {
   if (!albumIds.length) return new Map<string, FmtRow[]>();
   const r: any = await db.execute(sql`
     SELECT s.id, s.album_id, s.format, s.display_name, s.active, s.locked_at,
-           s.price_cents
+            s.price_cents, s.press_id
     FROM album_skus s
     WHERE s.album_id = ANY(${pgArray(albumIds)})
     ORDER BY s.position ASC
@@ -88,7 +99,26 @@ async function loadSkus(albumIds: string[]) {
   return map;
 }
 
-function shapeFormats(album: any, skus: any[]): FmtRow[] {
+export function resolvePortalPressId(album: any, skus: any[]): string | null {
+  const distinctSkuPressIds = Array.from(
+    new Set<string>(
+      (skus ?? [])
+        .map((s) => (s.press_id ? String(s.press_id) : null))
+        .filter((id): id is string => !!id),
+    ),
+  );
+  return resolvePressIdFromCandidates({
+    artistInvitedPressId: album.artist_invited_press_id ?? null,
+    labelInvitedPressId: album.label_invited_press_id ?? null,
+    artistDefaultPressId: album.artist_default_press_id ?? null,
+    labelDefaultPressId: album.label_default_press_id ?? null,
+    distinctSkuPressIds,
+  });
+}
+
+export function shapeFormats(album: any, skus: any[], pressNames: Map<string, string> = new Map()): FmtRow[] {
+  const pressId = resolvePortalPressId(album, skus);
+  const pressName = pressId ? pressNames.get(pressId) ?? null : null;
   return (skus ?? []).map((s) => {
     const kind = formatKind(s.format);
     return {
@@ -100,6 +130,7 @@ function shapeFormats(album: any, skus: any[]): FmtRow[] {
       priceCents: Number(s.price_cents ?? 0),
       lockedAt: s.locked_at ? new Date(s.locked_at).toISOString() : null,
       status: skuStatus(album, !!s.active, kind),
+      pressName,
     };
   });
 }
@@ -111,6 +142,15 @@ async function wallHandler(req: Request, res: Response) {
 
   const albums = await loadAlbums(scope.albumIds);
   const skuMap = await loadSkus(albums.map((a: any) => a.id));
+  const pressIds = Array.from(new Set<string>(
+    albums
+      .map((a: any) => resolvePortalPressId(a, skuMap.get(a.id) ?? []))
+      .filter((id: string | null): id is string => !!id),
+  ));
+  const pressRows: any = pressIds.length ? await db.execute(sql`
+    SELECT id, name FROM manufacturers WHERE id = ANY(${pgArray(pressIds)}) AND deleted_at IS NULL
+  `) : { rows: [] };
+  const pressNames = new Map<string, string>(((pressRows as any).rows ?? []).map((r: any) => [String(r.id), String(r.name)]));
 
   // Money flag: any pending payment request against one of these albums.
   let pendingAlbumIds = new Set<string>();
@@ -137,7 +177,7 @@ async function wallHandler(req: Request, res: Response) {
   }
 
   const cards = albums.map((a: any) => {
-    const formats = shapeFormats(a, skuMap.get(a.id) ?? []);
+    const formats = shapeFormats(a, skuMap.get(a.id) ?? [], pressNames);
     const anyLive = formats.some((f) => f.status === "live");
     const sellMode = a.sell_mode || null;
     const channel: "goodtunes" | "shopify" | null =
@@ -207,7 +247,16 @@ async function releaseHandler(req: Request, res: Response) {
   }
 
   const skuMap = await loadSkus([albumId]);
-  const formats = shapeFormats(album, skuMap.get(albumId) ?? []);
+  const albumSkus = skuMap.get(albumId) ?? [];
+  const resolvedPressId = resolvePortalPressId(album, albumSkus);
+  const resolvedPress = resolvedPressId
+    ? await storage.getManufacturerById(resolvedPressId)
+    : null;
+  const formats = shapeFormats(
+    album,
+    albumSkus,
+    resolvedPress ? new Map([[resolvedPress.id, resolvedPress.name]]) : new Map(),
+  );
 
   const person = await storage.getPersonById(String(album.primary_artist_id ?? scope.personId));
 

@@ -530,7 +530,13 @@ export function NewAlbumArtistDialog({
   });
   const createPersonMut = useMutation({
     mutationFn: async (body: Record<string, unknown>): Promise<PersonLite> => {
-      const res = await apiRequest("POST", `${personApiBase}/people`, body);
+      const res = await apiRequest("POST", `${personApiBase}/people`, {
+        ...body,
+        // Explicit artist intent keeps the broad Person endpoint safe for
+        // business-contact creation while the GoodTunes People/artist
+        // composer receives the platform press default.
+        goodTunesArtist: true,
+      });
       return (await res.json()) as PersonLite;
     },
     onSuccess: () => {

@@ -2637,7 +2637,13 @@ function OverviewPanel({
       <section className="space-y-5" aria-labelledby="artist-production-heading">
         <AccountSectionHeading id="artist-production-heading" title="Production." detail="Press routing and separate referral history." />
         <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-5" data-testid="card-artist-production">
-          <InvitedByPressPanel kind="people" id={person.id} currentPressId={person.invitedByPressId} currentPressMode={(person as any).pressMode} />
+          <InvitedByPressPanel
+            kind="people"
+            id={person.id}
+            currentPressId={person.invitedByPressId}
+            currentDefaultPressId={person.defaultPressId}
+            currentPressMode={(person as any).pressMode}
+          />
           <div className="border-t border-slate-100 pt-5" data-testid="section-artist-referral-history">
             <ReferralSummaryPanel kind="artist" id={person.id} />
             <BackfillReferralPanel kind="artist" id={person.id} />

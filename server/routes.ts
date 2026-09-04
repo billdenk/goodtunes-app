@@ -37,6 +37,10 @@ import {
 import { pgArray } from "./lib/pgArray";
 import { masterCandidates, classifySongMaster, MASTER_FAILURE_MESSAGES, getMastersSweepCache, runMastersSweep, startMastersHealthSweep } from "./mastersHealth";
 import { resolvePressIdFromCandidates } from "./lib/pressPlaceholders";
+import {
+  assignGoodTunesDefaultPressAtArtistGrant,
+  withGoodTunesDefaultPress,
+} from "./goodTunesDefaultPress";
 import { findChorusStartMs, findChorusCueIndex } from "./lib/chorusFinder";
 import { planAutoGoodSyncUpdates, decideInstrumental } from "./lib/autoGoodSyncPolicy";
 import { detectExplicitLyrics } from "./lib/explicitLyrics";
@@ -17153,6 +17157,10 @@ export async function registerRoutes(
     // row, so this keeps both partner paths at parity. Mirrors pressMode:
     // admin-curation state, not sensitive.
     invitedByPressId: p.invitedByPressId ?? null,
+    // Mutable pipeline/home press. Kept separate from invitedByPressId so
+    // GoodTunes defaults and later operator choices do not fabricate press
+    // provenance.
+    defaultPressId: p.defaultPressId ?? null,
     // Task #1310 — the artist half of the two-part share link. It's public
     // data (it literally appears in get.goodtunes.music/<artist>/<album>),
     // and the admin Share-link panel reads this projection to show the
@@ -17729,7 +17737,7 @@ export async function registerRoutes(
     }
     // Task #3196 — avatars render as circles; persist a square center-crop.
     photoUrl = await squarePersonPhotoUrl(photoUrl);
-    const p = await storage.createPerson({
+    const personValues = {
       name: String(b.name),
       photoUrl,
       coverUrl: opt(b.coverUrl),
@@ -17758,7 +17766,18 @@ export async function registerRoutes(
       groupKind: opt(b.groupKind),
       // Task #824 — creative-credit tags from the multi-role picker.
       roles: sanitizeRoles(b.roles),
-    } as any).catch(async (err: any) => {
+    } as any;
+    const operatorRow: any = b.goodTunesArtist === true
+      ? await db.execute(sql`SELECT role FROM users WHERE id = ${req.session.userId!} LIMIT 1`)
+      : { rows: [] };
+    const operatorRole = ((operatorRow as any).rows ?? [])[0]?.role ?? null;
+    const shouldApplyGoodTunesDefault =
+      b.goodTunesArtist === true && (operatorRole === "super_admin" || operatorRole === "admin");
+    const p = await storage.createPerson(
+      shouldApplyGoodTunesDefault
+        ? await withGoodTunesDefaultPress(personValues)
+        : personValues,
+    ).catch(async (err: any) => {
       // Unique-index race: a concurrent create won — return their row.
       const code = err?.cause?.code ?? err?.code;
       if (code === "23505") {
@@ -25888,6 +25907,21 @@ export async function registerRoutes(
   const { setUserRole, requireRole, getUserRole, findMembershipForScope, addMembership, removeMembership } = await import("./auth/roles");
   const { adminInvites: _adminInvites, ADMIN_ROLES } = await import("@shared/schema");
 
+  async function inviteWasCreatedDirectlyByGoodTunes(invite: {
+    createdByUserId?: string | null;
+    referrerKind?: string | null;
+    defaultPressId?: string | null;
+  }): Promise<boolean> {
+    // Absence of a press is not proof of GoodTunes ownership: artist/label
+    // partner referrals are intentionally separate acquisition paths.
+    if (!invite.createdByUserId || invite.referrerKind || invite.defaultPressId) return false;
+    const creator: any = await db.execute(sql`
+      SELECT role FROM users WHERE id = ${invite.createdByUserId} LIMIT 1
+    `);
+    const role = ((creator as any).rows ?? [])[0]?.role ?? null;
+    return role === "super_admin" || role === "admin";
+  }
+
   // Task #1038 — apply an admin invite's grant onto a user row. Shared by
   // the password invite-accept and the CREATE direct-grant-onto-existing
   // path so both produce identical side effects. `isNewAccount=true` mints
@@ -25936,11 +25970,22 @@ export async function registerRoutes(
           (ur?.real_name ?? "").trim() ||
           (invite.email ? invite.email.split("@")[0] : "") ||
           "Artist";
-        const newPerson = await storage.createPerson({
+        const originatingPressId =
+          invite.referrerKind === "manufacturer" && invite.referrerScopeId
+            ? String(invite.referrerScopeId)
+            : null;
+        const personValues = {
           name: rawName,
           isGroup: false,
           contactEmail: invite.email ?? null,
-        } as any);
+          invitedByPressId: originatingPressId,
+          defaultPressId: invite.defaultPressId ?? originatingPressId,
+        } as any;
+        const newPerson = await storage.createPerson(
+          await inviteWasCreatedDirectlyByGoodTunes(invite)
+            ? await withGoodTunesDefaultPress(personValues)
+            : personValues,
+        );
         effectiveRoleScopeId = newPerson.id;
         console.log(
           `[applyAdminInviteGrant] auto-created Person ${newPerson.id} ("${rawName}") for scopeless artist grant` +
@@ -25953,6 +25998,14 @@ export async function registerRoutes(
         console.error(`[applyAdminInviteGrant] failed to auto-create Person for scopeless artist (userId=${userId}): ${e?.message}`);
         throw e;
       }
+    }
+
+    if (
+      invite.role === "artist" &&
+      effectiveRoleScopeId &&
+      await inviteWasCreatedDirectlyByGoodTunes(invite)
+    ) {
+      await assignGoodTunesDefaultPressAtArtistGrant(effectiveRoleScopeId);
     }
 
     // Promote to admin. Stamp Terms only on a brand-new row — an existing
@@ -28224,12 +28277,29 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Enter the artist's name (or pick an existing artist)." });
       }
       const placeholderPhone = req.body?.phone ? String(req.body.phone).trim() || null : null;
-      const placeholder = await storage.createPerson({
+      const originatingPressId =
+        pressInviterScopeId ??
+        (req.body?.referrerKind === "manufacturer" && req.body?.referrerScopeId
+          ? String(req.body.referrerScopeId)
+          : null);
+      const explicitDefaultPressId = req.body?.defaultPressId
+        ? String(req.body.defaultPressId)
+        : null;
+      const placeholderValues = {
         name: placeholderName,
         isGroup: false,
         contactEmail: email,
         contactPhone: placeholderPhone,
-      } as any);
+        defaultPressId: explicitDefaultPressId ?? originatingPressId,
+      } as any;
+      const isDirectGoodTunesArtistCreation =
+        (callerRole.role === "super_admin" || callerRole.role === "admin") &&
+        !req.body?.referrerKind;
+      const placeholder = await storage.createPerson(
+        isDirectGoodTunesArtistCreation
+          ? await withGoodTunesDefaultPress(placeholderValues)
+          : placeholderValues,
+      );
       roleScopeId = placeholder.id;
     }
     // Roles that bind to a specific entity: validate the scope id
@@ -29407,7 +29477,12 @@ export async function registerRoutes(
       : await storage.getLabelById(id);
     if (!exists) return { error: "Partner not found" };
     if (kind === "people") {
-      await db.execute(sql`UPDATE people SET invited_by_press_id = ${pressId} WHERE id = ${id}`);
+      await db.execute(sql`
+        UPDATE people
+           SET invited_by_press_id = ${pressId},
+               default_press_id = ${pressId}
+         WHERE id = ${id}
+      `);
     } else {
       await db.execute(sql`UPDATE labels SET invited_by_press_id = ${pressId} WHERE id = ${id}`);
     }
@@ -29500,6 +29575,34 @@ export async function registerRoutes(
       const r = await setInvitedByPress("people", String(req.params.id), pressId);
       if ("error" in r) return res.status(400).json({ message: r.error });
       res.json({ ok: true });
+    },
+  );
+  app.patch(
+    "/api/admin/people/:id/default-press",
+    requireAdmin,
+    requireRole("super_admin"),
+    async (req, res) => {
+      const id = String(req.params.id);
+      const pressId = req.body?.pressId ? String(req.body.pressId) : null;
+      if (pressId && !(await storage.getManufacturerById(pressId))) {
+        return res.status(400).json({ message: "That press no longer exists" });
+      }
+      if (!(await storage.getPersonById(id))) {
+        return res.status(404).json({ message: "Partner not found" });
+      }
+      await db.execute(sql`UPDATE people SET default_press_id = ${pressId} WHERE id = ${id}`);
+      try {
+        const affected: any = await db.execute(
+          sql`SELECT id FROM albums WHERE primary_artist_id = ${id} AND deleted_at IS NULL`,
+        );
+        const { reresolveAlbumSkuSnapshots } = await import("./commerce");
+        for (const row of ((affected.rows ?? affected) as Array<{ id: string }>)) {
+          await reresolveAlbumSkuSnapshots(row.id);
+        }
+      } catch (error) {
+        console.error("setDefaultPress: snapshot re-resolve failed", error);
+      }
+      return res.json({ ok: true });
     },
   );
   app.patch(

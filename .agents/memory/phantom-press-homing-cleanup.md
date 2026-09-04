@@ -10,10 +10,10 @@ surfaces when its `default_press_id` points at that press (see
 `sqlPressCustomers` in `server/pressPortal.ts`: `default_press_id = pressId` OR
 they have a non-cancelled pressing order for it). A historical bulk stamp once
 set `default_press_id` (and, for most, `invited_by_press_id`) = Memphis Record
-Pressing (MRP) on ~129 famous artists/labels (Adele, Beyoncé, Springsteen…) who
-have **zero** MRP pressing orders and MRP had **zero** invites — so they wrongly
-listed as "ACCEPTED / 0 albums / 0 units". Prod-only; dev founding seed produces
-0 homed rows, so no recurring code path recreates them.
+Pressing (MRP) on ~129 unrelated imported artists/labels who had **zero** MRP
+pressing orders and no MRP invite — so they wrongly listed as
+"ACCEPTED / 0 albums / 0 units". A legitimate MRP default now exists for direct
+GoodTunes artist creation; it is intentionally creation-boundary-only.
 
 ## The non-obvious trap: `invited_by_press_id` is NOT passive provenance
 It also drives **Sell-panel press/pricing resolution and admin album
@@ -35,7 +35,11 @@ proper "these aren't that press's customers" cleanup must clear BOTH columns.
   tooling; post-merge is the only sanctioned prod write path). Marker-guard also
   protects a legit later "add artist under press" (which sets `default_press_id`
   before any invite/order exists) from being clobbered on a future merge.
+- A platform-default backfill must happen only after old phantom assignments
+  are removed and must require positive proof that the artist entered through
+  GoodTunes. Catalog presence or no current press assignment is not proof.
 
 **Why:** Bill reported MRP's customer list full of artists it never worked with;
-the ask was "no default press homing for these." Clearing default alone would
-have left MRP silently winning their pricing/attribution.
+the ask was "no default press homing for these." The later MRP default policy is
+valid only for GoodTunes-owned artist creation; broad artist-shape sweeps would
+recreate the original phantom roster and silently change pricing/attribution.

@@ -27,12 +27,14 @@ export function InvitedByPressPanel({
   kind,
   id,
   currentPressId,
+  currentDefaultPressId,
   currentPressMode,
   onChanged,
 }: {
   kind: "people" | "labels";
   id: string;
   currentPressId: string | null;
+  currentDefaultPressId?: string | null;
   // Task #736 — stored press mode for this entity. null = inherit (the
   // resolver falls to the label, then "dedicated"); the toggle below
   // surfaces the effective default ("dedicated") when null.
@@ -73,12 +75,13 @@ export function InvitedByPressPanel({
 
   const { data: presses = [] } = useQuery<Manufacturer[]>({
     queryKey: ["/api/manufacturers"],
-    enabled: isSuperAdmin || !!currentPressId,
+    enabled: isSuperAdmin || !!currentPressId || !!currentDefaultPressId,
   });
 
+  const assignmentPressId = currentPressId ?? currentDefaultPressId ?? null;
   const current = useMemo(
-    () => (currentPressId ? presses.find((p) => p.id === currentPressId) ?? null : null),
-    [presses, currentPressId],
+    () => (assignmentPressId ? presses.find((p) => p.id === assignmentPressId) ?? null : null),
+    [presses, assignmentPressId],
   );
 
   const [selecting, setSelecting] = useState(false);
@@ -86,7 +89,9 @@ export function InvitedByPressPanel({
 
   const save = useMutation({
     mutationFn: async (pressId: string | null) => {
-      await apiRequest("PATCH", `/api/admin/${kind}/${id}/invited-press`, { pressId });
+      const assignmentRoute =
+        kind === "people" && !currentPressId ? "default-press" : "invited-press";
+      await apiRequest("PATCH", `/api/admin/${kind}/${id}/${assignmentRoute}`, { pressId });
     },
     onSuccess: () => {
       // Invalidate the partner detail + any album-level invited-press
@@ -115,9 +120,9 @@ export function InvitedByPressPanel({
   // so "No plant set" doesn't silently contradict the album Press panel.
   const { data: skuSummary } = useQuery<{ skuDerivedPressName: string | null }>({
     queryKey: [`/api/admin/${kind}/${id}/sku-press-summary`],
-    enabled: isSuperAdmin && !currentPressId,
+    enabled: isSuperAdmin && !assignmentPressId,
   });
-  const skuDerivedPressName = currentPressId ? null : (skuSummary?.skuDerivedPressName ?? null);
+  const skuDerivedPressName = assignmentPressId ? null : (skuSummary?.skuDerivedPressName ?? null);
 
   // Hooks stay above every early return (Rules of Hooks — the query-driven
   // `current`/role flips between renders, so a hook below the guard crashes
@@ -274,7 +279,7 @@ export function InvitedByPressPanel({
                       <button
                         type="button"
                         onClick={() => save.mutate(p.id)}
-                        disabled={save.isPending || p.id === currentPressId}
+                        disabled={save.isPending || p.id === assignmentPressId}
                         className="w-full text-left flex items-center gap-3 px-3 py-2 hover:bg-slate-50 disabled:opacity-50"
                         data-testid={`option-press-${p.id}`}
                       >
@@ -284,7 +289,7 @@ export function InvitedByPressPanel({
                           <div className="w-6 h-6 rounded bg-slate-100" />
                         )}
                         <span className="flex-1 text-[13px] text-slate-900 truncate">{p.name}</span>
-                        {p.id === currentPressId && (
+                        {p.id === assignmentPressId && (
                           <span className="text-[10px] uppercase tracking-wide text-slate-400">current</span>
                         )}
                       </button>
