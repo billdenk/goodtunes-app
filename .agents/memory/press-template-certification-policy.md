@@ -41,3 +41,10 @@ no auto ink/PPI inspection on load (loadArtFromFile inspect:false), retry
 control hidden and its handler guarded via artInspectionAllowed() in
 templateHistory.ts. Only a fresh deliberate art pick in the live view may
 inspect.
+
+## Ordered multi-page evidence must be server-derived
+**Rule:** certification must independently derive ordered page facts from the pinned stored artwork. Source-paint inspection must recursively follow invoked Form XObjects with local/inherited resources; unresolved, cyclic, or unsupported paint-bearing content fails closed.
+
+**Why:** client verdicts are forgeable, display renderers normalize source color semantics, and ordinary print PDFs commonly place vector/text paint inside Forms. Reading only page-level content can miss prohibited RGB while the visible page appears valid.
+
+**How to apply:** gate every automatic and explicit certification path on the same server-validated ordered evidence: page count/order, geometry, effective PPI, source paint color, soft-mask exclusions, and referenced optional-content layers. Keep artist proofing behavior isolated unless separately approved.
