@@ -1,0 +1,62 @@
+{
+  "experimentId": "press-template-test",
+  "revision": "rnd-v9",
+  "sourcePage": "PressTemplatesIndexRnd",
+  "entry": "./index.ts",
+  "sourceCanonVersion": "otis-applied-baseline",
+  "components": [
+    {
+      "id": "press-templates-index",
+      "sourceComponent": "mockups/PressTemplatesIndex.tsx#PressTemplatesIndex",
+      "snapshot": "./PressTemplatesIndexRndOwned.tsx",
+      "snapshotDigest": "be0b0cefeac2fb010b6e348c7f23a5b9e582fbeb4b677d018cfe4f92a97fffcb",
+      "ownership": "rnd-owned"
+    },
+    {
+      "id": "press-template-live-test",
+      "sourceComponent": "mockups/PressTemplateLiveTest.tsx#PressTemplateLiveTest",
+      "snapshot": "./PressTemplateLiveTestRndOwned.tsx",
+      "snapshotDigest": "cb9efac5002c9f27d49488e89a57f497bf589f75d6fa7e679da9cad65380a172",
+      "ownership": "rnd-owned"
+    }
+  ],
+  "readOnlyFoundations": [
+    "react",
+    "lucide-react",
+    "pdfjs-dist"
+  ],
+  "readOnlyFiles": [
+    {
+      "path": "../../assets/mrp-logo.svg",
+      "digest": "daeac05279a0b425298da8041962cd1960e24b5f7582911bfb3eb2e8f5ea39c2"
+    },
+    {
+      "path": "../../assets/gt-preview-template-flat.jpg",
+      "digest": "e3065f40a886971469c9096c32d1c4807fde5cef5b13b283a36f6c3bfeeab4a3"
+    },
+    {
+      "path": "../../assets/gt-preview-jacket-flat.jpg",
+      "digest": "c56b0221d27d4db281115f80393a5ca7f3393d07c2dbd0b87fd8d338e8c0f244"
+    },
+    {
+      "path": "../../assets/label-template-r091125.pdf",
+      "digest": "b48f26f3cd9da169aad8076f99af03acbd86438047e8d8a09135ed2e965b4b0a"
+    },
+    {
+      "path": "../../../../../../../attached_assets/20260814_GoodTunes_MRP_12-LBL100M-2_—_12in_Center_Labels_for_2_1788539107835.pdf",
+      "digest": "0cdfd534df7b5a7bd67ea81eab665af9fa8f820fbf3864e329a31c5411cc2ffd"
+    },
+    {
+      "path": "../../assets/jacket-template-r072226.pdf",
+      "digest": "090dbddb63d8bcc9e6c14440d7507b7e916786c6f5d5d796ba58a70029ba8370"
+    },
+    {
+      "path": "../../assets/goodtunes-logo.png",
+      "digest": "81077765d8338b201b85eb0196471e5223816144d9c09f3fa9ef7e5aeb309c0d"
+    },
+    {
+      "path": "../../assets/brandon-seavers.png",
+      "digest": "9f5e6b9f4af4e66a5cb01aab07e70625fdc5234597255ff7432ed879813e8dc4"
+    }
+  ]
+}

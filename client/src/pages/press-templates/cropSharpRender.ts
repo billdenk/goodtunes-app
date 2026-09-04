@@ -72,9 +72,10 @@ export async function renderCropOnce(
   doc: pdfjs.PDFDocumentProxy,
   focus: CropFocus,
   desiredPx: number,
+  pageNum = 1,
 ): Promise<CropRender> {
   const { targetW, targetH, scale } = computeCropCanvasSize(focus.w, focus.h, desiredPx);
-  const page = await doc.getPage(1);
+  const page = await doc.getPage(pageNum);
   const vp1 = page.getViewport({ scale: 1 }); // overlay mm frame flips Y with THIS height
   const vp = page.getViewport({ scale });
   const canvas = document.createElement('canvas');

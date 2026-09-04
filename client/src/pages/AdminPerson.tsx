@@ -1001,13 +1001,13 @@ export function AdminPerson() {
                /api/admin/people writes for presses). */
             <div
               className="rounded-full overflow-hidden flex-shrink-0"
-              style={{ width: 96, height: 96 }}
+              style={{ width: 80, height: 80 }}
               data-testid="img-person-photo"
             >
               <PersonAvatar
                 name={person.name}
                 photoUrl={person.photoUrl}
-                size={96}
+                size={80}
               />
             </div>
           ) : (
@@ -1016,14 +1016,14 @@ export function AdminPerson() {
                 type="button"
                 onClick={() => setPhotoEditorOpen(true)}
                 className="group relative rounded-full overflow-hidden flex-shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2"
-                style={{ width: 96, height: 96 }}
+                style={{ width: 80, height: 80 }}
                 aria-label="Edit artist photo"
                 data-testid="button-edit-person-photo"
               >
                 <PersonAvatar
                   name={person.name}
                   photoUrl={person.photoUrl}
-                  size={96}
+                  size={80}
                 />
                 <span className="absolute inset-0 bg-black/0 group-hover:bg-black/40 group-focus-visible:bg-black/40 [@media(hover:none)]:bg-black/30 transition-colors" />
                 <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
@@ -1052,7 +1052,7 @@ export function AdminPerson() {
                         {person.attachments[0].role || person.attachments[0].gtRole || "Contact"}
                         {" at "}
                         <Link
-                          href={CONTACT_ATTACHMENT_HREF[person.attachments[0].entityKind as keyof typeof CONTACT_ATTACHMENT_HREF]?.(person.attachments[0].entityId) ?? "#"}
+                          href={CONTACT_ATTACHMENT_HREF[person.attachments[0].entityKind](person.attachments[0].entityId)}
                           className="hover:underline underline-offset-2"
                         >
                           {person.attachments[0].entityName}
@@ -1165,6 +1165,21 @@ export function AdminPerson() {
             operatorView
           />
         )}
+        {/* GoodStudio account canon places the operator's existing account
+            controls after the live artist Settings body. Overview remains
+            available as its established deep link; both mounts use the same
+            authoritative panels and handlers rather than a fork. */}
+        {mirrorMode && tab === "settings" && (
+          <div className="mt-8">
+            <div className="mb-8">
+              <h2 className="text-3xl font-semibold tracking-[-0.025em] text-[var(--apple-ink)]">
+                Settings.{" "}
+                <span className="font-medium text-[var(--apple-subink)]">Manage this artist.</span>
+              </h2>
+            </div>
+            <OverviewPanel person={person} labels={labels} managers={managers} />
+          </div>
+        )}
         {tab === "dashboard" && !pressMode && !mirrorMode && (
           <AdminPartnerDashboard
             scope="artist"
@@ -1181,14 +1196,6 @@ export function AdminPerson() {
           ) : (
             <OverviewPanel person={person} labels={labels} managers={managers} />
           )
-        )}
-        {/* Task #1783 — who gets this artist's end-of-day sales report.
-            Reuses the partner-notification recipient settings; the daily
-            digest only goes to people set up here. */}
-        {tab === "overview" && !pressMode && person.shape !== "contact" && (
-          <div className="mt-4">
-            <NotificationsCard partnerKind="person" partnerId={person.id} partnerName={person.name} />
-          </div>
         )}
         {tab === "cover" && (
           pressMode ? (
@@ -2495,17 +2502,68 @@ function OverviewPanel({
     { value: "Ensemble", label: "Ensemble" },
   ];
   return (
-    <div className="space-y-5">
-      <ReferralSummaryPanel kind="artist" id={person.id} />
-      <BackfillReferralPanel kind="artist" id={person.id} />
-      <InvitedByPressPanel kind="people" id={person.id} currentPressId={person.invitedByPressId} currentPressMode={(person as any).pressMode} />
-      <RolesPanel person={person} />
-      {/* Task #968 — an artist who is also partner staff (band artist +
-          MRP sales contact, label/NPO/vendor staff, …) sees their
-          business affiliation here too, so neither role hides the other.
-          Hidden entirely for a pure artist with no affiliations. */}
-      <AffiliationPanel person={person} hideWhenEmpty />
+    <div className="gt-admin-artist-account-stack space-y-8" data-testid="admin-artist-account-stack">
+      <section className="space-y-5" aria-labelledby="artist-links-heading">
+        <AccountSectionHeading id="artist-links-heading" title="Links." detail="Where people find this artist." />
       <ArtistUrlPanel person={person} />
+      <EditablePanel
+        title="Social links"
+        testId="panel-overview-socials"
+        endpoint={endpoint}
+        values={{
+          instagramUrl: person.instagramUrl,
+          tiktokUrl: person.tiktokUrl,
+          twitterUrl: person.twitterUrl,
+          blueskyUrl: person.blueskyUrl,
+          facebookUrl: person.facebookUrl,
+          websiteUrl: person.websiteUrl,
+        }}
+        invalidate={invalidate}
+        fields={[
+          { key: "instagramUrl", label: "Instagram", type: "url", readIcon: SiInstagram, placeholder: "https://instagram.com/…" },
+          { key: "tiktokUrl", label: "TikTok", type: "url", readIcon: SiTiktok, placeholder: "https://tiktok.com/@…" },
+          { key: "twitterUrl", label: "X / Twitter", type: "url", readIcon: SiX, placeholder: "https://x.com/…" },
+          { key: "blueskyUrl", label: "Bluesky", type: "url", readIcon: SiBluesky, placeholder: "https://bsky.app/profile/…" },
+          { key: "facebookUrl", label: "Facebook", type: "url", readIcon: SiFacebook, placeholder: "https://facebook.com/…" },
+          { key: "websiteUrl", label: "Website", type: "url", readIcon: Globe, placeholder: "https://…" },
+        ]}
+      />
+      <div className="space-y-3">
+        <EditablePanel
+          title="Streaming services"
+          testId="panel-streaming"
+          endpoint={endpoint}
+          values={{
+            appleMusicUrl: person.appleMusicUrl,
+            spotifyUrl: person.spotifyUrl,
+            tidalUrl: person.tidalUrl,
+            qobuzUrl: person.qobuzUrl,
+            deezerUrl: person.deezerUrl,
+            pandoraUrl: person.pandoraUrl,
+          }}
+          invalidate={invalidate}
+          fields={[
+            { key: "appleMusicUrl", label: "Apple Music", type: "url", readIcon: SiApplemusic, placeholder: "https://music.apple.com/…" },
+            { key: "spotifyUrl", label: "Spotify", type: "url", readIcon: SiSpotify, placeholder: "https://open.spotify.com/artist/…" },
+            { key: "tidalUrl", label: "Tidal", type: "url", readIcon: SiTidal, placeholder: "https://tidal.com/browse/artist/…" },
+            { key: "qobuzUrl", label: "Qobuz", type: "url", placeholder: "https://open.qobuz.com/artist/…" },
+            { key: "deezerUrl", label: "Deezer", type: "url", placeholder: "https://www.deezer.com/artist/…" },
+            { key: "pandoraUrl", label: "Pandora", type: "url", readIcon: SiPandora, placeholder: "https://www.pandora.com/artist/…" },
+          ]}
+        />
+        <p className="text-slate-400 text-[11.5px] leading-relaxed px-1">
+          GoodTunes hosts a song in-app for the first two weeks, then routes fans to these authoritative service URLs. Apple Music also supplies the existing discography import.
+        </p>
+      </div>
+      </section>
+
+      <section className="space-y-5" aria-labelledby="artist-stores-heading">
+        <AccountSectionHeading id="artist-stores-heading" title="Stores." detail="GoodTunes and Shopify." />
+        <PersonShopifyPanel person={person} />
+      </section>
+
+      <section className="space-y-5" aria-labelledby="artist-identity-heading">
+        <AccountSectionHeading id="artist-identity-heading" title="Identity." detail="The artist record and public profile." />
       <EditablePanel
         title="Identity"
         testId="panel-overview-identity"
@@ -2561,135 +2619,48 @@ function OverviewPanel({
           },
         ]}
       />
-      <EditablePanel
-        title="Socials"
-        testId="panel-overview-socials"
-        endpoint={endpoint}
-        values={{
-          instagramUrl: person.instagramUrl,
-          tiktokUrl: person.tiktokUrl,
-          twitterUrl: person.twitterUrl,
-          blueskyUrl: person.blueskyUrl,
-          facebookUrl: person.facebookUrl,
-          websiteUrl: person.websiteUrl,
-        }}
-        invalidate={invalidate}
-        fields={[
-          {
-            key: "instagramUrl",
-            label: "Instagram",
-            type: "url",
-            readIcon: SiInstagram,
-            placeholder: "https://instagram.com/…",
-          },
-          {
-            key: "tiktokUrl",
-            label: "TikTok",
-            type: "url",
-            readIcon: SiTiktok,
-            placeholder: "https://tiktok.com/@…",
-          },
-          {
-            key: "twitterUrl",
-            label: "X / Twitter",
-            type: "url",
-            readIcon: SiX,
-            placeholder: "https://x.com/…",
-          },
-          {
-            key: "blueskyUrl",
-            label: "Bluesky",
-            type: "url",
-            readIcon: SiBluesky,
-            placeholder: "https://bsky.app/profile/…",
-          },
-          {
-            key: "facebookUrl",
-            label: "Facebook",
-            type: "url",
-            readIcon: SiFacebook,
-            placeholder: "https://facebook.com/…",
-          },
-          {
-            key: "websiteUrl",
-            label: "Website",
-            type: "url",
-            readIcon: Globe,
-            placeholder: "https://…",
-          },
-        ]}
-      />
-      {/* Streaming services — Apple Music + Spotify. Lives at the
-          bottom of Overview so the more frequently edited
-          Identity/Socials sit on top. The Spotify picker shortcut was
-          removed: admins can paste a Spotify URL straight into the
-          field below if the auto-match isn't right. */}
-      <div className="space-y-3">
-        <EditablePanel
-          title="Streaming services"
-          testId="panel-streaming"
-          endpoint={endpoint}
-          values={{
-            appleMusicUrl: person.appleMusicUrl,
-            spotifyUrl: person.spotifyUrl,
-            tidalUrl: person.tidalUrl,
-            qobuzUrl: person.qobuzUrl,
-            deezerUrl: person.deezerUrl,
-            pandoraUrl: person.pandoraUrl,
-          }}
-          invalidate={invalidate}
-          fields={[
-            {
-              key: "appleMusicUrl",
-              label: "Apple Music",
-              type: "url",
-              readIcon: SiApplemusic,
-              placeholder: "https://music.apple.com/…",
-            },
-            {
-              key: "spotifyUrl",
-              label: "Spotify",
-              type: "url",
-              readIcon: SiSpotify,
-              placeholder: "https://open.spotify.com/artist/…",
-            },
-            {
-              key: "tidalUrl",
-              label: "Tidal",
-              type: "url",
-              readIcon: SiTidal,
-              placeholder: "https://tidal.com/browse/artist/…",
-            },
-            {
-              key: "qobuzUrl",
-              label: "Qobuz",
-              type: "url",
-              placeholder: "https://open.qobuz.com/artist/…",
-            },
-            {
-              key: "deezerUrl",
-              label: "Deezer",
-              type: "url",
-              placeholder: "https://www.deezer.com/artist/…",
-            },
-            {
-              key: "pandoraUrl",
-              label: "Pandora",
-              type: "url",
-              readIcon: SiPandora,
-              placeholder: "https://www.pandora.com/artist/…",
-            },
-          ]}
-        />
-        <p className="text-slate-400 text-[11.5px] leading-relaxed px-1">
-          Per replit.md: GoodTunes hosts a song in-app for the first ~2 weeks,
-          then routes fans to these URLs. The Apple Music URL also feeds the
-          iTunes Lookup pull used by the Discography tab.
-        </p>
-      </div>
-      <PersonShopifyPanel person={person} />
+        <RolesPanel person={person} />
+        {/* An artist who is also partner staff keeps the existing, separately
+            persisted business affiliation visible; no identity fields are
+            inferred from it. */}
+        <AffiliationPanel person={person} hideWhenEmpty />
+      </section>
+
+      <section className="space-y-5" aria-labelledby="artist-notifications-heading">
+        <AccountSectionHeading id="artist-notifications-heading" title="Notifications." detail="Who receives artist updates." />
+        <NotificationsCard partnerKind="person" partnerId={person.id} partnerName={person.name} />
+      </section>
+
+      <section className="space-y-5" aria-labelledby="artist-production-heading">
+        <AccountSectionHeading id="artist-production-heading" title="Production." detail="Press routing and separate referral history." />
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 space-y-5" data-testid="card-artist-production">
+          <InvitedByPressPanel kind="people" id={person.id} currentPressId={person.invitedByPressId} currentPressMode={(person as any).pressMode} />
+          <div className="border-t border-slate-100 pt-5" data-testid="section-artist-referral-history">
+            <ReferralSummaryPanel kind="artist" id={person.id} />
+            <BackfillReferralPanel kind="artist" id={person.id} />
+          </div>
+        </div>
+      </section>
+
       <RemoveArtistProfilePanel person={person} />
     </div>
+  );
+}
+
+function AccountSectionHeading({
+  id,
+  title,
+  detail,
+}: {
+  id: string;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <h2 id={id} className="text-xl font-semibold tracking-[-0.02em] text-[var(--apple-ink)]">
+      {title}{" "}
+      <span className="font-medium text-[var(--apple-subink)]">{detail}</span>
+    </h2>
   );
 }
 

@@ -1,0 +1,295 @@
+{
+  "package": "otis-final-canon-readiness-2026-09-04",
+  "sourceRevision": "press-template-test-rnd-v9",
+  "scopes": [
+    {
+      "id": "admin-artist-profile",
+      "classification": "ZERO FUNCTIONALITY CHANGES — SKIN ONLY",
+      "source": "goodstudio-source/mockups/AdminArtistProfileInteractionCanon.tsx"
+    },
+    {
+      "id": "press-template-ordered-multipage",
+      "classification": "approved functionality upgrade",
+      "source": "goodstudio-source/experiments/press-template-test/PressTemplateLiveTestRndOwned.tsx"
+    }
+  ],
+  "productionGate": "Otis itemized receipt plus independent published verification",
+  "artistMultipage": "deferred; separate authority-scoped implementation",
+  "files": [
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/README.md",
+      "bytes": 8043,
+      "sha256": "4b56291b02b459368ecd964d9ca536f67c19b336476ecd47882bf83b550d775c"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/experiments/press-template-test/isolation.json",
+      "bytes": 2215,
+      "sha256": "e631a17894c2aaad494eb30ae08560cfc34200ace6c116c3031086c5738a2bf3"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/experiments/press-template-test/PressTemplatesIndexRndOwned.tsx",
+      "bytes": 60661,
+      "sha256": "be0b0cefeac2fb010b6e348c7f23a5b9e582fbeb4b677d018cfe4f92a97fffcb"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/brandon-seavers.png",
+      "bytes": 495137,
+      "sha256": "9f5e6b9f4af4e66a5cb01aab07e70625fdc5234597255ff7432ed879813e8dc4"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/goodtunes-logo.png",
+      "bytes": 692098,
+      "sha256": "81077765d8338b201b85eb0196471e5223816144d9c09f3fa9ef7e5aeb309c0d"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/jacket-template-r072226.pdf",
+      "bytes": 742107,
+      "sha256": "090dbddb63d8bcc9e6c14440d7507b7e916786c6f5d5d796ba58a70029ba8370"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/label-template-r091125.pdf",
+      "bytes": 864321,
+      "sha256": "b48f26f3cd9da169aad8076f99af03acbd86438047e8d8a09135ed2e965b4b0a"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/gt-preview-jacket-flat.jpg",
+      "bytes": 84214,
+      "sha256": "c56b0221d27d4db281115f80393a5ca7f3393d07c2dbd0b87fd8d338e8c0f244"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/gt-preview-template-flat.jpg",
+      "bytes": 12954,
+      "sha256": "e3065f40a886971469c9096c32d1c4807fde5cef5b13b283a36f6c3bfeeab4a3"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/mrp-logo.svg",
+      "bytes": 13736,
+      "sha256": "daeac05279a0b425298da8041962cd1960e24b5f7582911bfb3eb2e8f5ea39c2"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/experiments/press-template-test/PressTemplateLiveTestRndOwned.tsx",
+      "bytes": 139383,
+      "sha256": "cb9efac5002c9f27d49488e89a57f497bf589f75d6fa7e679da9cad65380a172"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/test-fixtures/12-LBL100M-2_12in_Center_Labels_for_2LP_R091125.pdf",
+      "bytes": 302802,
+      "sha256": "0cdfd534df7b5a7bd67ea81eab665af9fa8f820fbf3864e329a31c5411cc2ffd"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/mockups/ArtistDashboardNextSteps.tsx",
+      "bytes": 22290,
+      "sha256": "02bb00c281e563e5999757c01fcaf1cf8ded0bf06559e3eef24cc9cd382541e4"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/niina-soleil.webp",
+      "bytes": 30366,
+      "sha256": "0052def45ef41f473c31e3c52eb8666bd05f7fcdc86c0be45dc2f998f74e2839"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/californialand-cover.jpg",
+      "bytes": 443091,
+      "sha256": "e66c61c417e774a8ab35511d39a6305a5295cc0f3f5937dc46c133a840592138"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/mockups/ArtistDashboardAccountStack.tsx",
+      "bytes": 246806,
+      "sha256": "7a87258282b7dfc41e3a22d0c31fac586af396f564839c066f8558319c298333"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/mrp-ruby-translucent.png",
+      "bytes": 1033236,
+      "sha256": "2c522fff5dcc82ff2c12f999645936ae719440c19f4c0adf23721816a5ad7a74"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/californialand-inner-sleeve.png",
+      "bytes": 440846,
+      "sha256": "ca0a1d6b855b478daff2ff7769f2f5e6aae31a98eabc5cd6709313e8f46a2608"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-facebook.svg",
+      "bytes": 557,
+      "sha256": "3c740b633631830c9e42d2670938713ad32a39b30949dd2b2deaeeaa66cfa92c"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-bluesky.svg",
+      "bytes": 580,
+      "sha256": "3a827da75dc07daa76555fd9f0335cbbffef70b20991d532f1e0a43da0cbd60a"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-x.svg",
+      "bytes": 319,
+      "sha256": "b647673049806a1305e579cc7e41794e51511b7c8120ab6c9900a55810b3b344"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-tiktok.svg",
+      "bytes": 490,
+      "sha256": "3c71057e951ff25969ab648269e4bafcf4de121a552af6bbcb3ee3e1d90b870a"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-instagram.svg",
+      "bytes": 464,
+      "sha256": "a1474432b4a6b3e03353639515243f11f7b88f92e0847c777cccc573f9d42009"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-applemusic.svg",
+      "bytes": 1750,
+      "sha256": "66d6a3000fcaaf33aa2aa96a9520f44a43fb27a43820ea8f6e10b75212e4c7b4"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-spotify.svg",
+      "bytes": 712,
+      "sha256": "b25ed984e9512b141c7a4264392948a119864c062a89f4034ff1dca1dc65cad4"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-pandora.svg",
+      "bytes": 253,
+      "sha256": "7032643dcf48c734408cbe825198cf61f7e7670449fda88884c6451e7b1982db"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-deezer.svg",
+      "bytes": 1213,
+      "sha256": "ae585e6083c2d6cfe77aae97d643dd13f58f6cd3f55dbd16c917a14368da75b8"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-qobuz.svg",
+      "bytes": 1350,
+      "sha256": "fcba54f56d895b6b36ae17e74905c47228f02960bfa573ef0ec7450faf941adc"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-tidal.svg",
+      "bytes": 320,
+      "sha256": "b54eaafe772db4f6036cff6f80ba01812133e9801d9f9109d7736aba480ffbbb"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/paramount/paramount-symbol.png",
+      "bytes": 88210,
+      "sha256": "014f285c8004a3db1265cfd3196e93be9125a64907729bedc5315c4e71703740"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/pmp-icon.svg",
+      "bytes": 3134,
+      "sha256": "611de15e1380e007ab07048f33178551fd946af6adcf2c9b2b6e515354aa48b2"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/viryl-icon.svg",
+      "bytes": 844,
+      "sha256": "6da564520601718db05318d9b80089614f9d9d14925dcd1b094bbf408a03fd18"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/hellbender-icon.svg",
+      "bytes": 1496,
+      "sha256": "23444bb7a1d9d8a3f531125764b3abd15c831a3f389acb3a7149dde1f8c3af87"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/niina-shopify-laptop.png",
+      "bytes": 1021148,
+      "sha256": "445c6e201078be7537434f3d968d7d2ae53bad25f5840c40fefda94b028251fb"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/logo-shopify-bag.svg",
+      "bytes": 1403,
+      "sha256": "01fd110447360788fb463cc72d626422d0facf8e2cf77f07a6d1c4549c526172"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/shopify-wordmark-light.svg",
+      "bytes": 3497,
+      "sha256": "b59264f0803410c9ba08b3730dd222b73777d32af9d8fecec7df6b7479beda5f"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/shopify-wordmark-dark.svg",
+      "bytes": 3713,
+      "sha256": "c7a9a8789eda68d82ce5203b9de97f6ccf801c333814e5fc37afac186025824b"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/gooddeed-otis-production-2026-09/renders/story-1080x1920.png",
+      "bytes": 1030733,
+      "sha256": "5f5e3fd536e52ecca80b394ba36d9498bab129436e4ffdde77ffbd1579d848d6"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/gooddeed-otis-production-2026-09/renders/portrait-1080x1350.png",
+      "bytes": 936263,
+      "sha256": "839a6ca38423971395b2c2b645ac71d20e1b7fd603ffbc9b0d1a426784a4ae03"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/gooddeed-otis-production-2026-09/renders/square-1080x1080.png",
+      "bytes": 888440,
+      "sha256": "08ccb57c5a9e21832550c744186f5162ba949258f66bd3711f60ed071a96412f"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/mockups/GoodDeedArtistPreview.tsx",
+      "bytes": 5752,
+      "sha256": "c6d8bcfd9c28c365e80b0b133db925c480b2e35669d0b63f14afe7f74a207403"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/goodtunes-logo-white.svg",
+      "bytes": 14861,
+      "sha256": "61d5ba013f0261c5d2872da7bc5d8ed6e2a91511644f27e30966fb9afdbfe115"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/mockups/OtisTracksInteractive.tsx",
+      "bytes": 109199,
+      "sha256": "319ebadfb7710db965397af605ef536628c54f910af0ba878e2b3aefd5640cd0"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/mockups/VinylPackageArtwork.tsx",
+      "bytes": 21663,
+      "sha256": "37b03110c1e67fe3084baa7a5a315a93288b169287468051a64e3e160512ed5a"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/mrp-logo.png",
+      "bytes": 4401,
+      "sha256": "2508bf8c6c53413bb45940c52ec06842bc7e95348244f566bf7c8ca018d0352e"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/mockups/ArtistReleasePackageTemplates.tsx",
+      "bytes": 193883,
+      "sha256": "0992825a30a612c35802ea4b318a57a2abc4c179c125543bd133d75c72c439e4"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/niina-label-1.png",
+      "bytes": 288748,
+      "sha256": "aa9b92143955dad4bd55888e527753a257e451ad44202ad52c98886ef8d5bf42"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/mockups/ArtistTemplateTest.tsx",
+      "bytes": 52166,
+      "sha256": "4ccbd9999e12738d3b3842e8e44a42f674acfeec5ccd99f9076e61724989dbd6"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/mrp-jacket-proof-template.png",
+      "bytes": 398714,
+      "sha256": "f1a476b3f4873134176d587020a2286a6ebcb2978032b57dd12024b488a38159"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/assets/californialand-jacket-proof-page.webp",
+      "bytes": 611178,
+      "sha256": "0da096d1778768ccc9a74da3c885ed295a11db1283b9e07c1b18ead3e1c29ee2"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/mockups/PressTemplatesIndex.tsx",
+      "bytes": 60623,
+      "sha256": "76628d926de5dd7936ec7328728bfa87ae7788fac7c6a3c99fba2b5bae4836b5"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/mockups/PressTemplateLiveTest.tsx",
+      "bytes": 113228,
+      "sha256": "f9d04f3aed816b7275abd1e553bca8968ea018e4e2ca386331cb0e9315a5f204"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/goodstudio-source/mockups/AdminArtistProfileInteractionCanon.tsx",
+      "bytes": 144222,
+      "sha256": "f2b77ecfc23f9bd7172086d91c62574ad5aebfa8507e999183ca711161eb56ac"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/test-fixtures/12-LBL100M-2_12in_Center_Labels_for_2LP_R091125.pdf",
+      "bytes": 591638,
+      "sha256": "9f27216c1558294ef83d5faa9dd1d2fa15dc44c02422d48a32e9901976443219"
+    },
+    {
+      "path": "handoff/otis-final-canon-readiness-2026-09-04/test-fixtures/CenterLabels_Finished.pdf",
+      "bytes": 2522838,
+      "sha256": "02c60b6a8861d32afa8957dd970fc8923a189f260ac62937ef81d2eddc3de28f"
+    }
+  ]
+}

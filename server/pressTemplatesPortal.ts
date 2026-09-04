@@ -13,6 +13,7 @@
 // (requirePressEditor), matching every other press-portal mutation.
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
+import { orderedPageProofSchema, proofCheck, runHasPassingOrderedPageProof, validateOrderedPageProof } from "./pressTemplateProofEvidence";
 import { storage } from "./storage";
 import {
   resolveFinishedComponents,
@@ -258,6 +259,9 @@ const testSchema = z.object({
       heightIn: z.number().positive().max(60),
     })
     .optional(),
+  // New multi-page clients send page-local evidence. Optional for old rows and
+  // non-certification history, but never optional for a new certification.
+  orderedPageProof: orderedPageProofSchema.optional(),
 });
 
 /** Mint a display revision label: R-MMDDYY (+ -2, -3… on same-day re-uploads). */
@@ -273,6 +277,11 @@ export async function autoCertifyTemplateTestRun(
   runId: string,
   runRevisionId: string,
 ): Promise<boolean> {
+  // Keep this guard inside the shared helper as well as the route worker:
+  // callers cannot bypass multi-page proof integrity by invoking auto-certify
+  // directly during a future workflow.
+  const run = await storage.getPressTemplateTestRunById(runId);
+  if (!run || run.specId !== specId || !runHasPassingOrderedPageProof(run.checks)) return false;
   const peek = await storage.getPressTemplateSpecById(pressId, specId);
   if (!peek) return false;
   const doAutoCertify = async (): Promise<boolean> => {
@@ -1582,6 +1591,7 @@ export function registerPressTemplateFlowRoutes(
           message: "This slot has no live template — attach a template before running a certification test.",
         });
       }
+      const templateArtifactUrl = spec.templateFileUrl;
 
       const slotSpec = await resolveSlotSpec(press, spec);
       if (!slotSpec) {
@@ -1651,18 +1661,33 @@ export function registerPressTemplateFlowRoutes(
       // immediately and the tile shows "Checking…" until the verdict lands.
       const revs = await storage.listPressTemplateRevisions([spec.id]);
       const live = revs.find((r) => r.status === "pending" || r.status === "certified") ?? null;
+      // Persist raw evidence immediately too: scan/mirror failures still leave
+      // an auditable record of the ordered proof that was submitted.
+      const orderedPageProof = body.data.orderedPageProof;
       const run = await storage.createPressTemplateTestRun({
         specId: spec.id,
         revisionId: live?.id ?? null,
         fileUrl: runFileUrl,
         fileName: body.data.fileName ?? null,
-        checks: [],
+        checks: orderedPageProof == null
+          ? []
+          : [{
+              key: "ordered-page-proof",
+              label: "Ordered page proof",
+              status: "processing",
+              message: "Waiting for server artifact validation.",
+              tier: "system",
+              evidence: orderedPageProof,
+            }],
         verdict: "processing",
         createdByUserId: req.session.userId ?? null,
       });
       res.json({ run });
 
       const certifyOnPass = body.data.certifyOnPass === true;
+      // Keep the submitted evidence immutable for this run. It is checked
+      // later against the server-read template/art PDFs; certifyOnPass alone
+      // is deliberately not authority to certify.
       const cutRect = body.data.templateCutRect ?? null;
       // Detached background scan — every failure lands a READABLE error on
       // the run row (verdict "error"); nothing here can hang the response.
@@ -1696,6 +1721,7 @@ export function registerPressTemplateFlowRoutes(
                 message,
                 tier: "system",
               },
+              proofCheck(orderedPageProof, { ok: false, message: "Server artifact validation did not complete." }),
             ],
             verdict: "error",
           });
@@ -1726,6 +1752,17 @@ export function registerPressTemplateFlowRoutes(
             }
             // Task #3069 — log every spot-usage fallback with its reason code.
             logSpotUsageFallback(scan, { fileName: null, source: fileUrl });
+            // Validate page evidence against the actual art AND the template
+            // artifact pinned by this run. This rejects forged aggregate
+            // booleans, stale page lists, and proof for a different template.
+            const templateProofScan = await scanTemplateUrl(templateArtifactUrl);
+            const proofValidation = validateOrderedPageProof(
+              orderedPageProof,
+              templateProofScan.scan?.pageCount ?? 0,
+              scan.pageCount,
+              (templateProofScan.scan?.pageSizesInches ?? []).map((size) => ({ w: size.w * 25.4, h: size.h * 25.4 })),
+              (scan.pageSizesInches ?? []).map((size) => ({ w: size.w * 25.4, h: size.h * 25.4 })),
+            );
             // Task #3072 parity with the album-side route: when a line exists but
             // the art carries no trustworthy PDF boxes (print-ready exports strip
             // them), measure bleed from RENDERED content — otherwise the check
@@ -1770,7 +1807,13 @@ export function registerPressTemplateFlowRoutes(
             // upload"; never blocks the run).
             const googleFonts = scan.hasFontDicts ? await getGoogleFontsIndex() : null;
             const checks: CheckResult[] = validateCompletedComponent(scan, slotSpecEff, { contentBleed, googleFonts });
-            const verdict = rollupStatus(checks);
+            const scannedVerdict = rollupStatus(checks);
+            const checksWithProof = [
+              ...checks,
+              proofCheck(orderedPageProof, proofValidation),
+            ];
+            // A normal scan pass cannot paper over missing/bad pair evidence.
+            const verdict = proofValidation.ok ? scannedVerdict : "fail";
 
             // Task #3090 — rasterize the test file's first page(s) so the client
             // can render the artwork under the TEMPLATE's zone rings. Best-effort,
@@ -1781,7 +1824,7 @@ export function registerPressTemplateFlowRoutes(
 
             const landed = await landRun({
               fileUrl,
-              checks: checks as unknown[],
+              checks: checksWithProof as unknown[],
               verdict,
               previewUrl: previews.previewUrl,
               previewUrl2: previews.previewUrl2,
@@ -1800,7 +1843,12 @@ export function registerPressTemplateFlowRoutes(
             // after awaiting the scan; async it must happen here). Same
             // state-machine guards as the explicit certify route: only the
             // revision that is live RIGHT NOW may be certified by this run.
-            if (certifyOnPass && (verdict === "pass" || verdict === "warn") && run.revisionId) {
+            if (
+              certifyOnPass &&
+              proofValidation.ok &&
+              (verdict === "pass" || verdict === "warn") &&
+              run.revisionId
+            ) {
               // Task #3407 review — auto-certify is a revision-state
               // transition too; the shared helper re-reads all state under
               // the same per-spec lock as replace/restore/archive, so a
@@ -2362,6 +2410,15 @@ export function registerPressTemplateFlowRoutes(
             status: 409,
             body: {
               message: "Only a passing test run can certify a template — fix the flagged checks and run the test again.",
+            },
+          };
+        }
+        if (!runHasPassingOrderedPageProof(run.checks)) {
+          return {
+            status: 409,
+            body: {
+              message:
+                "This test has no validated passing ordered page proof — run the current template and artwork together again before certifying.",
             },
           };
         }

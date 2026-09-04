@@ -480,7 +480,13 @@ export function ArtistTabBody({
     <>
       {/* Task #2893 — single merged, tier-disciplined Dashboard. */}
       {tab === "dashboard" && (
-        <DashboardTab qs={qs} artistName={artistName} preset={preset} onPresetChange={onPresetChange} />
+        <DashboardTab
+          qs={qs}
+          artistName={artistName}
+          preset={preset}
+          onPresetChange={onPresetChange}
+          operatorView={operatorView}
+        />
       )}
       {/* Restructure: the wall of releases IS the catalog. */}
       {tab === "catalog" && <ArtistReleasesWall qs={qs} onOpenAlbum={onOpenAlbum} artistName={artistName} personId={personId} />}
@@ -761,12 +767,14 @@ function WorkQueueEmpty() {
 // Plays/Revenue/Orders toggle stacked over the fan map, with Recent
 // activity on the right rail (below on narrow) → cert-run status.
 function DashboardTab({
-  qs, artistName, preset, onPresetChange,
+  qs, artistName, preset, onPresetChange, operatorView,
 }: {
   qs: string;
   artistName: string | null;
   preset: PresetId;
   onPresetChange: (p: PresetId) => void;
+  /** The admin mirror has no authoritative work-queue feed. */
+  operatorView?: boolean;
 }) {
   const summary = useQuery<Summary>({ queryKey: [`/api/artist/summary?${qs}`] });
   const series = useQuery<Timeseries>({ queryKey: [`/api/artist/timeseries?${qs}`] });
@@ -789,7 +797,9 @@ function DashboardTab({
             {timeGreeting()}{firstName ? `, ${firstName}` : ""}
           </h1>
           <p className="text-[14px] mt-1" style={{ color: SUBINK }}>
-            Nothing needs you right now — your catalog is running clean.
+            {operatorView
+              ? "Artist performance overview."
+              : "Nothing needs you right now — your catalog is running clean."}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -809,8 +819,9 @@ function DashboardTab({
         </div>
       </div>
 
-      {/* HERO: the work queue (no artist queue feed yet — honest empty state) */}
-      <WorkQueueEmpty />
+      {/* The artist portal retains its established empty state. The operator
+          mirror cannot claim the artist is caught up without a work feed. */}
+      {!operatorView && <WorkQueueEmpty />}
 
       {/* Compact five-tile KPI strip (reference order; lifetime tile fixed) */}
       <KpiStrip cur={cur} prev={prev} lifetime={lifetime} preset={preset} loading={summary.isLoading} />

@@ -88,7 +88,11 @@ export function zoneFromName(raw: string): { zone: string; kind: 'line' | 'area'
   return { zone, kind };
 }
 
-export async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: number): Promise<{ layers: GtLayer[]; layerNames: string[]; paintedLayerNames: string[] }> {
+export async function extractGtLayers(
+  doc: pdfjs.PDFDocumentProxy,
+  pageNum: number,
+  options?: { layerNameMode?: 'catalog' | 'referenced' },
+): Promise<{ layers: GtLayer[]; layerNames: string[]; paintedLayerNames: string[] }> {
   const oc = await doc.getOptionalContentConfig();
   const names: Record<string, string> = {};
   const order = (oc.getOrder() ?? []) as Array<string | { order?: unknown[] }>;
@@ -114,6 +118,7 @@ export async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: numb
   let ctm: Matrix = [1, 0, 0, 1, 0, 0];
   const ctmStack: Matrix[] = [];
   const mcStack: Array<string | null> = [];
+  const referencedLayerNames = new Set<string>();
   type SubBox = { minX: number; minY: number; maxX: number; maxY: number };
   const boxes: Record<string, { minX: number; minY: number; maxX: number; maxY: number; curves: number; lines: number; subs: SubBox[]; dParts: string[]; pathOk: boolean; rectish: boolean }> = {};
 
@@ -207,7 +212,9 @@ export async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: numb
     else if (fn === OPS.transform) ctm = mulM(ctm, args as number[]);
     else if (fn === OPS.beginMarkedContentProps) {
       const props = args?.[1] as { id?: string } | null;
-      mcStack.push((props?.id && names[props.id]) || null);
+      const layerName = (props?.id && names[props.id]) || null;
+      if (layerName) referencedLayerNames.add(layerName);
+      mcStack.push(layerName);
     } else if (fn === OPS.beginMarkedContent) mcStack.push(null);
     else if (fn === OPS.endMarkedContent) mcStack.pop();
     else if (fn === OPS.constructPath) {
@@ -285,7 +292,14 @@ export async function extractGtLayers(doc: pdfjs.PDFDocumentProxy, pageNum: numb
   // Viryl false-positive (Aug 18 2026): Illustrator flattens can leave GT
   // guide layers behind as empty OCG *definitions* with zero geometry —
   // hygiene must key off painted layers, not defined names.
-  return { layers, layerNames: Object.values(names), paintedLayerNames: Object.keys(boxes) };
+  return {
+    layers,
+    // Press proofing uses page-referenced OCG hygiene: disabled/orphaned
+    // catalog records are harmless. The default remains catalog for Artist
+    // proofing and every existing shared-engine caller.
+    layerNames: options?.layerNameMode === 'referenced' ? Array.from(referencedLayerNames) : Object.values(names),
+    paintedLayerNames: Object.keys(boxes),
+  };
 }
 
 export async function renderPage(doc: pdfjs.PDFDocumentProxy, pageNum: number, targetWidth = 1400): Promise<{ img: string; wMm: number; hMm: number }> {

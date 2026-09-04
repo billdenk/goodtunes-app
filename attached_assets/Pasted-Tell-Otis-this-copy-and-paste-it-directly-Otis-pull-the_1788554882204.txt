@@ -1,0 +1,101 @@
+Tell Otis this—copy and paste it directly:
+
+---
+
+**Otis, pull the latest `billdenk/goodtunes-app` `main` and implement the final GoodStudio handoff.**
+
+Package:
+
+`handoff/otis-final-canon-readiness-2026-09-04/`
+
+Package commit:
+
+`7a3dc6942ed184107e0f58b37e669515cca03f6c`
+
+Handoff index commit:
+
+`0a40e2c1ffc3beba2b90a2ce235455f094b159aa`
+
+Start by reading the package’s `README.md` and `MANIFEST.json`. The package contains the complete source graph, assets, exact four-page test files, acceptance criteria, and required reporting format.
+
+## 1. Admin Artist Profile
+
+**ZERO FUNCTIONALITY CHANGES — SKIN ONLY.**
+
+Apply the approved Artist Profile presentation and interaction treatment over Otis’ existing `/admin/people/:id` route and existing handlers.
+
+Preserve without modification:
+
+- API contracts and database behavior
+- Routes and permissions
+- Builders and pricing
+- Estimates and payments
+- Fulfillment and white-label behavior
+- Shopify behavior
+- Press assignment and referral semantics
+- Audit/history behavior
+- Existing production data
+
+Restore existing actions that became hidden, but do not invent new server behavior from the mock’s local state. Replace all `MOCK_` data with authoritative Otis data.
+
+Every visible Edit, Add, Replace, Connect, Change, View-as, tab, chip, overflow menu, dialog, sheet, external link, retry, cancel, and confirm must work through existing Otis functionality.
+
+Use the real press directory and correct mode-safe logos. View-as must remain permission-gated and read-only. The Next Steps strip starts collapsed and retains the approved gentle Expand shimmer with reduced-motion support.
+
+## 2. Press Template Test
+
+This is the authorized functionality upgrade—not a skin-only change.
+
+Integrate ordered multi-page proofing into Otis’ existing wired Press Template Test. Preserve its current route, persistence, drafts, history, superseding, certification, permissions, and API wiring.
+
+Required behavior:
+
+- Pair Template and artwork pages in exact order.
+- Run the same checks independently on every page.
+- One failing page blocks the aggregate result.
+- Artwork renders first; Template renders above it.
+- New tests begin at **55% Template opacity**.
+- Template off/on preserves the chosen opacity.
+- A new Template upload resets opacity to 55%.
+- With artwork present, use `multiply` blending in the viewer and every thumbnail.
+- Template-only remains normal and legible.
+- Thumbnails mirror Template-only, artwork-only, and combined states.
+- Preserve geometry, placement, crop, transforms, zoom, pan, navigation, overlays, history, saving, and certification.
+- Calculate effective PPI from embedded raster pixels and painted physical dimensions.
+- Count only color assignments that actually paint content.
+- Exclude soft masks from artwork color classification.
+- Treat vector-only art truthfully.
+- Ignore disabled/orphaned GT metadata not referenced by page content.
+
+Use the two PDFs in the package’s `test-fixtures/` directory. The expected result is four ordered passing page pairs at 300 × 300 effective PPI with CMYK painted raster content and no page-referenced GT Template layers left in the artwork.
+
+## Explicitly deferred
+
+Do **not** add ordered multi-page parsing to Artist proofing in this round. Do not introduce Press-only controls or authority into the Artist experience.
+
+## Completion requirements
+
+After implementation:
+
+1. Run the production build, design lint, focused static checks, and browser tests.
+2. Verify light and dark modes at 1440, 1024, and 768 pixels.
+3. Publish Otis through its normal Replit publishing flow.
+4. Verify the published routes—not only development.
+5. Append an itemized receipt to `docs/STATUS.md`.
+6. Push the Otis implementation and status update.
+7. Report either `READY_FOR_CANON` or `BLOCKED`, naming every blocker.
+
+The receipt must include:
+
+- GoodStudio package commit
+- Otis implementation commit
+- Exact routes and files changed
+- Outcome for each scope
+- Every Otis-authored adaptation and its reason
+- Production evidence
+- Build, lint, static-check, and browser-test results
+- Confirmation that unrelated production behavior remained unchanged
+
+Do not declare Canon readiness until the published implementation has been verified and the receipt has been pushed.
+
+---

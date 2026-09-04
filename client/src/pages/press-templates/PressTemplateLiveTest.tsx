@@ -76,6 +76,9 @@ import { groupZonesForPills, zoneSort, zoneSide, pickSideFocusZone, SIDE_NAMES, 
 // page renders art in the template with the exact same machinery. Behavior
 // here is byte-identical to the previous inline copies.
 import { loadPdfjs, renderPage, extractGtLayers, isGtEligibleLayer, shrinkDataUrl, zoneColor, type GtLayer } from './gtOverlayEngine';
+import { analyzePdfArtPage, buildImageColorIndex, type PdfPageAnalysis } from './pdfPageAnalysis';
+import { aggregatePagePass, pageVerdicts } from './pageProof';
+import { DEFAULT_TEMPLATE_OPACITY, templateCompositeStyle } from './proofComposite';
 export type { GtLayer } from './gtOverlayEngine';
 import { createFullSharpController } from './fullSharpRender';
 // Bounded-retry hi-DPI crop render (Task #3213) — never strands the viewer on
@@ -160,7 +163,29 @@ type ArtState = {
   gtLayerNames: string[]; // GT layers with real painted content left in the art file (hygiene fail)
   emptyGtLayerNames: string[]; // leftover empty GT layer entries (flatten residue — ignored, noted only)
   pxAspect?: number; // raster only — pixel w/h from the server scan, keeps the overlay unsquished
+  analysis?: PdfPageAnalysis | null;
 };
+
+const MIN_PRINT_PPI = 300;
+export function resolutionCheck(analysis: PdfPageAnalysis | null | undefined): CheckRow {
+  if (!analysis) return { param: 'Resolution', tone: 'na', detail: 'Source resolution needs a PDF.' };
+  if (analysis.rasterImageCount === 0) return { param: 'Resolution', tone: 'pass', detail: 'Vector artwork — no raster resolution floor applies' };
+  if (analysis.minEffectivePpi === null || analysis.unresolvedRasterImages > 0) {
+    return { param: 'Resolution', tone: 'na', detail: 'Could not measure every raster image in this page.' };
+  }
+  const ppi = Math.round(analysis.minEffectivePpi);
+  return analysis.minEffectivePpi >= MIN_PRINT_PPI - 0.5
+    ? { param: 'Resolution', tone: 'pass', detail: `${ppi} PPI minimum — meets the ${MIN_PRINT_PPI} PPI floor` }
+    : { param: 'Resolution', tone: 'fail', detail: `${ppi} PPI minimum — below the ${MIN_PRINT_PPI} PPI floor` };
+}
+
+export function colorCheck(analysis: PdfPageAnalysis | null | undefined): CheckRow {
+  if (!analysis) return { param: 'Color', tone: 'na', detail: 'Ink checks need a PDF.' };
+  if (analysis.hasRgb) return { param: 'Color', tone: 'fail', detail: 'Painted RGB content detected — convert artwork to CMYK or approved spot inks' };
+  const modes = [analysis.hasCmyk ? 'CMYK' : null, analysis.hasSpot ? 'spot' : null, analysis.hasGray ? 'grayscale' : null].filter(Boolean);
+  if (analysis.unresolvedRasterImages > 0 || modes.length === 0) return { param: 'Color', tone: 'na', detail: 'Could not verify every painted source color space in this page.' };
+  return { param: 'Color', tone: 'pass', detail: `${modes.join(' + ')} painted content — no painted RGB assignment` };
+}
 
 export default function PressTemplateLiveTest({
   pressId,
@@ -182,6 +207,11 @@ export default function PressTemplateLiveTest({
   const queryClient = useQueryClient();
   const [template, setTemplate] = useState<TemplateState | null>(null);
   const [art, setArt] = useState<ArtState | null>(null);
+  const [templatePages, setTemplatePages] = useState<TemplateState[]>([]);
+  const [artPages, setArtPages] = useState<ArtState[]>([]);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [pageCountError, setPageCountError] = useState<string | null>(null);
+  const pageViews = useRef<Record<number, { zoom: number; panC: { x: number; y: number } | null; activeZones: Set<string> }>>({});
   // Results banner: collapsed when everything passed (a pass doesn't need your
   // attention), auto-open when something failed or nothing was measured.
   const [checksOpen, setChecksOpen] = useState(true);
@@ -229,7 +259,7 @@ export default function PressTemplateLiveTest({
   // drafts, not auto-save). Holds the found draft while the sheet is up.
   const [resumeOffer, setResumeOffer] = useState<LiveTestDraft | null>(null);
   const [activeZones, setActiveZones] = useState<Set<string>>(new Set());
-  const [artOpacity, setArtOpacity] = useState(1);
+  const [templateOpacity, setTemplateOpacity] = useState(DEFAULT_TEMPLATE_OPACITY);
   // High-DPI crop raster — re-rendered when the crop view changes so the
   // spine/front/back don't appear blurry at the heavy magnification the CSS
   // transform applies (e.g. ~90× for a 3.5 mm spine). null = use template.img.
@@ -389,20 +419,40 @@ export default function PressTemplateLiveTest({
       // the previous one (same-size PDF replacement case).
       setTemplateGen((g) => g + 1);
       setCropImg(null);
-      const [{ img, wMm, hMm }, { layers, layerNames }] = [await renderPage(doc, 1), await extractGtLayers(doc, 1)];
-      const gt = layers.filter((l) => isGtEligibleLayer(l.name));
-      if (!gt.length) {
+      const pages: TemplateState[] = [];
+      for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
+        const [{ img, wMm, hMm }, { layers, layerNames }] = await Promise.all([
+          renderPage(doc, pageNumber),
+          extractGtLayers(doc, pageNumber, { layerNameMode: 'referenced' }),
+        ]);
+        pages.push({
+          name: displayName ?? f.name,
+          img, wMm, hMm,
+          layers: layers.filter((l) => isGtEligibleLayer(l.name)),
+          layerNames,
+          pageCount: doc.numPages,
+        });
+      }
+      if (!pages.some((page) => page.layers.length)) {
         setError('No GT layers found in this PDF. Add layers named like "GT CUT LINE" / "GT CUT AREA" in Illustrator and re-save.');
       }
-      setTemplate({ name: displayName ?? f.name, img, wMm, hMm, layers: gt, layerNames, pageCount: doc.numPages });
+      setTemplatePages(pages);
+      setTemplate(pages[0] ?? null);
+      setCurrentPage(0);
+      pageViews.current = {};
+      setTemplateOpacity(DEFAULT_TEMPLATE_OPACITY);
+      setTemplatePanelOpen(false);
       setUploadedAt(new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }));
       setOriginalName(f.name); // if a custom name was given, "Originally …" shows the file's own name
       // All overlays start off — you turn on only what you want to see (Bill, Aug 14 2026).
       setActiveZones(new Set());
       setArt(null);
+      setArtPages([]);
+      setPageCountError(null);
       artFile.current = null;
     } catch (err) {
       setTemplate(null);
+      setTemplatePages([]);
       setArriving(false); // fall back to the upload step if the file couldn't be read
       setError(err instanceof Error ? err.message : 'Could not read that PDF.');
     } finally { setBusy(null); }
@@ -668,18 +718,35 @@ export default function PressTemplateLiveTest({
     setInkProgress(null);
     try {
       if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
-        const doc = await (await loadPdfjs()).getDocument({ data: await f.arrayBuffer() }).promise;
-        const { img, wMm, hMm } = await renderPage(doc, 1);
-        const { layerNames, paintedLayerNames } = await extractGtLayers(doc, 1);
+        const sourceBytes = new Uint8Array(await f.arrayBuffer());
+        const pdfjs = await loadPdfjs();
+        const doc = await pdfjs.getDocument({ data: sourceBytes.slice() }).promise;
+        const imageColors = buildImageColorIndex(sourceBytes);
+        const pages: ArtState[] = [];
+        for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
+          const [{ img, wMm, hMm }, { layerNames }, analysis] = await Promise.all([
+            renderPage(doc, pageNumber),
+            extractGtLayers(doc, pageNumber, { layerNameMode: 'referenced' }),
+            analyzePdfArtPage(doc, pageNumber, imageColors, pdfjs.OPS as unknown as Record<string, number>),
+          ]);
+          const isGt = (n: string) => n.trim().toUpperCase().startsWith('GT');
+          // Press hygiene is page-reference based: any GT OCG referenced by
+          // page content fails, while orphaned catalog-only records never
+          // appear in layerNames in this mode.
+          const gtNames = layerNames.filter(isGt);
+          const emptyGtNames: string[] = [];
+          pages.push({ name: f.name, img, wMm, hMm, pageCount: doc.numPages, gtLayerNames: gtNames, emptyGtLayerNames: emptyGtNames, analysis });
+        }
         if (pickSeq.current !== myPick) return; // a newer pick superseded this parse
         // Viryl false-positive (Aug 18 2026): flattened exports keep GT guide
         // layers as EMPTY definitions — only GT layers that actually paint
         // content fail hygiene; empty leftovers are noted, never failed.
-        const isGt = (n: string) => n.trim().toUpperCase().startsWith('GT');
-        const gtNames = paintedLayerNames.filter(isGt);
-        const emptyGtNames = layerNames.filter((n) => isGt(n) && !paintedLayerNames.includes(n));
         setFormatNotice(null);
-        setArt({ name: f.name, img, wMm, hMm, pageCount: doc.numPages, gtLayerNames: gtNames, emptyGtLayerNames: emptyGtNames });
+        setArtPages(pages);
+        setArt(pages[currentPage] ?? pages[0] ?? null);
+        setPageCountError(doc.numPages === templatePages.length
+          ? null
+          : `Page count mismatch: this template has ${templatePages.length} ${templatePages.length === 1 ? 'page' : 'pages'}, but “${f.name}” has ${doc.numPages}. Upload art with exactly ${templatePages.length} pages; pages are paired only in order.`);
         artFile.current = f;
         setShowTemplate(false);
         if (inspect) runInkInspect(f, 'application/pdf');
@@ -715,7 +782,10 @@ export default function PressTemplateLiveTest({
         setFormatNotice(contentType.startsWith('image/png')
           ? 'PNG can\u2019t be CMYK, so it won\u2019t pass the color check. Export a CMYK TIFF, CMYK JPEG, or PDF for print ink.'
           : null);
-        setArt({ name: f.name, img, wMm: null, hMm: null, pageCount: null, gtLayerNames: [], emptyGtLayerNames: [] });
+        const raster = { name: f.name, img, wMm: null, hMm: null, pageCount: 1, gtLayerNames: [], emptyGtLayerNames: [], analysis: null };
+        setArtPages([raster]);
+        setArt(currentPage === 0 ? raster : null);
+        setPageCountError(templatePages.length === 1 ? null : `Page count mismatch: this template has ${templatePages.length} pages, but “${f.name}” has 1. Upload art with exactly ${templatePages.length} pages; pages are paired only in order.`);
         artFile.current = f; // server test submission still requires a PDF and skips rasters
         setShowTemplate(false);
         if (inspect) runInkInspect(f, contentType);
@@ -725,6 +795,8 @@ export default function PressTemplateLiveTest({
     } catch (err) {
       if (pickSeq.current !== myPick) return; // stale failure — don't clobber the newer pick
       setArt(null);
+      setArtPages([]);
+      setPageCountError(null);
       setError(err instanceof Error ? err.message : 'Could not read that file.');
     } finally { if (pickSeq.current === myPick) setBusy(null); }
   };
@@ -1032,9 +1104,9 @@ export default function PressTemplateLiveTest({
       } else {
         rows.push({ param: 'Bleed size', tone: 'na', detail: 'Template has no GT Bleed layer to measure against.' });
       }
-      rows.push(art.pageCount === 1
-        ? { param: 'Pages', tone: 'pass', detail: '1 page — a jacket is one spread' }
-        : { param: 'Pages', tone: 'fail', detail: `${art.pageCount} pages — a jacket spread is 1 page` });
+      rows.push(!pageCountError
+        ? { param: 'Page pairing', tone: 'pass', detail: `Template page ${currentPage + 1} is paired with art page ${currentPage + 1}` }
+        : { param: 'Page pairing', tone: 'fail', detail: pageCountError });
     }
     rows.push(art.gtLayerNames.length === 0
       ? {
@@ -1051,7 +1123,9 @@ export default function PressTemplateLiveTest({
     // Ink + PPI — measured live by the server scanner (gogoods, Aug 15 2026).
     // Rasters (JPEG/PNG) get measured too since Aug 16: pixel dims + PPI tag
     // + color space against the slot's artboard.
-    if (inkChecks === 'checking') {
+    if (art.analysis) {
+      rows.push(resolutionCheck(art.analysis), colorCheck(art.analysis));
+    } else if (inkChecks === 'checking') {
       rows.push({ param: 'Color & resolution', tone: 'na', detail: 'Measuring ink and image resolution…' });
     } else if (Array.isArray(inkChecks)) {
       rows.push(...inkChecks);
@@ -1068,22 +1142,37 @@ export default function PressTemplateLiveTest({
       rows.push({ param: 'Color & resolution', tone: 'na', detail: 'The ink + resolution check didn\u2019t finish (connection hiccup). Use \u201cRe-run measurement\u201d below \u2014 no need to re-pick the file.' });
     }
     return rows;
-  }, [template, art, bleedBox, cutBox, inkChecks, formatNotice]);
+  }, [template, art, bleedBox, cutBox, inkChecks, formatNotice, currentPage, pageCountError]);
 
   const measured = checks.filter((c) => c.tone !== 'na');
   // While the server ink/PPI scan is still in flight, the header must not
   // claim a clean pass over rows that aren't measured yet (review, Aug 15
   // 2026); a failed inspection stays advisory like the old prepress note.
-  const inkPending = inkChecks === 'checking';
+  const inkPending = !art?.analysis && inkChecks === 'checking';
   // A failed measurement must never let the header claim a clean pass —
   // for a raster nothing real was measured yet (gogoods, Aug 16 2026).
-  const inkFailed = inkChecks === 'error';
+  const inkFailed = !art?.analysis && inkChecks === 'error';
   // Task #3400 — 'warn' rows (the certification test's advisory tier, e.g.
   // live text with embedded fonts) are measured but must never flip the
   // header to Fail: fail beats warn, warn beats a clean pass.
-  const anyFail = measured.some((c) => c.tone === 'fail');
+  const pageStates = useMemo(() => pageVerdicts(
+    templatePages,
+    artPages,
+    !!pageCountError,
+    (analysis) => {
+      const tone = resolutionCheck(analysis).tone;
+      return tone === 'warn' ? 'pass' : tone;
+    },
+    (analysis) => {
+      const tone = colorCheck(analysis).tone;
+      return tone === 'warn' ? 'pass' : tone;
+    },
+  ), [templatePages, artPages, pageCountError]);
+  const aggregatePass = aggregatePagePass(pageStates);
+  const anyPageFailed = pageStates.some((state) => state === 'fail');
+  const anyFail = measured.some((c) => c.tone === 'fail') || anyPageFailed;
   const anyWarn = measured.some((c) => c.tone === 'warn');
-  const allPass = !inkPending && !inkFailed && measured.length > 0 && measured.every((c) => c.tone === 'pass');
+  const allPass = !inkPending && !inkFailed && measured.length > 0 && measured.every((c) => c.tone === 'pass') && aggregatePass;
   const passWithAdvisory = !inkPending && !inkFailed && measured.length > 0 && !anyFail && anyWarn;
   // New result → banner folds itself on a clean pass, opens on anything else.
   // A new file opens the detail rows; a finished measurement KEEPS them open —
@@ -1098,6 +1187,27 @@ export default function PressTemplateLiveTest({
     wasPending.current = inkPending;
   }, [inkPending, inkChecks]);
   const verdictWord = inkPending ? 'Checking…' : inkFailed ? 'Incomplete' : allPass ? 'Pass' : anyFail ? 'Flagged' : passWithAdvisory ? 'Advisory' : 'Visual only';
+  const aggregateExplanation = templatePages.length > 1
+    ? (aggregatePass
+      ? `All ${templatePages.length} paired pages passed`
+      : `${pageStates.filter((state) => state === 'pass').length} of ${templatePages.length} pages passed; every page must pass before certification`)
+    : null;
+
+  const selectPage = (index: number) => {
+    const next = templatePages[index];
+    if (!next || index === currentPage) return;
+    pageViews.current[currentPage] = { zoom, panC, activeZones: new Set(activeZones) };
+    const nextView = pageViews.current[index];
+    setCurrentPage(index);
+    setTemplate(next);
+    setArt(artPages[index] ?? null);
+    setViewArea('full');
+    setZoom(nextView?.zoom ?? 1);
+    setPanC(nextView?.panC ?? null);
+    setActiveZones(nextView?.activeZones ?? new Set());
+    setOpenGroup(null);
+    setTemplateGen((g) => g + 1);
+  };
 
   // Re-run the server measurement on the SAME file — a network hiccup must
   // not force a page refresh + re-pick (gogoods, Aug 16 2026).
@@ -1209,13 +1319,48 @@ export default function PressTemplateLiveTest({
     const templateCutRect = cutBox
       ? { leftIn: r3(cutBox.xMm), topIn: r3(cutBox.yMm), widthIn: r3(cutBox.wMm), heightIn: r3(cutBox.hMm) }
       : undefined;
+    // Immutable per-page evidence accompanies the server-backed run. The
+    // server independently verifies ordering/counts against the pinned
+    // template and uploaded artwork before any certification is possible.
+    const orderedPageProof =
+      templatePages.length > 0 &&
+      templatePages.length === artPages.length &&
+      templatePages.every((page, index) => {
+        const artPage = artPages[index];
+        return artPage?.wMm != null && artPage.hMm != null && !!artPage.analysis;
+      })
+        ? {
+            templatePageCount: templatePages.length,
+            artPageCount: artPages.length,
+            pairs: templatePages.map((templatePage, index) => {
+              const artPage = artPages[index];
+              const analysis = artPage.analysis!;
+              return {
+                page: index + 1,
+                template: { widthMm: templatePage.wMm, heightMm: templatePage.hMm },
+                art: { widthMm: artPage.wMm!, heightMm: artPage.hMm! },
+                effectivePpi: analysis.minEffectivePpi,
+                color: {
+                  hasCmyk: analysis.hasCmyk,
+                  hasRgb: analysis.hasRgb,
+                  hasGray: analysis.hasGray,
+                  hasSpot: analysis.hasSpot,
+                },
+                gtLayerNames: artPage.gtLayerNames,
+                verdict: pageStates[index],
+              };
+            }),
+          }
+        : undefined;
     // Task #3200 — the server records the run as "processing" and answers
     // immediately; the scan runs in the background and a pass/warn verdict
     // certifies the live revision server-side (certifyOnPass). No more
     // minutes-long request for the edge to kill mid-Save.
     await withTimeout(
       apiRequest('POST', templateTestPath(pressId, specId), {
-        url, fileName: f.name, templateBleedLineInches, templateCutRect, certifyOnPass: true,
+        // Certification is fail-closed across the complete ordered document:
+        // a passing current page can never certify over another page's failure.
+        url, fileName: f.name, templateBleedLineInches, templateCutRect, orderedPageProof, certifyOnPass: aggregatePass,
       }),
       60_000,
       'submitting the certification test',
@@ -1234,7 +1379,7 @@ export default function PressTemplateLiveTest({
       const currentLogged = !!(art && last && last.art === art.name && last.verdict === verdictWord);
       const tests = art && !currentLogged ? [...testLog, { art: art.name, at: '', verdict: verdictWord }] : testLog;
       const testsPayload = tests.map((e) => ({ artName: e.art, verdict: e.verdict }));
-      const previewImg = await shrinkDataUrl(template.img);
+      const previewImg = await shrinkDataUrl(templatePages[0]?.img ?? template.img);
       if (specRef.current && !fileReplaced.current) {
         // Spec-mode plain Save (gogoods bug, Aug 15 2026): the file already
         // lives on the slot — re-attaching would mint a needless revision,
@@ -1486,7 +1631,7 @@ export default function PressTemplateLiveTest({
     // can't render, surface the "Sharp preview unavailable" pill instead.
     void (async () => {
       const res = await runWithRetry(
-        () => renderCropOnce(doc, f, desiredPx),
+        () => renderCropOnce(doc, f, desiredPx, currentPage + 1),
         () => cropRenderSeq.current === seq,
       );
       if (cropRenderSeq.current !== seq) return;
@@ -1531,7 +1676,7 @@ export default function PressTemplateLiveTest({
           const desiredPx = Math.round(1440 * zoom * (window.devicePixelRatio || 1));
           const { targetW } = computeCropCanvasSize(template.wMm, template.hMm, desiredPx);
           if (targetW <= 1400) return; // base raster already carries this detail
-          const { img } = await renderPage(doc, 1, targetW);
+          const { img } = await renderPage(doc, currentPage + 1, targetW);
           if (token.isCurrent()) {
             fullSharp.cache.set(key, img);
             setFullImg(img);
@@ -2007,7 +2152,11 @@ export default function PressTemplateLiveTest({
                       onChange={(e) => setNameDraft(e.target.value)}
                       onBlur={() => {
                         const v = nameDraft.trim();
-                        if (v && v !== template.name) { setTemplate((prev) => (prev ? { ...prev, name: v } : prev)); setDirty(true); }
+                        if (v && v !== template.name) {
+                          setTemplatePages((pages) => pages.map((page) => ({ ...page, name: v })));
+                          setTemplate((prev) => (prev ? { ...prev, name: v } : prev));
+                          setDirty(true);
+                        }
                         setEditingName(false);
                       }}
                       onKeyDown={(e) => {
@@ -2417,8 +2566,8 @@ export default function PressTemplateLiveTest({
                 {/* Zone toggles (consolidated) + magnifier — swapped down here, Bill Aug 14 2026 */}
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    {/* Template underlay — off by default during a test; art opacity
-                        lives in its dropdown, not the header (Bill, Aug 14 2026) */}
+                    {/* Template is the frontmost proof layer; its opacity is
+                        preserved while visibility toggles. */}
                     {art && (
                       <div className="relative flex-shrink-0">
                         <span
@@ -2433,7 +2582,6 @@ export default function PressTemplateLiveTest({
                             onClick={() => setShowTemplate((v) => {
                               const on = !v;
                               if (on) {
-                                setArtOpacity(1); // template arrives at full strength
                                 if (!templateHintShown.current) {
                                   templateHintShown.current = true;
                                   setTemplatePanelOpen(true); // hint once: the slider lives here
@@ -2480,16 +2628,16 @@ export default function PressTemplateLiveTest({
                                 .gt-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 0.5px solid rgba(0,0,0,0.18); box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
                               `}</style>
                               <label className="block text-[11px] font-semibold" style={{ color: t.subink }}>
-                                Art opacity
+                                Template opacity
                                 <input
-                                  type="range" min={0} max={100} value={Math.round(artOpacity * 100)}
-                                  onChange={(e) => setArtOpacity(Number(e.target.value) / 100)}
+                                  type="range" min={0} max={100} value={Math.round(templateOpacity * 100)}
+                                  onChange={(e) => setTemplateOpacity(Number(e.target.value) / 100)}
                                   className="gt-slider block w-full mt-2"
-                                  data-testid="slider-art-opacity"
+                                  data-testid="slider-template-opacity"
                                 />
                               </label>
                               <div className="mt-1.5 text-[10.5px]" style={{ color: t.faint }}>
-                                Lower it to see the template through your art.
+                                Lower it to see your artwork through the press template.
                               </div>
                             </div>
                           </>
@@ -2760,7 +2908,60 @@ export default function PressTemplateLiveTest({
                   </div>
                   </div>
                 </div>
-                <div className="flex justify-center">
+                {pageCountError && (
+              <div className="mb-3 rounded-xl px-3 py-2 text-xs font-medium" style={{ color: t.crit, backgroundColor: t.critWash }} role="alert">
+                    {pageCountError}
+                  </div>
+                )}
+                {aggregateExplanation && (
+              <div className="mb-3 text-xs font-medium" style={{ color: aggregatePass ? t.ready : t.crit }} data-testid="text-page-aggregate">
+                    {aggregateExplanation}
+                  </div>
+                )}
+                <div className="flex justify-center gap-4">
+                {templatePages.length > 1 && (
+                  <aside className="w-24 flex-shrink-0 space-y-3" aria-label="Ordered page pairs" data-testid="template-page-rail">
+                    {templatePages.map((page, index) => {
+                      const artPage = artPages[index];
+                      const anchor = page.layers.find((layer) => layer.zone === 'Bleed' && layer.kind === 'line')
+                        ?? page.layers.find((layer) => layer.zone === 'Bleed')
+                        ?? page.layers.find((layer) => layer.zone === 'Cut')
+                        ?? null;
+                      const pageArtRect = artPage?.wMm != null && artPage.hMm != null
+                        ? computePdfArtRect(page, anchor, { wMm: artPage.wMm, hMm: artPage.hMm })
+                        : null;
+                      const state = pageStates[index];
+                      return (
+                        <button
+                          key={index}
+                          type="button"
+                          onClick={() => selectPage(index)}
+                          className="block w-full text-left"
+                          aria-current={index === currentPage ? 'page' : undefined}
+                          data-testid={`button-page-${index + 1}`}
+                        >
+                          <span className="relative block overflow-hidden rounded border" style={{ aspectRatio: `${page.wMm} / ${page.hMm}`, borderColor: index === currentPage ? t.blue : t.hairline, backgroundColor: '#fff' }}>
+                            {artPage?.img && pageArtRect && (
+                              <img src={artPage.img} alt="" className="absolute" draggable={false} style={{
+                                left: `${pageArtRect.xMm / page.wMm * 100}%`, top: `${pageArtRect.yMm / page.hMm * 100}%`,
+                                width: `${pageArtRect.wMm / page.wMm * 100}%`, height: `${pageArtRect.hMm / page.hMm * 100}%`,
+                              }} data-testid={`thumbnail-art-page-${index + 1}`} />
+                            )}
+                            {(!artPage || showTemplate) && (
+                              <img src={page.img} alt="" className="absolute inset-0 h-full w-full" draggable={false}
+                                style={templateCompositeStyle(!!artPage, templateOpacity)}
+                                data-testid={`thumbnail-template-page-${index + 1}`} />
+                            )}
+                          </span>
+                    <span className="mt-1 flex items-center justify-between text-xs" style={{ color: index === currentPage ? t.ink : t.subink }}>
+                            Page {index + 1}
+                      <span aria-label={state} className="h-3 w-3 rounded-sm" style={{ backgroundColor: state === 'pass' ? t.ready : state === 'fail' ? t.crit : t.faint }} />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </aside>
+                )}
                 <div
                   className="relative overflow-hidden rounded-lg"
                   style={{
@@ -2819,12 +3020,25 @@ export default function PressTemplateLiveTest({
                       shift/squeeze the bitmap under the frame's huge crop
                       scale (vector overlays are immune and stay put; the
                       rasters must match them). */}
-                  {(!art || showTemplate) && (
+                   {art && artRect && art.img && (
+                     <img
+                       src={art.img}
+                       alt="Art"
+                       draggable={false}
+                       className="absolute"
+                       style={rasterCssLayout({ x: artRect.xMm, y: artRect.yMm, w: artRect.wMm, h: artRect.hMm }, template.wMm, template.hMm, viewT.s)}
+                       data-testid="img-art-overlay"
+                     />
+                   )}
+                   {(!art || showTemplate) && (
                     <img
                       src={template.img}
                       alt="Template"
                       className="absolute"
-                      style={rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s)}
+                       style={{
+                         ...rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s),
+                         ...templateCompositeStyle(!!art, templateOpacity),
+                       }}
                       draggable={false}
                     />
                   )}
@@ -2837,7 +3051,10 @@ export default function PressTemplateLiveTest({
                       alt=""
                       draggable={false}
                       className="absolute pointer-events-none"
-                      style={rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s)}
+                       style={{
+                         ...rasterCssLayout({ x: 0, y: 0, w: template.wMm, h: template.hMm }, template.wMm, template.hMm, viewT.s),
+                         ...templateCompositeStyle(!!art, templateOpacity),
+                       }}
                       data-testid="img-full-sharp"
                     />
                   )}
@@ -2852,20 +3069,10 @@ export default function PressTemplateLiveTest({
                       // Task #3290 — stretch over the EXACT rect the raster
                       // covers (post canvas-size rounding), so raster and
                       // overlay share one coordinate frame and can't diverge.
-                      style={rasterCssLayout(cropImg.rectMm, template.wMm, template.hMm, viewT.s)}
-                    />
-                  )}
-                  {art && artRect && art.img && (
-                    <img
-                      src={art.img}
-                      alt="Art"
-                      draggable={false}
-                      className="absolute"
-                      style={{
-                        ...rasterCssLayout({ x: artRect.xMm, y: artRect.yMm, w: artRect.wMm, h: artRect.hMm }, template.wMm, template.hMm, viewT.s),
-                        opacity: artOpacity,
-                      }}
-                      data-testid="img-art-overlay"
+                       style={{
+                         ...rasterCssLayout(cropImg.rectMm, template.wMm, template.hMm, viewT.s),
+                         ...templateCompositeStyle(!!art, templateOpacity),
+                       }}
                     />
                   )}
                   {/* GT overlays — drawn from the template's own measured layers */}
