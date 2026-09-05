@@ -1,15 +1,18 @@
 # Artist Assets + Apple Canon correction handoff
 
-**ZERO FUNCTIONALITY CHANGES — SKIN ONLY**
+**UI + FUNCTIONALITY + DATA-CONTRACT CHANGES**
+
+> **FUNCTIONALITY CHANGES INCLUDED. Replace presentational code verbatim and wire every listed interaction and persistence transition. Do not preserve conflicting legacy behavior.**
 
 This correction lands on top of Otis `main` commit
 `32805d8d726cc1e4de93531cfbea220355c27692`, “Restore artist assets exposure
 and apply Apple admin skin.” Preserve that recovery, its tests, and all newer
 production behavior.
 
-Do not replace Otis infrastructure, data models, routes, builders, estimates,
-pricing, permissions, role behavior, white-label identity, upload persistence,
-or the production GoodDeed renderer.
+Do not replace unrelated Otis infrastructure, routes, builders, estimates,
+pricing, permissions, role behavior, white-label identity, or the production
+GoodDeed renderer. The image-review and vinyl-representation interactions below
+are explicitly authorized functionality and persistence changes.
 
 ## Why this is a correction, not a second rewrite
 
@@ -89,6 +92,20 @@ From `source/ArtistTemplateTest.tsx`:
 
 ## Must work
 
+- Existing images become legitimate center-stage vinyl representations.
+- **Replace image** opens the nested uploader.
+- **Build with colors** enters the image-to-generated conversion state.
+- **Keep image** cancels conversion, restores the image, and marks it reviewed.
+- Saving a generated design replaces the image-backed representation.
+- Saving a replacement image resolves the corresponding legacy-image review
+  item.
+- Image-count chips count only unresolved legacy images and decrement or
+  disappear as those items are resolved.
+- Persist `imageReviewed`; existing records without the field remain unresolved
+  by default.
+- Accept PNG and WebP images. Render non-square images contained rather than
+  cropped or stretched.
+- Cancel and close paths never mutate saved state.
 - Art, Audio, and Bonus switch the visible task family without losing release
   context.
 - Product selectors expose only the valid product/task combinations above.

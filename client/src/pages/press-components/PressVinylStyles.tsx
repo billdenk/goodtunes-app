@@ -63,6 +63,11 @@ import { postAdminImage } from '@/lib/adminUpload';
 import { resolvePressMarkLogo, type PressComponentsPayload } from './usePressComponents';
 import { WhiteMarkGlyph } from './PressMarkGlyph';
 import { canApplyPhotoSuggestion } from './photoSuggestionGuard';
+import {
+  canDismissVinylImageUpload, canSaveGeneratedVinylRepresentation,
+  generatedVinylReplacement, keepVinylImage,
+  unresolvedVinylImageCount, validateVinylImageUpload,
+} from './vinylImageRepresentation';
 import type { VinylComponentConfig, OfferOption } from '@shared/pressComponents';
 
 // ── Per-press label branding (data) ──────────────────────────────────
@@ -81,12 +86,21 @@ function useLabelBg(): string {
   return bgColor || PRESS_LABEL_BG;
 }
 async function uploadPreviewImageFile(file: File): Promise<string | null> {
+  const error = validateVinylSwatchImage(file);
+  if (error) return null;
   try {
     const { url } = await postAdminImage(file, { mask: 'disc', noun: 'swatch' });
     return url;
   } catch {
     return null;
   }
+}
+
+/** The image-backed vinyl contract deliberately excludes JPEG: source art
+ * must preserve its alpha/quality and is served through the production upload
+ * adapter, not a client object URL. */
+export function validateVinylSwatchImage(file: File): string | null {
+  return validateVinylImageUpload(file);
 }
 
 // ─── Theme tokens — light (default) + dark (charcoal admin canon) ────
@@ -276,6 +290,8 @@ type Swatch = {
   /** Optional press-supplied reference image (mock only). When set, it
       replaces the rendered vinyl disc on the tile/thumbnail. */
   customImg?: string;
+  /** Missing on legacy images means unresolved. */
+  imageReviewed?: boolean;
   /** Splatter-only: whether the base body is translucent (light passes
       through) rather than opaque. Drives which base mask VinylDisc uses. */
   splatterTranslucent?: boolean;
@@ -357,7 +373,7 @@ function VinylDisc({
   if (!swatch) return null;
   // A generator-made color renders through the stencil art everywhere the
   // disc device appears — stage, tiles, search rows — same frame, same label.
-  if (swatch.gen) {
+  if (swatch.gen && !swatch.customImg) {
     return (
       <GenDisc
         size={size}
@@ -398,7 +414,7 @@ function VinylDisc({
             src={swatch.customImg}
             alt=""
             aria-hidden
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' }}
           />
           {/* Branded center label composited over the reference photo — the
               photo replaces the vinyl BODY, but the press's printed label
@@ -1190,8 +1206,14 @@ function CategoryCard({
       }}
       aria-pressed={active}
       data-testid={`category-${category.id}`}
-      className="relative rounded-2xl text-left transition-all hover:-translate-y-px focus:outline-none cursor-pointer group"
-      style={{ padding: 14, border: active ? `2px solid ${t.blue}` : `1px solid ${t.hairline}`, backgroundColor: t.card }}
+      className="relative flex flex-col rounded-2xl text-left transition-all hover:-translate-y-px focus:outline-none cursor-pointer group"
+      style={{
+        height: 215,
+        padding: 14,
+        paddingBottom: 52,
+        border: active ? `2px solid ${t.blue}` : `1px solid ${t.hairline}`,
+        backgroundColor: t.card,
+      }}
     >
       <TypeEditorPopover
         category={category}
@@ -1228,22 +1250,6 @@ function CategoryCard({
           </button>
         }
       />
-      {/* Migration signal (Bill, Aug 20 2026): a quiet word+icon pill counts
-          the photo colors still to rebuild. It clears itself — replace the
-          last photo and the pill is gone. Word + icon, never color alone. */}
-      {(() => {
-        const photoCount = category.swatches.filter((s) => s.customImg).length;
-        return photoCount > 0 ? (
-          <span
-            className="absolute inline-flex items-center gap-1 rounded-full text-[10.5px] font-semibold"
-            data-testid={`badge-photos-${category.id}`}
-            style={{ top: 10, left: 10, zIndex: 2, padding: '3px 8px', border: `1px solid ${t.hairline}`, background: t.frostedBtnBg, backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)', color: t.subink }}
-          >
-            <ImageIcon style={{ width: 11, height: 11 }} />
-            {photoCount} {photoCount === 1 ? 'photo' : 'photos'}
-          </span>
-        ) : null;
-      })()}
       <div className="flex justify-center" style={{ marginBottom: 10, opacity: dimmed ? 0.35 : 1, filter: dimmed ? 'saturate(0.4)' : undefined, transition: 'opacity 0.3s, filter 0.3s' }}>
         <VinylDisc size={90} swatch={preview} />
       </div>
@@ -1260,6 +1266,21 @@ function CategoryCard({
           ? `Not offered in ${pageSize}`
           : `${category.swatches.length} ${category.swatches.length === 1 ? 'color' : 'colors'}`}
       </div>
+      {(() => {
+        const imageCount = unresolvedVinylImageCount(category.swatches);
+        return imageCount > 0 ? (
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: active ? 13 : 14, display: 'flex', justifyContent: 'center' }}>
+            <span
+              className="inline-flex items-center gap-1 rounded-full text-[10.5px] font-semibold"
+              data-testid={`badge-photos-${category.id}`}
+              style={{ padding: '3px 8px', border: `1px solid ${t.hairline}`, background: t.soft, color: t.subink }}
+            >
+              <ImageIcon style={{ width: 11, height: 11 }} />
+              {imageCount} {imageCount === 1 ? 'image' : 'images'}
+            </span>
+          </div>
+        ) : null;
+      })()}
     </div>
   );
 }
@@ -1485,7 +1506,7 @@ function PreviewImageRow({
           <input
             ref={inputRef}
             type="file"
-            accept="image/png,image/jpeg,image/webp"
+            accept="image/png,image/webp"
             className="hidden"
             data-testid={`${testId}-input`}
             onChange={async (e) => {
@@ -1562,6 +1583,7 @@ function SwatchEditorPopover({
   const [sizes, setSizes] = useState<SizeId[]>(edit?.sizes ?? ['12"']);
   const [uploaded, setUploaded] = useState(false);
   const [customImg, setCustomImg] = useState<string | undefined>(edit?.customImg);
+  const [imageReviewed, setImageReviewed] = useState<boolean | undefined>(edit?.imageReviewed);
   // Splatter composer: base body can be opaque or translucent (mirrors the
   // SplatterVinylPreview device). Defaults to opaque.
   const [vinylType, setVinylType] = useState<'opaque' | 'translucent'>(
@@ -1584,6 +1606,7 @@ function SwatchEditorPopover({
     setSizes(edit?.sizes ?? ['12"']);
     setUploaded(false);
     setCustomImg(edit?.customImg);
+    setImageReviewed(edit?.imageReviewed);
     setVinylType(edit?.splatterTranslucent ? 'translucent' : 'opaque');
   };
 
@@ -1599,6 +1622,7 @@ function SwatchEditorPopover({
       s3: isSplatter ? s3 : undefined,
       sizes,
       customImg,
+      imageReviewed,
       splatterTranslucent: isSplatter ? vinylType === 'translucent' : undefined,
     });
     onOpenChange(false);
@@ -1675,9 +1699,12 @@ function SwatchEditorPopover({
               img={customImg}
               onPick={async (file) => {
                 const url = await uploadPreviewImageFile(file);
-                if (url) setCustomImg(url);
+                if (url) {
+                  setCustomImg(url);
+                  setImageReviewed(true);
+                }
               }}
-              onRemove={() => setCustomImg(undefined)}
+              onRemove={() => { setCustomImg(undefined); setImageReviewed(undefined); }}
               testId="color-preview-img"
               t={t}
             />
@@ -2208,7 +2235,7 @@ function SwatchTile({
               {/* Two offerings only: Edit (straight to the picker) and the
                   offer toggle below. (Bill, Aug 20 2026.) */}
               {menuRow(`button-swatch-edit-${swatch.id}`,
-                <Pencil className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />, 'Edit',
+                <Pencil className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />, swatch.customImg ? 'Build with colors' : 'Edit',
                 () => (onEditGen ? onEditGen() : onRebuild ? onRebuild() : setEditOpen(true)))}
               {onMakeDefault && !isDefault && !hidden && menuRow(`button-swatch-default-${swatch.id}`,
                 <Star className="w-4 h-4 flex-shrink-0" style={{ color: t.faint }} />, 'Make default',
@@ -4031,20 +4058,23 @@ function GenGradientRamp({
 
 // ─── The generator sheet — pick a style, assign colors, name & save ──
 function GeneratorSheet({
-  initial, onClose, onSave, onAddExtra, replaceOf, t, titleLead, titleRest, variant = 'color', lockedStyleId, usedByStyle, styleName, styleCount, styleSwatches, onSwitchStyle, presetStyleId, startSaved, homeCatId, initialFinishes, onFinishesChange, onStyleNameChange,
+  initial, onClose, onSave, onAddExtra, replaceOf, onKeepImage, t, titleLead, titleRest, variant = 'color', lockedStyleId, usedByStyle, styleName, styleCount, styleSwatches, onSwitchStyle, presetStyleId, startSaved, homeCatId, initialFinishes, onFinishesChange, onStyleNameChange,
   styleLevel, initialSizes, onSizesChange,
 }: {
   initial: Swatch | null;
   onClose: () => void;
   /** Type flow returns the new style's id so the sheet can keep adding
       colors to it (Bill's one-sitting flow, Aug 20 2026). */
-  onSave: (s: Swatch, typeName?: string, offeredFinishes?: string[]) => string | void;
+  onSave: (s: Swatch, typeName?: string, offeredFinishes?: string[], conversionMode?: boolean) => string | void;
   /** Auto-saves each additional color into the just-created style. */
   onAddExtra?: (catId: string, s: Swatch) => void;
   /** Rebuilding an uploaded-photo color (Bill, Aug 20 2026): the photo slides
       out beside the preview to compare against, and the earned confirm reads
       "Replace" — it swaps the photo swatch for the rebuilt one in place. */
   replaceOf?: Swatch;
+  /** Exits conversion without touching builder inputs, approving the image via
+      the same atomic config save path as every other vinyl mutation. */
+  onKeepImage?: () => void;
   t: Theme;
   titleLead?: string;
   titleRest?: string;
@@ -4121,13 +4151,60 @@ function GeneratorSheet({
   const [name, setName] = useState(initial?.name ?? replaceOf?.name ?? (presetStyleId ? initStyle.name : ''));
   // Photo comparison starts tucked away — click to slide it out.
   const [compareOpen, setCompareOpen] = useState(false);
+  // An image-backed swatch opens as its current representation. Conversion is
+  // an explicit, local-only choice; neither opening nor closing changes it.
+  const [conversionMode, setConversionMode] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
+  const [uploadDimensions, setUploadDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSaving, setUploadSaving] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const resetUpload = () => {
+    if (uploadPreview) URL.revokeObjectURL(uploadPreview);
+    setUploadOpen(false); setUploadFile(null); setUploadPreview(null); setUploadDimensions(null); setUploadError(null);
+  };
+  const closeUpload = () => {
+    if (!canDismissVinylImageUpload(uploadSaving)) return;
+    resetUpload();
+  };
+  const chooseUpload = (file: File | undefined) => {
+    if (!file) return;
+    const error = validateVinylSwatchImage(file);
+    if (error) { setUploadError(error); return; }
+    if (uploadPreview) URL.revokeObjectURL(uploadPreview);
+    const preview = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      setUploadFile(file);
+      setUploadPreview(preview);
+      setUploadDimensions({ width: image.naturalWidth, height: image.naturalHeight });
+      setUploadError(null);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(preview);
+      setUploadFile(null);
+      setUploadPreview(null);
+      setUploadDimensions(null);
+      setUploadError('That image could not be read. Choose another transparent PNG or WebP.');
+    };
+    image.src = preview;
+  };
   // Form rule (handoff README): outside clicks never dismiss the sheet;
   // Esc/Cancel/Save close it. Esc handled here, window-level.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (uploadOpen) {
+        if (canDismissVinylImageUpload(uploadSaving)) closeUpload();
+        return;
+      }
+      onClose();
+    };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, [onClose, uploadOpen, uploadSaving]);
   // Dominant colors pulled from their photo — feeds the "From their photo"
   // strip in the compare drawer. (Andrew, Aug 21 2026.)
   const [photoPalette, setPhotoPalette] = useState<string[]>([]);
@@ -4318,6 +4395,7 @@ function GeneratorSheet({
   const fixedStyle = rowNames.length === 0 && !style.gradient;
   const allValid = fixedStyle || (rowNames.length > 0 && rowNames.every((_, i) => HEX_RE.test(colors[i] ?? '')));
   const canSave = allValid && name.trim().length > 0 && (variant !== 'type' || colorName.trim().length > 0);
+  const canSaveGenerated = canSaveGeneratedVinylRepresentation(Boolean(replaceOf?.customImg), conversionMode) && canSave;
   // Editing something that already exists? The confirm stays quiet until a
   // change earns it — no check mark, no filled blue, on a pristine sheet.
   // (Bill, Aug 20 2026.) Baseline re-snapshots when Update retargets.
@@ -4380,7 +4458,7 @@ function GeneratorSheet({
   };
 
   const save = () => {
-    if (!canSave) return;
+    if (!canSaveGenerated) return;
     if (variant === 'type') {
       const sw = makeSwatch(colorName.trim(), initial?.id);
       const offeredFin = style.pickOne?.label === 'Finish'
@@ -4398,7 +4476,7 @@ function GeneratorSheet({
     }
     if (styleLevel && onStyleNameChange && styleNameEdit.trim()) onStyleNameChange(styleNameEdit.trim());
     const sw = makeSwatch(name.trim(), editId);
-    const res = onSave(sw);
+    const res = onSave(sw, undefined, undefined, conversionMode);
     if (typeof res === 'string') {
       // Saved into a style — stay in the room and offer the next color.
       // (Bill, Aug 20 2026: Black takes more blacks like any other style.)
@@ -4406,6 +4484,29 @@ function GeneratorSheet({
       setSavedColors([sw]);
       setAddingMore(false);
       resetColorFields();
+    }
+  };
+
+  const saveUpload = async () => {
+    if (!uploadFile || uploadSaving) return;
+    setUploadSaving(true); setUploadError(null);
+    try {
+      const customImg = await uploadPreviewImageFile(uploadFile);
+      if (!customImg) throw new Error('The image could not be saved. Try again.');
+      const source = initial ?? replaceOf;
+      onSave({
+        ...(source ?? makeSwatch(name.trim() || uploadFile.name.replace(/\.[^.]+$/, ''))),
+        id: source?.id ?? `upload-${Date.now()}`,
+        name: name.trim() || source?.name || uploadFile.name.replace(/\.[^.]+$/, ''),
+        customImg,
+        imageReviewed: true,
+      }, undefined, undefined, false);
+      resetUpload();
+      onClose();
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'The image could not be saved. Try again.');
+    } finally {
+      setUploadSaving(false);
     }
   };
 
@@ -4458,7 +4559,7 @@ function GeneratorSheet({
       >
       {/* The photo drawer slides out PAST the sheet's left edge — its own
           panel, never squeezing the sheet's insides. (Bill, Aug 20 2026.) */}
-      {replaceOf?.customImg && (
+      {conversionMode && replaceOf?.customImg && (
         <div
           className="flex flex-col items-center"
           data-testid="gen-compare-drawer"
@@ -4494,6 +4595,17 @@ function GeneratorSheet({
           <span className="text-[11px]" style={{ color: t.faint, marginTop: 6, whiteSpace: 'nowrap' }}>
             {compareLarge ? 'Click to shrink' : 'Click to match the record size'}
           </span>
+          {onKeepImage && (
+            <button
+              type="button"
+              onClick={() => { onKeepImage(); setCompareOpen(false); setCompareLarge(false); setConversionMode(false); }}
+              data-testid="gen-keep-image"
+              className="rounded-full text-[12.5px] font-semibold"
+              style={{ marginTop: 14, padding: '8px 16px', border: `1px solid ${t.hairline}`, background: t.soft, color: t.ink }}
+            >
+              Keep image
+            </button>
+          )}
           {/* From their photo (Andrew, Aug 21 2026): the dominant colors,
               pulled off the vinyl itself — background and label excluded.
               One click drops a color into the next empty row. The style
@@ -4577,14 +4689,18 @@ function GeneratorSheet({
                 (Bill, Aug 20 2026.) */}
             <div className="flex items-center" style={{ gap: 6 }}>
             <div style={{ position: 'relative', width: 340, height: 340, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <GenDisc
-                size={Math.round(340 * ctx.scale)}
-                gen={previewGen}
-                labelRatio={ctx.labelRatio}
-                holeRatio={ctx.holeRatio}
-                ghost={previewGhost}
-              />
-              {previewGhost && (
+              {replaceOf?.customImg && !conversionMode ? (
+                <VinylDisc size={340} swatch={replaceOf} />
+              ) : (
+                <GenDisc
+                  size={Math.round(340 * ctx.scale)}
+                  gen={previewGen}
+                  labelRatio={ctx.labelRatio}
+                  holeRatio={ctx.holeRatio}
+                  ghost={previewGhost}
+                />
+              )}
+              {previewGhost && conversionMode && (
                 // Fades away after a few seconds (Andrew, Aug 20 2026) — the
                 // hint earns a glance, then gets out of the record's way.
                 <div
@@ -4612,20 +4728,19 @@ function GeneratorSheet({
                 Suggested from their photo — a first guess. Change anything.
               </span>
             )}
-            {replaceOf?.customImg && (
-              <button
-                type="button"
-                onClick={() => setCompareOpen((v) => !v)}
-                data-testid="gen-compare-photo"
-                className="inline-flex items-center gap-2 rounded-full text-[12.5px] font-semibold transition-colors"
-                style={{
-                  marginTop: 16, padding: '7px 16px', background: 'transparent',
-                  border: `1px solid ${compareOpen ? t.subink : t.dashedBorder}`, color: t.ink, cursor: 'pointer',
-                }}
-              >
-                {compareOpen ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                {compareOpen ? 'Hide their photo' : 'Compare their photo'}
-              </button>
+            {replaceOf?.customImg && !conversionMode && (
+              <div className="inline-flex rounded-full p-[3px] text-[12.5px] font-semibold" style={{ marginTop: 16, background: t.soft, color: t.ink }}>
+                <button
+                  type="button"
+                  onClick={() => setUploadOpen(true)}
+                  data-testid="gen-replace-image"
+                  className="inline-flex items-center gap-2 rounded-full px-4 py-2"
+                  style={{ color: t.ink, background: 'transparent' }}
+                >
+                  <UploadCloud className="w-3.5 h-3.5" /> Replace image
+                </button>
+                <button type="button" onClick={() => { setConversionMode(true); setCompareOpen(true); }} data-testid="gen-build-with-colors" className="rounded-full px-4 py-2" style={{ color: t.ink }}>Build with colors</button>
+              </div>
             )}
             {/* 12/10/7 does double duty (Bill, Aug 20 2026): a viewing lens
                 as-is; hover ··· expands it into style-level offer toggles. */}
@@ -5336,7 +5451,7 @@ function GeneratorSheet({
                 <button
                   type="button"
                   onClick={save}
-                  disabled={!canSave || pristineEdit}
+                  disabled={!canSaveGenerated || pristineEdit}
                   data-testid="gen-save"
                   className="inline-flex items-center gap-2 rounded-full text-[13.5px] font-semibold transition-all"
                   style={pristineEdit ? {
@@ -5344,7 +5459,7 @@ function GeneratorSheet({
                     color: t.subink, cursor: 'default',
                   } : {
                     padding: '10px 22px', border: 'none', background: t.blue, color: '#ffffff',
-                    cursor: canSave ? 'pointer' : 'not-allowed', opacity: canSave ? 1 : 0.45,
+                    cursor: canSaveGenerated ? 'pointer' : 'not-allowed', opacity: canSaveGenerated ? 1 : 0.45,
                   }}
                 >
                   {!pristineEdit && <Check className="w-4 h-4" />}
@@ -5376,6 +5491,31 @@ function GeneratorSheet({
       </div>
       </div>
     </div>
+    {uploadOpen && (
+      <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(0,0,0,.42)', padding: 24 }} data-testid="gen-replace-image-dialog">
+        <div className="rounded-3xl" style={{ width: 'min(760px, 100%)', padding: 24, background: t.card, boxShadow: t.popShadowLg }}>
+          <div className="flex items-start justify-between gap-4">
+            <div><h2 className="text-[19px] font-semibold" style={{ color: t.ink }}>Replace image</h2><p className="text-[12.5px]" style={{ color: t.subink, marginTop: 4 }}>PNG or WebP · 2 MB maximum. Nothing changes until you save the image.</p></div>
+            <button type="button" aria-label="Close replace image" onClick={closeUpload} disabled={uploadSaving} style={{ color: t.subink }}><X className="w-4 h-4" /></button>
+          </div>
+          <input ref={uploadInputRef} type="file" accept="image/png,image/webp" className="hidden" data-testid="gen-replace-image-input" onChange={(e) => { chooseUpload(e.currentTarget.files?.[0]); e.currentTarget.value = ''; }} />
+          <div className="grid items-center" style={{ gridTemplateColumns: '220px minmax(0, 1fr)', gap: 24, marginTop: 20 }}>
+            <button type="button" onClick={() => uploadInputRef.current?.click()} className="flex items-center justify-center rounded-2xl" style={{ width: 220, height: 220, overflow: 'hidden', border: `1px dashed ${t.dashedBorder}`, background: t.soft }}>
+              {uploadPreview ? <VinylDisc size={220} swatch={{ id: 'upload-preview', name: 'Upload preview', kind: 'opaque', base: '#777', sizes: ['12"'], customImg: uploadPreview }} /> : <span className="text-[13px] font-semibold" style={{ color: t.subink }}><UploadCloud className="w-5 h-5 mx-auto mb-2" />Choose an image</span>}
+            </button>
+            <div>
+              <button type="button" onClick={() => uploadInputRef.current?.click()} className="text-[13px] font-semibold" style={{ color: t.blue }}>{uploadFile ? 'Choose another image' : 'Choose PNG or WebP'}</button>
+              {uploadFile && <p className="text-[13px]" style={{ color: t.subink, marginTop: 10 }}>{uploadFile.name}{uploadDimensions ? ` · ${uploadDimensions.width} × ${uploadDimensions.height}` : ''}</p>}
+              {uploadError && <p role="alert" data-testid="gen-replace-image-error" className="text-[13px] font-medium" style={{ color: t.critical, marginTop: 10 }}>{uploadError}</p>}
+            </div>
+          </div>
+          <div className="flex justify-end gap-3" style={{ borderTop: `1px solid ${t.hairline}`, paddingTop: 16, marginTop: 20 }}>
+            <button type="button" onClick={closeUpload} disabled={uploadSaving} className="rounded-full text-[13px] font-semibold" style={{ padding: '8px 15px', border: `1px solid ${t.hairline}`, color: t.ink }}>Cancel</button>
+            <button type="button" onClick={saveUpload} disabled={!uploadFile || uploadSaving} data-testid="gen-replace-image-save" className="rounded-full text-[13px] font-semibold" style={{ padding: '8px 15px', border: 'none', background: t.blue, color: '#fff', opacity: !uploadFile || uploadSaving ? .55 : 1 }}>{uploadSaving ? 'Saving…' : 'Save image'}</button>
+          </div>
+        </div>
+      </div>
+    )}
     </PhotoSampleCtx.Provider>
   );
 }
@@ -5673,6 +5813,14 @@ export function PressVinylStylesComponent({
     );
   };
 
+  // Image resolutions still go through the production atomic vinyl-config
+  // saver. Nothing calls this on dialog/sheet dismissal.
+  const keepSwatchImage = (catId: CategoryId, swatchId: string) => {
+    setCategories((prev) => prev.map((c) => c.id === catId
+      ? { ...c, swatches: c.swatches.map((s) => s.id === swatchId ? keepVinylImage(s) : s) }
+      : c));
+  };
+
   // Remove a swatch from a specific category; reselect a sibling if needed.
   const removeSwatchFrom = (catId: CategoryId, swatchId: string) => {
     setCategories((prev) =>
@@ -5728,16 +5876,16 @@ export function PressVinylStylesComponent({
   // offer "Add color" — saving an edit shouldn't drop the press out of the
   // room. Black takes charcoal, off-black… like any other style. (Bill,
   // Aug 20 2026.)
-  const saveGenColor = (s: Swatch): string => {
+  const saveGenColor = (s: Swatch, _typeName?: string, _offeredFinishes?: string[], conversionMode = false): string => {
     let catId: string;
-    if (genSheet?.replace && genSheet.swatch && genSheet.catId) {
-      // "Replace" — the rebuilt color takes the photo swatch's spot; the
-      // upload is gone. (Bill, Aug 20 2026: presses move off images.)
+    if (conversionMode && genSheet?.swatch && genSheet.catId) {
+      // Explicit generated conversion replaces the image in place. Simply
+      // opening an image-backed builder must never take this branch.
       const oldId = genSheet.swatch.id;
       catId = genSheet.catId;
       const cid = catId;
       setCategories((prev) => prev.map((c) => (c.id === cid
-        ? { ...c, swatches: c.swatches.map((x) => (x.id === oldId ? s : x)) }
+        ? { ...c, swatches: c.swatches.map((x) => (x.id === oldId ? generatedVinylReplacement(s) as Swatch : x)) }
         : c)));
     } else if (genSheet?.swatch && genSheet.catId) {
       // Edit-in-place keeps the swatch's reference photo (Task #3451 — MRP's
@@ -6170,8 +6318,8 @@ export function PressVinylStylesComponent({
                     onSelect={() => setSelectedSwatchId(s.id)}
                     onSave={(next) => updateSwatchIn(category.id, next)}
                     onRemove={() => removeSwatchFrom(category.id, s.id)}
-                    onEditGen={s.gen ? () => setGenSheet({ swatch: s, catId: category.id }) : undefined}
-                    onRebuild={!s.gen ? () => setGenSheet({ swatch: s, catId: category.id, replace: true }) : undefined}
+                    onEditGen={s.gen && !s.customImg ? () => setGenSheet({ swatch: s, catId: category.id }) : undefined}
+                    onRebuild={s.customImg ? () => setGenSheet({ swatch: s, catId: category.id, replace: true }) : undefined}
                     onMakeDefault={() => makeDefaultSwatch(category.id, s.id)}
                     onToggleHidden={() => toggleSwatchHidden(category.id, s.id)}
                     t={t}
@@ -6208,7 +6356,9 @@ export function PressVinylStylesComponent({
       {/* The generator sheet */}
       {genSheet !== null && (
         <GeneratorSheet
-          initial={genSheet.replace ? null : genSheet.swatch ?? null}
+          // A conversion starts with a fresh generated render but retains the
+          // original id so generated Save replaces the representation in place.
+          initial={genSheet.swatch ?? null}
           startSaved={genSheet.view}
           homeCatId={genSheet.catId}
           // Editing a generated color that still carries its imported photo
@@ -6217,6 +6367,12 @@ export function PressVinylStylesComponent({
           // (initial set, genSheet.replace false), and the auto-suggestion
           // can't fire into a sheet whose colors are already seeded.
           replaceOf={genSheet.replace || (genSheet.swatch?.customImg && !genSheet.view) ? genSheet.swatch : undefined}
+          onKeepImage={genSheet.swatch?.customImg && genSheet.catId
+            ? () => {
+                keepSwatchImage(genSheet.catId!, genSheet.swatch!.id);
+                setGenSheet(null);
+              }
+            : undefined}
           onClose={() => setGenSheet(null)}
           onSave={saveGenColor}
           onAddExtra={addColorToCategory}
@@ -6228,8 +6384,8 @@ export function PressVinylStylesComponent({
           // Picking another style here = starting another style, not
           // changing this one — hop to the create flow. (Bill, Aug 20 2026.)
           onSwitchStyle={(sid) => { setGenSheet(null); setTypeSheet(sid); }}
-          titleLead={genSheet.view ? 'Add a color.' : genSheet.replace ? (genSheet.swatch?.customImg ? 'Rebuild this color.' : 'Edit the color.') : undefined}
-          titleRest={genSheet.view ? 'It joins this type.' : genSheet.replace ? (genSheet.swatch?.customImg ? 'Match their photo, then replace it.' : 'Rebuild it with the picker.') : undefined}
+          titleLead={genSheet.view ? 'Add a color.' : genSheet.swatch?.customImg ? 'Edit the color.' : genSheet.replace ? 'Edit the color.' : undefined}
+          titleRest={genSheet.view ? 'It joins this type.' : genSheet.swatch?.customImg ? 'Keep the current image, replace it, or build a generated representation.' : genSheet.replace ? 'Rebuild it with the picker.' : undefined}
           t={t}
           // Editing the default color = editing the style itself: the sizes
           // ··· and the style chip come along. (Bill, Aug 20 2026.)

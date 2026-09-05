@@ -37,6 +37,9 @@ export const vinylSwatchSchema = z.object({
   sizes: z.array(vinylSizeIdSchema).max(3),
   // Uploaded/imported preview photo (splatter, picture disc, marbled).
   customImg: z.string().max(1024).optional(),
+  // An imported image without this flag is in the press's migration queue.
+  // `true` means an operator explicitly retained/replaced the image.
+  imageReviewed: z.boolean().optional(),
   splatterTranslucent: z.boolean().optional(),
   // Generator-made color (handoff/press-vinyl-styles, Aug 20 2026): style +
   // assigned hexes. Presence means the disc renders through the stencil kit

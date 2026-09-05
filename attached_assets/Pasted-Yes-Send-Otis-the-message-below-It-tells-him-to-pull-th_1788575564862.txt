@@ -1,0 +1,123 @@
+Yes. Send Otis the message below. It tells him to pull the corrected handoff, implement the functional changes, and not assume every mock button is intentionally dead.
+
+---
+
+## Copy and send this to Otis
+
+Please pull the latest `billdenk/goodtunes-app` `main`, including these commits:
+
+- `50795cbd2a38cd0ca2d8585bf428ac00c65c33f4` — corrects today’s handoff classifications
+- `b752cdbea7ebd44d82c1e95270cb34d7a6287386` — supplies the approved Vinyl source and supporting files
+
+The controlling instructions are:
+
+- `handoff/AMENDMENT-2026-09-04-FUNCTIONALITY-CLASSIFICATION.md`
+- `handoff/press-vinyl-styles/README.md`
+- `handoff/press-vinyl-styles/HANDOFF-IMAGE-REPRESENTATION-2026-09-04.json`
+
+### Important correction
+
+Do not follow the earlier blanket instruction:
+
+> ZERO FUNCTIONALITY CHANGES — SKIN ONLY
+
+That classification was incorrect for Vinyl Components.
+
+The approved Vinyl handoff includes:
+
+> UI + functionality + data-contract changes
+
+Use the complete supplied presentation and interaction source, but wire it to Otis’s real routes, permissions, uploads, persistence, and data. Do not replace production persistence with GoodStudio’s mock/local storage.
+
+### Vinyl functionality to implement
+
+1. **Image-backed representation**
+   - An uploaded vinyl image is a legitimate current representation.
+   - At rest, display that image in the center stage.
+   - Render it centered with `object-fit: contain`.
+   - Do not distort it or require square dimensions.
+   - GoodTunes overlays the correct press-owned center label.
+
+2. **Replace image**
+   - Clicking **Replace image** opens the nested Canon upload dialog.
+   - Accept transparent PNG and WebP files up to 2 MB.
+   - Do not invite JPEG uploads.
+   - Successful replacement preserves the color/swatches identity.
+   - It marks the image reviewed and resolves that legacy review item.
+   - Canceling or closing must not mutate saved state.
+
+3. **Build with colors**
+   - Clicking **Build with colors** enters an explicit conversion state.
+   - The generated vinyl moves into the center.
+   - The existing uploaded image moves into the side comparison tray.
+   - Merely entering this state does not delete or modify the existing image.
+
+4. **Keep image**
+   - Clicking **Keep image** cancels the conversion.
+   - Return the uploaded image to the center.
+   - Close the comparison tray.
+   - Preserve the uploaded image.
+   - Persist `imageReviewed: true` through Otis’s real save path.
+   - Decrement the unresolved-image count.
+
+5. **Save generated replacement**
+   - Saving the generated version replaces the image-backed representation in place.
+   - Preserve the existing color identity.
+   - Remove the old `customImg` from the current representation.
+   - Resolve the unresolved-image count.
+
+6. **Unresolved-image review counts**
+   - Add optional persisted metadata:
+     - `imageReviewed?: boolean`
+   - Existing records with `customImg` and no explicit `imageReviewed: true` are unresolved.
+   - Count only unresolved image-backed colors.
+   - This is a migration/review queue—not a permanent count of all custom images.
+   - Successful **Keep image**, image replacement, or generated replacement decrements the count.
+   - Opening, comparing, entering conversion, canceling, or closing does not affect it.
+   - Remove the badge when the count reaches zero.
+
+7. **Card badges**
+   - Put unresolved-image badges in reserved card footers.
+   - Keep footer rows aligned across all cards.
+   - Badges must not overlap the record, menu, title, or color count.
+
+### Existing production behavior to preserve
+
+Preserve all existing live Otis behavior that is unrelated to the changed contract, including:
+
+- routes and navigation;
+- permissions and press identity;
+- catalog ownership;
+- offered/hidden rules;
+- size, quantity, and weight behavior;
+- pricing boundaries;
+- GoodTunes Packages;
+- press-specific label resolution;
+- all other currently working buttons and actions.
+
+An inert button in GoodStudio does **not** mean the corresponding production button should become dead. If Otis already has a working action and the handoff does not explicitly replace it, preserve and reconnect it.
+
+### Mock-only controls
+
+Only controls explicitly identified as mock/decorative may remain inert. The GoodStudio light/dark preview switch is mock chrome; Otis should retain its real production theme behavior.
+
+### Other corrected handoffs from today
+
+- **Artist Profile:** classify as presentation plus interaction reachability—not pure skin-only. Keep existing APIs and persistence, but every listed link/action must remain reachable and wired.
+- **Template proofing:** it was already correctly classified as a functionality upgrade. Controls such as Transparency changing the template-over-art overlay are functional behavior and must work.
+- **Artist Release Payments:** do not apply it as skin-only if that package is later sent. Its ledger switching, estimate links, payment-method selection, Pay actions, card gross-up, and payout loading are functional requirements.
+
+### Required receipt
+
+Please return an itemized receipt identifying each requirement as:
+
+- applied verbatim;
+- adapted, with reason;
+- superseded, with reason; or
+- blocked.
+
+Include the exact routes and implementation files changed. Do not mark this Canon until the behavior is published and independently verified.
+
+---
+
+That is everything Otis needs. He should use all files from the two latest commits, but he should distinguish the supplied presentation from the production adapters rather than copying GoodStudio’s mock persistence.

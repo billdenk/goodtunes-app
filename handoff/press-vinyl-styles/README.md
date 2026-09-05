@@ -58,3 +58,63 @@ Also: a photo style's tile-level Edit routes to this same rebuild sheet (one doo
 ## Addendum (Aug 20 2026): Migration progress signals
 - **Style-tile photo badge**: any style holding photo colors shows a quiet frosted pill on its tile — Image icon + "N photos" (word + icon, never color alone). It's a live count of colors still to rebuild; replacing the last photo clears it automatically. When no tile carries a badge, migration is done and the orphan-file cleanup can run.
 - **Compare drawer 1:1**: the drawer photo is clickable — it expands to exactly the live disc's render size (and back) for a true side-by-side match. Caption reads "Click to match the record size" / "Click to shrink".
+
+
+---
+
+---
+
+## Andrew Vinyl classification correction — September 4, 2026
+
+**UI + FUNCTIONALITY + DATA-CONTRACT CHANGES**
+
+This section supersedes the earlier **ZERO FUNCTIONALITY CHANGES — SKIN ONLY** label. Apply the approved interactions and persistence semantics below. Preserve unrelated Otis behavior; do not preserve conflicting legacy Vinyl behavior.
+
+### New and changed behavior
+
+- An image-backed color is a legitimate current representation. Its uploaded image occupies the fixed center stage with the press-owned system label overlaid.
+- **Replace image** opens the nested Canon upload dialog over the unchanged builder.
+- **Build with colors** starts a conversion state: the generated disc occupies the center and the existing image opens in the side comparison tray.
+- **Keep image** exits conversion, returns the image to center, closes the tray, and marks the legacy image reviewed through the real config save path.
+- Saving a generated conversion replaces the image-backed representation in place while retaining the color identity.
+- Saving a replacement image marks the new image reviewed and replaces the legacy image in place.
+- Opening, comparing, entering conversion, canceling the uploader, or closing without save must not change persistence or review state.
+- New source images accept transparent PNG or WebP up to 2 MB. Square dimensions are not required. Center and scale with contain; never distort. GoodTunes owns the correctly sized center-label overlay.
+- Image-count pills are an unresolved migration queue, not a lifetime count of every image. Count only colors with customImg and imageReviewed !== true. Resolving one item decrements the count immediately; resolving the last removes the pill.
+- Category image-count pills stay in a reserved bottom footer with consistent alignment and never overlap the record, menu, title, or color count.
+
+### Data and persistence contract
+
+- Add optional imageReviewed?: boolean to the persisted vinyl color/swatches model.
+- Existing custom-image records without the field are unresolved by default.
+- Otis must use its production image upload/storage and vinyl-config persistence paths. The GoodStudio IndexedDB adapter is prototype infrastructure, not the production storage contract.
+- Generated replacement removes the active customImg reference from the current representation. Keep image preserves it and sets imageReviewed: true.
+
+### Existing production behavior to preserve
+
+- Preserve current press/operator routes, permissions, identity, catalog ownership, size/quantity/weight behavior, hidden/offered rules, pricing boundaries, and GoodTunes Packages.
+- Preserve every existing live action even when the supplied mock does not exercise it. Mock inactivity never means a production button should become dead.
+- Preserve per-press label resolution. Never fall back to another press's mark.
+
+### Must work
+
+- Replace image opens and completes the production upload flow.
+- Build with colors opens conversion with the existing image visible for comparison.
+- Keep image persists review approval, restores the centered image, and closes conversion.
+- Generated Save replaces the image representation and decrements the unresolved count.
+- Replacement-image Save resolves the legacy count.
+- Cancel and close paths do not mutate saved state.
+- Compare resize, stencil selection, color assignment, size lens, style identity, and all previously live Vinyl actions remain functional.
+
+### Mock-only or decorative
+
+- Only controls explicitly identified elsewhere in this handoff as mock chrome may remain inert. The light/dark preview switch is mock chrome; production theme controls continue using Otis's real behavior.
+
+### Acceptance
+
+Verify both themes at 1440, 1024, and 768. Exercise every Must work transition with production handlers and confirm unresolved image counts before and after each successful resolution. Confirm cancel paths preserve data. Return an itemized Otis receipt before Canon promotion.
+
+### Approved source
+
+GoodStudio isolated route: rnd/vinyl-components-rnd/components
+Approved PressVinylStyles digest: a0d37bdd6346d6436435eb410de528439a083e2a5d0a980ad2eb199d98489981

@@ -10,9 +10,9 @@ This package closes the current Artist Profile interaction and multi-page Templa
 
 ### A. Admin Artist Profile
 
-**ZERO FUNCTIONALITY CHANGES — SKIN ONLY.**
+**PRESENTATION + INTERACTION REACHABILITY; NO NEW DATA CONTRACT.**
 
-Delete and replace presentation only on Otis' existing super-admin artist profile route. Preserve all current routes, API contracts, database writes, permissions, validation, audit behavior, Shopify behavior, press assignment/referral meaning, releases, fulfillment, builders, pricing, estimates, white-label behavior, and production data. Restore existing Otis actions that became hidden by presentation changes; do not create new server behavior from the mock's local React state.
+Replace the presentation on Otis' existing super-admin artist profile route and wire every listed interaction to the existing production handlers. Preserve all current routes, API contracts, database writes, permissions, validation, audit behavior, Shopify behavior, press assignment/referral meaning, releases, fulfillment, builders, pricing, estimates, white-label behavior, and production data. Restore existing Otis actions that became hidden by presentation changes; do not create new server behavior from the mock's local React state.
 
 The GoodStudio source is the exact presentational and interaction contract. Wire Otis data and existing handlers into it. Replace every MOCK_ value with live data. Never ship demo identities, in-memory mutations, hash navigation, or mock timeouts. If an action shown by the source has no existing Otis capability, report it as blocked instead of inventing a new contract.
 
@@ -81,7 +81,7 @@ Do not push the isolated multi-page Press R&D component directly into Artist pro
 ## Otis implementation and production gates
 
 1. Start from the newest main and read docs/STATUS.md.
-2. Apply the Artist Profile presentation over existing handlers with the exact ZERO FUNCTIONALITY CHANGES boundary above.
+2. Apply the Artist Profile presentation over existing handlers with the presentation + interaction-reachability classification above. Every listed link and action must remain live.
 3. Integrate the multi-page proof engine into Otis' existing wired Press page.
 4. Run Otis' production build, design lint, focused static checks, and focused browser tests for these changed routes.
 5. Publish Otis through its normal Replit publishing flow.

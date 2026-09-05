@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "status": "staging",
+  "classification": "UI + functionality + data-contract changes",
+  "experimentId": "vinyl-components-rnd",
+  "route": "rnd/vinyl-components-rnd/components",
+  "revision": "image-backed-color-review-rnd-v3",
+  "sourceDigest": "a0d37bdd6346d6436435eb410de528439a083e2a5d0a980ad2eb199d98489981",
+  "sourceAuthority": "approved GoodStudio isolated R&D",
+  "otisStatus": "pending implementation receipt",
+  "files": [
+    {
+      "path": "PressVinylStyles.tsx",
+      "sha256": "a0d37bdd6346d6436435eb410de528439a083e2a5d0a980ad2eb199d98489981",
+      "handling": "replace presentational and interaction source verbatim; wire production persistence"
+    },
+    {
+      "path": "replicaSupport.ts",
+      "sha256": "ce6e109e54fce6f1f55efedae09544dc791e199ec151beda5dfddb012069a7c0",
+      "handling": "production adapter contract"
+    },
+    {
+      "path": "PressMarkGlyph.tsx",
+      "sha256": "cc0b826cb91a199b26b4fe846c4b4b9f369a8ca0e34f0be4cd55e3358c5c8966",
+      "handling": "press-owned mark rendering"
+    },
+    {
+      "path": "photoSuggestionGuard.ts",
+      "sha256": "f2277df2ddbca7dca80bb9cfa343e1bdda8dc9c697a818bc9798b5108be107cd",
+      "handling": "preserve async suggestion safety"
+    }
+  ],
+  "requiredReceipt": [
+    "applied",
+    "adapted",
+    "superseded",
+    "blocked"
+  ],
+  "canonPromotion": "blocked until Otis implementation and published behavior are reconciled"
+}

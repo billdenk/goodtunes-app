@@ -7,12 +7,13 @@
 // GoodDeed chips with a far-right Art/Audio segmented control that is easy to
 // miss).
 //
-// ZERO FUNCTIONALITY CHANGES. This file DOES NOT mutate any Canon component. The
-// asset panels (Vinyl art / audio, Player art / audio, GoodDeed) are extracted
-// verbatim from ArtistDashboardAccountStack.tsx so the content and interactions
-// are identical; only the surrounding control hierarchy is re-arranged. Shared
-// interactive pieces (Otis tracks, prepress template review, artwork dialog,
-// component icons) are imported from their real source modules.
+// UI + FUNCTIONALITY + DATA-CONTRACT HANDOFF. This isolated source does not
+// persist production state by itself, but its named image-review, replacement,
+// conversion, and resolution transitions are implementation contracts for Otis.
+// Asset panels are extracted from ArtistDashboardAccountStack.tsx and the
+// surrounding hierarchy is re-arranged. Shared interactive pieces (Otis tracks,
+// prepress template review, artwork dialog, component icons) are imported from
+// their real source modules.
 //
 // Applicability matrix is exact:
 //   Art   → Vinyl, GoodTunes® Player, GoodDeed®
