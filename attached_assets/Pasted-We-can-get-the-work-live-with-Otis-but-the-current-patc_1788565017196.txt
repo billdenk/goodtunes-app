@@ -1,0 +1,82 @@
+We **can** get the work live with Otis—but the current patch-by-patch process is failing.
+
+Otis’s response is not saying the work cannot be shipped. It is saying the task it just completed was too narrow and it is closing that task without performing the **broader Canon reconciliation**. That broader reconciliation is the work actually needed.
+
+The mistake has been treating each screenshot problem as another isolated correction. That lets Otis pass tests while production still contains untouched legacy screens.
+
+## The reliable path forward
+
+1. **Stop publishing the current partial corrections.**
+2. Treat the approved GoodStudio/Canvas work as one complete Canon migration.
+3. Copy the approved mocks into Otis as an explicit, self-contained handoff—not vague visual references.
+4. Build a route-by-route matrix connecting every approved screen to its real Otis route and production component.
+5. Apply the shared shell, navigation, typography, spacing, layout, components, and responsive behavior systematically.
+6. Preserve the underlying production logic.
+7. Review development screenshots of every affected route before publishing.
+8. Publish one approved commit.
+9. Verify that exact commit on production.
+
+## Send this to Otis
+
+> Do not close the broader Canon reconciliation.
+>
+> The completed MRP evidence task may remain closed separately, but the primary objective is still open: move the complete approved GoodStudio/Canvas experience into production Otis.
+>
+> Create one dedicated **Otis Canon reconciliation branch/workstream** using Ruby’s approved September 4 package and the standing Apple Canon documentation.
+>
+> This is not another isolated CSS correction. “Canon skin” includes:
+>
+> - application shell;
+> - primary and nested navigation;
+> - page layout and information hierarchy;
+> - content widths and responsive composition;
+> - typography;
+> - spacing;
+> - cards, controls, menus, dialogs, and status treatments;
+> - interaction placement;
+> - light and approved charcoal appearances;
+> - role-specific Artist, press, partner, and operator presentation;
+> - loading, empty, warning, error, incomplete, passing, and completed states.
+>
+> It remains **ZERO FUNCTIONALITY CHANGES — SKIN ONLY** unless a separately approved task explicitly says otherwise.
+>
+> Preserve production routes, data, queries, handlers, builders, pricing, estimates, permissions, uploads, proofing, certification, payments, fulfillment, Shopify, white-label behavior, APIs, and data contracts.
+>
+> ### Required process
+>
+> 1. Read the complete Ruby handoff and Apple Canon source.
+> 2. Inventory every approved mock and every corresponding production route.
+> 3. Produce a reconciliation matrix with:
+>    - approved Canon surface;
+>    - production route;
+>    - production component;
+>    - user role;
+>    - light/dark states;
+>    - responsive states;
+>    - implementation status;
+>    - screenshot evidence.
+> 4. Identify all shared production shells and components that currently cause legacy islands.
+> 5. Implement the shared Canon foundation first.
+> 6. Reconcile every mapped route—not only the routes called out in recent screenshots.
+> 7. Capture complete development screenshots for the full matrix.
+> 8. Return `READY_FOR_VISUAL_REVIEW`, not `READY_FOR_CANON`.
+> 9. Wait for Andrew/Ruby visual approval.
+> 10. Publish the exact approved revision.
+> 11. Verify the same matrix on `admin.goodtunes.music`.
+> 12. Return `READY_FOR_CANON` only with the live revision and production evidence.
+>
+> Do not close this work because individual implementation tests pass. Build/test success is required, but visual acceptance is a separate gate.
+>
+> Do not ask Andrew to publish again until the complete development screenshot matrix has been reviewed and accepted.
+
+## The important change
+
+We should not keep asking Otis:
+
+> “Fix this screenshot too.”
+
+We should require:
+
+> “Reconcile the complete approved Canon inventory, show every route in development, and only then ask for publication.”
+
+That is how the work gets live without another cycle of publishing a technically successful but visually incomplete build.

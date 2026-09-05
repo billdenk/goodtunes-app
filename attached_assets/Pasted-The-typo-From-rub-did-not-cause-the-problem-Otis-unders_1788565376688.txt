@@ -1,0 +1,48 @@
+The typo **“From rub”** did not cause the problem. Otis understood it was Ruby’s note.
+
+What happened is that Otis treated the note as clarification for the **current narrow MRP task**, rather than as an instruction to begin the broader Canon migration. It is still focused on resolving a rebase and closing that narrow task.
+
+Send this next:
+
+> Yes, close the completed MRP evidence task once its rebase issue is resolved.
+>
+> **Then immediately begin the broader Canon reconciliation as a new dedicated workstream. This is an instruction to execute the work—not merely acknowledge that it remains outstanding.**
+>
+> Use Ruby’s complete pasted directive as the requirements document.
+>
+> Your first deliverable is the route-by-route reconciliation matrix covering:
+>
+> - every approved GoodStudio/Canvas surface;
+> - corresponding Otis production route and component;
+> - Artist, press, partner, and operator roles;
+> - light and charcoal appearances;
+> - desktop, tablet, and mobile states;
+> - loading, empty, warning, error, incomplete, passing, and completed states;
+> - implementation and visual-verification status.
+>
+> After creating the matrix, continue directly into implementation. Do not close the broader work after producing only a plan.
+>
+> Do not ask Andrew to publish again until:
+>
+> 1. the complete mapped scope is implemented in development;
+> 2. the complete development screenshot matrix is available;
+> 3. Ruby/Andrew has reviewed the visual evidence;
+> 4. any discrepancies found during that review are corrected.
+>
+> The requirement remains:
+>
+> **ZERO FUNCTIONALITY CHANGES — SKIN ONLY**, except for separately approved functional tasks.
+>
+> “Skin” includes the complete approved layout, shell, navigation, hierarchy, typography, spacing, component composition, interaction placement, responsive behavior, role-specific presentation, and light/charcoal appearance—not merely CSS color aliases.
+>
+> Confirm your next response with:
+>
+> - `CANON_RECONCILIATION_STARTED`
+> - the new workstream/task name;
+> - the matrix location;
+> - the first implementation batch;
+> - any genuine blocker preventing execution.
+>
+> Do not respond only that the broader sweep is required. Start it.
+
+The key is the explicit phrase: **“This is an instruction to execute the work—not merely acknowledge it.”**

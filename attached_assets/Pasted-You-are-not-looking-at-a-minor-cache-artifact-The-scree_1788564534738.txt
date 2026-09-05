@@ -1,0 +1,55 @@
+You are not looking at a minor cache artifact. The screenshots prove that production is still serving the **legacy Sell-builder composition**:
+
+- narrow centered builder column;
+- oversized empty gutters;
+- detached artwork preview;
+- old stacked controls and pricing treatment;
+- legacy GoodDeed panel;
+- no approved Canon layout transformation.
+
+A refresh cannot fix that. One of two things happened:
+
+1. **The published deployment does not contain commit `27425827f`**, or
+2. Commit `27425827f` only added scoped colors/surface aliases while leaving the legacy builder structure intact.
+
+The second explanation matches Otis’s wording—“applied scoped Canon styling”—and what is visible. The route may have received subtle CSS changes, but it did **not** receive the complete approved Sell-builder skin.
+
+I cannot inspect Otis’s deployment revision from this Playground workspace because Otis is a separate Repl. Otis needs to verify the live build SHA directly.
+
+### Send this to Otis
+
+> `BLOCKED` — production still shows the legacy Sell/package-builder composition after republishing.
+>
+> Exact production route:
+>
+> `/admin/albums/a5e96e28-1961-4dd4-8184-e0ebf6446143?tab=sell`
+>
+> First, report the revision actually running on `admin.goodtunes.music` and confirm whether it contains commit `27425827f`.
+>
+> - If production is not running `27425827f`, correct the deployment source/revision and republish.
+> - If production is running `27425827f`, the implementation is incomplete. Scoped color aliases are not the requested Canon skin.
+>
+> Current production evidence still shows:
+>
+> - the narrow legacy builder column;
+> - large unused gutters;
+> - detached/sticky artwork presentation;
+> - legacy package, color, pricing, quantity, and GoodDeed layouts;
+> - no complete Apple Canon hierarchy or responsive composition.
+>
+> Apply the approved complete Sell-builder presentation across the full route—not merely theme variables around the existing narrow layout.
+>
+> This remains **ZERO FUNCTIONALITY CHANGES — SKIN ONLY**. Recompose the existing production controls without replacing their handlers, state, pricing, validation, persistence, permissions, routes, APIs, or data contracts.
+>
+> Before returning another receipt, provide:
+>
+> 1. live production revision;
+> 2. confirmation that it includes `27425827f` and the subsequent correction;
+> 3. a production screenshot of this exact album and tab;
+> 4. full-page light and charcoal captures;
+> 5. desktop, tablet, and mobile captures;
+> 6. confirmation that the complete scroll depth—not only the top section—uses the approved Canon presentation.
+>
+> Do not return `READY_FOR_CANON` based on development screenshots or test results while this exact production route still displays the legacy builder.
+
+So the publish may have succeeded technically, but the visible result is still not the requested Canon design.

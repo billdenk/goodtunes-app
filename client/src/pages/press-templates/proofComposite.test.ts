@@ -40,6 +40,11 @@ test("artist template visibility stays independent from art opacity", () => {
   assert.doesNotMatch(source, /if \(on\) setArtOpacity/);
   assert.match(source, /data-testid="slider-template-opacity"/);
   assert.match(source, /data-testid="slider-art-opacity"/);
+  assert.match(
+    source,
+    /<label className="block text-xs font-semibold leading-4"[\s\S]*?Template opacity[\s\S]*?<label className="mt-3 block text-xs font-semibold leading-4"[\s\S]*?Art opacity/,
+    "template and art opacity controls must share the compact popover heading typography",
+  );
 });
 
 test("sharp template rasters replace the base instead of stacking over it", () => {

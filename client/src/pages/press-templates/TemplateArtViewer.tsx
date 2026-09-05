@@ -540,7 +540,7 @@ export function TemplateArtViewer({
                       .gt-slider::-moz-range-track { height: 3px; border-radius: 2px; background: ${t.hairline}; }
                       .gt-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 0.5px solid rgba(0,0,0,0.18); box-shadow: 0 1px 4px rgba(0,0,0,0.35); }
                     `}</style>
-                    <label className="block text-[11px] font-semibold" style={{ color: t.subink }}>
+                    <label className="block text-xs font-semibold leading-4" style={{ color: t.subink }}>
                       Template opacity
                       <input
                         type="range" min={0} max={100} value={Math.round(templateOpacity * 100)}
@@ -549,10 +549,10 @@ export function TemplateArtViewer({
                         data-testid="slider-template-opacity"
                       />
                     </label>
-                    <div className="mt-1.5 text-[10.5px]" style={{ color: t.faint }}>
+                    <div className="mt-1.5 text-xs leading-4" style={{ color: t.faint }}>
                       Adjust the press template without changing your artwork.
                     </div>
-                    <label className="mt-3 block text-xs font-semibold" style={{ color: t.subink }}>
+                    <label className="mt-3 block text-xs font-semibold leading-4" style={{ color: t.subink }}>
                       Art opacity
                       <input
                         type="range" min={0} max={100} value={Math.round(artOpacity * 100)}
@@ -561,7 +561,7 @@ export function TemplateArtViewer({
                         data-testid="slider-art-opacity"
                       />
                     </label>
-                    <div className="mt-1.5 text-[10.5px]" style={{ color: t.faint }}>
+                    <div className="mt-1.5 text-xs leading-4" style={{ color: t.faint }}>
                       Adjust the artwork independently from the press template.
                     </div>
                   </div>

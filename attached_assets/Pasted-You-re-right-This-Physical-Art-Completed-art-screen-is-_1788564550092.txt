@@ -1,0 +1,63 @@
+You’re right. This **Physical → Art / Completed art** screen is also still using the legacy production presentation.
+
+Visible problems include:
+
+- the same narrow content column and huge unused canvas;
+- legacy album header and tab treatment;
+- old Audio/Art/Fulfillment segmented navigation;
+- weak hierarchy around “Completed art”;
+- legacy warning panel and artwork cards;
+- inconsistent spacing, typography, status language, and controls;
+- no complete Apple Canon light/charcoal composition.
+
+This confirms the problem is broader than one Sell route. Otis applied isolated CSS corrections instead of conducting the required **album-workspace Canon sweep**.
+
+### Send this consolidated correction to Otis
+
+> `BLOCKED` — production still contains multiple legacy album-workspace surfaces after republishing.
+>
+> Additional failing surface:
+>
+> - Album → Physical → Art / Completed art
+> - Exact album: `a5e96e28-1961-4dd4-8184-e0ebf6446143`
+>
+> This page still displays the legacy narrow layout, old nested navigation, warning treatment, artwork cards, spacing, and typography.
+>
+> Stop correcting these screens individually. Audit the complete production album workspace and apply the approved Apple Canon skin consistently across every existing tab and nested state, including:
+>
+> - Dashboard
+> - Overview
+> - Package/Sell
+> - Digital
+> - Physical
+>   - Audio
+>   - Art
+>   - Fulfillment
+> - Shopify
+> - Payments
+> - Customers
+> - Early access
+> - loading, empty, incomplete, warning, error, passing, and completed states
+>
+> Maintain one coherent shell, content width, hierarchy, spacing system, navigation treatment, card language, status treatment, and responsive behavior across the workspace.
+>
+> This remains **ZERO FUNCTIONALITY CHANGES — SKIN ONLY**.
+>
+> Preserve all existing album data, uploads, validation, preflight results, downloads, status calculations, permissions, builders, pricing, estimates, fulfillment, Shopify behavior, routes, APIs, and data contracts.
+>
+> Do not replace production screens with Canvas implementations. Apply the Canon presentation to the existing production components and handlers.
+>
+> Before republishing again:
+>
+> 1. inventory every album tab and nested route;
+> 2. capture each current development surface;
+> 3. verify the Canon shell and layout across the complete inventory;
+> 4. run the established automated suite;
+> 5. publish the verified revision;
+> 6. return full production captures from this exact album.
+>
+> Also report the revision actually running on `admin.goodtunes.music`. Do not claim completion based on one development screenshot.
+>
+> Return `READY_FOR_CANON` only after the complete album-workspace sweep is production-verified.
+
+At this point, another one-screen patch is not enough. Otis needs to verify the entire album workspace systematically before asking you to publish again.
