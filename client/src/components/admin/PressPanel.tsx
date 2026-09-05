@@ -17,7 +17,7 @@
 // SellPanel used to mount UploadValidationsPanel directly; that surface
 // is now a one-line pointer to this tab.
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { formatUsdCents } from "@shared/money";
 import { Download, Loader2, AlertTriangle, RefreshCcw, CheckCircle2, Check, X, Circle, Truck } from "lucide-react";
@@ -39,6 +39,13 @@ import { PressTemplateDownloads, type PressTemplate } from "@/components/admin/P
 import { PackagePrintTemplates } from "@/pages/PressAlbumPackageBuilder";
 import { PrintPdfsPanel } from "@/components/admin/PrintPdfsPanel";
 import { FulfillmentAssignmentPanel } from "@/components/admin/FulfillmentAssignmentPanel";
+import { AlbumWorkspacePanel } from "@/components/admin/AlbumWorkspacePanel";
+import {
+  canonicalPhysicalSearch,
+  physicalSubTabFromSearch,
+  physicalSubTabsFor,
+  type PhysicalSubTab,
+} from "@/components/admin/physicalNavigation";
 import { VinylOrderPanel } from "@/components/admin/VinylOrderPanel";
 import { SegmentedPillToggle } from "@/components/admin/SegmentedPillToggle";
 import { VINYL_FORMAT_RULES, type VinylFormat } from "@shared/vinylFormatRules";
@@ -602,23 +609,8 @@ function PressDownloadsPanel({
 // Task #2701 — sub-tab split of the Physical tab. Audio is the default;
 // the active sub-tab persists in the URL as `ptab` merged with the
 // page's existing `?tab=` handling so refresh + deep links restore it.
-type PhysicalSubTab = "audio" | "art" | "fulfillment" | "downloads";
-const PHYSICAL_SUB_TABS: Array<{ id: PhysicalSubTab; label: string }> = [
-  { id: "audio", label: "Audio" },
-  { id: "art", label: "Art" },
-  { id: "fulfillment", label: "Fulfillment" },
-];
-// Task #3308 follow-up (Monday MRP demo) — a press-only "Downloads" sub-tab
-// consolidating the finished print files + music the plant actually pulls to
-// press a record. Appended to the sub-tab row only in pressMode so operators
-// keep their existing Audio/Art/Fulfillment surfaces untouched.
-const PRESS_DOWNLOADS_SUB_TAB: { id: PhysicalSubTab; label: string } = {
-  id: "downloads",
-  label: "Downloads",
-};
-function readSubTabFromUrl(): PhysicalSubTab {
-  const v = new URLSearchParams(window.location.search).get("ptab");
-  return v === "art" || v === "fulfillment" || v === "downloads" ? v : "audio";
+function readSubTabFromUrl(pressMode: boolean): PhysicalSubTab {
+  return physicalSubTabFromSearch(window.location.search, pressMode);
 }
 
 export function PressPanel({
@@ -631,6 +623,7 @@ export function PressPanel({
   readyToSend = false,
   sendBlockers = [],
   pressMode = false,
+  roleResolved = true,
   hideEntityLinks = false,
   canManageFulfillment = false,
   fulfillmentPartnerId = null,
@@ -661,6 +654,9 @@ export function PressPanel({
   // dedicated note + a CTA to send GoodTunes their plant's exact specs
   // instead of just the terse operator badge.
   pressMode?: boolean;
+  // A press-only deep link must not be canonicalized while the caller's role
+  // is still loading. AdminAlbum passes false until /api/me/role resolves.
+  roleResolved?: boolean;
   // Task #2578 — true when an artist partner (not an operator or the
   // press itself) is viewing this tab. Hides the "Change/Assign a plant"
   // deep-links to /admin/people|labels/:id — those pages are operator-only
@@ -951,8 +947,29 @@ export function PressPanel({
   // Task #2701 — Audio | Art | Fulfillment sub-tabs, persisted in the
   // URL as `ptab` merged with the page's existing query params (never
   // clobbers `?tab=`).
-  const [subTab, setSubTabState] = useState<PhysicalSubTab>(() => readSubTabFromUrl());
+  const initialSubTabSearchRef = useRef(window.location.search);
+  const subTabChangedByUserRef = useRef(false);
+  const [subTab, setSubTabState] = useState<PhysicalSubTab>(() =>
+    roleResolved ? readSubTabFromUrl(pressMode) : "audio",
+  );
+  useEffect(() => {
+    if (!roleResolved) return;
+    if (!subTabChangedByUserRef.current) {
+      setSubTabState(
+        physicalSubTabFromSearch(initialSubTabSearchRef.current, pressMode),
+      );
+    }
+    const canonicalSearch = canonicalPhysicalSearch(window.location.search, pressMode);
+    if (canonicalSearch === window.location.search) return;
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${canonicalSearch}${window.location.hash}`,
+    );
+  }, [pressMode, roleResolved]);
+
   function setSubTab(t: PhysicalSubTab) {
+    subTabChangedByUserRef.current = true;
     setSubTabState(t);
     const params = new URLSearchParams(window.location.search);
     if (t === "audio") params.delete("ptab");
@@ -1048,7 +1065,7 @@ export function PressPanel({
     );
 
   return (
-    <div className="py-6" data-testid="panel-press">
+    <AlbumWorkspacePanel className="mt-1" testId="panel-press">
       <div>
         <MastersApprovalBanner albumId={albumId} />
         {/* Task #533 — pool-funded early-cut ledger readout. */}
@@ -1062,7 +1079,7 @@ export function PressPanel({
           <SegmentedPillToggle
             value={subTab}
             onChange={setSubTab}
-            options={(pressMode ? [...PHYSICAL_SUB_TABS, PRESS_DOWNLOADS_SUB_TAB] : PHYSICAL_SUB_TABS).map(({ id, label }) => ({
+            options={physicalSubTabsFor(pressMode).map(({ id, label }) => ({
               value: id,
               label,
               testId: `subtab-${id}`,
@@ -1528,9 +1545,8 @@ export function PressPanel({
         )}
 
         {/* ── DOWNLOADS sub-tab (press-only, Monday MRP demo) ──────────
-            Guarded on pressMode: the tab only renders in the sub-tab row
-            for presses, but a deep-linked ?ptab=downloads could carry it in
-            for anyone — fail closed to nothing rather than exposing it. */}
+            Role-aware URL restoration waits for role resolution, preserving
+            valid press links and canonicalizing everyone else to Audio. */}
         {subTab === "downloads" && pressMode && (
           <PressDownloadsPanel
             albumId={albumId}
@@ -1729,7 +1745,7 @@ export function PressPanel({
           </DialogContent>
         </Dialog>
       </div>
-    </div>
+    </AlbumWorkspacePanel>
   );
 }
 

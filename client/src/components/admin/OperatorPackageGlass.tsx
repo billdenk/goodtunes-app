@@ -15,6 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { PrinterAndPressPanel } from "@/components/admin/SellPanel";
 import { ShareQuoteWithArtist } from "@/components/admin/ShareQuoteWithArtist";
 import { PressAlbumPackageBuilder } from "@/pages/PressAlbumPackageBuilder";
+import { AlbumWorkspacePanel } from "@/components/admin/AlbumWorkspacePanel";
 
 type InvitedPress = ComponentProps<typeof PrinterAndPressPanel>["invited"];
 
@@ -63,9 +64,9 @@ export function OperatorPackageGlass({
   const savedEstimateCount = new Set((sell?.skus ?? []).map((s) => s.format)).size;
 
   return (
-    <div
-      className="gt-canon-package-surface rounded-2xl border border-[var(--apple-hairline)] bg-[var(--apple-card)] p-3 sm:p-5"
-      data-testid="operator-package-glass"
+    <AlbumWorkspacePanel
+      className="gt-canon-package-surface"
+      testId="operator-package-glass"
     >
       {/* ── Admin-only chrome — everything below it is the artist's page ── */}
       <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-[var(--apple-canvas)] p-3 sm:p-4">
@@ -120,6 +121,6 @@ export function OperatorPackageGlass({
         artworkUrl={artworkUrl}
         trackCount={trackCount}
       />
-    </div>
+    </AlbumWorkspacePanel>
   );
 }

@@ -10,15 +10,22 @@ export function PageColumn({
   className,
   padded = true,
   testId,
+  width = "contained",
 }: {
   children: ReactNode;
   className?: string;
   padded?: boolean;
   testId?: string;
+  width?: "contained" | "full";
 }) {
   return (
     <div
-      className={cn("mx-auto w-full max-w-[1240px]", padded && "px-4 sm:px-10 pt-8 pb-24", className)}
+      className={cn(
+        "mx-auto w-full min-w-0",
+        width === "contained" ? "max-w-[1240px]" : "max-w-none",
+        padded && "px-4 sm:px-6 xl:px-10 pt-6 sm:pt-8 pb-24",
+        className,
+      )}
       data-testid={testId}
     >
       {children}

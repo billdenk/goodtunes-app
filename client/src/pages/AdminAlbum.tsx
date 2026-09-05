@@ -142,6 +142,8 @@ import { Switch } from "@/components/ui/switch";
 import { PlayerDock } from "@/components/ui/PlayerDock";
 import { SellPanel } from "@/components/admin/SellPanel";
 import { OperatorPackageGlass } from "@/components/admin/OperatorPackageGlass";
+import { AlbumWorkspacePanel } from "@/components/admin/AlbumWorkspacePanel";
+import { AlbumWorkspaceTabs } from "@/components/admin/AlbumWorkspaceTabs";
 import { PressAlbumPackageBuilder } from "@/pages/PressAlbumPackageBuilder";
 import { PressPanel } from "@/components/admin/PressPanel";
 import { ShopifyPanel } from "@/components/admin/ShopifyPanel";
@@ -1357,7 +1359,7 @@ export function AdminAlbum({
 
   const mainBody = (
     <>
-      <PageColumn className="space-y-6" padded={false}>
+      <PageColumn className="space-y-6" padded={false} width="full">
         {/* BREADCRUMB */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-400 font-medium">
           {backCrumb ? (
@@ -1700,40 +1702,30 @@ export function AdminAlbum({
           className="flex items-end justify-between gap-5 border-b border-slate-200"
           data-testid="tabs-admin-album"
         >
-          <div className="flex items-center gap-5 overflow-x-auto min-w-0 scrollbar-hide">
-            {visibleTabsFor(album, { hidePress: hidePressSection, operatorTabs: isOperator, canManagePayouts: albumEditAccess?.canManagePayouts }).map((t) => {
-              const status = (completeness as any)?.[t.key] as
-                | SectionStatus
-                | undefined;
-              const isActive = tab === t.key;
-              const labelColor = isActive
-                ? "text-slate-900"
-                : status?.state === "complete"
-                  ? "text-slate-600 hover:text-slate-800"
-                  : status?.state === "in-progress"
-                    ? "text-slate-500 hover:text-slate-800"
-                    : "text-slate-400 hover:text-slate-700";
-              return (
-                <button
-                  key={t.key}
-                  onClick={(e) =>
-                    anchorScrollToElement(e.currentTarget, () => setTab(t.key))
-                  }
-                  title={status ? sectionTooltip(t.label, status) : undefined}
-                  className={[
-                    "relative pb-2.5 inline-flex items-center gap-1.5 text-[13.5px] font-semibold whitespace-nowrap transition-colors",
-                    labelColor,
-                  ].join(" ")}
-                  data-testid={`tab-${t.key}`}
-                >
-                  {t.label}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[var(--brand-blue)] rounded-full" />
-                  )}
-                </button>
-              );
+          <AlbumWorkspaceTabs
+            tabs={visibleTabsFor(album, {
+              hidePress: hidePressSection,
+              operatorTabs: isOperator,
+              canManagePayouts: albumEditAccess?.canManagePayouts,
+            }).map((t) => {
+              const status = (completeness as any)?.[t.key] as SectionStatus | undefined;
+              return {
+                key: t.key,
+                label: t.label,
+                complete: status?.state === "complete",
+                inProgress: status?.state === "in-progress",
+                title: status ? sectionTooltip(t.label, status) : undefined,
+              };
             })}
-          </div>
+            activeKey={tab}
+            onSelect={(key, element) =>
+              anchorScrollToElement(
+                element,
+                () => setTab(key as Tab),
+              )
+            }
+            testId="tabs-admin-album-navigation"
+          />
           {/* Delete Options dropdown — replaces the standalone trashcan.
               Same visual chrome as the Tracks-tab "Advanced" menu so the
               two top-level actions on the album feel like a matched
@@ -1990,13 +1982,15 @@ export function AdminAlbum({
                   SellPanel remains only for press/label partner roles and
                   Shopify-mode albums. */}
               {safeTab === "sell" && allowed.has("sell") && isArtist && (
-                <PressAlbumPackageBuilder
-                  albumId={album.id}
-                  albumTitle={album.title}
-                  artistName={album.artist}
-                  artworkUrl={album.artwork}
-                  trackCount={album.songs.length}
-                />
+                <AlbumWorkspacePanel testId="artist-package-workspace">
+                  <PressAlbumPackageBuilder
+                    albumId={album.id}
+                    albumTitle={album.title}
+                    artistName={album.artist}
+                    artworkUrl={album.artwork}
+                    trackCount={album.songs.length}
+                  />
+                </AlbumWorkspacePanel>
               )}
               {safeTab === "sell" &&
                 allowed.has("sell") &&
@@ -2023,30 +2017,32 @@ export function AdminAlbum({
                 !isArtist &&
                 !!adminRoleInfo &&
                 !(isOperatorRole && (album.sellMode ?? null) !== "shopify") && (
-                <SellPanel
-                  albumId={album.id}
-                  albumTitle={album.title}
-                  artistName={album.artist}
-                  primaryArtistId={album.primaryArtistId ?? null}
-                  artworkUrl={album.artwork}
-                  sellMode={album.sellMode ?? null}
-                  physicalFormat={album.physicalFormat ?? null}
-                  sellQuoteLockedAt={album.sellQuoteLockedAt ?? null}
-                  trackCount={album.songs.length}
-                  totalRuntimeSec={album.songs.reduce(
-                    (sum, s) => sum + (s.duration ?? 0),
-                    0,
-                  )}
-                  anticipatedTrackCount={album.anticipatedTrackCount ?? null}
-                  onAnticipatedTrackCountChange={(next) =>
-                    updateAlbumMode.mutate({ anticipatedTrackCount: next })
-                  }
-                  onLockToggle={(next) => updateAlbumMode.mutate({ sellQuoteLockedAt: next })}
-                  onChangeMode={() => setModeDialogOpen(true)}
-                  changeModeDisabled={modeChangeBlocked}
-                  changeModeDisabledReason={modeChangeBlockedReason}
-                  onEditArtwork={() => setArtworkEditorOpen(true)}
-                />
+                <AlbumWorkspacePanel testId="sell-workspace">
+                  <SellPanel
+                    albumId={album.id}
+                    albumTitle={album.title}
+                    artistName={album.artist}
+                    primaryArtistId={album.primaryArtistId ?? null}
+                    artworkUrl={album.artwork}
+                    sellMode={album.sellMode ?? null}
+                    physicalFormat={album.physicalFormat ?? null}
+                    sellQuoteLockedAt={album.sellQuoteLockedAt ?? null}
+                    trackCount={album.songs.length}
+                    totalRuntimeSec={album.songs.reduce(
+                      (sum, s) => sum + (s.duration ?? 0),
+                      0,
+                    )}
+                    anticipatedTrackCount={album.anticipatedTrackCount ?? null}
+                    onAnticipatedTrackCountChange={(next) =>
+                      updateAlbumMode.mutate({ anticipatedTrackCount: next })
+                    }
+                    onLockToggle={(next) => updateAlbumMode.mutate({ sellQuoteLockedAt: next })}
+                    onChangeMode={() => setModeDialogOpen(true)}
+                    changeModeDisabled={modeChangeBlocked}
+                    changeModeDisabledReason={modeChangeBlockedReason}
+                    onEditArtwork={() => setArtworkEditorOpen(true)}
+                  />
+                </AlbumWorkspacePanel>
               )}
               {safeTab === "press" && allowed.has("press") && (
                 <PressPanel
@@ -2059,6 +2055,7 @@ export function AdminAlbum({
                   readyToSend={completeness?.pressReadyToSend ?? false}
                   sendBlockers={completeness?.press.missing ?? []}
                   pressMode={isPress}
+                  roleResolved={!!adminRoleInfo}
                   hideEntityLinks={isArtist}
                   // Task #2703 — Fulfillment sub-tab. Destination management +
                   // the custom-company contact card are press/operator-only;
