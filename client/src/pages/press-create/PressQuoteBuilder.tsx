@@ -29,7 +29,7 @@ import { apiRequest, queryClient } from '@/lib/queryClient';
 import { useAdminDark } from '@/lib/adminAppearance';
 import { PRESS_MARK_ON_DARK, PRESS_MARK_ON_LIGHT } from '@/lib/pressMark';
 import type { PressComponentsPayload } from '@shared/pressComponents';
-import { makeQuotePricer, pendingLines, scaledUnitDollars, computeSetupLines, polyBagUnitLine, type QuoteLine } from './quotePricing';
+import { makeQuotePricer, pendingLines, scaledUnitDollars, computeSetupLines, polyBagUnitLine, resolvedCodaMultiplicity, type QuoteLine } from './quotePricing';
 import { PressLogoImg, PressLogoOnLightImg, usePressBrand, usePressCatalogSwatches, QtyStageFitScale, QTY_STAGE_W } from './PressPackageBuilder';
 import californialandCover from './assets/californialand-cover.jpg';
 import californialandInnerSleeve from './assets/californialand-inner-sleeve.png';
@@ -2509,6 +2509,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   // build itself (with per-quote operator override). No rules → the manual
   // `service:<id>` rows price everything, exactly as before.
   const setupRules = components?.pricing?.setupRules ?? null;
+  const codaPricing = components?.pricing?.mrpCodaCrosswalk ?? null;
 
   // ── Shared state — the record size flows through every section ──
   const [sizeId, setSizeId] = useState<SizeId>('12');
@@ -2750,16 +2751,16 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
   // Imported quantity-ladder prices (Task #3325) resolve AT the run size and
   // carry laddered=true so the synthetic run-size curve never rescales them.
   const linesAt = (q: number): QuoteLine[] => ([
-    vinylDone ? (() => { const p = pricer.vinylEx(color.name, color.kindNote, sizeId, weightId, q); return { id: 'vinyl', name: `${VINYL_SIZES.find((s) => s.id === sizeId)?.label ?? ''} · ${weightId}g ${color.name}`, note: discs > 1 ? `${discs} LP per record` : 'Vinyl', v: p == null ? null : p.v * discs, laddered: p?.laddered, parts: p?.parts ? { manualV: p.parts.manualV * discs, ladderV: p.parts.ladderV * discs } : undefined }; })() : null,
-    picked('label') ? (() => { const p = pricer.flatEx(`labels:${labelId}`, sizeId, q); return { id: 'label', name: `${labelStyle.name} label`, note: discs > 1 ? 'Both discs' : undefined, v: p == null ? null : p.v * discs, laddered: p?.laddered }; })() : null,
-    picked('jacket') ? (() => { const p = pricer.flatEx(`jackets:${jacketType.id}`, sizeId, q); return { id: 'jacket', name: `${jacketType.name} jacket`, v: p?.v ?? null, laddered: p?.laddered }; })() : null,
-    picked('sleeve') ? (() => { const p = pricer.flatEx(`sleeves:${sleeveType.id}`, sizeId, q); return { id: 'sleeve', name: `${sleeveType.name} sleeve`, v: p?.v ?? null, laddered: p?.laddered }; })() : null,
-    picked('insert') && insertType.id !== 'none' ? (() => { const p = pricer.flatEx(`inserts:${insertType.id}`, sizeId, q); return { id: 'insert', name: insertType.name, v: p?.v ?? null, laddered: p?.laddered }; })() : null,
-    picked('sticker') && stickerShapeId !== 'none' ? (() => { const p = pricer.flatEx(`stickers:${stickerShapeId}`, sizeId, q); return { id: 'sticker', name: `${stickerShape?.name ?? 'Sticker'} sticker`, v: p?.v ?? null, laddered: p?.laddered }; })() : null,
-    vinylDone ? (() => { const p = pricer.flatEx('service:assembly', sizeId, q); return { id: 'assembly', name: 'Assembly', note: 'Insert placed on top before shrink', v: p?.v ?? null, laddered: p?.laddered }; })() : null,
-    vinylDone ? (() => { const p = pricer.flatEx('service:shrink', sizeId, q); return { id: 'shrink', name: 'Shrinkwrap', note: 'Retail-ready seal', v: p?.v ?? null, laddered: p?.laddered }; })() : null,
+    vinylDone ? (() => { const p = pricer.vinylEx(color.name, color.kindNote, sizeId, weightId, q); const m = resolvedCodaMultiplicity(p, sizeId, discs, codaPricing, {}, weightId === '180'); const mult = codaPricing ? m : discs; return { id: 'vinyl', name: `${VINYL_SIZES.find((s) => s.id === sizeId)?.label ?? ''} · ${weightId}g ${color.name}`, note: discs > 1 ? `${discs} LP per record` : 'Vinyl', v: p == null || mult == null ? null : p.v * mult, laddered: p?.laddered, parts: p?.parts && mult != null ? { manualV: p.parts.manualV * mult, ladderV: p.parts.ladderV * mult } : undefined }; })() : null,
+    picked('label') ? (() => { const p = pricer.flatEx(`labels:${labelId}`, sizeId, q); const m = resolvedCodaMultiplicity(p, sizeId, discs, codaPricing); return { id: 'label', name: `${labelStyle.name} label`, note: discs > 1 ? 'Both discs' : undefined, v: p == null || m == null ? null : p.v * (codaPricing ? m : discs), laddered: p?.laddered }; })() : null,
+    picked('jacket') ? (() => { const p = pricer.flatEx(`jackets:${jacketType.id}`, sizeId, q); const m = resolvedCodaMultiplicity(p, sizeId, discs, codaPricing); return { id: 'jacket', name: `${jacketType.name} jacket`, v: p == null || m == null ? null : p.v * m, laddered: p?.laddered }; })() : null,
+    picked('sleeve') ? (() => { const p = pricer.flatEx(`sleeves:${sleeveType.id}`, sizeId, q); const m = resolvedCodaMultiplicity(p, sizeId, discs, codaPricing); return { id: 'sleeve', name: `${sleeveType.name} sleeve`, v: p == null || m == null ? null : p.v * m, laddered: p?.laddered }; })() : null,
+    picked('insert') && insertType.id !== 'none' ? (() => { const p = pricer.flatEx(`inserts:${insertType.id}`, sizeId, q); const m = resolvedCodaMultiplicity(p, sizeId, discs, codaPricing); return { id: 'insert', name: insertType.name, v: p == null || m == null ? null : p.v * m, laddered: p?.laddered }; })() : null,
+    picked('sticker') && stickerShapeId !== 'none' ? (() => { const p = pricer.flatEx(`stickers:${stickerShapeId}`, sizeId, q); const m = resolvedCodaMultiplicity(p, sizeId, discs, codaPricing, { stickers: 1 }); return { id: 'sticker', name: `${stickerShape?.name ?? 'Sticker'} sticker`, v: p == null || m == null ? null : p.v * m, laddered: p?.laddered }; })() : null,
+    vinylDone ? (() => { const p = pricer.flatEx('service:assembly', sizeId, q); const m = resolvedCodaMultiplicity(p, sizeId, discs, codaPricing, { touches: discs }); return { id: 'assembly', name: 'Assembly', note: 'Insert placed on top before shrink', v: p == null || m == null ? null : p.v * m, laddered: p?.laddered }; })() : null,
+    vinylDone ? (() => { const p = pricer.flatEx('service:shrink', sizeId, q); const m = resolvedCodaMultiplicity(p, sizeId, discs, codaPricing); return { id: 'shrink', name: 'Shrinkwrap', note: 'Retail-ready seal', v: p == null || m == null ? null : p.v * m, laddered: p?.laddered }; })() : null,
     // Open-top poly bag (Task #3387): ONE per-unit line, insertion folded in.
-    vinylDone && polyBag ? polyBagUnitLine(setupRules) : null,
+    vinylDone && polyBag ? polyBagUnitLine(setupRules, codaPricing) : null,
   ] as Array<QuoteLine | null>).filter((x): x is QuoteLine => x !== null);
   const quoteLines = linesAt(effQty);
   // Sum with the run-size factor applied ONLY to operator-entered (manual)
@@ -2782,7 +2783,7 @@ export function PressQuoteBuilder({ pressId, estimateId, canEdit, onExit }: { pr
     reorder,
     splatterColors: isSplatterBuild ? splatterColors : null,
     overrides: setupOverrides,
-  });
+  }, codaPricing);
   const QB_SETUP_TOTAL = QB_SETUP_LINES.reduce((acc, l) => acc + (l.amount ?? 0), 0);
   const total = picked('qty') ? perUnit * qty + QB_SETUP_TOTAL : 0;
   // Any picked line (or setup line) without a real price ⇒ the quote is

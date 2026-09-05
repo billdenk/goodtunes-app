@@ -12,6 +12,8 @@ Check off each step as you dry-run it. Anything that fails gets a note here plus
 - [ ] **Add ourselves as people**: create a test artist/person under MRP's scope with one of our own email addresses (use a second address for the receiver role).
 - [ ] **Estimates unveiled**: confirm the Estimates and White Label tabs are visible for MRP — they're behind the per-press unveil flag (`manufacturers.estimates_white_label_enabled`). Existing presses were backfilled ON in Aug 2026, but verify for the demo account.
 - [ ] **Pricing seeded**: confirm every component you plan to quote has a real price in MRP's Components → Pricing. Unpriced lines show "Pricing pending · custom quote", are excluded from the total ("Estimate total · incomplete"), and block Send — enforced server-side (the `/send` route recomputes pending lines from the stored builder state + current pricing rows and 409s; it never trusts the client).
+- [ ] **Crosswalk reconciled**: preview `npx tsx scripts/reconcile-mrp-coda-crosswalk.ts --dry` in the intended environment, review the exact MRP identity and 124-code count, then run without `--dry` only with release authorization. The script is metadata-only and marker-guarded. Never treat rows 29/35 or an unknown CODA code as a price.
+- [ ] **Agreed pricing fixture**: 12", 140g, 1LP, Black, full-color labels, standard full-color single jacket, white poly-lined inner, shrink-wrap, 1,000 units, new audio, no insert/sticker/poly bag. Reconfirm this exact fixture with MRP before the live send.
 
 ## 1. MRP Admin — Estimate Builder (1-2-3-4 flow)
 
@@ -46,11 +48,18 @@ Run as an MRP portal user (not god view).
 - Run the full loop at least twice: once with the review redirect on, once with real delivery.
 - Duplicate rather than edit sent estimates; use clearly named test people.
 - One person drives MRP-side, one plays the artist on a separate device/browser profile.
+- Automated coverage is hermetic and may use captured test delivery only.
+  A real-email/branded-host check is a manual launch gate; never send a real
+  message or access production as part of an automated reconciliation.
 
 ## Known gaps / talk-track cautions
 
 - **Estimate emails**: `PRESS_ESTIMATE_REVIEW_RECIPIENT` may still redirect all estimate mail to the review inbox — verify and clear the env var before the live demo.
 - **Pricing**: unpriced components block send by design — pre-price everything you'll demo.
+- **CODA/API**: unknown codes and held rows 29/35 are custom quote. The future
+  read-only GET API is blocked on MRP supplying endpoint/auth/schema/error,
+  rate-limit, versioning, and network requirements; Autoscale must not be
+  represented as having a fixed outbound IP.
 - **Dark mode**: client portal/estimate pages are light-only for now (the dark-mode addendum was deliberately not applied).
 - **New subdomains**: any new press slug needs manual domain linking in the Replit Domains panel before HTTPS works (~1 min, wildcard DNS already in place) — demo only on already-linked hosts.
 - **Sent estimates**: immutable; revisions = duplicate — frame as an audit/trust feature.

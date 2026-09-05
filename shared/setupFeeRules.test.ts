@@ -15,6 +15,7 @@ import {
   type SetupRuleContext,
 } from "./quotePricing";
 import { setupFeeRulesSchema, type PricingRow, type SetupFeeRules } from "./pressComponents";
+import { MRP_CODA_CROSSWALK, MRP_CODA_SOURCE } from "./mrpCodaPricing";
 
 // ── MRP's values (mirrors scripts/seed-mrp-setup-rules.ts) ──────────────
 const MRP: SetupFeeRules = setupFeeRulesSchema.parse({
@@ -42,6 +43,36 @@ const MRP: SetupFeeRules = setupFeeRulesSchema.parse({
   },
   pressSetup: { amountCents: 9500, underQty: 500 },
   polyBag: { label: "Open-top poly bag", bagCents: 25, insertionCents: 12 },
+});
+
+const CODA = { source: MRP_CODA_SOURCE, entries: Array.from(MRP_CODA_CROSSWALK.values()) };
+const CODA_MRP: SetupFeeRules = setupFeeRulesSchema.parse({
+  ...MRP,
+  codaSource: MRP_CODA_SOURCE,
+  stamper: {
+    ...MRP.stamper,
+    rules: MRP.stamper!.rules.map((rule) => ({
+      ...rule,
+      codaCode: rule.weights?.includes("140")
+        ? "4021-0001"
+        : rule.weights?.includes("180")
+          ? "4021-0002"
+          : rule.sizes?.includes("7")
+            ? "4021-0004"
+            : "4021-0003",
+    })),
+  },
+  colorSetup: {
+    ...MRP.colorSetup!,
+    codaCode: "4011A-0003",
+    splatter: { ...MRP.colorSetup!.splatter!, codaCode: "4011A-0014" },
+  },
+  pressSetup: { ...MRP.pressSetup!, codaCode: "4080-0001" },
+  polyBag: {
+    ...MRP.polyBag!,
+    bagCodaCode: "4033-0018",
+    insertionCodaCode: "4040A-0004",
+  },
 });
 
 const ctx = (over: Partial<SetupRuleContext>): SetupRuleContext => ({
@@ -276,4 +307,79 @@ test("email breakdown carries the SAME derived setup lines (derivation notes inc
   // Reorder flips the stamper allowance off through the persisted state.
   const re = computeQuoteEmailBreakdown({ ...FULL_STATE, reorder: true }, FULL_ROWS, MRP)!;
   assert.equal(re.setupLines.find((l) => l.id === "stampers")!.dollars, 42); // 300 × $0.14
+});
+
+test("CODA-composed 1LP/2LP totals honor every verified basis exactly", () => {
+  const codaRow = (partial: Partial<PricingRow>): PricingRow => row({
+    pricingSource: "mrp-tier3-2025",
+    codaSource: MRP_CODA_SOURCE,
+    ...partial,
+  });
+  const rows: PricingRow[] = [
+    codaRow({ key: "type:opaque", label: "Opaque", rungsBySize: { '12"': [{ qty: 2000, unitCents: 230 }] }, codaCodesBySize: { '12"': "4011A-0006" } }),
+    codaRow({ key: "type:splatter", label: "Splatter", surchargeOver: "type:opaque", rungsBySize: { '12"': [{ qty: 2000, unitCents: 55 }] }, codaCode: "4011A-0012" }),
+    codaRow({ key: "labels:color", kind: "labels", label: "Full Color", rungsBySize: { '12"': [{ qty: 2000, unitCents: 25 }] }, codaCode: "4035-0004" }),
+    codaRow({ key: "jackets:single", kind: "jackets", label: "Single Jacket", rungsBySize: { '12"': [{ qty: 2000, unitCents: 81 }] }, codaCode: "4031-0004" }),
+    codaRow({ key: "sleeves:unprinted", kind: "sleeves", label: "White Poly-lined Sleeve", rungsBySize: { '12"': [{ qty: 2000, unitCents: 0 }] }, codaCode: "4033-0003" }),
+    codaRow({ key: "inserts:12x12-color", kind: "inserts", label: '12" Color Insert', rungsBySize: { '12"': [{ qty: 2000, unitCents: 35 }] }, codaCode: "4032-0003" }),
+    codaRow({ key: "service:assembly", kind: "service", label: "Insertion", rungsBySize: { '12"': [{ qty: 2000, unitCents: 12 }] }, codaCode: "4040A-0004" }),
+    codaRow({ key: "service:shrink", kind: "service", label: "Shrink-wrap", rungsBySize: { '12"': [{ qty: 2000, unitCents: 17 }] }, codaCode: "4040E-0002" }),
+    codaRow({ key: "service:cutting", kind: "service", label: "Cutting", priceCents: 40000, codaCode: "4050-0001" }),
+    codaRow({ key: "service:plating", kind: "service", label: "Plating", priceCents: 30000, codaCode: "4020-0002" }),
+    codaRow({ key: "service:test", kind: "service", label: "Test pressings", priceCents: 12500, codaCode: "4011B-0001" }),
+    // Derived rules own these two lines; stale rows must not affect totals.
+    flatRow("service:stampers", 99999),
+    flatRow("service:colorfee", 99999),
+  ];
+  const state = (discs: number) => ({
+    ...FULL_STATE,
+    qty: 2000,
+    discs,
+    colorName: "Custom Splatter",
+    colorTierName: "Splatter",
+    colorKind: "splatter",
+    splatterColors: 2,
+    labelId: "color",
+    insertId: "12x12-color",
+    polyBag: true,
+  });
+  const one = computeQuoteEmailBreakdown(state(1), rows, CODA_MRP, CODA)!;
+  const two = computeQuoteEmailBreakdown(state(2), rows, CODA_MRP, CODA)!;
+  assert.deepEqual(computeQuotePendingIds(state(1), rows, CODA_MRP, CODA), []);
+  assert.deepEqual(computeQuotePendingIds(state(2), rows, CODA_MRP, CODA), []);
+
+  assert.equal(one.unitCost, 4.92);
+  assert.equal(two.unitCost, 8.14);
+  assert.equal(one.setupTotal, 1130);
+  assert.equal(two.setupTotal, 2135);
+  assert.equal(one.total, 10_970);
+  assert.equal(two.total, 18_415);
+  const oneUnit = Object.fromEntries(one.unitLines.map((line) => [line.id, line.unitDollars]));
+  const twoUnit = Object.fromEntries(two.unitLines.map((line) => [line.id, line.unitDollars]));
+  assert.equal(twoUnit.vinyl, oneUnit.vinyl * 2);
+  assert.equal(twoUnit.label, oneUnit.label * 2);
+  assert.equal(twoUnit.sleeve, oneUnit.sleeve * 2);
+  assert.equal(twoUnit.assembly, oneUnit.assembly * 2);
+  assert.equal(twoUnit.jacket, oneUnit.jacket);
+  assert.equal(twoUnit.insert, oneUnit.insert);
+  assert.equal(twoUnit.shrink, oneUnit.shrink);
+  assert.equal(twoUnit.polybag, oneUnit.polybag);
+  const oneSetup = Object.fromEntries(one.setupLines.map((line) => [line.id, line.dollars]));
+  const twoSetup = Object.fromEntries(two.setupLines.map((line) => [line.id, line.dollars]));
+  assert.equal(twoSetup.cutting, oneSetup.cutting * 2);
+  assert.equal(twoSetup.plating, oneSetup.plating * 2);
+  assert.equal(twoSetup.stampers, oneSetup.stampers * 2);
+  assert.equal(twoSetup.colorfee, oneSetup.colorfee * 2);
+  assert.equal(twoSetup.test, oneSetup.test);
+});
+
+test("active CODA mode fails closed for unmapped, unknown, and held concrete lines", () => {
+  const mapped = FULL_ROWS.map((r) => ({ ...r }));
+  assert.ok(computeQuotePendingIds(FULL_STATE, mapped, CODA_MRP, CODA).length > 0, "unmapped rows pend");
+  const heldRules = setupFeeRulesSchema.parse({
+    ...CODA_MRP,
+    colorSetup: { ...CODA_MRP.colorSetup!, codaCode: "4011A-0003" },
+  });
+  const opaqueState = { ...FULL_STATE, colorTierName: "Opaque", colorKind: "opaque" };
+  assert.ok(computeQuotePendingIds(opaqueState, mapped, heldRules, CODA).includes("colorfee"));
 });

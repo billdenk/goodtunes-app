@@ -5,6 +5,22 @@
 
 Mid-South pressing plant with a published short-run program, a full online color catalog, and the most thorough public art/audio prep checklists of the three vendors we currently track.
 
+## Current Tier 3 workbook review (September 2026)
+
+The current reviewed source is
+`attached_assets/GoodTunes___GoGoods-Tier3-2_1788555344172.xlsx` (SHA-256
+`7bcff0e0cb3b92c2f2e33842aa8e6a4b81193127ce1fef3c5b4776fda0b1b6f1`).
+Its seven common quantity columns have no numeric changes from the previously
+loaded workbook. Existing all-in ladders, including the old workbook's
+25,000-unit rungs, remain in place. The expanded workbook adds CODA code,
+cost/charge semantics, reflected status, and notes. See
+`docs/vendors/mrp-tier3-2026-09-workbook-review.md` for the extraction,
+classification, anomaly hold, and reconciliation boundary.
+
+CODA identity is fail-closed: labels are not used to guess an unknown code.
+Rows 29 and 35 remain MRP questions and cannot resolve through the code
+calculator. The separately confirmed setup-rule configuration is unchanged.
+
 The press catalog matrix (1LP / 2LP / 7" × Color / Splatter / Black, columns 100 / 200 / 300 / 500 / 1000 / 2000) carries MRP's confirmed 500 / 1000 / 2000 rungs from #625 plus the confirmed **12" LP × Single Jacket × Black 100/200/300 short-run rungs** ($1,350 / $1,750 / $2,085, retail = cost). Every other 100 / 200 / 300 rung — and the full ladder under the new EcoMix / Translucent / Opaque / Neon-Glow / Smoke Blends / Cream Blends tiers — seeds as unconfirmed yellow placeholders until MRP quotes them.
 
 ## Contact

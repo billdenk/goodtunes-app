@@ -329,6 +329,10 @@ export function mergePricingRows(existing: PricingRow[], seeded: PricingRow[]): 
       ? { rungsBySizeHeavy: prev.rungsBySizeHeavy }
       : {}),
     ...(prev.pricingSource ? { pricingSource: prev.pricingSource } : {}),
+    ...(prev.codaCode ? { codaCode: prev.codaCode } : {}),
+    ...(prev.codaCodesBySize ? { codaCodesBySize: prev.codaCodesBySize } : {}),
+    ...(prev.codaCodesBySizeHeavy ? { codaCodesBySizeHeavy: prev.codaCodesBySizeHeavy } : {}),
+    ...(prev.codaSource ? { codaSource: prev.codaSource } : {}),
   });
   const out: PricingRow[] = seeded.map((s) => {
     const prev = byKey.get(s.key);

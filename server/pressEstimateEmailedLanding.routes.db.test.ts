@@ -13,6 +13,10 @@
 // Harness mirrors pressEstimateSenderName.routes.db.test.ts. Real DB:
 //   GT_TEST=1 npx tsx --test server/pressEstimateEmailedLanding.routes.db.test.ts
 process.env.SESSION_SECRET = process.env.SESSION_SECRET || "t3423-test-session-secret";
+// This suite asserts the in-process delivery seam. Set it before importing the
+// mail module so focused multi-file runs remain hermetic without requiring the
+// caller to export GT_TEST.
+process.env.GT_TEST = "1";
 
 import { test, after, before } from "node:test";
 import assert from "node:assert/strict";
@@ -26,7 +30,9 @@ import { authKindMiddleware } from "./auth/host";
 import { registerRoutes } from "./routes";
 import { __testEstimateDeliveries } from "./mail";
 import type { PricingRow } from "@shared/pressComponents";
-import { QUOTE_SETUP_SERVICE_KEYS } from "@shared/quotePricing";
+import { QUOTE_SETUP_SERVICE_KEYS, computeQuotePendingIds } from "@shared/quotePricing";
+import { loadPressComponents } from "./pressComponents";
+import { MRP_CODA_CROSSWALK, MRP_CODA_SOURCE } from "@shared/mrpCodaPricing";
 
 const scryptAsync = promisify(_scrypt);
 const exec = (q: any) => db.execute(q);
@@ -37,6 +43,7 @@ const SKINNED_NAME = `T3423 Skinned Press ${RUN}`;
 const SKINNED_SLUG = `t3423s${RUN}`;
 const PLAIN_NAME = `T3423 Plain Press ${RUN}`;
 const PLAIN_SLUG = `t3423p${RUN}`;
+const ACCEPT_EMAIL = `t3462-accept-${RUN}@example.test`;
 let ADMIN_EMAIL = "";
 let baseUrl = "";
 let httpServer: HttpServer | undefined;
@@ -124,7 +131,7 @@ before(async () => {
   created.presses.add(plainPressId);
   await exec(sql`
     INSERT INTO manufacturers (id, name, does_vinyl, contact_email, white_label_slug, client_portal_skin)
-    VALUES (${skinnedPressId}, ${SKINNED_NAME}, true, 't3423-skinned@example.test', ${SKINNED_SLUG}, 'pmp')
+    VALUES (${skinnedPressId}, ${SKINNED_NAME}, true, 't3423-skinned@example.test', ${SKINNED_SLUG}, 'mrp-light')
   `);
   await exec(sql`
     INSERT INTO manufacturers (id, name, does_vinyl, contact_email, white_label_slug)
@@ -140,6 +147,8 @@ before(async () => {
 
 after(async () => {
   try {
+    await exec(sql`DELETE FROM auth_tokens WHERE customer_user_id IN (SELECT id FROM customer_users WHERE lower(email) = lower(${ACCEPT_EMAIL}))`);
+    await exec(sql`DELETE FROM customer_users WHERE lower(email) = lower(${ACCEPT_EMAIL})`);
     for (const id of created.presses) {
       await exec(sql`DELETE FROM press_estimates WHERE press_id = ${id}`);
       await exec(sql`DELETE FROM press_components WHERE press_id = ${id}`);
@@ -244,4 +253,136 @@ test("token-only portal read: own host 200, other press's host 401, no token 401
   assert.equal(anon.status, 401);
   const anonNoHost = await api("GET", `/api/press-client/portal`, undefined, { anon: true });
   assert.equal(anonNoHost.status, 401);
+});
+
+test("MRP-skinned fixture is saved, sent, opened, and accepted without real email", async () => {
+  assert.ok(skinnedToken, "share token from the saved/sent fixture");
+  // Opening the public estimate uses the same anonymous token an email carries.
+  const opened = await api("GET", `/api/estimate-link/${skinnedToken}`, undefined, { anon: true });
+  assert.equal(opened.status, 200, await opened.clone().text());
+  const openBody = await opened.json();
+  assert.equal(openBody.brand?.skin, "mrp-light");
+
+  // Accept by creating a hermetic test identity. Mail remains captured by the
+  // test seam (__testEstimateDeliveries); no real delivery is attempted.
+  const accepted = await api(
+    "POST",
+    `/api/estimate-link/${skinnedToken}/start`,
+    { name: "T3462 Test Artist", email: ACCEPT_EMAIL, password: "t3462-test-password" },
+    { anon: true },
+  );
+  assert.equal(accepted.status, 200, await accepted.clone().text());
+  assert.equal((await accepted.json()).ok, true);
+
+  const result = await exec(sql`
+    SELECT status FROM press_estimates
+    WHERE press_id = ${skinnedPressId} AND payload->>'shareToken' = ${skinnedToken}
+    LIMIT 1
+  `);
+  assert.equal((result as any).rows?.[0]?.status, "Converted");
+});
+
+test("MRP CODA 1LP/2LP totals stay identical across save, email, landing, and acceptance", async () => {
+  const ladder = (key: string, kind: PricingRow["kind"], cents: number, codaCode: string): PricingRow => ({
+    key, label: key, detail: "", kind, sizes: [], priceCents: null, pricesBySize: {},
+    rungsBySize: { '12"': [{ qty: 2000, unitCents: cents }] },
+    codaCode, codaSource: MRP_CODA_SOURCE,
+  });
+  const rows: PricingRow[] = [
+    { ...ladder("type:opaque", "type", 230, "4011A-0006"), label: "Opaque", codaCode: undefined, codaCodesBySize: { '12"': "4011A-0006" } },
+    { ...ladder("type:splatter", "type", 55, "4011A-0012"), label: "Splatter", surchargeOver: "type:opaque" },
+    ladder("labels:color", "labels", 25, "4035-0004"),
+    ladder("jackets:single", "jackets", 81, "4031-0004"),
+    ladder("sleeves:unprinted", "sleeves", 0, "4033-0003"),
+    ladder("inserts:12x12-color", "inserts", 35, "4032-0003"),
+    ladder("service:assembly", "service", 12, "4040A-0004"),
+    ladder("service:shrink", "service", 17, "4040E-0002"),
+    { ...flat("service:cutting", "service", 40000), codaCode: "4050-0001", codaSource: MRP_CODA_SOURCE },
+    { ...flat("service:plating", "service", 30000), codaCode: "4020-0002", codaSource: MRP_CODA_SOURCE },
+    { ...flat("service:test", "service", 12500), codaCode: "4011B-0001", codaSource: MRP_CODA_SOURCE },
+    flat("service:stampers", "service", 99999),
+    flat("service:colorfee", "service", 99999),
+  ];
+  const setupRules = {
+    source: "mrp-day2-tracker-s16",
+    codaSource: MRP_CODA_SOURCE,
+    stamper: { reordersAlwaysPay: true, rules: [{ weights: ["140"], perUnitCents: 14, freeUnits: 1000, codaCode: "4021-0001" }] },
+    colorSetup: {
+      perColorCents: 9500, perDisc: true, categories: [], defaultColors: 1,
+      codaCode: "4011A-0003",
+      splatter: { match: ["splatter"], baseColors: 1, perSplatterColorCents: 3500, maxSplatterColors: 3, codaCode: "4011A-0014" },
+    },
+    pressSetup: { amountCents: 9500, underQty: 500, codaCode: "4080-0001" },
+    polyBag: { label: "Open-top poly bag", bagCents: 25, insertionCents: 12, bagCodaCode: "4033-0018", insertionCodaCode: "4040A-0004" },
+  };
+  const coda = {
+    source: MRP_CODA_SOURCE,
+    reviewedWorkbook: "GoodTunes___GoGoods-Tier3-2_1788555344172.xlsx",
+    entries: Array.from(MRP_CODA_CROSSWALK.values()),
+  };
+  await exec(sql`
+    UPDATE press_components SET config = ${JSON.stringify({ rows, setupRules, mrpCodaCrosswalk: coda })}::jsonb
+    WHERE press_id = ${skinnedPressId} AND component_key = 'pricing'
+  `);
+
+  for (const [discs, expected] of [[1, 10_970], [2, 18_415]] as const) {
+    const state = {
+      ...builderState(), qty: 2000, discs, colorName: "Custom Splatter",
+      colorTierName: "Splatter", colorKind: "splatter", splatterColors: 2,
+      labelId: "color", insertId: "12x12-color", polyBag: true,
+    };
+    const loaded = await loadPressComponents(skinnedPressId);
+    assert.deepEqual(
+      computeQuotePendingIds(state, loaded.pricing.rows, loaded.pricing.setupRules, loaded.pricing.mrpCodaCrosswalk),
+      [],
+      JSON.stringify(loaded.pricing.rows.filter((r) => r.key.startsWith("type:"))),
+    );
+    const create = await api("POST", `/api/press/${skinnedPressId}/estimates`, {
+      kind: "estimate", title: `T3462 CODA ${discs}LP`,
+      payload: { builderState: state, source: "Builder", totalCents: 1 },
+    });
+    assert.equal(create.status, 201, await create.clone().text());
+    const draft = await create.json();
+    const mark = __testEstimateDeliveries.length;
+    const send = await api("POST", `/api/press/${skinnedPressId}/estimates/${draft.id}/send`, {
+      artistName: "T3462 Test Artist", recipients: [{ name: "T3462 Test Artist", email: ACCEPT_EMAIL }],
+    });
+    assert.equal(send.status, 200, await send.clone().text());
+    const sent = await send.json();
+    assert.equal(sent.row.payload.totalCents, expected * 100, "server replaces forged saved total");
+    assert.equal(sent.row.payload.quoteBreakdown.total, expected);
+    assert.equal(__testEstimateDeliveries[mark]?.breakdown?.total, expected);
+
+    const opened = await api("GET", `/api/estimate-link/${sent.shareToken}`, undefined, { anon: true });
+    assert.equal(opened.status, 200);
+    const landing = await opened.json();
+    assert.equal(landing.totalCents, expected * 100);
+    assert.equal(landing.quoteBreakdown.total, expected);
+
+    const accepted = await api("POST", `/api/estimate-link/${sent.shareToken}/start`, {
+      email: ACCEPT_EMAIL, password: "t3462-test-password", mode: "signin",
+    }, { anon: true });
+    assert.equal(accepted.status, 200, await accepted.clone().text());
+    const afterAccept = await api("GET", `/api/estimate-link/${sent.shareToken}`, undefined, { anon: true });
+    const acceptedLanding = await afterAccept.json();
+    assert.equal(acceptedLanding.status, "Converted");
+    assert.equal(acceptedLanding.totalCents, expected * 100);
+    assert.deepEqual(acceptedLanding.quoteBreakdown, landing.quoteBreakdown);
+  }
+
+  for (const [label, state, pendingId] of [
+    ["unmapped jacket", { ...builderState(), qty: 2000, colorName: "Opaque Pick", colorTierName: "Opaque", colorKind: "opaque", labelId: "color", jacketId: "gatefold" }, "jacket"],
+    ["held color setup", { ...builderState(), qty: 2000, colorName: "Opaque Pick", colorTierName: "Opaque", colorKind: "opaque", labelId: "color" }, "colorfee"],
+  ] as const) {
+    const create = await api("POST", `/api/press/${skinnedPressId}/estimates`, {
+      kind: "estimate", title: `T3462 ${label}`, payload: { builderState: state, source: "Builder", totalCents: 999_999_999 },
+    });
+    assert.equal(create.status, 201);
+    const draft = await create.json();
+    const send = await api("POST", `/api/press/${skinnedPressId}/estimates/${draft.id}/send`, {
+      artistName: "T3462 Test Artist", recipients: [{ name: "T3462 Test Artist", email: ACCEPT_EMAIL }],
+    });
+    assert.equal(send.status, 409);
+    assert.ok((await send.json()).pendingLineIds.includes(pendingId));
+  }
 });

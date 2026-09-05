@@ -1,5 +1,12 @@
 # GoodTunes Pricing Push API — Integration Kit for Matilda
 
+> This staged inbound POST integration remains the supported contract. MRP's
+> proposed future read-only GET pricing API is not implemented or inferred
+> from this document. It requires a separately supplied endpoint,
+> authentication, request/response schema, error/rate-limit behavior,
+> versioning, and network policy. Replit Autoscale should not be assumed to
+> provide a fixed outbound IP.
+
 This document is for the developer integrating MRP's ERP (built by
 Matilda Tech) with GoodTunes. Your side is small: format a JSON payload
 of vinyl pricing rows and POST it to us with an API key. We handle

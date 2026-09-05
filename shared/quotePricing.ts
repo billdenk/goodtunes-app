@@ -18,6 +18,7 @@
 // names) because the builder's swatches come from the relational catalog
 // while pricing rows key off the vinyl component's slugs.
 import type { PricingRow, PricingRung, SetupFeeRules, StamperRule } from "./pressComponents";
+import type { MrpCodaCrosswalkEntry } from "./mrpCodaPricing";
 
 export type QuoteSizeId = "7" | "10" | "12";
 const SIZE_TO_VINYL: Record<QuoteSizeId, string> = { "7": '7"', "10": '10"', "12": '12"' };
@@ -54,7 +55,89 @@ export type ResolvedUnit = {
    * and `ladderV` the imported-ladder portion (already at the run size).
    * v === manualV + ladderV. */
   parts?: { manualV: number; ladderV: number };
+  /** Concrete pricing records composing this amount (base + surcharge). */
+  sourceRows?: PricingRow[];
 };
+
+/** Structural shape accepted from pricingComponentConfigSchema. Optional on
+ * every public API so old callers/presses remain byte-compatible. */
+export type CodaPricingSnapshot = {
+  source: string;
+  entries: MrpCodaCrosswalkEntry[];
+} | null | undefined;
+
+function codaEntry(snapshot: CodaPricingSnapshot, code: string | null | undefined): MrpCodaCrosswalkEntry | null {
+  if (!snapshot || !code) return null;
+  const matches = snapshot.entries.filter((entry) => entry.code === code);
+  if (matches.length !== 1 || matches[0].classification === "requires_mrp_decision") return null;
+  return matches[0];
+}
+
+function rowCodaCode(row: PricingRow, size: QuoteSizeId, heavy = false): string | null {
+  const sz = SIZE_TO_VINYL[size] as '7"' | '10"' | '12"';
+  return (
+    (heavy ? row.codaCodesBySizeHeavy?.[sz] : row.codaCodesBySize?.[sz]) ??
+    row.codaCode ??
+    null
+  );
+}
+
+/** Multiplier for one finished unit. `null` means the selected concrete row
+ * is not safely mapped under an active CODA snapshot. */
+function rowCodaMultiplicity(
+  row: PricingRow,
+  size: QuoteSizeId,
+  discs: number,
+  snapshot: CodaPricingSnapshot,
+  counts: { stickers?: number; touches?: number } = {},
+  heavy = false,
+): number | null {
+  if (!snapshot) return 1;
+  if (row.codaSource !== snapshot.source) return null;
+  const entry = codaEntry(snapshot, rowCodaCode(row, size, heavy));
+  if (!entry || entry.targetKey !== row.key) return null;
+  if (entry.costType !== "job") return null;
+  switch (entry.chargeType) {
+    case "per_lp": return discs;
+    case "per_unit": return 1;
+    case "per_sticker": return Number.isInteger(counts.stickers) && (counts.stickers ?? 0) >= 0 ? counts.stickers! : null;
+    case "per_touch": return Number.isInteger(counts.touches) && (counts.touches ?? 0) >= 0 ? counts.touches! : null;
+    default: return null;
+  }
+}
+
+function setupCodaMultiplicity(
+  code: string | null | undefined,
+  targetKey: string,
+  discs: number,
+  snapshot: CodaPricingSnapshot,
+): number | null {
+  if (!snapshot) return 1;
+  const entry = codaEntry(snapshot, code);
+  if (!entry || entry.targetKey !== targetKey || entry.costType !== "setup") return null;
+  if (entry.chargeType === "per_lp") return discs;
+  if (entry.chargeType === "per_unit" || entry.chargeType === "flat_fee") return 1;
+  return null;
+}
+
+export function resolvedCodaMultiplicity(
+  resolved: ResolvedUnit | null,
+  size: QuoteSizeId,
+  discs: number,
+  snapshot: CodaPricingSnapshot,
+  counts: { stickers?: number; touches?: number } = {},
+  heavy = false,
+): number | null {
+  if (!resolved) return null;
+  if (!snapshot) return 1;
+  const rows = resolved.sourceRows ?? [];
+  if (rows.length === 0) return null;
+  const values = rows.map((row) => rowCodaMultiplicity(row, size, discs, snapshot, counts, heavy));
+  if (values.some((value) => value == null)) return null;
+  // A composed base+surcharge must share a basis. Applying different
+  // multiplicities to one combined rate would be ambiguous and underquote.
+  return values.every((value) => value === values[0]) ? values[0]! : null;
+}
 
 /** Scale a resolved line's per-unit dollars by the synthetic run-size factor,
  * applying it ONLY to operator-entered portions — ladder portions are already
@@ -84,29 +167,29 @@ export function resolveRowUnit(
     const ladders = (row.rungsBySizeHeavy ?? {}) as Record<string, PricingRung[] | undefined>;
     const ladder = sz ? ladders[sz] : Object.values(ladders).find((l) => (l ?? []).length > 0);
     const c = snapLadderCents(ladder, qty);
-    return c == null ? null : { v: c / 100, laddered: true };
+    return c == null ? null : { v: c / 100, laddered: true, sourceRows: [row] };
   }
   const bySize = (row.pricesBySize ?? {}) as Record<string, number | null | undefined>;
   if (sz) {
     const v = bySize[sz];
-    if (typeof v === "number") return { v: v / 100, laddered: false };
+    if (typeof v === "number") return { v: v / 100, laddered: false, sourceRows: [row] };
   }
   // Flat rows (no size scoping) keep their any-cell operator semantics — a
   // price typed under any size chip applies everywhere.
   if ((row.sizes ?? []).length === 0) {
     for (const v of Object.values(bySize)) {
-      if (typeof v === "number") return { v: v / 100, laddered: false };
+      if (typeof v === "number") return { v: v / 100, laddered: false, sourceRows: [row] };
     }
   } else if (!sz) {
     for (const v of Object.values(bySize)) {
-      if (typeof v === "number") return { v: v / 100, laddered: false };
+      if (typeof v === "number") return { v: v / 100, laddered: false, sourceRows: [row] };
     }
   }
   const ladders = (row.rungsBySize ?? {}) as Record<string, PricingRung[] | undefined>;
   const ladder = sz ? ladders[sz] : Object.values(ladders).find((l) => (l ?? []).length > 0);
   const c = snapLadderCents(ladder, qty);
-  if (c != null) return { v: c / 100, laddered: true };
-  if (typeof row.priceCents === "number") return { v: row.priceCents / 100, laddered: false };
+  if (c != null) return { v: c / 100, laddered: true, sourceRows: [row] };
+  if (typeof row.priceCents === "number") return { v: row.priceCents / 100, laddered: false, sourceRows: [row] };
   return null;
 }
 
@@ -182,6 +265,7 @@ export function makeQuotePricer(rows: PricingRow[] | undefined | null): QuotePri
         v: (manualC + ladderC) / 100,
         laddered: manualC === 0,
         parts: { manualV: manualC / 100, ladderV: ladderC / 100 },
+        sourceRows: [...(base.sourceRows ?? []), typeRow],
       };
     }
     return resolveRowUnit(typeRow, size, qty, heavy);
@@ -210,7 +294,7 @@ export function makeQuotePricer(rows: PricingRow[] | undefined | null): QuotePri
     }
     if (colorRow && !heavy) {
       const c = rowDollars(colorRow, size);
-      if (c != null) return { v: c, laddered: false };
+      if (c != null) return { v: c, laddered: false, sourceRows: [colorRow] };
     }
     // Structural parent (color:<cat>:<sw> → type:<cat>) wins over name match.
     const parentKey = colorRow?.key.startsWith("color:") ? `type:${colorRow.key.split(":")[1]}` : null;
@@ -430,9 +514,23 @@ export function evaluatePressSetupFee(
 /** Open-top poly bag as ONE per-unit line — insertion fee folded into the
  * bag price (MRP 16.4 / 4.11). Fixed cents, so it never rides the synthetic
  * run-size curve (laddered=true). */
-export function polyBagUnitLine(rules: SetupFeeRules | null | undefined): QuoteLine | null {
+export function polyBagUnitLine(
+  rules: SetupFeeRules | null | undefined,
+  coda?: CodaPricingSnapshot,
+): QuoteLine | null {
   const pb = rules?.polyBag;
   if (!pb) return null;
+  if (coda) {
+    if (rules?.codaSource !== coda.source) return null;
+    const bag = codaEntry(coda, pb.bagCodaCode);
+    const insertion = codaEntry(coda, pb.insertionCodaCode);
+    if (
+      !bag || bag.targetKey !== "packaging:open-top-polybag" ||
+      bag.costType !== "job" || bag.chargeType !== "per_unit" ||
+      !insertion || insertion.targetKey !== "service:assembly" ||
+      insertion.costType !== "job" || insertion.chargeType !== "per_touch"
+    ) return null;
+  }
   return {
     id: "polybag",
     name: pb.label?.trim() || "Open-top poly bag",
@@ -473,18 +571,31 @@ export function computeSetupLines(
   rows: PricingRow[] | undefined | null,
   rules: SetupFeeRules | null | undefined,
   ctx: SetupRuleContext,
+  coda?: CodaPricingSnapshot,
 ): SetupLine[] {
   const pricer = makeQuotePricer(rows);
   const hasRules = !!rules && !!(rules.stamper || rules.colorSetup || rules.pressSetup || rules.polyBag);
+  const rulesCodaValid = !coda || rules?.codaSource === coda.source;
   const resolve = (
     id: string,
     name: string,
     staticNote: string | undefined,
     derive: (() => DerivedSetupFee | RefusedSetupFee | null) | null,
+    derivedCodaCode?: string | null,
+    derivedTargetKey?: string,
   ): SetupLine => {
+    const concreteRow = (rows ?? []).find((candidate) => candidate.key === `service:${id}`);
     if (hasRules) {
       const oc = overrideCents(ctx, id);
       if (oc != null) {
+        const overrideCode = derivedCodaCode ?? (concreteRow ? rowCodaCode(concreteRow, ctx.sizeId) : null);
+        const overrideTarget = derivedTargetKey ?? concreteRow?.key ?? `setup-rule:${id}`;
+        if (
+          (derivedCodaCode && !rulesCodaValid) ||
+          setupCodaMultiplicity(overrideCode, overrideTarget, Math.max(1, Math.floor(ctx.discs)), coda) == null
+        ) {
+          return { id, name, amount: null, overridden: true, note: "CODA pricing identity pending" };
+        }
         const rule = derive ? derive() : null;
         const priced = rule && !("refused" in rule) ? rule : null;
         return {
@@ -499,17 +610,35 @@ export function computeSetupLines(
         // row — so the /send gate fails closed.
         return { id, name, amount: null, derived: true, note: rule.note };
       }
-      if (rule) return { id, name, amount: rule.dollars, derived: true, note: rule.note };
+      if (rule) {
+        const mult = rulesCodaValid ? setupCodaMultiplicity(
+          derivedCodaCode,
+          derivedTargetKey ?? `setup-rule:${id}`,
+          Math.max(1, Math.floor(ctx.discs)),
+          coda,
+        ) : null;
+        if (mult == null) return { id, name, amount: null, derived: true, note: "CODA pricing identity pending" };
+        // Existing rule evaluators already apply their documented LP
+        // multiplicity. CODA validates that basis; it must not double-extend.
+        return { id, name, amount: rule.dollars, derived: true, note: rule.note };
+      }
     }
-    const v = pricer.flat(`service:${id}`, ctx.sizeId, ctx.qty);
+    const row = concreteRow;
+    const resolved = pricer.flatEx(`service:${id}`, ctx.sizeId, ctx.qty);
+    const mult = row
+      ? setupCodaMultiplicity(rowCodaCode(row, ctx.sizeId), row.key, Math.max(1, Math.floor(ctx.discs)), coda)
+      : null;
+    const v = resolved == null || mult == null ? null : resolved.v * mult;
     return { id, name, amount: v, ...(staticNote ? { note: staticNote } : {}) };
   };
+  const stamperRule = rules?.stamper?.rules.find((r) => stamperRuleMatches(r, ctx, ruleHaystack(ctx)));
+  const isSplatter = norm(ctx.colorKind).includes("splatter") || norm(ctx.colorTierName).includes("splatter");
   const lines: SetupLine[] = [
     resolve("cutting", "Lacquer cutting", undefined, null),
     resolve("plating", "Lacquer plating", undefined, null),
     resolve("test", "Test pressing", "Includes 2-day domestic shipping", null),
-    resolve("stampers", "Stampers", undefined, () => evaluateStamperFee(rules, ctx)),
-    resolve("colorfee", "Color setup fee", undefined, () => evaluateColorSetupFee(rules, ctx)),
+    resolve("stampers", "Stampers", undefined, () => evaluateStamperFee(rules, ctx), stamperRule?.codaCode, stamperRule?.codaCode ? `setup-rule:stamper:${stamperRule.codaCode === "4021-0001" ? "140" : stamperRule.codaCode === "4021-0002" ? "180" : stamperRule.codaCode === "4021-0004" ? "7" : "special-effect"}` : undefined),
+    resolve("colorfee", "Color setup fee", undefined, () => evaluateColorSetupFee(rules, ctx), isSplatter ? rules?.colorSetup?.splatter?.codaCode : rules?.colorSetup?.codaCode, isSplatter ? "setup-rule:splatter-color" : "setup-rule:color"),
   ];
   if (rules?.pressSetup) {
     // The press-setup line only EXISTS for presses that configured the rule
@@ -518,8 +647,15 @@ export function computeSetupLines(
     // are not consulted.
     const oc = overrideCents(ctx, "setup");
     const rule = evaluatePressSetupFee(rules, ctx)!;
+    const codaMult = rule.dollars === 0
+      ? 1
+      : rulesCodaValid
+        ? setupCodaMultiplicity(rules.pressSetup.codaCode, "setup-rule:press-setup:under-500", Math.max(1, Math.floor(ctx.discs)), coda)
+        : null;
     lines.push(
-      oc != null
+      codaMult == null
+        ? { id: "setup", name: "Press setup", amount: null, derived: true, note: "CODA pricing identity pending" }
+        : oc != null
         ? { id: "setup", name: "Press setup", amount: oc / 100, derived: true, overridden: true, note: `Operator override — rules computed ${moneyC(Math.round(rule.dollars * 100))}` }
         : { id: "setup", name: "Press setup", amount: rule.dollars, derived: true, note: rule.note },
     );
@@ -643,6 +779,7 @@ export function computeQuotePendingIds(
   bs: QuoteBuilderState | null | undefined,
   rows: PricingRow[] | undefined | null,
   rules?: SetupFeeRules | null,
+  coda?: CodaPricingSnapshot,
 ): string[] {
   const state = bs && typeof bs === "object" ? bs : {};
   const done = new Set(Array.isArray(state.done) ? state.done.map(String) : []);
@@ -661,31 +798,39 @@ export function computeQuotePendingIds(
     const v =
       state.colorName == null
         ? null // pre-name draft: fail closed, re-save from the builder
-        : pricer.vinyl(String(state.colorName), String(state.colorTierName ?? ""), size, String(state.weightId ?? ""), qty);
-    if (v == null) pending.push("vinyl");
-    if (pricer.flat("service:assembly", size, qty) == null) pending.push("assembly");
-    if (pricer.flat("service:shrink", size, qty) == null) pending.push("shrink");
+        : pricer.vinylEx(String(state.colorName), String(state.colorTierName ?? ""), size, String(state.weightId ?? ""), qty);
+    const discs = typeof state.discs === "number" && state.discs > 0 ? Math.floor(state.discs) : 1;
+    if (v == null || resolvedCodaMultiplicity(v, size, discs, coda, {}, String(state.weightId) === "180") == null) pending.push("vinyl");
+    const assembly = pricer.flatEx("service:assembly", size, qty);
+    if (assembly == null || resolvedCodaMultiplicity(assembly, size, discs, coda, { touches: discs }) == null) pending.push("assembly");
+    const shrink = pricer.flatEx("service:shrink", size, qty);
+    if (shrink == null || resolvedCodaMultiplicity(shrink, size, discs, coda) == null) pending.push("shrink");
   } else {
     pending.push("vinyl");
   }
   // Components count when their step is done OR a selection is recorded —
   // a selection can never dodge pricing by leaving its step out of `done`.
-  if ((picked("label") || state.labelId) && pricer.flat(`labels:${state.labelId}`, size, qty) == null) pending.push("label");
-  if ((picked("jacket") || state.jacketId) && pricer.flat(`jackets:${state.jacketId}`, size, qty) == null) pending.push("jacket");
-  if ((picked("sleeve") || state.sleeveId) && pricer.flat(`sleeves:${state.sleeveId}`, size, qty) == null) pending.push("sleeve");
-  if (state.insertId && state.insertId !== "none" && pricer.flat(`inserts:${state.insertId}`, size, qty) == null) {
+  const discs = typeof state.discs === "number" && state.discs > 0 ? Math.floor(state.discs) : 1;
+  const flatPending = (key: string, counts: { stickers?: number; touches?: number } = {}) => {
+    const resolved = pricer.flatEx(key, size, qty);
+    return resolved == null || resolvedCodaMultiplicity(resolved, size, discs, coda, counts) == null;
+  };
+  if ((picked("label") || state.labelId) && flatPending(`labels:${state.labelId}`)) pending.push("label");
+  if ((picked("jacket") || state.jacketId) && flatPending(`jackets:${state.jacketId}`)) pending.push("jacket");
+  if ((picked("sleeve") || state.sleeveId) && flatPending(`sleeves:${state.sleeveId}`)) pending.push("sleeve");
+  if (state.insertId && state.insertId !== "none" && flatPending(`inserts:${state.insertId}`)) {
     pending.push("insert");
   }
-  if (state.stickerShapeId && state.stickerShapeId !== "none" && pricer.flat(`stickers:${state.stickerShapeId}`, size, qty) == null) {
+  if (state.stickerShapeId && state.stickerShapeId !== "none" && flatPending(`stickers:${state.stickerShapeId}`, { stickers: 1 })) {
     pending.push("sticker");
   }
   // Setup lines resolve through the shared rules engine (Task #3387): with
   // no rules configured this is exactly the old `service:<id>` row loop.
-  for (const l of computeSetupLines(rows, rules ?? null, setupCtxFromState(state))) {
+  for (const l of computeSetupLines(rows, rules ?? null, setupCtxFromState(state), coda)) {
     if (l.amount == null) pending.push(l.id);
   }
   // A recorded poly-bag pick with no poly-bag rule can't price — fail closed.
-  if (state.polyBag === true && polyBagUnitLine(rules) == null) pending.push("polybag");
+  if (state.polyBag === true && polyBagUnitLine(rules, coda) == null) pending.push("polybag");
   return pending;
 }
 
@@ -741,9 +886,10 @@ export function computeQuoteEmailBreakdown(
   bs: QuoteBuilderState | null | undefined,
   rows: PricingRow[] | undefined | null,
   rules?: SetupFeeRules | null,
+  coda?: CodaPricingSnapshot,
 ): QuoteEmailBreakdown | null {
   if (invalidQuoteBuilderState(bs)) return null;
-  if (computeQuotePendingIds(bs, rows, rules).length > 0) return null;
+  if (computeQuotePendingIds(bs, rows, rules, coda).length > 0) return null;
   const state = bs as QuoteBuilderState;
   const list: PricingRow[] = Array.isArray(rows) ? rows.filter((r) => r && typeof r.key === "string") : [];
   const pricer = makeQuotePricer(list);
@@ -756,66 +902,74 @@ export function computeQuoteEmailBreakdown(
   // ride the synthetic run-size curve (Task #3325).
   const raw: Array<{ id: string; name: string; note?: string; v: number | null; laddered?: boolean; parts?: { manualV: number; ladderV: number } }> = [];
   const vinylBase = pricer.vinylEx(String(state.colorName), String(state.colorTierName ?? ""), sizeId, String(state.weightId ?? ""), qty);
+  const vinylMult = resolvedCodaMultiplicity(vinylBase, sizeId, discs, coda, {}, String(state.weightId) === "180");
   raw.push({
     id: "vinyl",
     name: `${SIZE_LABEL[sizeId] ?? sizeId} · ${state.weightId ?? "140"}g ${state.colorName}`,
     note: discs > 1 ? `${discs} LP per record` : "Vinyl",
-    v: vinylBase == null ? null : vinylBase.v * discs,
+    v: vinylBase == null || vinylMult == null ? null : vinylBase.v * (coda ? vinylMult : discs),
     laddered: vinylBase?.laddered,
     parts: vinylBase?.parts
-      ? { manualV: vinylBase.parts.manualV * discs, ladderV: vinylBase.parts.ladderV * discs }
+      ? { manualV: vinylBase.parts.manualV * (coda ? vinylMult! : discs), ladderV: vinylBase.parts.ladderV * (coda ? vinylMult! : discs) }
       : undefined,
   });
   const labelId = String(state.labelId);
   const labelV = pricer.flatEx(`labels:${labelId}`, sizeId, qty);
+  const labelMult = resolvedCodaMultiplicity(labelV, sizeId, discs, coda);
   raw.push({
     id: "label",
     name: withSuffix(rowDisplayName(list, `labels:${labelId}`, LABEL_NAMES[labelId] ?? titleCase(labelId)), "label"),
     note: discs > 1 ? "Both discs" : undefined,
-    v: labelV == null ? null : labelV.v * discs,
+    v: labelV == null || labelMult == null ? null : labelV.v * (coda ? labelMult : discs),
     laddered: labelV?.laddered,
   });
   const jacketId = String(state.jacketId);
   const jacketV = pricer.flatEx(`jackets:${jacketId}`, sizeId, qty);
+  const jacketMult = resolvedCodaMultiplicity(jacketV, sizeId, discs, coda);
   raw.push({
     id: "jacket",
     name: withSuffix(rowDisplayName(list, `jackets:${jacketId}`, JACKET_NAMES[jacketId] ?? titleCase(jacketId)), "jacket"),
-    v: jacketV?.v ?? null,
+    v: jacketV == null || jacketMult == null ? null : jacketV.v * jacketMult,
     laddered: jacketV?.laddered,
   });
   const sleeveId = String(state.sleeveId);
   const sleeveV = pricer.flatEx(`sleeves:${sleeveId}`, sizeId, qty);
+  const sleeveMult = resolvedCodaMultiplicity(sleeveV, sizeId, discs, coda);
   raw.push({
     id: "sleeve",
     name: withSuffix(rowDisplayName(list, `sleeves:${sleeveId}`, titleCase(sleeveId)), "sleeve"),
-    v: sleeveV?.v ?? null,
+    v: sleeveV == null || sleeveMult == null ? null : sleeveV.v * sleeveMult,
     laddered: sleeveV?.laddered,
   });
   if (state.insertId && state.insertId !== "none") {
     const insertV = pricer.flatEx(`inserts:${state.insertId}`, sizeId, qty);
+    const insertMult = resolvedCodaMultiplicity(insertV, sizeId, discs, coda);
     raw.push({
       id: "insert",
       name: rowDisplayName(list, `inserts:${state.insertId}`, `${titleCase(String(state.insertId))} insert`),
-      v: insertV?.v ?? null,
+      v: insertV == null || insertMult == null ? null : insertV.v * insertMult,
       laddered: insertV?.laddered,
     });
   }
   if (state.stickerShapeId && state.stickerShapeId !== "none") {
     const stickerV = pricer.flatEx(`stickers:${state.stickerShapeId}`, sizeId, qty);
+    const stickerMult = resolvedCodaMultiplicity(stickerV, sizeId, discs, coda, { stickers: 1 });
     raw.push({
       id: "sticker",
       name: withSuffix(rowDisplayName(list, `stickers:${state.stickerShapeId}`, titleCase(String(state.stickerShapeId))), "sticker"),
-      v: stickerV?.v ?? null,
+      v: stickerV == null || stickerMult == null ? null : stickerV.v * stickerMult,
       laddered: stickerV?.laddered,
     });
   }
   const assemblyV = pricer.flatEx("service:assembly", sizeId, qty);
-  raw.push({ id: "assembly", name: "Assembly", note: "Insert placed on top before shrink", v: assemblyV?.v ?? null, laddered: assemblyV?.laddered });
+  const assemblyMult = resolvedCodaMultiplicity(assemblyV, sizeId, discs, coda, { touches: discs });
+  raw.push({ id: "assembly", name: "Assembly", note: "Insert placed on top before shrink", v: assemblyV == null || assemblyMult == null ? null : assemblyV.v * assemblyMult, laddered: assemblyV?.laddered });
   const shrinkV = pricer.flatEx("service:shrink", sizeId, qty);
-  raw.push({ id: "shrink", name: "Shrinkwrap", note: "Retail-ready seal", v: shrinkV?.v ?? null, laddered: shrinkV?.laddered });
+  const shrinkMult = resolvedCodaMultiplicity(shrinkV, sizeId, discs, coda);
+  raw.push({ id: "shrink", name: "Shrinkwrap", note: "Retail-ready seal", v: shrinkV == null || shrinkMult == null ? null : shrinkV.v * shrinkMult, laddered: shrinkV?.laddered });
   // Open-top poly bag (Task #3387): ONE per-unit line, insertion folded in.
   if (state.polyBag === true) {
-    const pb = polyBagUnitLine(rules);
+    const pb = polyBagUnitLine(rules, coda);
     if (pb == null) return null; // pending gate already failed closed; stay honest
     raw.push(pb);
   }
@@ -830,13 +984,16 @@ export function computeQuoteEmailBreakdown(
   // derivation (and derivation notes) the builder showed when Send was hit.
   // Without rules this is byte-identical to the old five-row loop.
   const setupLines: QuoteEmailSetupLine[] = [];
-  for (const l of computeSetupLines(rows, rules ?? null, setupCtxFromState(state))) {
+  for (const l of computeSetupLines(rows, rules ?? null, setupCtxFromState(state), coda)) {
     if (l.amount == null) return null;
     setupLines.push({ id: l.id, name: l.name, ...(l.note ? { note: l.note } : {}), dollars: l.amount });
   }
 
-  const unitCost = unitLines.reduce((a, l) => a + l.unitDollars, 0);
-  const setupTotal = setupLines.reduce((a, l) => a + l.dollars, 0);
-  const subtotal = unitCost * qty;
-  return { qty, unitLines, setupLines, unitCost, setupTotal, subtotal, total: subtotal + setupTotal };
+  // Keep persisted/email/public totals cents-stable; binary floating point
+  // must not make a 2LP composition disagree with its saved estimate.
+  const money = (dollars: number) => Math.round(dollars * 100) / 100;
+  const unitCost = money(unitLines.reduce((a, l) => a + l.unitDollars, 0));
+  const setupTotal = money(setupLines.reduce((a, l) => a + l.dollars, 0));
+  const subtotal = money(unitCost * qty);
+  return { qty, unitLines, setupLines, unitCost, setupTotal, subtotal, total: money(subtotal + setupTotal) };
 }

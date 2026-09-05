@@ -188,9 +188,17 @@ test("operator per-color override beats the inherited ladder", () => {
 
 test("flatEx: ladders carry laddered=true; oneTime rows resolve totals at qty", () => {
   const pricer = makeQuotePricer(LADDER_ROWS);
-  assert.deepEqual(pricer.flatEx("jackets:gatefold", "12", 2000), { v: 1.46, laddered: true, oneTime: false });
+  const gatefold = pricer.flatEx("jackets:gatefold", "12", 2000);
+  assert.equal(gatefold?.v, 1.46);
+  assert.equal(gatefold?.laddered, true);
+  assert.equal(gatefold?.oneTime, false);
+  assert.deepEqual(gatefold?.sourceRows?.map((row) => row.key), ["jackets:gatefold"]);
   // stampers one-time total: $0 at 1,000 (genuine "Included"), $140 at 2,000
-  assert.deepEqual(pricer.flatEx("service:stampers", "12", 1000), { v: 0, laddered: true, oneTime: true });
+  const stampers = pricer.flatEx("service:stampers", "12", 1000);
+  assert.equal(stampers?.v, 0);
+  assert.equal(stampers?.laddered, true);
+  assert.equal(stampers?.oneTime, true);
+  assert.deepEqual(stampers?.sourceRows?.map((row) => row.key), ["service:stampers"]);
   assert.equal(pricer.flat("service:stampers", "12", 2000), 140);
   // beyond the top rung → pending, never extrapolated
   assert.equal(pricer.flat("jackets:gatefold", "12", 5000), null);

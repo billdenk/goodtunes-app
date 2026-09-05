@@ -43,6 +43,7 @@ const SOURCE = "mrp-day2-tracker-s16";
 
 export const MRP_SETUP_RULES: SetupFeeRules = {
   source: SOURCE,
+  codaSource: "mrp-tier3-expanded-2026-09-04",
   stamper: {
     reordersAlwaysPay: true,
     rules: [
@@ -52,13 +53,14 @@ export const MRP_SETUP_RULES: SetupFeeRules = {
         tierMatch: ["picture", "glitter", "ghostly", "torrent", "manual effect", "special effect"],
         perUnitCents: 24,
         label: "Picture disc / glitter / manual effects",
+        codaCode: "4021-0003",
       },
       // 7" pays at every quantity.
-      { sizes: ["7"], perUnitCents: 15, label: '7" stamper fee' },
+      { sizes: ["7"], perUnitCents: 15, label: '7" stamper fee', codaCode: "4021-0004" },
       // 180g: free first 500 units on new audio, $0.24/record above.
-      { weights: ["180"], perUnitCents: 24, freeUnits: 500 },
+      { weights: ["180"], perUnitCents: 24, freeUnits: 500, codaCode: "4021-0002" },
       // 140g: free first 1,000 units on new audio, $0.14/record above.
-      { weights: ["140"], perUnitCents: 14, freeUnits: 1000 },
+      { weights: ["140"], perUnitCents: 14, freeUnits: 1000, codaCode: "4021-0001" },
     ],
   },
   colorSetup: {
@@ -75,14 +77,20 @@ export const MRP_SETUP_RULES: SetupFeeRules = {
     // $35 supersedes the Tier-3 sheet's $50 "Setup — Splatter Records" line.
     // MRP offers build-your-own splatter with up to THREE accent colors —
     // higher persisted counts are refused (fall to the manual row), never priced.
-    splatter: { match: ["splatter"], baseColors: 1, perSplatterColorCents: 3500, maxSplatterColors: 3 },
+    splatter: { match: ["splatter"], baseColors: 1, perSplatterColorCents: 3500, maxSplatterColors: 3, codaCode: "4011A-0014" },
     // Everything else (Opaque, Translucent, Neon, Glow, solid Color) = 1.
     defaultColors: 1,
   },
   // $95 press setup on orders under 500 units (16.3).
-  pressSetup: { amountCents: 9500, underQty: 500 },
+  pressSetup: { amountCents: 9500, underQty: 500, codaCode: "4080-0001" },
   // Open-top poly 25¢ + 12¢ insertion = one 37¢/unit line (16.4 / 4.11).
-  polyBag: { label: "Open-top poly bag", bagCents: 25, insertionCents: 12 },
+  polyBag: {
+    label: "Open-top poly bag",
+    bagCents: 25,
+    insertionCents: 12,
+    bagCodaCode: "4033-0018",
+    insertionCodaCode: "4040A-0004",
+  },
 };
 
 async function main() {

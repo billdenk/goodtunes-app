@@ -1098,13 +1098,13 @@ export function resolvePressEstimateDelivery(
     : { deliverTo: toEmail, subject };
 }
 
-export const __testEstimateDeliveries: Array<{ to: string; replyTo: string | null; fromDisplayName: string | null; linkUrl: string | null }> = [];
+export const __testEstimateDeliveries: Array<{ to: string; replyTo: string | null; fromDisplayName: string | null; linkUrl: string | null; breakdown: PressEstimateEmailBreakdown | null }> = [];
 export async function sendPressClientEstimateEmail(
   toEmail: string,
   opts: PressEstimateEmailOpts & { replyToEmail?: string | null; fromDisplayName?: string | null },
 ): Promise<SendResult> {
   if (process.env.GT_TEST) {
-    __testEstimateDeliveries.push({ to: toEmail, replyTo: opts.replyToEmail ?? null, fromDisplayName: opts.fromDisplayName ?? null, linkUrl: (opts as any).linkUrl ?? null });
+    __testEstimateDeliveries.push({ to: toEmail, replyTo: opts.replyToEmail ?? null, fromDisplayName: opts.fromDisplayName ?? null, linkUrl: (opts as any).linkUrl ?? null, breakdown: opts.breakdown ?? null });
   }
   const { subject, html, text } = buildPressClientEstimateEmail(opts);
   const delivery = resolvePressEstimateDelivery(toEmail, subject);

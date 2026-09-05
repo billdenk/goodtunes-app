@@ -14,6 +14,7 @@
 //   EMPTY price cells (null) — never fabricate a price.
 
 import { z } from "zod";
+import { MRP_CODA_SOURCE } from "./mrpCodaPricing";
 
 // ── Vinyl component ────────────────────────────────────────────────────
 // Sizes use the mock's literal ids.
@@ -344,6 +345,13 @@ export const pricingRowSchema = z.object({
   surchargeOver: z.string().max(160).optional(),
   // Provenance stamp for imported ladders (e.g. "mrp-tier3-2025").
   pricingSource: z.string().max(120).optional(),
+  // Optional verified ERP pricing identity. `codaCode` covers a flat row;
+  // vinyl rows may select different codes by size/weight. Older press configs
+  // omit these fields and retain their legacy behavior.
+  codaCode: z.string().regex(/^\d{4}[A-Z]{0,2}-\d{4}$/).optional(),
+  codaCodesBySize: z.record(vinylSizeIdSchema, z.string().regex(/^\d{4}[A-Z]{0,2}-\d{4}$/)).optional(),
+  codaCodesBySizeHeavy: z.record(vinylSizeIdSchema, z.string().regex(/^\d{4}[A-Z]{0,2}-\d{4}$/)).optional(),
+  codaSource: z.literal(MRP_CODA_SOURCE).optional(),
 });
 export type PricingRow = z.infer<typeof pricingRowSchema>;
 
@@ -377,12 +385,15 @@ export const stamperRuleSchema = z.object({
   freeUnits: z.number().int().min(0).max(1_000_000).optional(),
   /** Optional human label for the derivation note. */
   label: z.string().max(120).optional(),
+  codaCode: z.string().regex(/^\d{4}[A-Z]{0,2}-\d{4}$/).optional(),
 });
 export type StamperRule = z.infer<typeof stamperRuleSchema>;
 
 export const setupFeeRulesSchema = z.object({
   /** Provenance stamp (e.g. "mrp-day2-2026"). */
   source: z.string().max(120).optional(),
+  /** Provenance of optional CODA identities; separate from rate source. */
+  codaSource: z.literal(MRP_CODA_SOURCE).optional(),
   stamper: z
     .object({
       rules: z.array(stamperRuleSchema).max(24),
@@ -396,6 +407,7 @@ export const setupFeeRulesSchema = z.object({
       perColorCents: centsSchema,
       /** Multiply by disc count (2LP doubles). Default true. */
       perDisc: z.boolean().optional(),
+      codaCode: z.string().regex(/^\d{4}[A-Z]{0,2}-\d{4}$/).optional(),
       /** Ordered category matchers → color counts (first match wins),
        * matched as substrings against the tier + kind names. colors: 0 is a
        * genuine "no setup fee" (black vinyl). */
@@ -412,6 +424,7 @@ export const setupFeeRulesSchema = z.object({
           baseColors: z.number().int().min(0).max(12).optional(),
           perSplatterColorCents: centsSchema,
           maxSplatterColors: z.number().int().min(1).max(12).optional(),
+          codaCode: z.string().regex(/^\d{4}[A-Z]{0,2}-\d{4}$/).optional(),
         })
         .optional(),
       /** Count when no category matches; absent = can't derive (falls back
@@ -424,6 +437,7 @@ export const setupFeeRulesSchema = z.object({
     .object({
       amountCents: centsSchema,
       underQty: z.number().int().min(1).max(1_000_000),
+      codaCode: z.string().regex(/^\d{4}[A-Z]{0,2}-\d{4}$/).optional(),
     })
     .optional(),
   /** Open-top poly bag priced as ONE per-unit line with the insertion fee
@@ -433,6 +447,8 @@ export const setupFeeRulesSchema = z.object({
       label: z.string().max(120).optional(),
       bagCents: centsSchema,
       insertionCents: centsSchema,
+      bagCodaCode: z.string().regex(/^\d{4}[A-Z]{0,2}-\d{4}$/).optional(),
+      insertionCodaCode: z.string().regex(/^\d{4}[A-Z]{0,2}-\d{4}$/).optional(),
     })
     .optional(),
 });
@@ -443,6 +459,35 @@ export const pricingComponentConfigSchema = z.object({
   // Optional per-press setup-fee rules (Task #3387). Lives alongside the
   // rows in the same pricing config blob; absent = manual behavior.
   setupRules: setupFeeRulesSchema.optional(),
+  // MRP's reviewed CODA identity/semantics snapshot. It is metadata only:
+  // existing all-in ladders and operator-entered cells remain authoritative.
+  mrpCodaCrosswalk: z
+    .object({
+      source: z.literal(MRP_CODA_SOURCE),
+      reviewedWorkbook: z.string().max(200),
+      entries: z
+        .array(
+          z.object({
+            code: z.string().regex(/^\d{4}[A-Z]?(?:[A-Z])?-\d{4}$/),
+            workbookRow: z.number().int().min(1),
+            costType: z.enum(["setup", "job"]),
+            chargeType: z.enum(["per_lp", "per_unit", "flat_fee", "per_sticker", "per_touch"]),
+            classification: z.enum(["already_reflected", "newly_mappable", "requires_mrp_decision"]),
+            targetKind: z.enum([
+              "record_tier", "setup_rule", "service", "center_label", "sleeve",
+              "jacket", "insert", "download_card", "finish_surcharge", "sticker",
+              "assembly", "packaging",
+            ]),
+            targetKey: z.string().min(1).max(200),
+          }),
+        )
+        .length(124)
+        .refine(
+          (entries) => new Set(entries.map((entry) => entry.code)).size === entries.length,
+          "MRP CODA codes must be unique",
+        ),
+    })
+    .optional(),
 });
 export type PricingComponentConfig = z.infer<typeof pricingComponentConfigSchema>;
 
@@ -491,4 +536,3 @@ export type PressComponentsPayload = {
   stickers: StickersComponentConfig;
   pricing: PricingComponentConfig;
 };
-

@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { seedPricingFromVinyl, mergePricingRows, rowHasAnyPrice } from "./pressComponents";
 import type { PricingRow, VinylComponentConfig } from "@shared/pressComponents";
+import { MRP_CODA_SOURCE } from "@shared/mrpCodaPricing";
 
 const vinyl: VinylComponentConfig = {
   weights: [{ id: "140", label: "140g", note: "Standard" }],
@@ -125,7 +126,7 @@ test("merge: re-sync carries seeded quantity ladders and pricingSource through (
   const seeded = seedPricingFromVinyl(vinyl).rows;
   const ladder = [{ qty: 500, unitCents: 275 }, { qty: 1000, unitCents: 250 }];
   const existing: PricingRow[] = [
-    { key: "type:black", label: "Black", detail: "", kind: "type", sizes: ['7"', '10"', '12"'], priceCents: null, pricesBySize: {}, rungsBySize: { '12"': ladder }, pricingSource: "pmp-pricing-2026" },
+    { key: "type:black", label: "Black", detail: "", kind: "type", sizes: ['7"', '10"', '12"'], priceCents: null, pricesBySize: {}, rungsBySize: { '12"': ladder }, pricingSource: "pmp-pricing-2026", codaCodesBySize: { '12"': "4011-0001" }, codaSource: MRP_CODA_SOURCE },
     // orphan (not in the re-seeded vinyl) with only a ladder must survive too
     { key: "type:gone", label: "Retired", detail: "", kind: "type", sizes: ['12"'], priceCents: null, pricesBySize: {}, rungsBySize: { '12"': ladder } },
   ];
@@ -133,6 +134,8 @@ test("merge: re-sync carries seeded quantity ladders and pricingSource through (
   const black = merged.find((r) => r.key === "type:black")!;
   assert.deepEqual(black.rungsBySize, { '12"': ladder });
   assert.equal(black.pricingSource, "pmp-pricing-2026");
+  assert.deepEqual(black.codaCodesBySize, { '12"': "4011-0001" });
+  assert.equal(black.codaSource, MRP_CODA_SOURCE);
   const gone = merged.find((r) => r.key === "type:gone")!;
   assert.deepEqual(gone.rungsBySize, { '12"': ladder });
 });
